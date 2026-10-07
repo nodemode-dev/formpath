@@ -99,7 +99,9 @@ export interface NodeBase {
 }
 
 export interface LayerNode extends NodeBase { kind: 'layer'; children: VNode[]; color: string; template?: boolean; printable?: boolean; clip?: boolean }
-export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean }
+export type TraceView = 'result' | 'result_outlines' | 'outlines' | 'outlines_source' | 'source';
+export interface TraceInfo { src: ImageNode; opts: Record<string, number | string | boolean>; view: TraceView }
+export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo }
 export interface PathNode extends NodeBase { kind: 'path'; d: PathData; rule: FillRule; live?: LiveShape; guide?: boolean }
 export interface CompoundNode extends NodeBase { kind: 'compound'; children: PathNode[]; rule: FillRule }
 

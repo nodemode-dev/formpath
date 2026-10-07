@@ -20,7 +20,7 @@ import { Project } from './project';
 import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
+import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, TraceView, Units, VNode } from './types';
 import { Viewport } from './viewport';
 
 export * from './types';
@@ -841,6 +841,32 @@ export class Engine extends Emitter<EngineEvents> {
     this.edit(SYMBOLISM_NAMES[args.op], (d) => { const r = applySymbolism(d, t, args); touched = r.touched; return r.doc; });
     return touched;
   }
+  traceTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return n?.kind === 'group' && !!n.trace; }) : []; }
+  setTraceView(view: TraceView, ids?: string[]): boolean {
+    const t = this.traceTargets(ids);
+    return t.length > 0 && this.applyToSelection('Image Trace View', (n) => (n.kind === 'group' && n.trace ? { ...n, trace: { ...n.trace, view } } : n), t);
+  }
+  expandTrace(ids?: string[]): boolean {
+    const t = this.traceTargets(ids);
+    if (!t.length) return false;
+    return this.applyToSelection('Expand Image Trace', (n) => (n.kind === 'group' && n.trace ? { ...n, trace: undefined, name: n.name === 'Image Tracing' ? 'Image Trace' : n.name } : n), t);
+  }
+  releaseTrace(ids?: string[]): boolean {
+    const t = this.traceTargets(ids);
+    if (!t.length) return false;
+    return this.edit('Release Image Trace', (d) => {
+      const out: string[] = [];
+      let doc = d;
+      for (const id of t) {
+        const n = findNode(doc, id);
+        if (n?.kind !== 'group' || !n.trace) continue;
+        const src = findNode(doc, n.trace.src.id) ? { ...n.trace.src, id: newId('i') } : n.trace.src;
+        out.push(src.id);
+        doc = updateNodes(doc, [id], () => src);
+      }
+      return { doc, select: out };
+    });
+  }
   breakSymbolLink(ids?: string[]): void {
     const p = this.current; if (!p) return;
     this.run('Break Link to Symbol', (d, t) => {
@@ -906,6 +932,7 @@ export class Engine extends Emitter<EngineEvents> {
       return [{ id: newId('g'), kind: 'group', clip: false, children: kids.flatMap((k) => this.expandNode(doc, k, what)), opacity: n.opacity, blend: n.blend, ap: emptyAppearance(), name: nodeLabel(n) }];
     }
     if (obj && n.kind === 'symbol') { const s = bakedInstance(doc, n); return s ? this.expandNode(doc, transformNode(cloneNode(s), n.xf), what) : [n]; }
+    if (obj && n.kind === 'group' && n.trace) return this.expandNode(doc, { ...n, trace: undefined }, what);
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
     if (app && (n.kind === 'path' || n.kind === 'compound')) return expandAppearance(doc, n);
@@ -1102,7 +1129,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (!t.length) return;
     const nodes = t.map((id) => findNode(p.doc, id) as VNode);
     const syms = new Set<string>(), imgs = new Set<string>(), pats = new Set<string>();
-    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
+    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
     const assets = new Map<string, Blob>();
     for (const k of imgs) { const b = p.assets.get(k); if (b) assets.set(k, b); }
     this.clipboard = {
@@ -1171,6 +1198,8 @@ export class Engine extends Emitter<EngineEvents> {
       if (n.ap.effects.length) out.effects = n.ap.effects.map((e) => e.id);
       if (n.ap.items.length > 2) out.appearance_items = n.ap.items.length;
       if (n.kind === 'group' && n.clip) out.clipping = true;
+      if (n.kind === 'group' && n.trace) out.tracing = { view: n.trace.view, mode: n.trace.opts.mode, colors: n.trace.opts.colors, threshold: n.trace.opts.threshold };
+      if (n.kind === 'symbol' && n.tint) out.tint = { color: hex(n.tint.color), amount: r(n.tint.amount) };
       const ch = childrenOf(n);
       if (ch && n.kind !== 'compound') out.children = lvl < depth ? [...ch].reverse().map((c) => node(c, lvl + 1)) : `${ch.length} objects`;
       return out;

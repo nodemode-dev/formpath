@@ -140,6 +140,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/navigator.ts
 - src/ui/panels/type.ts
 - src/ui/panels/text-styles.ts
+- src/ui/panels/image-trace.ts
 - src/ui/panels/pattern-options.ts
 - src/ui/panels/preview-edit.ts
 - src/ui/form-dialog.ts
@@ -605,7 +606,21 @@ Canvas 2D has no `font-feature-settings`, so a span that asks for OpenType featu
 - kind: explainer
 - logged: v0.9.0 · 2026-10-07
 
-Quantize (k-means, or a threshold for black and white), collect each colour's boundary as maximal horizontal and vertical runs between pixels inside and outside it, link the runs end to end into loops (inside on the left; where two boundaries meet at one vertex, take the sharpest right turn, so pixels of one colour that touch only at a corner join into one loop), simplify with RDP, fit cubic curves, and group each colour as an even-odd compound path.
+Quantize (k-means, or a threshold for black and white), collect each colour's boundary as maximal horizontal and vertical runs between pixels inside and outside it, link the runs end to end into loops (inside on the left; where two boundaries meet at one vertex, take the sharpest right turn, so pixels of one colour that touch only at a corner join into one loop), simplify with RDP, smooth, and group each colour as an even-odd compound path.
+
+### src/io/trace.ts · smoothing and the closed-loop fix
+- refers-to: src/io/trace.ts :: smoothLoop; src/engine/geometry.ts :: simplifyPolyline
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+Every trace since 0.7.0 came out as slivers: RDP was handed each closed outline with its first point repeated at the end, measured every point against the zero-length chord between those two equal points, found no distance, and kept two points. `simplifyPolyline` now measures against the point itself when the chord has no length, which matters to the Pencil's closed loops too. The least-squares curve fit that followed overshot badly on the few points a rectangle simplifies to (handles reaching past the image), so outlines are now smoothed per vertex: a turn sharper than 50 degrees stays a corner, any other vertex gets handles along the line from its previous to its next point, a third of each neighbouring segment long. That keeps corners square and curves inside the hull of the outline.
+
+### src/io/trace.ts · live tracing objects
+- refers-to: src/io/trace.ts :: traceOptions, TRACE_VIEWS; src/engine/types.ts :: TraceInfo; src/app.ts :: trace, makeTrace; src/engine/index.ts :: setTraceView, expandTrace, releaseTrace, traceTargets; src/engine/render.ts :: drawTraceView; src/engine/transform.ts :: transformNode
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+A tracing object is a group carrying `trace`: the source image node, the options it was traced with, and the view. Its children are the result, so bounds, hit testing, selection, export and every path operation see ordinary paths, and transforming the group transforms the source image with it so tracing again lands in the same place. Views other than Tracing Result are drawn on screen only; exports and raster renders (`printing`) always show the result. Tracing again replaces the children and keeps the group's id, name, opacity and appearance; option changes from the panel merge into one undo step, and a run that finishes after a newer one started is dropped. Expand removes `trace`; Release puts the source image back (with a fresh id if a pasted copy already released the same image). `traceOptions` is shared by the panel, the menu commands and the agent tool so a preset name, explicit numbers and a mode combine the same way everywhere.
 
 ## src/plugins/host.ts
 
@@ -817,6 +832,15 @@ One panel class serves both style panels. A span links to its character style th
 - logged: v0.10.0 · 2026-10-07
 
 Lists every family and style the document's type uses with the number of objects using it. Find selects those objects; Change All replaces the family and style in every run that uses it in one undo step and starts loading the new face. The replacement lists come from the same `families` and `stylesOf` as the Character panel, so installed fonts appear once the engine has listed them.
+
+## src/ui/panels/image-trace.ts
+
+### src/ui/panels/image-trace.ts · Image Trace
+- refers-to: src/ui/panels/image-trace.ts :: ImageTracePanel
+- kind: explainer
+- logged: v0.12.0 · 2026-10-07
+
+The panel keeps its own options and loads them from a tracing object whenever the selection or that object's options change. With Preview on, an option change on a tracing object traces again after 280 ms of quiet; on a plain image nothing happens until Trace, because tracing a photo takes long enough that it should be asked for. Colours and Threshold share one slot and swap with the mode. The form and the hint are built once and swapped with `hidden`.
 
 ## src/ui/panels/pattern-options.ts
 

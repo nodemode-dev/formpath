@@ -8,7 +8,7 @@ import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './pai
 import { latticeCopies, patternLattice } from './pattern';
 import { instanceArt } from './symbolism';
 import { drawText } from './text';
-import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type VNode } from './types';
+import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
 
 export interface RenderContext {
   doc: Doc;
@@ -393,6 +393,7 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
       return;
     }
     case 'group':
+      if (n.trace && !rc.outline && !rc.printing && n.trace.view !== 'result') { drawTraceView(ctx, n, n.trace.view, rc); return; }
       if (n.clip && n.children.length > 1) { drawClipped(ctx, n.children, rc); return; }
       for (const c of n.children) renderNode(ctx, c, rc);
       if (n.ap.items.length && !rc.outline) drawGroupItems(ctx, n, rc);
@@ -460,6 +461,20 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
       return;
     }
   }
+}
+
+function drawTraceView(ctx: CanvasRenderingContext2D, n: GroupNode, view: TraceView, rc: RenderContext): void {
+  const src = n.trace?.src;
+  if (src && (view === 'source' || view === 'outlines_source')) { ctx.save(); if (view === 'outlines_source') ctx.globalAlpha *= 0.5; renderNode(ctx, src, rc); ctx.restore(); }
+  if (view === 'result_outlines') for (const c of n.children) renderNode(ctx, c, rc);
+  if (view === 'source') return;
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = view === 'result_outlines' ? 'rgba(20, 20, 20, 0.85)' : '#141414';
+  ctx.lineWidth = 1 / Math.max(1e-6, rc.scale * (rc.pixelRatio ?? 1));
+  const walk = (x: VNode): void => { if (x.kind === 'path') ctx.stroke(cachedPath(x.d)); else if (x.kind === 'compound') x.children.forEach(walk); else childrenOf(x)?.forEach(walk); };
+  n.children.forEach(walk);
+  ctx.restore();
 }
 
 function drawGroupItems(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): void {

@@ -1,7 +1,7 @@
-import { fitCurve, simplifyPolyline, transformPath } from '../engine/geometry';
+import { simplifyPolyline, transformPath } from '../engine/geometry';
 import { rgb, solid, fill } from '../engine/paint';
 import { newId } from '../engine/doc';
-import type { Mat, PathData, Pt, VNode } from '../engine';
+import type { Anchor, Mat, PathData, Pt, TraceView, VNode } from '../engine';
 
 export interface TraceOpts { mode: 'bw' | 'gray' | 'color'; colors: number; threshold: number; detail: number; ignoreWhite: boolean; smooth: boolean; maxSide: number }
 export const TRACE_PRESETS: Record<string, Partial<TraceOpts>> = {
@@ -15,6 +15,28 @@ export const TRACE_PRESETS: Record<string, Partial<TraceOpts>> = {
   'High Fidelity Photo': { mode: 'color', colors: 32, detail: 0.85, maxSide: 600 },
 };
 export const DEFAULT_TRACE: TraceOpts = { mode: 'color', colors: 6, threshold: 128, detail: 0.5, ignoreWhite: false, smooth: true, maxSide: 420 };
+export const TRACE_VIEWS: ReadonlyArray<readonly [TraceView, string]> = [['result', 'Tracing Result'], ['result_outlines', 'Tracing Result with Outlines'], ['outlines', 'Outlines'], ['outlines_source', 'Outlines with Source Image'], ['source', 'Source Image']];
+
+export function presetKey(name: unknown): string | null {
+  const k = String(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return k ? Object.keys(TRACE_PRESETS).find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, '') === k) ?? null : null;
+}
+
+export function traceOptions(base: Partial<TraceOpts>, a: Record<string, unknown>): TraceOpts & { preset: string } {
+  const pk = presetKey(a.preset);
+  const mode: Partial<TraceOpts> = a.mode === 'color' || a.mode === 'gray' || a.mode === 'bw' ? { mode: a.mode } : {};
+  const touched = ['colors', 'threshold', 'paths', 'ignore_white', 'smooth', 'mode'].some((k) => k in a);
+  return {
+    ...DEFAULT_TRACE, ...base, ...(pk ? TRACE_PRESETS[pk] : {}),
+    ...(typeof a.colors === 'number' ? { colors: Math.max(2, Math.min(64, Math.round(a.colors))), mode: 'color' as const } : {}),
+    ...(typeof a.threshold === 'number' ? { threshold: Math.max(1, Math.min(255, Math.round(a.threshold))), mode: 'bw' as const } : {}),
+    ...(typeof a.paths === 'number' ? { detail: Math.max(0, Math.min(1, a.paths / 100)) } : {}),
+    ...(typeof a.ignore_white === 'boolean' ? { ignoreWhite: a.ignore_white } : {}),
+    ...(typeof a.smooth === 'boolean' ? { smooth: a.smooth } : {}),
+    ...mode,
+    preset: pk ?? (touched ? 'Custom' : String((base as { preset?: unknown }).preset ?? 'Custom')),
+  };
+}
 
 function quantize(px: Uint8ClampedArray, n: number, k: number): { labels: Uint16Array; palette: Array<[number, number, number]> } {
   const sample: Array<[number, number, number]> = [];
@@ -95,6 +117,17 @@ function loops(labels: Uint16Array, w: number, h: number, label: number): Pt[][]
   return out;
 }
 
+function smoothLoop(pts: Pt[], cornerDeg: number): Anchor[] {
+  const n = pts.length, lim = Math.cos((cornerDeg * Math.PI) / 180);
+  return pts.map((q, i) => {
+    const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
+    const ax = q.x - a.x, ay = q.y - a.y, bx = b.x - q.x, by = b.y - q.y, la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    if (la < 1e-9 || lb < 1e-9 || (ax * bx + ay * by) / (la * lb) < lim) return { x: q.x, y: q.y, ix: q.x, iy: q.y, ox: q.x, oy: q.y };
+    const tx = b.x - a.x, ty = b.y - a.y, lt = Math.hypot(tx, ty) || 1, ux = tx / lt, uy = ty / lt;
+    return { x: q.x, y: q.y, ix: q.x - (ux * la) / 3, iy: q.y - (uy * la) / 3, ox: q.x + (ux * lb) / 3, oy: q.y + (uy * lb) / 3, smooth: true };
+  });
+}
+
 export async function traceImage(blob: Blob, xf: Mat, natural: { w: number; h: number }, o: TraceOpts): Promise<VNode | null> {
   const bmp = await createImageBitmap(blob);
   const s = Math.min(1, o.maxSide / Math.max(bmp.width, bmp.height)), w = Math.max(1, Math.round(bmp.width * s)), h = Math.max(1, Math.round(bmp.height * s));
@@ -126,8 +159,7 @@ export async function traceImage(blob: Blob, xf: Mat, natural: { w: number; h: n
     const d: PathData = polys.map((p) => {
       const simple = simplifyPolyline([...p, p[0]], tol).slice(0, -1);
       if (!o.smooth || simple.length < 4) return { closed: true, pts: simple.map((q) => ({ x: q.x, y: q.y, ix: q.x, iy: q.y, ox: q.x, oy: q.y })) };
-      const fitted = fitCurve([...simple, simple[0]], tol * 1.4);
-      return { closed: true, pts: fitted.slice(0, -1) };
+      return { closed: true, pts: smoothLoop(simple, 50) };
     });
     kids.push({ id: newId('p'), kind: 'path', d: transformPath(d, toDoc), rule: 'evenodd', opacity: 1, blend: 'normal', ap: { items: [fill(solid(rgb(r, gg, b)))], effects: [] } });
   }
