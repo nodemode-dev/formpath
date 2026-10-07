@@ -1,5 +1,5 @@
 import { newId } from '../doc';
-import { arrowGeometry, brushGeometry, effectDef, effectPath, strokeOutline } from '../effects';
+import { arrowGeometry, brushGeometry, effectDef, effectPath, has3d, strokeOutline, threeDFaces } from '../effects';
 import { boolean, strokeToPath } from '../kernel';
 import { emptyAppearance, fill } from '../paint';
 import type { Doc, FillRule, PathData, StrokeItem, VNode } from '../types';
@@ -63,6 +63,8 @@ function dashPath(d: PathData, dash: number[], offset: number): PathData {
 }
 
 export function expandAppearance(doc: Doc, n: VNode): VNode[] {
+  const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(doc, n) : null;
+  if (faces) return [{ id: newId('g'), kind: 'group', clip: false, children: faces.map((f) => ({ ...f, id: newId('p') })), opacity: n.opacity, blend: n.blend, ap: { items: [], effects: n.ap.effects.filter((e) => e.visible && effectDef(e.id)?.raster) }, name: n.name ?? '3D' }];
   if (n.kind !== 'path' && n.kind !== 'compound') return [n];
   const g = geometryOf(n);
   if (!g) return [n];

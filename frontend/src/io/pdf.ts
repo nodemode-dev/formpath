@@ -1,6 +1,6 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf } from '../engine/doc';
-import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline } from '../engine/effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, strokeOutline, threeDFaces } from '../engine/effects';
 import { inflate, isEmptyRect, isLineSeg, segments } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
@@ -213,6 +213,8 @@ class Painter {
   private async children(list: VNode[], page: Mat): Promise<string> { const out: string[] = []; for (const c of list) out.push(await this.node(c, page)); return out.filter(Boolean).join('\n'); }
 
   async body(n: VNode, page: Mat): Promise<string> {
+    const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(this.doc, n) : null;
+    if (faces) return this.children(faces, page);
     switch (n.kind) {
       case 'layer': case 'group': {
         if (n.clip && n.children.length > 1) {

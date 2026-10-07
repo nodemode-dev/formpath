@@ -1,7 +1,7 @@
 import { geomBounds, invalidateBounds, nodePath, selectionBounds, visualBounds } from './bounds';
 import { defaultBrushes } from './brushes';
 import { allNodes, ancestors, childrenOf, cloneNode, findNode, inDocOrder, insertInto, isContainer, isLocked, isVisible, layerOf, makeLayer, newDoc, newId, nodeAt, nodeLabel, pathOf, removeNodes, topObjects, topSelectable, updateNodes, walk, type IndexPath } from './doc';
-import { EFFECT_IDS, effectDefaults, WIDTH_PROFILES } from './effects';
+import { EFFECT_IDS, effectDef, effectDefaults, has3d, WIDTH_PROFILES } from './effects';
 import { Emitter } from './events';
 import { detachFrames, reflow, threadChains } from './flow';
 import { harmonyColors, isNeutral } from './harmony';
@@ -526,6 +526,19 @@ export class Engine extends Emitter<EngineEvents> {
     return this.applyToSelection('Effect', (n) => ({ ...n, ap: { ...n.ap, effects: [...n.ap.effects, effect(id, prm)] } }), ids);
   }
   applyLastEffect(): void { if (this.lastEffect) this.addEffect(this.lastEffect.id, this.lastEffect.params); }
+  set3d(kind: string | null, patch: Record<string, number | string | boolean>, ids?: string[]): boolean {
+    const is3d = (id: string): boolean => id.startsWith('3d.');
+    if (kind && !EFFECT_IDS.has(kind)) return false;
+    return this.applyToSelection('3D and Materials', (n) => {
+      const at = n.ap.effects.findIndex((e) => is3d(e.id));
+      if (!kind && !Object.keys(patch).length) return at < 0 ? n : { ...n, ap: { ...n.ap, effects: n.ap.effects.filter((e) => !is3d(e.id)) } };
+      if (at < 0) return kind ? { ...n, ap: { ...n.ap, effects: [...n.ap.effects, effect(kind, { ...effectDefaults(kind), ...patch })] } } : n;
+      const cur = n.ap.effects[at], id = kind ?? cur.id, defs = effectDefaults(id), spec = effectDef(id);
+      const params = Object.fromEntries(Object.entries({ ...defs, ...cur.params, ...patch }).filter(([k]) => k in defs));
+      for (const p of spec?.params ?? []) if (p.kind === 'select' && !(p.choices ?? []).includes(String(params[p.key]))) params[p.key] = p.def;
+      return { ...n, ap: { ...n.ap, effects: n.ap.effects.map((e, i) => (i === at ? { ...e, id, params, visible: true } : e)) } };
+    }, ids);
+  }
 
   deleteSelection(ids?: string[]): void {
     const p = this.current; if (!p) return;
@@ -1041,6 +1054,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (obj && n.kind === 'group' && n.trace) return this.expandNode(doc, { ...n, trace: undefined }, what);
     if (obj && n.kind === 'group' && n.livePaint) return this.expandNode(doc, this.expandedLivePaint(n), what);
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
+    if (app && n.kind !== 'layer' && has3d(n)) return expandAppearance(doc, n);
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
     if (app && (n.kind === 'path' || n.kind === 'compound')) return expandAppearance(doc, n);
     return [n];

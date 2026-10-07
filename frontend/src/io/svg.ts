@@ -1,6 +1,6 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf, findNode, newDoc, newId } from '../engine/doc';
-import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline, type RasterFx } from '../engine/effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, strokeOutline, threeDFaces, type RasterFx } from '../engine/effects';
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
@@ -216,6 +216,8 @@ class Writer {
     if (n.hidden) return '';
     const baked = this.baked(n);
     if (baked !== null) return baked;
+    const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(this.doc, n) : null;
+    if (faces) return this.wrap(n, `<g>${faces.map((f) => this.node(f)).join('')}</g>`);
     switch (n.kind) {
       case 'layer': case 'group': {
         if (n.clip && n.children.length > 1) {
