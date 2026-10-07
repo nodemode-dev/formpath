@@ -47,6 +47,7 @@ frontend/
     │       ├── paths.ts        pathfinder and path commands
     │       ├── objects.ts      align, arrange, transform
     │       ├── expand.ts       expand appearance and live objects
+    │       ├── text-styles.ts  character and paragraph styles: apply, redefine, delete
     │       └── recolor.ts      colour maps for Recolor and Edit Colors
     ├── extensions/
     │   └── registry.ts         Tool, ToolContext, OptionSpec, registerTool, toolHost
@@ -129,6 +130,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/color-picker.ts
 - src/ui/panels/navigator.ts
 - src/ui/panels/type.ts
+- src/ui/panels/text-styles.ts
 - src/ui/panels/preview-edit.ts
 - src/ui/form-dialog.ts
 - src/ui/palette.ts
@@ -686,6 +688,15 @@ The dynamic import of `engine/doc` became a static import; the module is in the 
 ```ts
 for (const t of (await import('../../engine/doc')).allNodes(doc)) {
 ```
+
+## src/ui/panels/text-styles.ts
+
+### src/ui/panels/text-styles.ts · character and paragraph styles
+- refers-to: src/ui/panels/text-styles.ts :: TextStylesPanel; src/engine/ops/text-styles.ts :: applyCharStyle, applyParaStyle, redefineTextStyle, charOverridden, paraOverridden
+- kind: rationale
+- logged: v0.10.0 · 2026-10-07
+
+One panel class serves both style panels. A span links to its character style through `CharStyle.cs` and a text object to its paragraph style through `ParaStyle.ps`; applying copies the style's attributes into the span or the paragraph and keeps the link, so rendering never looks styles up. A paragraph style also carries character attributes (`ParaStyleDef.char`) that it applies under any span's own character style. Redefine copies the selected type's attributes into the style and reapplies it to everything linked, which is how a style is edited. The plus after the active style's name means the type differs from the style on some attribute; clicking the style again clears those overrides. The Normal rows reset the typographic attributes and unlink, but keep fill and stroke. The style id rides on `data-style` because `patchList` owns `data-key`.
 
 ## src/ui/panels/preview-edit.ts
 

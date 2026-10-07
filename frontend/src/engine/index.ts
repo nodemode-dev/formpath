@@ -10,6 +10,7 @@ import { liveChildren } from './live';
 import { buildMesh } from './mesh';
 import { align, arrange, duplicateNodes, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
 import { expandAppearance } from './ops/expand';
+import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, redefineTextStyle, renameTextStyle, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, hex, NONE, resolvePaint, sameColor, solid, stroke, WHITE, withFirstFill, withFirstStroke } from './paint';
 import { Project } from './project';
@@ -663,6 +664,26 @@ export class Engine extends Emitter<EngineEvents> {
     if (all) return this.edit('Remove Threading', (d) => updateNodes(d, hit.flat().map((x) => x.id), (n) => (n.kind === 'text' ? { ...n, next: undefined } : n)));
     return this.edit('Release Threaded Text', (d) => detachFrames(d, t));
   }
+  private styleSource(): TextNode | null { return this.selected().find((n): n is TextNode => n.kind === 'text') ?? null; }
+  addTextStyle(kind: TextStyleKind, name: string): string {
+    let id = '';
+    const from = this.styleSource();
+    this.edit(kind === 'char' ? 'New Character Style' : 'New Paragraph Style', (d) => { const r = addTextStyle(d, kind, name, from); id = r.id; return r.doc; });
+    return id;
+  }
+  applyTextStyle(kind: TextStyleKind, id: string | null, ids?: string[], range?: [number, number]): boolean {
+    const p = this.current; if (!p) return false;
+    const t = this.targetIds(ids).filter((x) => findNode(p.doc, x)?.kind === 'text');
+    if (!t.length) return false;
+    return this.edit(kind === 'char' ? 'Character Style' : 'Paragraph Style', (d) => (kind === 'char' ? applyCharStyle(d, t, id, range) : applyParaStyle(d, t, id)), { keepAnchors: true });
+  }
+  redefineTextStyle(kind: TextStyleKind, id: string, range?: [number, number]): boolean {
+    const from = this.styleSource();
+    if (!from) { this.notice('Select type with the attributes the style should take.'); return false; }
+    return this.edit('Redefine Style', (d) => redefineTextStyle(d, kind, id, from, range));
+  }
+  deleteTextStyle(kind: TextStyleKind, id: string): boolean { return this.edit('Delete Style', (d) => deleteTextStyle(d, kind, id)); }
+  renameTextStyle(kind: TextStyleKind, id: string, name: string): boolean { return this.edit('Style Options', (d) => renameTextStyle(d, kind, id, name)); }
   setTextWrap(wrap: TextWrap | null, ids?: string[]): boolean { return this.applyToSelection(wrap ? 'Text Wrap' : 'Release Text Wrap', (n) => (n.kind === 'layer' ? n : ({ ...n, wrap: wrap ?? undefined }) as VNode), ids); }
   async createOutlines(provider: (n: TextNode) => Promise<PathData | null>, ids?: string[]): Promise<boolean> {
     const p = this.current; if (!p) return false;
