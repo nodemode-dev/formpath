@@ -12,7 +12,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `clipping_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`
-- Effects and live objects: `apply_effect`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `make_pattern`, `recolor`
+- Effects and live objects: `apply_effect`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
 - Type: `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
 - Commands: `list_commands`, `run_command`
@@ -535,16 +535,69 @@ Applies a brush to the strokes of the objects (calligraphic, scatter, art or pat
 
 ## image_trace
 
-Traces a placed image into vector paths with a preset (high_fidelity_photo, low_fidelity_photo, colors_3, colors_6, colors_16, shades_of_gray, black_and_white, outline, line_art, sketched_art, silhouettes, technical_drawing) or explicit settings, expanded to paths.
+Traces a placed image into a live tracing object (the paths are its children, the image stays inside so the options can change), with a preset (high_fidelity_photo, low_fidelity_photo, 3_colors, 6_colors, 16_colors, shades_of_gray, black_and_white_logo, sketched_art, silhouettes, line_art, technical_drawing) or explicit settings. Pass a tracing object's id to trace it again with new settings; action expand turns it into ordinary paths, release brings back the image; expand true traces and expands in one call; view sets what the canvas shows.
 
-- `id`: string; An object id from get_document.
+- `id`: string; A placed image or an image tracing object.
+- `action`: string (trace | expand | release); default "trace"
 - `preset`: string
+- `mode`: string (color | gray | bw)
 - `colors`: integer
 - `threshold`: integer
 - `paths`: number
-- `corners`: number
-- `noise`: integer
-- `ignore_white`: boolean; default false
+- `ignore_white`: boolean
+- `smooth`: boolean
+- `view`: string (result | result_outlines | outlines | outlines_source | source)
+- `expand`: boolean; default false
+
+## live_paint
+
+Live Paint: make a Live Paint group from paths (their crossings divide the area into faces that keep their colour when the paths move), fill the face at a point, paint the stroke of the edge nearest a point, set gap detection in points (0 turns it off) so small openings still close a face, expand into ordinary filled faces and strokes, or release back to the paths.
+
+- `action`: string (make | fill | edge | gap | expand | release); required
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `id`: string; The Live Paint group for fill, edge and gap.
+- `x`: number
+- `y`: number
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `gap`: number
+
+## gradient_mesh
+
+Gradient meshes: make one from each closed shape (rows, columns, flat or with a white highlight at the centre or the edge); list a mesh's points by row and column; set one point's colour, opacity or position (dx, dy moves it); add a mesh line through x, y in a colour; remove the lines through a point.
+
+- `action`: string (make | list | point | add_line | remove_point); required
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `id`: string; The mesh for list, point, add_line and remove_point.
+- `rows`: integer; default 4
+- `columns`: integer; default 4
+- `highlight`: string (flat | center | edge); default "flat"
+- `row`: integer
+- `column`: integer
+- `color`: string
+- `opacity`: number
+- `dx`: number
+- `dy`: number
+- `x`: number
+- `y`: number
+
+## symbolism
+
+The symbolism tools on symbol instances (a sprayed symbol set or any group of instances): shift by dx, dy; scrunch together (reverse spreads apart); size up (reverse shrinks); spin by angle degrees or toward dx, dy; stain toward a colour (reverse removes the tint); screen more transparent (reverse more opaque); style with a graphic style (reverse removes it). With x, y and radius only the instances under that brush change, weighted toward its centre; without them every instance does. Intensity 1..10; method average pulls instances toward their mean, random scatters.
+
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `op`: string (shift | scrunch | size | spin | stain | screen | style); required
+- `intensity`: number; default 5
+- `method`: string (user | average | random); default "user"
+- `x`: number
+- `y`: number
+- `radius`: number
+- `dx`: number
+- `dy`: number
+- `angle`: number
+- `color`: string
+- `style`: string; A graphic style name.
+- `reverse`: boolean; default false
+- `repeat`: integer; default 1
 
 ## make_pattern
 
@@ -556,6 +609,21 @@ Makes a pattern swatch from the objects, tiled as a grid, brick or hex, and opti
 - `h_spacing`: number
 - `v_spacing`: number
 - `apply_to`: array; Object ids from get_document; the selection when left out.
+
+## edit_pattern
+
+Changes a pattern swatch in place, and every object filled with it: name, tile type, spacing, the offset of brick rows or columns (0.5 is half a tile), the tile's width and height around its art, and which neighbour overlaps in front.
+
+- `pattern`: string; required; The pattern's name or id.
+- `name`: string
+- `tile`: string (grid | brick_by_row | brick_by_column | hex_by_column | hex_by_row)
+- `h_spacing`: number
+- `v_spacing`: number
+- `brick_offset`: number
+- `width`: number
+- `height`: number
+- `overlap_h`: string (left | right)
+- `overlap_v`: string (top | bottom)
 
 ## recolor
 

@@ -84,11 +84,14 @@ export function removeMeshLines(m: MeshNode, idx: number): MeshNode {
   const pts: MeshPoint[] = [];
   rows.forEach((j, jj) => cols.forEach((i, ii) => {
     const q = at(j, i), h = [...q.h] as MeshPoint['h'];
-    const toward = (o: MeshPoint): Pt => ({ x: (o.x - q.x) / 3, y: (o.y - q.y) / 3 });
-    if (ii + 1 < cols.length && cols[ii + 1] !== i + 1) h[0] = toward(at(j, cols[ii + 1]));
-    if (ii > 0 && cols[ii - 1] !== i - 1) h[1] = toward(at(j, cols[ii - 1]));
-    if (jj + 1 < rows.length && rows[jj + 1] !== j + 1) h[2] = toward(at(rows[jj + 1], i));
-    if (jj > 0 && rows[jj - 1] !== j - 1) h[3] = toward(at(rows[jj - 1], i));
+    const toward = (o: MeshPoint, old: Pt): Pt => {
+      const len = Math.hypot(o.x - q.x, o.y - q.y) / 3, ol = Math.hypot(old.x, old.y);
+      return ol > 1e-6 ? { x: (old.x / ol) * len, y: (old.y / ol) * len } : { x: (o.x - q.x) / 3, y: (o.y - q.y) / 3 };
+    };
+    if (ii + 1 < cols.length && cols[ii + 1] !== i + 1) h[0] = toward(at(j, cols[ii + 1]), q.h[0]);
+    if (ii > 0 && cols[ii - 1] !== i - 1) h[1] = toward(at(j, cols[ii - 1]), q.h[1]);
+    if (jj + 1 < rows.length && rows[jj + 1] !== j + 1) h[2] = toward(at(rows[jj + 1], i), q.h[2]);
+    if (jj > 0 && rows[jj - 1] !== j - 1) h[3] = toward(at(rows[jj - 1], i), q.h[3]);
     pts.push({ ...q, h });
   }));
   return { ...m, rows: rows.length - 1, cols: cols.length - 1, points: pts };

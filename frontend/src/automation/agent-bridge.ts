@@ -1,14 +1,16 @@
 import { geomBounds, selectionBounds, visualBounds } from '../engine/bounds';
 import { findNode, nodeLabel, updateNodes } from '../engine/doc';
 import { EFFECTS, effectDef, WIDTH_PROFILES } from '../engine/effects';
-import { anchor, flatIndex, inflate, isEmptyRect, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
+import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, mapFn, nearestFn, RECOLOR, recolorDoc } from '../engine/ops/recolor';
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
 import { DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
 import { harmonyColors, variations, type HarmonyRule, type Variation } from '../engine/harmony';
 import { liveParams, type LivePatch } from '../engine/ops/live-shapes';
 import { transformNode } from '../engine/transform';
-import { UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type TextNode, type Units, type VNode } from '../engine';
+import { interiorOf, liveFaceNodes, liveFaces } from '../engine/livepaint';
+import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
+import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
@@ -106,6 +108,13 @@ export class AgentBridge {
         e.setFill({ type: 'gradient', gradient: { kind: 'freeform', stops: [], angle: 0, aspect: 1, geom: null, mode, points } }, [id]);
       }
     } finally { e.endGesture(); }
+  }
+
+  private livePaintSummary(id: string): string {
+    const g = this.engine.doc ? findNode(this.engine.doc, id) : null;
+    if (g?.kind !== 'group' || !g.livePaint) return 'no faces';
+    const faces = liveFaces(g), painted = liveFaceNodes(g).length;
+    return `${faces.length} face(s), ${painted} painted${faces.length ? `; face centres ${faces.slice(0, 12).map((f) => { const q = interiorOf(f); return `(${Math.round(q.x)}, ${Math.round(q.y)})`; }).join(' ')}` : ''}`;
   }
 
   private node(id: unknown): VNode {
@@ -273,7 +282,8 @@ export class AgentBridge {
             const seg = Math.round(num('segment', 0)), t = Math.max(0.001, Math.min(0.999, num('t', 0.5)));
             const u = unflatIndex(d, seg);
             if (!u) return fail(`segment must be 0..${d.reduce((s, sp) => s + sp.pts.length, 0) - 1}.`);
-            d = d.map((sp, s) => (s === u[0] ? splitSegmentAt(sp, u[1], t) : sp));
+            const sp0 = d[u[0]], line = isLineSeg(segOf(sp0.pts[u[1]], sp0.pts[(u[1] + 1) % sp0.pts.length]));
+            d = d.map((sp, s) => (s === u[0] ? splitSegmentAt(sp, u[1], line ? 0.5 - Math.sin(Math.asin(1 - 2 * t) / 3) : t) : sp));
           } else if (act === 'delete') d = d.map((sp, s) => ({ ...sp, pts: sp.pts.filter((_, i) => !idx.has(flatIndex(d, s, i))) })).filter((sp) => sp.pts.length > 0);
           else if (act === 'corner') d = map((q, k) => (idx.has(k) || !idx.size ? { ...q, ix: q.x, iy: q.y, ox: q.x, oy: q.y, smooth: false } : q));
           else if (act === 'smooth') d = map((q, k, s, i) => {
@@ -339,7 +349,7 @@ export class AgentBridge {
           return text('Updated the objects.');
         }
         case 'arrange': { e.arrange(str('order') as 'bring_to_front', this.ids(a)); return text('Rearranged.'); }
-        case 'group': { const ok = str('action', 'group') === 'ungroup' ? e.ungroup(this.ids(a)) : e.group(this.ids(a)); return ok ? text(str('action', 'group') === 'ungroup' ? 'Ungrouped.' : `Grouped (id ${e.selectedIds()[0]}).`, { selection: e.selectedIds() }) : fail('Nothing changed: check the ids.'); }
+        case 'group': { const ok = str('action', 'group') === 'ungroup' ? e.ungroup(this.ids(a)) : e.group(this.ids(a)); return ok ? text(str('action', 'group') === 'ungroup' ? 'Ungrouped.' : `Grouped (id ${e.selectedIds()[0]}).`, { selection: e.selectedIds(), ...(str('action', 'group') === 'ungroup' ? {} : { id: e.selectedIds()[0] }) }) : fail('Nothing changed: check the ids.'); }
         case 'compound_path': { const ok = str('action', 'make') === 'release' ? e.releaseCompound(this.ids(a)) : e.makeCompound(this.ids(a), has('rule') ? (str('rule') as 'nonzero') : undefined); return ok ? text('Done.', { selection: e.selectedIds() }) : fail('Nothing changed: compound paths need paths.'); }
         case 'clipping_mask': { const ok = str('action', 'make') === 'release' ? e.releaseClip(this.ids(a)) : e.makeClip(this.ids(a)); return ok ? text('Done: the topmost object clips the others.', { selection: e.selectedIds() }) : fail('Nothing changed: select two or more objects, the clipping shape on top.'); }
         case 'delete_objects': { const ids = this.ids(a); e.deleteSelection(ids ?? e.targetIds()); return text('Deleted.'); }
@@ -443,10 +453,85 @@ export class AgentBridge {
           return ok ? text('Applied the brush.') : fail('Nothing changed.');
         }
         case 'image_trace': {
-          const target = has('id') ? this.node(a.id) : e.selected().find((n) => n.kind === 'image');
-          if (!target || target.kind !== 'image') return fail('Pass the id of a placed image.');
+          const target = has('id') ? this.node(a.id) : e.selected().find((n) => n.kind === 'image' || (n.kind === 'group' && !!n.trace));
+          const live = target?.kind === 'group' && !!target.trace;
+          if (!target || (target.kind !== 'image' && !live)) return fail('Pass the id of a placed image or of an image tracing object.');
+          const act = str('action', 'trace');
+          if (act === 'expand' || act === 'release') {
+            if (!live) return fail(`${act} needs an image tracing object; trace the image first.`);
+            const ok = act === 'expand' ? e.expandTrace([target.id]) : e.releaseTrace([target.id]);
+            return ok ? text(act === 'expand' ? `Expanded into ordinary paths (group ${target.id}).` : `Released the image (id ${e.selectedIds()[0] ?? ''}).`, { id: act === 'expand' ? target.id : e.selectedIds()[0] }) : fail('Nothing changed.');
+          }
+          if (live && has('view') && Object.keys(a).every((k) => k === 'id' || k === 'view' || k === 'action')) return e.setTraceView(str('view') as TraceView, [target.id]) ? text(`The tracing object shows ${str('view')}.`, { id: target.id }) : fail('Nothing changed.');
           const id = await this.deps.trace(target.id, a);
-          return id ? text(`Traced into paths (id ${id}).`, { id }) : fail('The trace found no shapes: try a different preset or threshold.');
+          if (!id) return fail('The trace found no shapes: try a different preset, mode or threshold.');
+          const g = this.node(id);
+          const kids = g.kind === 'group' ? g.children.length : 0, noun = kids === 1 ? 'path' : 'paths';
+          return text(a.expand === true ? `Traced and expanded into ${kids} ${noun} (group ${id}).` : `Traced into a live tracing object with ${kids} ${noun} (id ${id}); image_trace with action expand makes them ordinary paths.`, { id, paths: kids });
+        }
+        case 'live_paint': {
+          const act = str('action');
+          if (act === 'make') { const id = e.makeLivePaint(this.ids(a)); return id ? text(`Live Paint group ${id} with ${this.livePaintSummary(id)}.`, { id }) : fail('Select or pass paths to make a Live Paint group.'); }
+          const id = has('id') ? String(a.id) : e.livePaintTargets()[0];
+          const g = id ? this.node(id) : null;
+          if (!g || g.kind !== 'group' || !g.livePaint) return fail('Pass the id of a Live Paint group (live_paint with action make returns one).');
+          if (act === 'fill' || act === 'edge') {
+            if (!has('x') || !has('y')) return fail('Give x and y in document points.');
+            const paint = has('color') ? this.paint(a.color, 'color') : act === 'fill' ? e.fillPaint : e.strokePaint;
+            const at = { x: num('x', 0), y: num('y', 0) };
+            const ok = act === 'fill' ? e.livePaintFill(g.id, at, paint) : e.livePaintEdge(g.id, at, paint, 6);
+            return ok ? text(act === 'fill' ? `Filled the face at ${at.x}, ${at.y}; ${this.livePaintSummary(g.id)}.` : 'Painted the edge.', { id: g.id }) : fail(act === 'fill' ? 'No closed face there: pick a point inside an area the paths close, or set a gap.' : 'No edge within 6 points of that point.');
+          }
+          if (act === 'gap') return e.setLivePaintGap(num('gap', 0), [g.id]) ? text(`Gap detection ${num('gap', 0) > 0 ? `closes gaps up to ${num('gap', 0)} pt` : 'is off'}; ${this.livePaintSummary(g.id)}.`, { id: g.id }) : fail('Nothing changed.');
+          if (act === 'expand') return e.expandLivePaint([g.id]) ? text(`Expanded into filled faces and strokes (group ${g.id}).`, { id: g.id }) : fail('Nothing changed.');
+          if (act === 'release') return e.releaseLivePaint([g.id]) ? text(`Released to a plain group of the paths (${g.id}).`, { id: g.id }) : fail('Nothing changed.');
+          return fail('action must be make, fill, edge, gap, expand or release.');
+        }
+        case 'symbolism': {
+          const op = str('op') as SymbolismOp;
+          if (!SYMBOLISM_NAMES[op]) return fail('op must be shift, scrunch, size, spin, stain, screen or style.');
+          const ids = this.ids(a) ?? e.targetIds();
+          const color = has('color') ? parseColor(str('color')) : null;
+          if (op === 'stain' && !color && a.reverse !== true && num('intensity', 5) > 0 && str('method', 'user') === 'user') return fail('stain needs a color.');
+          const style = has('style') ? p.doc.styles.find((s) => s.name === str('style') || s.id === str('style')) ?? null : null;
+          if (op === 'style' && !style && a.reverse !== true) return fail(`No graphic style named ${str('style')}. Graphic styles: ${p.doc.styles.map((s) => s.name).join(', ') || 'none'}.`);
+          const at = has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null;
+          let touched = 0;
+          for (let i = 0; i < Math.max(1, Math.min(50, Math.round(num('repeat', 1)))); i++) touched = e.symbolism({ op, at, radius: num('radius', 60), intensity: num('intensity', 5), method: (['user', 'average', 'random'].includes(str('method')) ? str('method') : 'user') as SymbolismMethod, reverse: a.reverse === true, dx: num('dx', 0), dy: num('dy', 0), ...(has('angle') ? { angle: num('angle', 0) } : {}), ...(color ? { color } : {}), style }, ids);
+          return touched ? text(`${SYMBOLISM_NAMES[op]} changed ${touched} instance(s).`, { changed: touched }) : fail(at ? 'No symbol instance under that brush: widen radius or move x, y.' : 'Those objects hold no symbol instances.');
+        }
+        case 'gradient_mesh': {
+          const act = str('action');
+          if (act === 'make') { const ok = e.createMesh(Math.max(1, Math.round(num('rows', 4))), Math.max(1, Math.round(num('columns', 4))), (['flat', 'center', 'edge'].includes(str('highlight')) ? str('highlight') : 'flat') as 'flat', this.ids(a)); return ok ? text(`Made ${e.selectedIds().length} gradient mesh(es).`, { ids: e.selectedIds() }) : fail('Pass closed shapes to turn into meshes.'); }
+          const m = has('id') ? this.node(a.id) : e.selected().find((n) => n.kind === 'mesh');
+          if (!m || m.kind !== 'mesh') return fail('Pass the id of a gradient mesh.');
+          const w = m.cols + 1, r = Math.round(num('row', 0)), c = Math.round(num('column', 0)), idx = r * w + c;
+          if (act === 'list') return text(`${m.rows} rows x ${m.cols} columns of patches, ${m.points.length} points.`, { rows: m.rows, columns: m.cols, points: m.points.map((q, i) => ({ row: Math.floor(i / w), column: i % w, x: Math.round(q.x * 100) / 100, y: Math.round(q.y * 100) / 100, color: hex(q.color), opacity: Math.round(q.opacity * 100) })) });
+          if ((act === 'point' || act === 'remove_point') && (r < 0 || c < 0 || r > m.rows || c > m.cols)) return fail(`row must be 0..${m.rows} and column 0..${m.cols}.`);
+          if (act === 'remove_point') { e.edit('Delete Mesh Point', (d) => updateNodes(d, [m.id], (n) => (n.kind === 'mesh' ? removeMeshLines(n, idx) : n))); return text(`The mesh is now ${(this.node(m.id) as MeshNode).rows} x ${(this.node(m.id) as MeshNode).cols}.`, { id: m.id }); }
+          if (act === 'point') {
+            const color = has('color') ? parseColor(str('color')) : null;
+            if (has('color') && !color) return fail('color must be #rrggbb, rgb(), cmyk() or gray().');
+            e.edit('Mesh Point', (d) => updateNodes(d, [m.id], (n) => (n.kind === 'mesh' ? { ...n, points: n.points.map((q, i) => (i === idx ? { ...q, ...(color ? { color } : {}), ...(has('opacity') ? { opacity: Math.max(0, Math.min(1, num('opacity', 100) / 100)) } : {}), x: q.x + num('dx', 0), y: q.y + num('dy', 0) } : q)) } : n)));
+            return text(`Set point row ${r}, column ${c}.`, { id: m.id });
+          }
+          if (act === 'add_line') {
+            if (!has('x') || !has('y')) return fail('Give x and y inside the mesh.');
+            const color = has('color') ? parseColor(str('color')) : null, at = { x: num('x', 0), y: num('y', 0) };
+            const before = m.points.length;
+            e.edit('Add Mesh Line', (d) => updateNodes(d, [m.id], (n) => { if (n.kind !== 'mesh') return n; const next = addMeshLine(n, at), k = meshPointAt(next, at, 1e9); return color && k >= 0 ? { ...next, points: next.points.map((q, i) => (i === k ? { ...q, color } : q)) } : next; }));
+            const after = this.node(m.id) as MeshNode;
+            return after.points.length > before ? text(`The mesh is now ${after.rows} x ${after.cols}.`, { id: m.id, rows: after.rows, columns: after.cols }) : fail('That point is not inside the mesh.');
+          }
+          return fail('action must be make, list, point, add_line or remove_point.');
+        }
+        case 'edit_pattern': {
+          const tile = has('tile') ? ({ grid: 'grid', brick_by_row: 'brick_row', brick_by_column: 'brick_col', hex_by_column: 'hex_col', hex_by_row: 'hex_row' } as const)[str('tile') as 'grid'] : undefined;
+          if (has('tile') && !tile) return fail('tile must be grid, brick_by_row, brick_by_column, hex_by_column or hex_by_row.');
+          const def = p.doc.patterns.find((x) => x.name === str('pattern') || x.id === str('pattern'));
+          if (!def) return fail(`No pattern named ${str('pattern')}. Patterns: ${p.doc.patterns.map((x) => x.name).join(', ') || 'none'}.`);
+          const ok = e.setPatternOptions(def.id, { ...(has('name') ? { name: str('name') } : {}), ...(tile ? { type: tile } : {}), ...(has('h_spacing') ? { hs: num('h_spacing', 0) } : {}), ...(has('v_spacing') ? { vs: num('v_spacing', 0) } : {}), ...(has('brick_offset') ? { brick: num('brick_offset', 0.5) } : {}), ...(has('width') ? { width: num('width', 0) } : {}), ...(has('height') ? { height: num('height', 0) } : {}), ...(has('overlap_h') || has('overlap_v') ? { overlap: [str('overlap_h', def.overlap?.[0] ?? 'left') as 'left', str('overlap_v', def.overlap?.[1] ?? 'top') as 'top'] } : {}) });
+          return ok ? text(`Updated the pattern ${str('name') || def.name}.`, { id: def.id }) : fail('Nothing changed.');
         }
         case 'make_pattern': {
           const id = e.makePattern(str('name') || 'Pattern', this.ids(a), ({ grid: 'grid', brick_by_row: 'brick_row', brick_by_column: 'brick_col', hex_by_column: 'hex_col', hex_by_row: 'hex_row' } as const)[str('tile', 'grid') as 'grid'] ?? 'grid', num('h_spacing', 0), num('v_spacing', 0));

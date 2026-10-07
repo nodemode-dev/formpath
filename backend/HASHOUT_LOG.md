@@ -110,6 +110,13 @@ States that type is black unless `color` is given, matching the bridge's default
 
 `set_paint` takes its fill as `_FILL`, which adds freeform gradients to `_COLOR`; strokes keep `_COLOR` because Illustrator has no freeform strokes. Freeform points are fractions of each object's bounds unless `absolute` is true, so one call can paint several objects of different sizes. `select_similar` is the Magic Wand with tolerances; `select_same` stays for exact matches on the twelve Select Same attributes. `edit_shape` reaches the live shape parameters; `get_object` reports them under `shape` in the same units. `color_harmony` is the Color Guide. The window now squashes every history step one call makes into one (`Engine.beginStep` and `endStep`), so an agent's undo always takes back exactly one call. The catalogue is at 61 tools.
 
+### app/routers/mcp.py · live object tools
+- refers-to: app/routers/mcp.py :: TOOLS, image_trace, live_paint, symbolism, gradient_mesh, edit_pattern
+- kind: explainer
+- logged: v0.12.0 · 2026-10-07
+
+`image_trace` now leaves a live tracing object, as the app does; `expand: true` keeps the old one-call behaviour for agents that only want paths, and passing a tracing object's id traces it again. Its preset list names the presets that exist (the old list advertised outline, line art and technical drawing that the tracer did not have, and `corners` and `noise`, which it ignored; the last two are gone and the three presets now exist). Preset names match by their words, so `6_colors`, `colors 6` and `6 Colors` are the same preset, and a subset such as `black_and_white` finds Black and White Logo. `live_paint` answers with the face count and a point inside each of the first twelve faces, because an agent cannot see where faces are and needs a point to fill. `symbolism` applies to every instance unless x, y and radius give a brush, and `repeat` stands in for holding the mouse down; all repeats are one undo step. `gradient_mesh` addresses points by row and column, which `list` reports with their colours. `edit_pattern` changes a swatch in place without pattern editing mode, which is modal and meant for people. `group` now returns the new group's `id` beside `selection`. The catalogue is at 65 tools.
+
 ## app/routers/projects.py
 
 ### app/routers/projects.py · save conflicts

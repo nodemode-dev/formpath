@@ -13,13 +13,19 @@ export const TRACE_PRESETS: Record<string, Partial<TraceOpts>> = {
   'Shades of Gray': { mode: 'gray', colors: 6 },
   'Low Fidelity Photo': { mode: 'color', colors: 12, detail: 0.3 },
   'High Fidelity Photo': { mode: 'color', colors: 32, detail: 0.85, maxSide: 600 },
+  'Silhouettes': { mode: 'bw', threshold: 230, detail: 0.5, ignoreWhite: true },
+  'Line Art': { mode: 'bw', threshold: 128, detail: 0.75, ignoreWhite: true },
+  'Technical Drawing': { mode: 'bw', threshold: 140, detail: 0.9, ignoreWhite: true, smooth: false, maxSide: 600 },
 };
 export const DEFAULT_TRACE: TraceOpts = { mode: 'color', colors: 6, threshold: 128, detail: 0.5, ignoreWhite: false, smooth: true, maxSide: 420 };
 export const TRACE_VIEWS: ReadonlyArray<readonly [TraceView, string]> = [['result', 'Tracing Result'], ['result_outlines', 'Tracing Result with Outlines'], ['outlines', 'Outlines'], ['outlines_source', 'Outlines with Source Image'], ['source', 'Source Image']];
 
+const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && w !== 'and');
 export function presetKey(name: unknown): string | null {
-  const k = String(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  return k ? Object.keys(TRACE_PRESETS).find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, '') === k) ?? null : null;
+  const want = words(String(name ?? ''));
+  if (!want.length) return null;
+  const keys = Object.keys(TRACE_PRESETS);
+  return keys.find((k) => { const have = words(k); return have.length === want.length && want.every((w) => have.includes(w)); }) ?? keys.find((k) => { const have = words(k); return want.every((w) => have.includes(w)); }) ?? null;
 }
 
 export function traceOptions(base: Partial<TraceOpts>, a: Record<string, unknown>): TraceOpts & { preset: string } {

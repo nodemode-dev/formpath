@@ -100,10 +100,11 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/index.ts
 - src/engine/history.ts
 - src/engine/viewport.ts
-- src/engine/render.ts
 - src/engine/effects.ts
 - src/engine/live.ts
 - src/engine/snap.ts
+- src/engine/render.ts
+- src/engine/geometry.ts
 - src/engine/kernel.ts
 - src/engine/ops/recolor.ts
 - src/engine/text.ts
@@ -233,6 +234,13 @@ The engine service reads and writes the absolute paths agents give; the window o
 
 The consent prompt promises that each change is one undoable step, but a call such as `set_paint` with a fill and a stroke made two steps, and gestures only merge steps of the same name. `run` now marks the history before a call and squashes everything the call pushed into one step named after its first edit. `undo` and `redo` are left out so they move through history normally.
 
+### src/automation/agent-bridge.ts · live object tools
+- refers-to: src/automation/agent-bridge.ts :: image_trace, live_paint, symbolism, gradient_mesh, edit_pattern, livePaintSummary, edit_anchors insert
+- kind: explainer
+- logged: v0.12.0 · 2026-10-07
+
+Each tool calls the same engine methods as the menus and tools, so an agent's Live Paint group, tracing object, stained symbol set or edited pattern is the same object a person gets. `image_trace` with only `view` changes the view without tracing again. `edit_anchors` insert takes `t` as a fraction along a straight segment, converted to the curve parameter (the inverse of 3t squared minus 2t cubed) because a straight segment is stored as a cubic with its handles on its ends.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture
@@ -267,15 +275,6 @@ A new project is fitted to the last stage size the stage reported. Before, the f
 
 The Properties column overlays the right of the stage (284 px wide in a 46 px grid track), so fitting and zoom centring use the width minus 238 px while it is open.
 
-## src/engine/render.ts
-
-### src/engine/render.ts · Path2D cache
-- refers-to: src/engine/render.ts :: path cache WeakMap
-- kind: warning-context
-- logged: v0.9.0 · 2026-10-07
-
-Keyed by node identity. Never mutate a node in place: the cache would keep drawing the old geometry.
-
 ## src/engine/effects.ts
 
 ### src/engine/effects.ts · Distort and Transform
@@ -309,6 +308,24 @@ Each subpath's anchors are placed by their fraction of its length; each side is 
 - logged: v0.9.0 · 2026-10-07
 
 Built once per drag. Every visible object adds its box as three columns and three rows (sides and centre) and a centre spot; the anchors of the first 6000 objects are added as spots; artboards add their rules and four corner spots; guides add rules that span the pasteboard. Columns and rows are kept sorted and searched by bisection. Spots sit in a spatial hash of 64-unit cells; when the search window covers more cells than the hash holds, it scans every spot instead. A point takes the best spot first, scored by distance plus a rank penalty (anchor, then artboard corner, then centre) so an anchor wins a close call, and otherwise the nearest column and row. `hit` tells the stage which happened, so the angle guide only runs when no spot won. A moving box tries its sides and centre on each axis and prefers like-for-like matches (centre to centre, side to side) by a quarter of the tolerance.
+
+## src/engine/render.ts
+
+### src/engine/render.ts · Path2D cache
+- refers-to: src/engine/render.ts :: path cache WeakMap
+- kind: warning-context
+- logged: v0.9.0 · 2026-10-07
+
+Keyed by node identity. Never mutate a node in place: the cache would keep drawing the old geometry.
+
+## src/engine/geometry.ts
+
+### src/engine/geometry.ts · straight segments
+- refers-to: src/engine/geometry.ts :: nearestOnSeg, splitSegmentAt
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+A straight segment is a cubic whose handles sit on its ends, so its points are not spread evenly along the curve parameter: a point a fraction u along the line is at parameter 0.5 minus sin(asin(1 minus 2u) / 3). `nearestOnSeg` projected the point onto the line, used the fraction as the parameter and so reported a point near the nearer end, up to a fifth of the length off. Hit tests on edges, the Add Anchor Point tool, the Scissors and the Live Paint edge bucket all missed or cut in the wrong place on straight lines. It now converts the fraction to the parameter, and `splitSegmentAt` keeps the two halves of a straight segment straight, with no handles, instead of giving them handles along the line.
 
 ## src/engine/kernel.ts
 
