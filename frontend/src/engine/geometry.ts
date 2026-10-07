@@ -131,8 +131,8 @@ export function nearestOnSeg(s: Seg, p: Pt): { t: number; d: number; pt: Pt } {
   }
   if (isLineSeg(s)) {
     const dx = s[3].x - s[0].x, dy = s[3].y - s[0].y, l2 = dx * dx + dy * dy;
-    const t = l2 < EPS ? 0 : Math.max(0, Math.min(1, ((p.x - s[0].x) * dx + (p.y - s[0].y) * dy) / l2));
-    const q = bezPoint(s, t);
+    const u = l2 < EPS ? 0 : Math.max(0, Math.min(1, ((p.x - s[0].x) * dx + (p.y - s[0].y) * dy) / l2));
+    const t = 0.5 - Math.sin(Math.asin(1 - 2 * u) / 3), q = bezPoint(s, t);
     return { t, d: dist(q, p), pt: q };
   }
   let t = best.t;
@@ -516,12 +516,12 @@ export function nearestOnPath(d: PathData, p: Pt): { sub: number; seg: number; t
 
 export function splitSegmentAt(sp: SubPath, segIndex: number, t: number): SubPath {
   const n = sp.pts.length, i = segIndex, j = (segIndex + 1) % n;
-  const a = sp.pts[i], b = sp.pts[j];
+  const a = sp.pts[i], b = sp.pts[j], line = isLineSeg(segOf(a, b));
   const [l, r] = bezSplit(segOf(a, b), t);
-  const na: Anchor = { ...a, ox: l[1].x, oy: l[1].y };
-  const m: Anchor = { x: l[3].x, y: l[3].y, ix: l[2].x, iy: l[2].y, ox: r[1].x, oy: r[1].y };
-  if (!isLineSeg(segOf(a, b))) m.smooth = true;
-  const nb: Anchor = { ...b, ix: r[2].x, iy: r[2].y };
+  const na: Anchor = line ? { ...a } : { ...a, ox: l[1].x, oy: l[1].y };
+  const m: Anchor = line ? { x: l[3].x, y: l[3].y, ix: l[3].x, iy: l[3].y, ox: l[3].x, oy: l[3].y } : { x: l[3].x, y: l[3].y, ix: l[2].x, iy: l[2].y, ox: r[1].x, oy: r[1].y };
+  if (!line) m.smooth = true;
+  const nb: Anchor = line ? { ...b } : { ...b, ix: r[2].x, iy: r[2].y };
   const pts = sp.pts.map((p) => ({ ...p }));
   pts[i] = na; pts[j] = nb;
   pts.splice(i + 1, 0, m);
