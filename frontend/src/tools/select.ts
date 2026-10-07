@@ -1,10 +1,12 @@
 import { allNodes, findNode, isLocked, isVisible } from '../engine/doc';
 import { anchorHit, segmentHit } from '../engine/hit';
-import { flatIndex, hasIn, hasOut, nearestOnPath, normRect, pointInPolygon, rectContains, rotateAbout, scaleAbout, translate, unflatIndex } from '../engine/geometry';
+import { apply, flatIndex, hasIn, hasOut, invert, nearestOnPath, normRect, pointInPolygon, rectContains, rotateAbout, scaleAbout, translate, unflatIndex } from '../engine/geometry';
 import { transformNodes } from '../engine/ops/objects';
 import { constrainAngle } from '../engine/snap';
 import { framePort } from '../engine/flow';
-import type { Anchor, Doc, Engine, PathData, Pt, Rect, VNode } from '../engine';
+import { editLive, normalizeLive } from '../engine/ops/live-shapes';
+import { updateNodes } from '../engine/doc';
+import type { Anchor, Doc, Engine, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { fmt, hud, layerColor, marquee, outlineNode, stroke2, tolDoc, unitLabel } from './util';
@@ -113,6 +115,45 @@ function placeLoaded(ctx: ToolContext, p: ToolPointer): void {
   e.endGesture();
 }
 
+interface Widget { id: string; at: Pt; corner: number; dir: Pt; origin: Pt; xf: Mat; k: number; max: number }
+const CW = { on: false, w: null as Widget | null, moved: false };
+
+function cornerWidgets(ctx: ToolContext): Widget[] {
+  const e = ctx.engine, pr = e.current;
+  if (!pr || !e.view.cornerWidget || pr.selection.size !== 1 || pr.anchors.size) return [];
+  const n = findNode(pr.doc, [...pr.selection][0]);
+  if (n?.kind !== 'path' || !n.live || (n.live.kind !== 'rect' && n.live.kind !== 'polygon')) return [];
+  const l = normalizeLive(n.live) as Extract<LiveShape, { kind: 'rect' | 'polygon' }>, zoom = ctx.view().zoom, min = 14 / zoom;
+  if (l.kind === 'rect') {
+    const cs: Array<[number, number, number, number]> = [[l.x, l.y, 1, 1], [l.x + l.w, l.y, -1, 1], [l.x + l.w, l.y + l.h, -1, -1], [l.x, l.y + l.h, 1, -1]];
+    if (Math.min(Math.abs(l.w), Math.abs(l.h)) * zoom < 40) return [];
+    return cs.map(([cx, cy, sx, sy], i) => { const d = Math.max(l.radii[i], min); return { id: n.id, at: apply(l.xf, cx + sx * d, cy + sy * d), corner: i, dir: { x: sx / Math.SQRT2, y: sy / Math.SQRT2 }, origin: { x: cx, y: cy }, xf: l.xf, k: Math.SQRT2, max: Math.min(Math.abs(l.w), Math.abs(l.h)) / 2 }; });
+  }
+  if (l.r * zoom < 24) return [];
+  const half = Math.PI / l.sides, sinH = Math.cos(half), a = -Math.PI / 2, vx = l.cx + l.r * Math.cos(a), vy = l.cy + l.r * Math.sin(a), dir = { x: -Math.cos(a), y: -Math.sin(a) }, d = Math.max(l.radius, min) / sinH;
+  return [{ id: n.id, at: apply(l.xf, vx + dir.x * d, vy + dir.y * d), corner: -1, dir, origin: { x: vx, y: vy }, xf: l.xf, k: 1 / sinH, max: l.r * Math.cos(half) }];
+}
+
+function widgetAt(ctx: ToolContext, p: ToolPointer): Widget | null {
+  const v = ctx.view();
+  for (const w of cornerWidgets(ctx)) { const s = v.toScreen(w.at); if (Math.hypot(s.x - p.screen.x, s.y - p.screen.y) <= 6) return w; }
+  return null;
+}
+
+function dragWidget(ctx: ToolContext, p: ToolPointer): void {
+  const e = ctx.engine, base = e.dragOrigin, w = CW.w;
+  if (!base || !w) return;
+  const q = apply(invert(w.xf), p.doc.x, p.doc.y), along = (q.x - w.origin.x) * w.dir.x + (q.y - w.origin.y) * w.dir.y;
+  const r = Math.max(0, Math.min(w.max, along / w.k));
+  CW.moved = true;
+  e.dragTo(updateNodes(base, [w.id], (n) => {
+    if (n.kind !== 'path' || !n.live) return n;
+    if (n.live.kind === 'rect' && p.alt) { const l = normalizeLive(n.live) as Extract<LiveShape, { kind: 'rect' }>; const radii = [...l.radii] as [number, number, number, number]; radii[w.corner] = r; return editLive(n, { radii }); }
+    return editLive(n, { radius: r });
+  }));
+  e.setOverlay({ label: `Radius: ${unitLabel(e, r)}`, at: p.doc, lines: [] });
+}
+
 registerTool({
   id: 'selection', label: 'Selection Tool', group: 'select', order: 10, shortcut: 'V',
   icon: () => 'vSelect',
@@ -131,6 +172,8 @@ registerTool({
     if (L.id) { L.drag = true; L.start = p.doc; L.cur = p.doc; return; }
     const port = outPortAt(ctx, p);
     if (port) { L.id = port; ctx.redraw(); return; }
+    const wdg = widgetAt(ctx, p);
+    if (wdg) { CW.on = true; CW.w = wdg; CW.moved = false; e.beginDrag('Corner Radius'); return; }
     const h = handleAt(ctx, p);
     if (h >= 0) { beginTransform(ctx, S, p, h >= 100 ? 'rotate' : 'scale', h % 100); return; }
     const hit = e.hit(p.doc);
@@ -145,12 +188,14 @@ registerTool({
     S.mode = 'marquee'; S.start = p.doc; S.cur = p.doc;
   },
   move: (ctx, p) => {
+    if (CW.on) { dragWidget(ctx, p); return; }
     if (L.drag) { L.cur = p.doc; ctx.redraw(); return; }
     if (S.mode === 'marquee') { S.cur = p.doc; ctx.redraw(); return; }
     dragTransform(ctx, S, p);
   },
   up: (ctx, p) => {
     const e = ctx.engine;
+    if (CW.on) { CW.on = false; CW.w = null; e.clearOverlay(); if (CW.moved) e.commitDrag(); else e.cancelDrag(); return; }
     if (L.drag) { placeLoaded(ctx, p); ctx.redraw(); return; }
     if (S.mode === 'marquee') {
       const r = normRect(S.start.x, S.start.y, p.doc.x, p.doc.y), z = ctx.view().zoom;
@@ -180,6 +225,10 @@ registerTool({
   overlay: (ctx, g) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
+    if (!S.mode && !L.id) {
+      const v = ctx.view(), color = pr.selection.size ? layerColor(e, [...pr.selection][0]) : ctx.paint().accent;
+      for (const w of cornerWidgets(ctx)) { const s = v.toScreen(w.at); g.save(); g.beginPath(); g.arc(s.x, s.y, 4, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1; g.strokeStyle = color; g.stroke(); g.beginPath(); g.arc(s.x, s.y, 1.5, 0, Math.PI * 2); g.fillStyle = color; g.fill(); g.restore(); }
+    }
     if (L.drag) marquee(ctx, g, L.start, L.cur);
     else if (S.mode === 'marquee') marquee(ctx, g, S.start, S.cur);
     else if (!S.mode && hover && !pr.selection.has(hover)) { const n = findNode(pr.doc, hover); if (n) outlineNode(ctx, g, pr.doc, n, layerColor(e, hover), 1.5); }

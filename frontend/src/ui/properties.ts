@@ -7,6 +7,7 @@ import { el, q, setClass, setHidden, setHtml, setStyleVar, setText } from './dom
 import { icon } from './icons';
 import { paintCss } from './rail';
 import { check, iconButton, numField, row, section, seg, selectCtl, slider } from './panels/kit';
+import { ShapeFields } from './shape-fields';
 
 const UNIT: Record<string, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
 export const refPoint = { x: 0.5, y: 0.5 };
@@ -103,9 +104,12 @@ export class PropertiesPanel {
   private readonly flags: Array<{ c: ReturnType<typeof check>; key: keyof Engine['view'] }> = [];
   private frame = 0;
   private quickKey = '';
+  private readonly shape: ShapeFields;
+  private readonly shapeHead = section('Shape');
 
   constructor(private readonly engine: Engine, private readonly run: (cmd: string) => void) {
     this.xform = new TransformFields(engine, false);
+    this.shape = new ShapeFields(engine);
     const app = el(`<div class="cv-propsp-app"><div class="cv-propsp-paint"><span class="cv-pf-label">Fill</span><button class="cv-fs-mini cv-propsp-fill" type="button" aria-label="Fill color"></button></div><div class="cv-propsp-paint"><span class="cv-pf-label">Stroke</span><button class="cv-fs-mini cv-fs-mini-stroke cv-propsp-stroke" type="button" aria-label="Stroke color"></button></div></div>`);
     this.fillChip = q<HTMLButtonElement>(app, '.cv-propsp-fill');
     this.strokeChip = q<HTMLButtonElement>(app, '.cv-propsp-stroke');
@@ -114,7 +118,7 @@ export class PropertiesPanel {
     this.weight = numField('', 'pt', (v) => engine.setStroke({ width: v }), { min: 0, max: 1000, step: 0.5 });
     q(app, '.cv-propsp-paint:last-child').appendChild(this.weight.el);
     this.opacity = slider(engine, 'Opacity', 0, 100, (v) => engine.setObjectProps({ opacity: v / 100 }), { unit: '%' });
-    this.selBox.append(section('Transform'), this.xform.el, section('Appearance'), app, this.opacity.el, section('Quick Actions'), this.quick);
+    this.selBox.append(section('Transform'), this.xform.el, this.shapeHead, this.shape.el, section('Appearance'), app, this.opacity.el, section('Quick Actions'), this.quick);
     this.units = selectCtl('Units', [['pt', 'Points'], ['px', 'Pixels'], ['in', 'Inches'], ['mm', 'Millimeters'], ['cm', 'Centimeters'], ['pc', 'Picas']], (v) => engine.documentSetup({ units: v as Units }));
     this.boards = selectCtl('Artboard', [], (v) => { engine.setActiveArtboard(Number(v)); engine.fit(); });
     const flagsBox = el('<div class="cv-propsp-flags"></div>');
@@ -158,6 +162,7 @@ export class PropertiesPanel {
     setText(q(this.head, '.cv-props-name'), !p ? 'No Document' : !has ? 'Document' : sel.length > 1 ? `${sel.length} Objects` : nodeLabel(n));
     if (has) {
       this.xform.sync();
+      setHidden(this.shapeHead, !this.shape.sync());
       const f = n.kind === 'text' ? n.spans[0]?.style.fill : firstFill(n.ap)?.paint, s = n.kind === 'text' ? n.spans[0]?.style.stroke : firstStroke(n.ap)?.paint;
       setStyleVar(this.fillChip, '--paint', paintCss(f ?? { type: 'none' }, e));
       setStyleVar(this.strokeChip, '--paint', paintCss(s ?? { type: 'none' }, e));

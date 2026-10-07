@@ -11,6 +11,7 @@ import { liveChildren } from './live';
 import { buildMesh } from './mesh';
 import { align, arrange, duplicateNodes, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
 import { expandAppearance } from './ops/expand';
+import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, WHITE, withFirstFill, withFirstStroke } from './paint';
@@ -398,6 +399,9 @@ export class Engine extends Emitter<EngineEvents> {
     this.fillPaint = paint;
     this.emit('colors', null);
     if (!this.applyToSelection('Fill', (n) => this.paintDeep(n, (ap) => withFirstFill(ap, paint)), ids)) this.emit('options', null);
+  }
+  editLiveShape(patch: LivePatch, ids?: string[], name = 'Shape'): boolean {
+    return this.applyToSelection(name, (n) => (n.kind === 'path' && n.live ? editLive(n, patch) : n), ids);
   }
   setFreeform(mode: 'points' | 'lines' = 'points', ids?: string[], colors?: Color[]): boolean {
     const p = this.current; if (!p) return false;

@@ -145,6 +145,11 @@
 .cv-gradp-stoprow > .cv-props-field { flex: 1 1 0; min-width: 0; }
 .cv-gradp-stoprow .cv-num { padding: 0 6px; }
 .cv-gradp-stoprow .cv-num input { width: 100%; }
+.cv-shapef, .cv-shapef-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cv-shapef[hidden], .cv-shapef-group[hidden] { display: none; }
+.cv-shapef .cv-kit-row > .cv-props-field { flex: 1 1 0; min-width: 0; }
+.cv-shapef .cv-props-field .cv-num { padding: 0 6px; }
+.cv-shapef .cv-props-field .cv-num input { width: 100%; }
 .cv-guidep-top { flex-wrap: nowrap; }
 .cv-guidep-top > .cv-props-field { flex: 1 1 0; min-width: 0; }
 .cv-guidep-base { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line-3); border-radius: 6px; background: var(--sw, transparent); cursor: pointer; }
