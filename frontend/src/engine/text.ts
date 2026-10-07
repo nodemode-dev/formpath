@@ -1,4 +1,4 @@
-import { apply, emptyRect, pathLength, pointAtLength, toPath2D, transformRect, unionRect } from './geometry';
+import { apply, emptyRect, mul, pathLength, pointAtLength, toPath2D, transformPath, transformRect, unionRect } from './geometry';
 import { BLACK, NONE, solid } from './paint';
 import type { CharStyle, Mat, ParaStyle, PathData, Pt, Rect, Span, TextNode } from './types';
 
@@ -298,6 +298,20 @@ export function textBounds(n: TextNode): Rect {
   if (n.mode === 'path') return l.bounds;
   if (n.mode === 'area' && n.framePath) return transformRect(l.bounds, n.xf);
   return transformRect(l.bounds, n.xf);
+}
+
+export function textOutline(n: TextNode): PathData | null {
+  if (!shaping) return null;
+  const out: PathData = [];
+  for (const g of layoutText(n).glyphs) {
+    if (!g.ch.trim()) continue;
+    const st = g.style, gid = g.gid ?? shaping.shape(st, g.ch, [])?.[0]?.gid, d = gid === undefined ? null : shaping.outline(st, gid);
+    if (!d) return null;
+    const co = Math.cos(g.angle), si = Math.sin(g.angle), sx = (g.size * st.hscale) / 100, sy = (g.size * st.vscale) / 100;
+    const m: Mat = mul([co, si, -si, co, g.x, g.y], [sx, 0, 0, sy, 0, 0]);
+    out.push(...transformPath(d, n.mode === 'path' ? m : mul(n.xf, m)).map((sp) => ({ ...sp, closed: true })));
+  }
+  return out;
 }
 
 const glyphPaths = new WeakMap<PathData, Path2D>();
