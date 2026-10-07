@@ -1,5 +1,5 @@
 import { AgentBridge, regionOf } from './automation/agent-bridge';
-import { Engine, type Color, type Doc, type Pt, type Units, type VNode } from './engine';
+import { Engine, type Color, type Doc, type Pt, type TraceView, type Units, type VNode } from './engine';
 import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc';
 import { EFFECTS } from './engine/effects';
 import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
@@ -16,7 +16,7 @@ import { docFromManifest, serialize } from './io/project-io';
 import { canvasBlob, exportForScreens, exportRaster, renderRegion } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
 import { exportRegion, exportSvg, importSvg } from './io/svg';
-import { DEFAULT_TRACE, TRACE_PRESETS, traceImage } from './io/trace';
+import { TRACE_VIEWS, traceImage, traceOptions, type TraceOpts } from './io/trace';
 import { unzip, zipFiles } from './io/zip';
 import { PluginHost } from './plugins/host';
 import { registerBuiltinTools } from './tools';
@@ -55,6 +55,7 @@ import { TextStylesPanel } from './ui/panels/text-styles';
 import { FindFontDialog } from './ui/panels/find-font';
 import { ColorGuidePanel } from './ui/panels/color-guide';
 import { PatternOptionsPanel } from './ui/panels/pattern-options';
+import { ImageTracePanel } from './ui/panels/image-trace';
 import { CHECKER_CELL, CHECKER_PAIR, applyPrefs, loadPrefs, savePrefs, type Prefs } from './ui/prefs';
 import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './ui/properties';
 import { Rail } from './ui/rail';
@@ -116,7 +117,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -182,7 +183,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }], 'Color');
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }], 'Appearance');
-  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }], 'Symbols');
+  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
@@ -426,35 +427,34 @@ export function startApp(): void {
     return engine.task(() => engine.createOutlines(async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n); }, ids));
   }
 
+  const traceRuns = new Map<string, number>();
   async function trace(id: string, a: Record<string, unknown>): Promise<string | null> {
     const p = engine.current, n = p ? findNode(p.doc, id) : null;
-    if (!p || !n || n.kind !== 'image') return null;
-    const blob = p.assets.get(n.src);
+    const live = n?.kind === 'group' && n.trace ? n : null, src = n?.kind === 'image' ? n : live?.trace?.src ?? null;
+    if (!p || !n || !src) return null;
+    const blob = p.assets.get(src.src);
     if (!blob) return null;
-    const presetKey = Object.keys(TRACE_PRESETS).find((k) => k.toLowerCase().replace(/[^a-z0-9]/g, '') === String(a.preset ?? '').toLowerCase().replace(/[^a-z0-9]/g, ''));
-    const o = { ...DEFAULT_TRACE, ...(presetKey ? TRACE_PRESETS[presetKey] : {}), ...(typeof a.colors === 'number' ? { colors: a.colors, mode: 'color' as const } : {}), ...(typeof a.threshold === 'number' ? { threshold: a.threshold, mode: 'bw' as const } : {}), ...(typeof a.paths === 'number' ? { detail: Math.max(0, Math.min(1, a.paths / 100)) } : {}), ...(typeof a.ignore_white === 'boolean' ? { ignoreWhite: a.ignore_white } : {}) };
-    const g = await engine.task(() => traceImage(blob, n.xf, { w: n.w, h: n.h }, o));
-    if (!g) return null;
-    engine.edit('Image Trace', (d) => ({ doc: updateNodes(d, [id], () => g), select: [g.id] }));
-    return g.id;
+    const run = (traceRuns.get(id) ?? 0) + 1;
+    traceRuns.set(id, run);
+    const o = traceOptions(live?.trace?.opts as Partial<TraceOpts> | undefined ?? {}, a);
+    const g = await engine.task(() => traceImage(blob, src.xf, { w: src.w, h: src.h }, o));
+    if (traceRuns.get(id) !== run) return null;
+    if (!g || g.kind !== 'group') return null;
+    const view = TRACE_VIEWS.some(([v]) => v === a.view) ? a.view as TraceView : live?.trace?.view ?? 'result';
+    const info = { src, opts: { ...o }, view };
+    const next: VNode = live ? { ...live, children: g.children, trace: info } : { ...g, name: 'Image Tracing', trace: info };
+    engine.edit(live ? 'Image Trace Options' : 'Image Trace', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => next), select: [next.id] } : d), { merge: !!live });
+    if (a.expand === true) engine.expandTrace([next.id]);
+    return next.id;
   }
 
-  async function traceDialog(): Promise<void> {
-    const n = engine.selected().find((x) => x.kind === 'image');
-    if (!n) { toast('Select a placed image to trace.'); return; }
-    const v = await askForm('Image Trace', [
-      { kind: 'select', key: 'preset', label: 'Preset', value: '6 Colors', choices: Object.keys(TRACE_PRESETS).map((k) => [k, k] as const) },
-      { kind: 'number', key: 'colors', label: 'Colors', value: 6, min: 2, max: 64 },
-      { kind: 'number', key: 'threshold', label: 'Threshold (black and white)', value: 128, min: 1, max: 255 },
-      { kind: 'number', key: 'paths', label: 'Paths fidelity', value: 50, min: 0, max: 100, unit: '%' },
-      { kind: 'check', key: 'ignore_white', label: 'Ignore white', value: false },
-    ], { ok: 'Trace' });
-    if (!v) return;
-    const preset = TRACE_PRESETS[String(v.preset)] ?? {};
-    const args: Record<string, unknown> = { preset: v.preset, paths: v.paths, ignore_white: v.ignore_white };
-    if (preset.mode === 'bw') args.threshold = v.threshold; else args.colors = v.colors;
-    const id = await trace(n.id, args);
-    if (!id) toast('The trace found no shapes: try another preset.', 'error');
+  async function makeTrace(expand: boolean): Promise<void> {
+    const imgs = engine.selected().filter((x) => x.kind === 'image');
+    if (!imgs.length) { toast('Select a placed image to trace.'); return; }
+    if (!expand) showPanel('image-trace');
+    let found = 0;
+    for (const n of imgs) if (await trace(n.id, { preset: '6 Colors', expand })) found++;
+    if (!found) toast('The trace found no shapes: try another preset.', 'error');
   }
 
   const home = new HomeScreen(stageEl, { engine, autoShow: () => loadPrefs().autoShowHome, recent: () => recent, openRecent: (name) => { void openLibrary(name); }, run: (c) => { commands.run(c); }, preset: (id) => newDoc.createPreset(id) });
@@ -795,7 +795,10 @@ export function startApp(): void {
     { id: 'envelope-warp', label: 'Make with Warp...', keys: ['Alt+Shift+Mod+W'], enabled: sel, run: () => void askForm('Warp Options', [{ kind: 'select', key: 'style', label: 'Style', value: 'arc', choices: ['arc', 'arc_lower', 'arc_upper', 'arch', 'bulge', 'shell_lower', 'shell_upper', 'flag', 'wave', 'fish', 'rise', 'fisheye', 'inflate', 'squeeze', 'twist'].map((s) => [s, s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())] as const) }, { kind: 'number', key: 'bend', label: 'Bend', value: 50, min: -100, max: 100, unit: '%' }, { kind: 'number', key: 'h', label: 'Horizontal distortion', value: 0, min: -100, max: 100, unit: '%' }, { kind: 'number', key: 'v', label: 'Vertical distortion', value: 0, min: -100, max: 100, unit: '%' }, { kind: 'check', key: 'vertical', label: 'Vertical', value: false }]).then((v) => { if (v) engine.makeEnvelope({ kind: 'warp', style: String(v.style), bend: Number(v.bend), h: Number(v.h), v: Number(v.v), vertical: !!v.vertical }); }) },
     { id: 'envelope-mesh', label: 'Make with Mesh...', keys: ['Alt+Mod+M'], enabled: sel, run: () => void askForm('Envelope Mesh', [{ kind: 'number', key: 'rows', label: 'Rows', value: 2, min: 1, max: 20 }, { kind: 'number', key: 'cols', label: 'Columns', value: 2, min: 1, max: 20 }]).then((v) => { if (v) engine.makeEnvelope({ kind: 'mesh', rows: Math.round(Number(v.rows)), cols: Math.round(Number(v.cols)), points: [] }); }) },
     { id: 'envelope-top', label: 'Make with Top Object', keys: ['Alt+Mod+C'], enabled: many, run: () => engine.makeEnvelope('top') },
-    { id: 'image-trace', label: 'Image Trace...', enabled: () => kindSel('image'), run: () => void traceDialog() },
+    { id: 'image-trace', label: 'Make Image Trace', enabled: () => kindSel('image'), run: () => void makeTrace(false) },
+    { id: 'image-trace-expand', label: 'Make Image Trace and Expand', enabled: () => kindSel('image'), run: () => void makeTrace(true) },
+    { id: 'trace-expand', label: 'Expand Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.expandTrace() },
+    { id: 'trace-release', label: 'Release Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.releaseTrace() },
     { id: 'embed-image', label: 'Embed Image', enabled: () => kindSel('image'), run: () => engine.applyToSelection('Embed Image', (n) => (n.kind === 'image' ? { ...n, link: undefined } : n)) },
     { id: 'make-clip', label: 'Make Clipping Mask', keys: ['Mod+7'], enabled: many, run: () => engine.makeClip() },
     { id: 'release-clip', label: 'Release Clipping Mask', keys: ['Alt+Mod+7'], enabled: () => engine.selected().some((n) => n.kind === 'group' && n.clip), run: () => engine.releaseClip() },
@@ -935,7 +938,7 @@ export function startApp(): void {
       { label: 'Repeat', items: ['repeat-radial', 'repeat-grid', 'repeat-mirror', '-', 'release-live', 'repeat-options'] },
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'expand-object'] },
-      { label: 'Image Trace', items: ['image-trace', 'embed-image'] }, '-',
+      { label: 'Image Trace', items: ['image-trace', 'image-trace-expand', '-', 'trace-release', 'trace-expand', '-', 'embed-image'] }, '-',
       { label: 'Text Wrap', items: ['wrap-make', 'wrap-release', '-', 'wrap-options'] },
       { label: 'Clipping Mask', items: ['make-clip', 'release-clip'] },
       { label: 'Compound Path', items: ['compound-make', 'compound-release'] },
