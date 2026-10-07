@@ -1,6 +1,6 @@
 ---
 name: formpth-harness
-description: Draws and edits vector artwork in formpth, the Illustrator-style editor, through its MCP server. Use whenever someone asks to make a poster, flyer, logo, icon, badge, sticker, diagram, infographic, pattern or illustration; to combine, recolour, outline type or apply effects to vector shapes; or to open, save or export SVG, PDF, PNG or .fpth files in formpth, even when they never name formpth or MCP. Covers get_document, get_image, draw_shape, draw_path, add_text, set_paint, pathfinder, apply_effect, export_file and 46 more tools.
+description: Draws and edits vector artwork in formpth, the Illustrator-style editor, through its MCP server. Use whenever someone asks to make a poster, flyer, logo, icon, badge, sticker, diagram, infographic, pattern or illustration; to combine, recolour, outline type or apply effects to vector shapes; or to open, save or export SVG, PDF, PNG or .fpth files in formpth, even when they never name formpth or MCP. Covers get_document, get_image, draw_shape, draw_path, add_text, set_paint, pathfinder, apply_effect, export_file and 56 more tools.
 ---
 
 # formpth-harness
@@ -21,7 +21,7 @@ formpth-harness/
     paths-and-shapes/              live shapes, paths, anchors, Pathfinder, compound, clipping
     paint-and-appearance/          fills, strokes, gradients, swatches, appearance, recolour
     type-and-layout/               type, outlines, align, transform, layers, artboards
-    effects-and-live-objects/      effects, blends, envelopes, repeats, symbols, brushes, trace
+    effects-and-live-objects/      effects, blends, envelopes, repeats, symbols, brushes, live paint, mesh, trace
     files-and-export/              open, place, save, export, scopes and formats
     troubleshooting/               consent, engine offline, stale ids, recovery
     tool-catalog-author/           keeping this pack in step with the tool catalogue
@@ -38,7 +38,7 @@ A path inside a `SUB-SKILL.md` resolves against that specialist's own folder; a 
 | Shapes, curves, anchors, combining or cutting shapes, holes, masks | `paths-and-shapes` |
 | Colours, gradients, strokes, dashes, arrows, opacity, swatches, recolouring | `paint-and-appearance` |
 | Words on the art, fonts, outlines, alignment, moving and rotating, layers, artboards | `type-and-layout` |
-| Shadows, glows, warps, roughen, blends, repeats, symbols, brushes, tracing an image | `effects-and-live-objects` |
+| Shadows, glows, warps, roughen, blends, repeats, symbols, brushes, patterns, colouring line art, soft mesh colour, tracing an image | `effects-and-live-objects` |
 | Opening, placing, saving, exporting, file formats, sizes for screens | `files-and-export` |
 | A tool error, no answer, the window asking permission, wrong ids | `troubleshooting` |
 | The tool catalogue changed, this pack is out of date | `tool-catalog-author` |

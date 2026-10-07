@@ -35,9 +35,16 @@ The engine owns the document and every change to it. It has no DOM, so the canva
 - A story spans a thread (`next` links); deleting or releasing a frame goes through `detachFrames` so its text flows back.
 - OpenType features go through the `Shaping` interface (`setShaping`), installed by `io/fonts.ts`; the engine never imports opentype.js.
 
+## Derived live objects (`livepaint.ts`, `symbolism.ts`, `pattern.ts`)
+
+- A Live Paint group (`GroupNode.livePaint`) stores only edges (its children) and paint seeds (a point and a paint). Faces are derived by `liveFaces`, a planar walk over the flattened edges, cached per children array; `liveFaceNodes` turns painted faces into path nodes that render, hit test, SVG and PDF draw under the edges. Never store faces in the document.
+- A tracing object (`GroupNode.trace`) keeps its source image; its children are the result. Views other than the result are drawn on screen only (`rc.printing` shows the result).
+- A symbol instance with `tint` is drawn from `instanceArt`, the symbol art with every paint mixed toward the tint; Break Link and Expand use `bakedInstance`.
+- Pattern tiles (`patternLattice`, `latticeCopies`) are shared by the renderer, the SVG writer and pattern editing mode; the editing session lives on the `Project`, not in the document, and squashes into one history step on Done.
+
 ## Rendering (`render.ts`)
 
-Canvas 2D with a `Path2D` cached per node in a `WeakMap`: an unchanged node is free. Raster effects render through offscreen canvases. Never mutate a node, or the cache serves a stale path.
+Canvas 2D with a `Path2D` cached per node in a `WeakMap`: an unchanged node is free. Raster effects render through offscreen canvases. Never mutate a node, or the cache serves a stale path. Group renders branch on `trace` and `livePaint` before the ordinary children loop.
 
 ## Adding an operation
 
