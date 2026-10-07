@@ -14,7 +14,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`
 - Effects and live objects: `apply_effect`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `make_pattern`, `recolor`
 - Artboards: `artboard`
-- Type: `set_text`, `create_outlines`
+- Type: `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
 - Commands: `list_commands`, `run_command`
 - History: `undo`, `redo`
 
@@ -542,7 +542,7 @@ Artboards: add one, change one (name, x, y, width, height), delete one, fit one 
 
 ## set_text
 
-Changes a type object: its words, and its font, style, size, colour, leading, tracking and alignment, for all of it or the characters from start to end.
+Changes a type object: its words, and its font, style, size, colour, leading, tracking, alignment, case and OpenType features, for all of it or the characters from start to end.
 
 - `id`: string; required; An object id from get_document.
 - `text`: string
@@ -555,6 +555,39 @@ Changes a type object: its words, and its font, style, size, colour, leading, tr
 - `align`: string (left | center | right | justify)
 - `start`: integer
 - `end`: integer
+- `caps`: string (none | all | small)
+- `features`: array; OpenType feature tags to turn on, replacing the current list: liga, dlig, frac, ordn, tnum, pnum, lnum, onum, zero, case, sups, subs, numr, dnom, swsh, salt, titl, smcp, ss01..ss20. Features the font lacks do nothing; find_font lists the fonts in use.
+
+## text_flow
+
+Threads area type through more frames, releases or unthreads frames, or wraps area type around objects. thread: ids in order, the first area type, the rest area type or closed paths (which become frames). release: the frames leave the thread and their text flows back. remove: every link breaks and each frame keeps its text. wrap: area type below these objects in their layer flows around them, offset points away (invert flows it inside them). unwrap: stop wrapping.
+
+- `action`: string (thread | release | remove | wrap | unwrap); required
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `offset`: number; default 6
+- `invert`: boolean; default false
+
+## text_style
+
+Character and paragraph styles: list them, create one from the selected type (or ids) and apply it, apply one to type (character styles to the characters from start to end), redefine one from the selected type, or delete one. style is an id or a name.
+
+- `action`: string (list | create | apply | redefine | delete); required
+- `kind`: string (char | para); default "char"
+- `name`: string
+- `style`: string
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `start`: integer
+- `end`: integer
+
+## find_font
+
+Lists the fonts the document's type uses (family, style and the objects using each), or replaces one family (and optionally one style) with another everywhere.
+
+- `action`: string (list | replace); default "list"
+- `font`: string
+- `style`: string
+- `to_font`: string
+- `to_style`: string; default "Regular"
 
 ## create_outlines
 

@@ -494,6 +494,7 @@ export function startApp(): void {
     svg: async (scope, artboard, ids) => { const p = engine.current; if (!p) return ''; return exportSvg(p, { artboard: scope === 'document' ? 'all' : artboard ?? p.activeArtboard, outlineText: false, preserve: false, precision: 2, ids: ids ?? (scope === 'selection' ? engine.targetIds() : undefined) }); },
     outlines: (ids) => makeOutlines(ids),
     trace,
+    ensureFace,
   });
   agents.commands = commands;
   agents.setEnabled(loadPrefs().agentsAllowed);

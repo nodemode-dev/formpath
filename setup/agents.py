@@ -34,7 +34,7 @@ GROUPS = [
     ("Path operations", {"pathfinder", "path_operation", "shape_builder"}),
     ("Effects and live objects", {"apply_effect", "expand", "make_blend", "envelope", "repeat", "symbol", "apply_brush", "image_trace", "make_pattern", "recolor"}),
     ("Artboards", {"artboard"}),
-    ("Type", {"set_text", "create_outlines"}),
+    ("Type", {"set_text", "text_flow", "text_style", "find_font", "create_outlines"}),
     ("Commands", {"list_commands", "run_command"}),
     ("History", {"undo", "redo"}),
 ]

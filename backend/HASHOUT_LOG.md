@@ -96,6 +96,13 @@ Paths are checked here, not in the window: absolute, an allowed extension, the f
 
 States that type is black unless `color` is given, matching the bridge's default. After changing any entry in `TOOLS`, run `./formpth agents sync`; CI checks it.
 
+### app/routers/mcp.py · type tools
+- refers-to: app/routers/mcp.py :: TOOLS, set_text, text_flow, text_style, find_font
+- kind: explainer
+- logged: v0.10.0 · 2026-10-07
+
+`text_flow` folds threading and text wrap into one tool with an `action`, since both decide where a story's lines go and an agent reaches for them at the same moment (copy that does not fit). `text_style` covers both style kinds with `kind`. `find_font` is not marked read-only because `replace` edits. `set_text` gained `caps` and `features`; `features` replaces the whole list, so an agent adds a tag by sending the old tags with it. Object descriptions now carry `overflow`, `next`, `wrapped` and `wrap`, which is how an agent sees that a frame needs threading. The catalogue is at 58 tools.
+
 ## app/routers/projects.py
 
 ### app/routers/projects.py · save conflicts

@@ -4,7 +4,7 @@ import { EFFECTS, effectDef, WIDTH_PROFILES } from '../engine/effects';
 import { anchor, flatIndex, inflate, isEmptyRect, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, mapFn, nearestFn, RECOLOR, recolorDoc } from '../engine/ops/recolor';
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
-import { DEFAULT_CHAR, plainText, styleSpans } from '../engine/text';
+import { DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
 import { transformNode } from '../engine/transform';
 import { UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type Paint, type PathData, type Pt, type Rect, type StrokeItem, type TextNode, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
@@ -22,6 +22,7 @@ export interface AgentDeps {
   svg(scope: string, artboard: number | undefined, ids: string[] | undefined): Promise<string>;
   outlines(ids?: string[]): Promise<boolean>;
   trace(id: string, o: Record<string, unknown>): Promise<string | null>;
+  ensureFace?(family: string, style: string): Promise<void>;
 }
 
 const text = (t: string, data?: Record<string, unknown>): McpResult => ({ content: [{ type: 'text', text: t }], ...(data ? { structuredContent: data } : {}) });
@@ -117,7 +118,8 @@ export class AgentBridge {
     const doc = this.engine.doc;
     if (!doc) return {};
     const f = firstFill(n.ap);
-    return { id: n.id, kind: n.kind, name: nodeLabel(n), bounds: box(geomBounds(doc, n)), fill: f ? (f.paint.type === 'color' ? hex(f.paint.color) : f.paint.type) : undefined };
+    const t = n.kind === 'text' ? { overflow: layoutText(n).overflow >= 0, ...(n.next ? { next: n.next } : {}), ...(n.wrapShape?.length ? { wrapped: true } : {}) } : {};
+    return { id: n.id, kind: n.kind, name: nodeLabel(n), bounds: box(geomBounds(doc, n)), fill: f ? (f.paint.type === 'color' ? hex(f.paint.color) : f.paint.type) : undefined, ...t, ...(n.wrap ? { wrap: n.wrap } : {}) };
   }
 
   async run(name: string, a: Record<string, unknown>): Promise<McpResult> {
@@ -453,13 +455,41 @@ export class AgentBridge {
           const n = this.node(a.id);
           if (n.kind !== 'text') return fail(`${n.id} is not type.`);
           if (has('text')) e.setTextSpans(n.id, [{ text: str('text'), style: n.spans[0]?.style ?? DEFAULT_CHAR }], 'Edit Text');
-          const patch: Partial<typeof DEFAULT_CHAR> = { ...(has('font') ? { font: str('font') } : {}), ...(has('style') ? { style: str('style') } : {}), ...(has('size') ? { size: Math.max(0.1, num('size', 12)) } : {}), ...(has('color') ? { fill: this.paint(a.color, 'color') } : {}), ...(has('leading') ? { leading: num('leading', 14) } : {}), ...(has('tracking') ? { tracking: num('tracking', 0) } : {}) };
+          const patch: Partial<typeof DEFAULT_CHAR> = { ...(has('font') ? { font: str('font') } : {}), ...(has('style') ? { style: str('style') } : {}), ...(has('size') ? { size: Math.max(0.1, num('size', 12)) } : {}), ...(has('color') ? { fill: this.paint(a.color, 'color') } : {}), ...(has('leading') ? { leading: num('leading', 14) } : {}), ...(has('tracking') ? { tracking: num('tracking', 0) } : {}), ...(Array.isArray(a.features) ? { features: a.features.filter((f): f is string => typeof f === 'string' && /^[a-z0-9]{4}$/.test(f)) } : {}), ...(has('caps') ? { caps: str('caps') as 'none' } : {}) };
           if (Object.keys(patch).length) {
             const cur = e.nodeById(n.id) as TextNode, range: [number, number] | undefined = has('start') || has('end') ? [Math.max(0, Math.round(num('start', 0))), Math.round(num('end', plainText(cur).length))] : undefined;
             e.edit('Character', (d) => updateNodes(d, [n.id], (x) => (x.kind === 'text' ? { ...x, spans: range ? styleSpans(x.spans, range[0], range[1], patch) : x.spans.map((s) => ({ ...s, style: { ...s.style, ...patch } })) } : x)));
           }
           if (has('align')) e.setParaStyle({ align: str('align') as 'left' }, [n.id]);
           return text('Changed the type.', this.describe(this.node(n.id)));
+        }
+        case 'text_flow': {
+          const act = str('action'), ids = this.ids(a);
+          if (act === 'thread') { if (!ids || ids.length < 2) return fail('Give ids: the area type first, then the frames or closed paths to thread into, in order.'); return e.threadText(ids) ? text('Threaded the type.', { frames: ids.map((id) => this.describe(this.node(id))) }) : fail('Nothing was threaded: the first id must be area type and the rest area type or closed paths.'); }
+          if (act === 'release' || act === 'remove') return e.releaseThread(ids, act === 'remove') ? text(act === 'remove' ? 'Removed the threading; each frame keeps its text.' : 'Released the frames; their text flowed back into the thread.') : fail('Those objects are not threaded type.');
+          if (act === 'wrap') return e.setTextWrap({ offset: num('offset', 6), invert: a.invert === true }, ids) ? text('Area type below these objects in their layer now wraps around them.') : fail('Nothing to wrap: give ids or select objects.');
+          if (act === 'unwrap') return e.setTextWrap(null, ids) ? text('Released the text wrap.') : fail('Nothing to release.');
+          return fail('action must be thread, release, remove, wrap or unwrap.');
+        }
+        case 'text_style': {
+          const kind = str('kind', 'char') === 'para' ? 'para' : 'char', act = str('action', 'list'), doc = p.doc;
+          const defs: Array<{ id: string; name: string }> = kind === 'char' ? doc.charStyles : doc.paraStyles;
+          const pick = (): string | null => { const s = str('style'); if (!s) return null; const d = defs.find((x) => x.id === s || x.name.toLowerCase() === s.toLowerCase()); if (!d) throw new ToolError(`There is no ${kind === 'char' ? 'character' : 'paragraph'} style ${s}: call text_style with action list.`); return d.id; };
+          if (act === 'list') return text(defs.length ? defs.map((d) => `${d.id}: ${d.name}`).join('\n') : 'No styles yet.', { styles: kind === 'char' ? doc.charStyles : doc.paraStyles });
+          if (act === 'create') { const ids = this.ids(a); if (ids?.length) e.select(ids); const id = e.addTextStyle(kind, str('name') || `Style ${defs.length + 1}`); if (id && e.selected().some((x) => x.kind === 'text')) e.applyTextStyle(kind, id); return id ? text(`Made the style ${id} from the selected type and applied it.`, { id }) : fail('No document.'); }
+          if (act === 'apply') { const range: [number, number] | undefined = kind === 'char' && (has('start') || has('end')) ? [Math.max(0, Math.round(num('start', 0))), Math.round(num('end', 1e9))] : undefined; return e.applyTextStyle(kind, pick(), this.ids(a), range) ? text('Applied the style.') : fail('Select type or give ids of type objects.'); }
+          if (act === 'redefine') { const ids = this.ids(a); if (ids?.length) e.select(ids); const id = pick(); return id && e.redefineTextStyle(kind, id) ? text('Redefined the style from the selected type and updated everything using it.') : fail('Give the style and select the type to take it from.'); }
+          if (act === 'delete') { const id = pick(); return id && e.deleteTextStyle(kind, id) ? text('Deleted the style; type that used it keeps its look.') : fail('Give the style to delete.'); }
+          return fail('action must be list, create, apply, redefine or delete.');
+        }
+        case 'find_font': {
+          const used = e.fontsUsed();
+          if (str('action', 'list') === 'list') return text(used.map((u) => `${u.font} ${u.style}: ${u.ids.length} object(s)`).join('\n') || 'The document has no type.', { fonts: used.map((u) => ({ font: u.font, style: u.style, objects: u.ids })) });
+          if (!has('font') || !has('to_font')) return fail('replace needs font (and optionally style) and to_font (and optionally to_style).');
+          const to = { font: str('to_font'), style: str('to_style', 'Regular') };
+          await this.deps.ensureFace?.(to.font, to.style);
+          const n = e.replaceFont({ font: str('font'), style: has('style') ? str('style') : undefined }, to);
+          return n ? text(`Replaced ${n} run(s) with ${to.font} ${to.style}.`) : fail(`No type uses ${str('font')}${has('style') ? ` ${str('style')}` : ''}.`);
         }
         case 'create_outlines': { const ok = await this.deps.outlines(this.ids(a)); return ok ? text('Created outlines.', { selection: e.selectedIds() }) : fail('Nothing was outlined: select type, and check that its font can be read.'); }
         case 'undo': { const n = Math.max(1, Math.round(num('steps', 1))); return e.undo(n) ? text(`Undid ${n} step${n === 1 ? '' : 's'}.`) : fail('Nothing to undo.'); }
