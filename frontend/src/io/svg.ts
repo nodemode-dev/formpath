@@ -1,4 +1,4 @@
-import { selectionBounds } from '../engine/bounds';
+import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf, findNode, newDoc, newId } from '../engine/doc';
 import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline, type RasterFx } from '../engine/effects';
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
@@ -8,7 +8,7 @@ import { meshQuads } from '../engine/mesh';
 import { latticeCopies, patternLattice } from '../engine/pattern';
 import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
-import { clipGeometry, docArtBounds, gradientGeom } from '../engine/render';
+import { clipGeometry, docArtBounds, gradientGeom, renderNode } from '../engine/render';
 import { layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
 import { BLEND_MODES, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
 import { outlineText } from './fonts';
@@ -197,8 +197,25 @@ class Writer {
     return `<text xml:space="preserve"${xf}>${runs.join('')}</text>`;
   }
 
+  baked(n: VNode): string | null {
+    if (n.kind === 'layer' || typeof document === 'undefined' || !rasterEffects(n).some((f) => f.kind === 'filter')) return null;
+    const b = visualBounds(this.doc, n);
+    if (isEmptyRect(b)) return '';
+    const k = Math.min(Math.max(1, (this.doc.rasterPpi || 150) / 72), Math.sqrt(16e6 / Math.max(1, b.w * b.h))), W = Math.max(1, Math.ceil(b.w * k)), H = Math.max(1, Math.ceil(b.h * k));
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    if (!g) return '';
+    g.setTransform(k, 0, 0, k, -b.x * k, -b.y * k);
+    renderNode(g, { ...n, opacity: 1, blend: 'normal' } as VNode, { doc: this.doc, scale: k, outline: false, assets: (key) => this.p.bitmaps.get(key) ?? null, printing: true });
+    const attrs = `${n.opacity < 1 ? ` opacity="${num(n.opacity)}"` : ''}${n.blend !== 'normal' ? ` style="mix-blend-mode:${BLEND_CSS.get(n.blend) ?? 'normal'}"` : ''}${n.name ? ` data-name="${esc(n.name)}"` : ''}`;
+    return `<image href="${c.toDataURL('image/png')}" x="${num(b.x)}" y="${num(b.y)}" width="${num(b.w)}" height="${num(b.h)}" preserveAspectRatio="none"${attrs}/>`;
+  }
+
   node(n: VNode): string {
     if (n.hidden) return '';
+    const baked = this.baked(n);
+    if (baked !== null) return baked;
     switch (n.kind) {
       case 'layer': case 'group': {
         if (n.clip && n.children.length > 1) {
