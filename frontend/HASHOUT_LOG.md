@@ -345,6 +345,13 @@ Each Effect Gallery effect is a function from unpremultiplied float planes to pl
 
 Every kernel is linear in the pixel count whatever its size. Blurs are three box passes, the vertical ones accumulated row by row for cache locality. Directional strokes are sliding windows along lines at 0, 45, 90 and 135 degrees rather than per-pixel sampling, which took seconds on a million pixels. The Kuwahara filter (Dry Brush, Fresco, Paint Daubs, Palette Knife, Sponge, Watercolor, Cutout) uses summed-area tables weighted by alpha, so quadrants outside the object never win. Cutout reduces colours with a few rounds of k-means on a sample instead of per-channel posterisation, which gave false colours on hue gradients.
 
+### src/engine/filters.ts · Rasterize
+- refers-to: src/engine/filters.ts :: RUNS rasterize.raster
+- kind: explainer
+- logged: v0.14.0 · 2026-10-07
+
+The live Rasterize effect averages the object's pixels in cells of 72 divided by its resolution points, aligned to the object, so it shows the pixels it would have at that resolution at any zoom. A white background fills the object's bounds plus Add Around Object and makes them opaque. It sits in the Illustrator half of the Effect menu, not the gallery.
+
 ## src/engine/geometry.ts
 
 ### src/engine/geometry.ts · straight segments

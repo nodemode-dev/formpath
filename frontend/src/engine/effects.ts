@@ -100,6 +100,7 @@ export const EFFECTS: EffectDef[] = [
   { id: 'stylize.inner_glow', label: 'Inner Glow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'screen', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#ffffff')] },
   { id: 'stylize.outer_glow', label: 'Outer Glow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'screen', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#ffd400')] },
   { id: 'stylize.feather', label: 'Feather', menu: 'Stylize', raster: true, params: [num('radius', 'Feather Radius', 5, 0, 1000, 'pt')] },
+  { id: 'rasterize.raster', label: 'Rasterize', menu: 'Rasterize', raster: true, params: [num('resolution', 'Resolution', 72, 1, 2400, 'ppi'), sel('background', 'Background', 'transparent', ['transparent', 'white']), num('around', 'Add Around Object', 0, 0, 1000, 'pt')] },
   { id: 'blur.gaussian', label: 'Gaussian Blur', menu: 'Blur', raster: true, family: 'photoshop', params: [num('radius', 'Radius', 5, 0, 250, 'pt')] },
   ...GALLERY,
   { id: 'convert.rectangle', label: 'Rectangle', menu: 'Convert to Shape', params: [num('extra_w', 'Extra Width', 0, -1000, 1000, 'pt'), num('extra_h', 'Extra Height', 0, -1000, 1000, 'pt')] },

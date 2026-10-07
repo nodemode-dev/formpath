@@ -711,6 +711,20 @@ const RUNS: Record<string, Run> = {
     }
     return out;
   },
+  'rasterize.raster': (px, p, F) => {
+    const c = (F.scale * 72) / Math.max(1, num(p, 'resolution', 72)), white = str(p, 'background', 'transparent') === 'white', out = like(px), { w, h } = px;
+    if (c > 1.01) {
+      const gx0 = Math.floor(-F.x / c) - 1, cols = Math.floor((w - F.x) / c) + 2 - gx0, gy0 = Math.floor(-F.y / c) - 1, rows = Math.floor((h - F.y) / c) + 2 - gy0, sum = new Float64Array(cols * rows * 5);
+      const cell = (x: number, y: number): number => ((Math.floor((y - F.y) / c) - gy0) * cols + Math.floor((x - F.x) / c) - gx0) * 5;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, k = cell(x, y), a = px.a[i]; sum[k] += px.r[i] * a; sum[k + 1] += px.g[i] * a; sum[k + 2] += px.b[i] * a; sum[k + 3] += a; sum[k + 4]++; }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, k = cell(x, y), a = sum[k + 3], q = a > 1e-6 ? 1 / a : 0; out.r[i] = sum[k] * q; out.g[i] = sum[k + 1] * q; out.b[i] = sum[k + 2] * q; out.a[i] = a / sum[k + 4]; }
+    } else { out.r.set(px.r); out.g.set(px.g); out.b.set(px.b); out.a.set(px.a); }
+    if (white) {
+      const m = num(p, 'around', 0) * F.scale, x0 = F.x - m, y0 = F.y - m, x1 = F.x + F.w + m, y1 = F.y + F.h + m;
+      for (let y = Math.max(0, Math.floor(y0)); y < Math.min(h, Math.ceil(y1)); y++) for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) { const i = y * w + x, a = out.a[i]; out.r[i] = out.r[i] * a + 1 - a; out.g[i] = out.g[i] * a + 1 - a; out.b[i] = out.b[i] * a + 1 - a; out.a[i] = 1; }
+    }
+    return out;
+  },
   'gallery.ntsc_colors': (px) => map(px, (r, g, b, _i, o) => {
     const Y = 0.299 * r + 0.587 * g + 0.114 * b, I = 0.596 * r - 0.274 * g - 0.322 * b, Q = 0.211 * r - 0.523 * g + 0.312 * b, c = Math.hypot(I, Q), lim = 0.24, k = c > lim ? lim / c : 1, i2 = I * k, q2 = Q * k;
     o[0] = Y + 0.956 * i2 + 0.621 * q2; o[1] = Y - 0.272 * i2 - 0.647 * q2; o[2] = Y - 1.106 * i2 + 1.703 * q2;
@@ -718,13 +732,14 @@ const RUNS: Record<string, Run> = {
 };
 
 export const FILTER_IDS = new Set(Object.keys(RUNS));
-const MOVES_ALPHA = new Set(['blur.radial', 'gallery.spatter', 'gallery.sprayed_strokes', 'gallery.glass', 'gallery.ocean_ripple', 'gallery.crystallize']);
+const MOVES_ALPHA = new Set(['rasterize.raster', 'blur.radial', 'gallery.spatter', 'gallery.sprayed_strokes', 'gallery.glass', 'gallery.ocean_ripple', 'gallery.crystallize']);
 
 export function filterReach(id: string, p: Params): number {
   if (id === 'gallery.spatter' || id === 'gallery.sprayed_strokes') return num(p, 'radius', 10) * 0.5 + (id === 'gallery.sprayed_strokes' ? num(p, 'length', 12) / 2 : 0);
   if (id === 'gallery.glass') return num(p, 'distortion', 5) * 1.5;
   if (id === 'gallery.ocean_ripple') return num(p, 'magnitude', 9) * 0.6;
   if (id === 'gallery.crystallize') return num(p, 'cell', 10) * 0.5;
+  if (id === 'rasterize.raster') return str(p, 'background', 'transparent') === 'white' ? num(p, 'around', 0) : 0;
   return 0;
 }
 
