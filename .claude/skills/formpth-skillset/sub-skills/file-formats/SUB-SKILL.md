@@ -1,6 +1,6 @@
 ---
 name: file-formats
-description: formpth file formats in frontend/src/io. Use for the .fpth project format and manifest, SVG import and export, PDF export and reading formpth PDFs, PNG, JPEG and WebP export, Export for Screens, placed and linked images, image trace, bundled and installed fonts, and type outlines through opentype.js.
+description: formpth file formats in frontend/src/io. Use for the .fpth project format and manifest, SVG import and export, PDF export, reading formpth PDFs and reading any PDF or .ai, PNG, JPEG and WebP export, Export for Screens, placed and linked images, image trace, bundled and installed fonts, and type outlines through opentype.js.
 ---
 
 # file-formats
@@ -17,6 +17,10 @@ A zip of `manifest.json` (`format: com.nodemode.formpth`, `version: 1`, `app`, `
 ## PDF (`io/pdf.ts`)
 
 `exportPdf(project, { artboards, preserve, ppi })`: one page per artboard with a flipped page matrix; transparency and blend modes as ExtGState; gradients as shading patterns (Type 2 and 3 with stitching functions); images as DCT or Flate with an SMask; anything a PDF cannot express (raster effects, masks, meshes, unoutlined text) is rasterised at `ppi`. The editable document is embedded as `formpth-document.json`; `readPdfNative` finds it.
+
+## PDF and .ai reading (`io/pdf-read.ts`)
+
+`readPdfVector(data, title)` returns `{ doc, assets, pages, skipped, fonts }` for any PDF or PDF-compatible .ai that `readPdfNative` does not recognise. Objects are found by scanning for `n g obj`, object streams are unpacked, Flate (with PNG predictors), ASCIIHex, ASCII85 and DCT decode; encrypted files throw. The content interpreter maps paths, painting, dashes, ExtGState opacity and blend, clipping (as clip groups), colour spaces (gray, RGB and CMYK stay native; ICCBased, Indexed, Separation, DeviceN and Lab convert), axial and radial shadings (as gradients), form XObjects (as groups), images with SMask, and text (point type, ToUnicode or Differences, fonts matched through `FontNames`, runs tracked to the PDF's width by `fitRun`). Type 3 glyphs run as content. Anything left out goes into `skipped`, and font fallbacks into `fonts`, which the open flow reports.
 
 ## Raster (`io/raster.ts`)
 
