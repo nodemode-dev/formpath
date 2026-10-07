@@ -559,6 +559,7 @@ Live Paint: make a Live Paint group from paths (their crossings divide the area 
 - `x`: number
 - `y`: number
 - `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `width`: number; Stroke width in points for edge; 0 hides the edge.
 - `gap`: number
 
 ## gradient_mesh
