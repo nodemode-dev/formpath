@@ -143,3 +143,10 @@ The browser and the desktop web views cannot read installed fonts, so the engine
 - logged: v0.9.0 · 2026-10-07
 
 Scans the system font folders for macOS, Windows and Linux once and caches the list; ids are hashes of paths so no path leaves the engine.
+
+### app/services/fonts.py · fontconfig folders
+- refers-to: app/services/fonts.py :: _dirs
+- kind: explainer
+- logged: v0.13.0 · 2026-10-07
+
+On Linux the `dir` entries of fontconfig's configuration are added to the standard folders, so fonts a distribution installs outside `/usr/share/fonts` (TeX Live's OpenType fonts, for instance) are listed as the desktop lists them. Relative entries are skipped, since the home folders are already scanned, and folders inside a scanned folder are not added twice.

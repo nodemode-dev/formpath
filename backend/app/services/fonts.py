@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import struct
 import sys
 import threading
@@ -19,7 +20,17 @@ def _dirs() -> list[Path]:
         windir = Path(os.environ.get("WINDIR", "C:\\Windows"))
         local = Path(os.environ.get("LOCALAPPDATA", str(home / "AppData/Local")))
         return [windir / "Fonts", local / "Microsoft/Windows/Fonts"]
-    return [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), home / ".fonts", home / ".local/share/fonts"]
+    dirs = [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), home / ".fonts", home / ".local/share/fonts"]
+    for conf in [Path("/etc/fonts/fonts.conf"), *sorted(Path("/etc/fonts/conf.d").glob("*.conf"))]:
+        try:
+            text = conf.read_text(errors="ignore")
+        except OSError:
+            continue
+        for m in re.finditer(r"<dir(?:\s[^>]*)?>([^<]+)</dir>", text):
+            p = Path(os.path.expanduser(m.group(1).strip()))
+            if p.is_absolute() and p not in dirs and not any(d in p.parents for d in dirs):
+                dirs.append(p)
+    return dirs
 
 
 def _decode(raw: bytes, platform: int) -> str:
