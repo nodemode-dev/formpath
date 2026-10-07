@@ -2,6 +2,17 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.3.0 · 2026-10-07
+
+Selection and drawing tools.
+
+### Added
+
+- Selection, Direct Selection, Group Selection, Magic Wand and Lasso; Hand, Rotate View, Zoom and the Artboard tool.
+- Pen, Add and Delete Anchor Point, Anchor Point and Curvature.
+- Rectangle, Rounded Rectangle, Ellipse, Polygon, Star, Flare, Line Segment, Arc, Spiral, Rectangular and Polar Grid, with exact sizes on a click.
+- Pencil, Smooth, Path Eraser, Join, Paintbrush, Blob Brush, Eraser, Scissors and Knife.
+
 ## 0.2.0 · 2026-10-07
 
 Document engine.
