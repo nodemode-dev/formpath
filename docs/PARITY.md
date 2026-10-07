@@ -75,7 +75,7 @@ Platform rows are shown and not scored.
 | Stroke panel | Full | Weight, caps, joins, miter, alignment, dashes, arrowheads with scale, profiles |
 | Appearance and Graphic Styles | Full | Multiple fills and strokes, effects per item, visibility, Clear and Reduce to Basic, Graphic Styles |
 
-## Effects and live objects · 9.5 of 10
+## Effects and live objects · 10 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
