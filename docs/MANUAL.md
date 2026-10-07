@@ -31,8 +31,8 @@ ask it questions.
 - Properties (the column beside the stage) shows what matters for the selection: transform, fill, stroke, opacity
   and quick actions; with nothing selected it shows the document's units, artboards, rulers and grids.
 - Panels dock on the right in groups: Color, Swatches, Gradient; Stroke, Transparency, Brushes; Appearance, Graphic
-  Styles; Symbols, Artboards, Links; Navigator, Info, History, Actions; Layers; Properties, Transform, Align,
-  Pathfinder; Character, Paragraph, Glyphs. Drag a tab into another group or between groups; Window lists every
+  Styles; Symbols, Artboards, Links, Image Trace; Navigator, Info, History, Actions; Layers; Properties, Transform,
+  Align, Pathfinder, Pattern Options; Character, Paragraph, Glyphs. Drag a tab into another group or between groups; Window lists every
   panel and Window > Reset Panels puts them back. Workspaces in the title bar arrange the panels for a kind of work.
 - Screen modes (F cycles): standard, full screen with menu bar, full screen. Tab hides the panels.
 
@@ -111,8 +111,11 @@ ask it questions.
 - Pathfinder: Unite, Minus Front, Intersect, Exclude, and Divide, Trim, Merge, Crop, Outline and Minus Back. Shape
   modes make a single new path; Divide and the rest make groups of pieces.
 - Shape Builder (Shift+M): drag across regions of the selected shapes to merge them; Alt-drag to delete regions.
-- Live Paint Bucket (K): click regions of the selected paths to fill them with the current fill, as if the paths
-  were a colouring book.
+- Live Paint Bucket (K): click an area closed by the selected paths to fill it with the current fill, as if the
+  paths were a colouring book. The paths become a Live Paint group (Object > Live Paint > Make, Ctrl+Alt+X) that stays
+  editable: move or reshape a path and the colours follow their areas. Shift-click a path to paint its stroke.
+  Gap Options closes small openings so an area that is not quite closed still fills; Merge adds more paths; Expand
+  makes ordinary filled shapes and strokes; Release gives the paths back.
 - Compound paths (Ctrl+8) cut holes by the fill rule; clipping masks (Ctrl+7) clip objects with the topmost path.
 
 ## Colour and paint
@@ -132,9 +135,16 @@ ask it questions.
 - Color Guide: harmonies of the current colour. Choose a rule (complementary, analogous, triad and nine more), click
   any swatch to use it, and pick tints and shades, warm and cool, or vivid and muted variations below. The plus saves
   the five harmony colours as a swatch group.
-- Mesh (U): click into a shape to make a gradient mesh, then colour its points.
+- Mesh (U): click into a shape to make a gradient mesh, then click inside it to add mesh lines in the fill colour
+  (Shift keeps the colour already there). Click a point to select it: drag it, drag its handles to bend the lines,
+  and set its colour and opacity in the options bar. Alt-click a point to remove its lines.
 - Eyedropper (I) picks up the fill, stroke and type attributes of what you click and applies them to the selection.
-- Patterns: Object > Pattern > Make turns the selection into a pattern swatch; patterns fill and stroke like colours.
+- Patterns: Object > Pattern > Make opens pattern editing mode on a copy of the selection: the tile repeats around
+  it, and Pattern Options sets the name, tile type (grid, brick by row or column with an offset, hex by column or
+  row), the tile size (fitted to the art or exact), spacing, which neighbour overlaps in front, how many copies show
+  and how dim. Edit the art as usual, then Done (or Escape) adds the swatch, Save a Copy adds another, Cancel leaves
+  nothing behind. Double-click a pattern swatch, or Object > Pattern > Edit Pattern, to change one; every object
+  filled with it updates. Patterns fill and stroke like colours.
 
 ## Stroke, transparency and appearance
 
@@ -149,7 +159,9 @@ ask it questions.
   Roughen, Transform, Tweak, Twist, Zig Zag), Path (Offset Path, Outline Stroke), Stylize (Round Corners, Scribble,
   Drop Shadow, Inner Glow, Outer Glow, Feather), Blur (Gaussian Blur) and Convert to Shape. Apply Last Effect repeats
   the last one; Expand Appearance makes it permanent.
-- Brushes: calligraphic, scatter, art and pattern brushes apply to any stroke from the Brushes panel.
+- Brushes: calligraphic, scatter, art and pattern brushes apply to any stroke from the Brushes panel. New Brush
+  makes a calligraphic brush, or a scatter, art or pattern brush from the selected art; double-click a brush for its
+  options and colorization.
 
 ## Type
 
@@ -196,9 +208,17 @@ ask it questions.
 - Repeats: radial, grid and mirror, editable in Repeat Options until released or expanded.
 - Envelope Distort: warp presets, a mesh, or the top object's shape.
 - Symbols: Object > Symbol > New Symbol stores art in the Symbols panel; instances update when the symbol changes;
-  Break Link makes an instance ordinary art. The Symbol Sprayer (Shift+S) sprays instances.
-- Image Trace converts a placed image to paths: black and white, colour, greyscale or posterised presets, with the
-  number of colours, path fitting and noise to tune. Embed turns a linked image into one stored in the document.
+  Break Link makes an instance ordinary art. The Symbol Sprayer (Shift+S) sprays instances into a symbol set, and
+  the symbolism tools in its flyout change the instances under the brush: Shifter pushes them (Shift-click and
+  Shift-Alt-click restack), Scruncher pulls them together, Sizer grows them, Spinner turns them toward the drag,
+  Stainer tints them with the fill colour, Screener fades them and Styler applies the graphic style chosen in the
+  options bar. Alt reverses each one. Diameter, intensity and the method (user defined, average, random) are in the
+  options bar; [ and ] change the diameter.
+- Image Trace: Object > Image Trace > Make traces a placed image into a tracing object that keeps the image, so the
+  Image Trace panel can change the preset, mode, colours or threshold, paths, ignore white and smoothing and trace
+  it again (with Preview on, as you change them). View switches between the result, the result with outlines,
+  outlines, outlines over the image and the image. Expand makes ordinary paths; Release brings the image back.
+  Embed turns a linked image into one stored in the document.
 
 ## Saving and exporting
 

@@ -21,6 +21,8 @@
 
 `text.ts` lays type out per node and caches the layout by node identity. Area type places each line first and breaks into the free runs of its band, so it can flow inside a shape and on both sides of a wrap object. Anything that depends on other nodes, the outlines of wrap objects and each threaded frame's share of the story, is written into the text nodes by `flow.ts` (`reflow`), which every edit, drag, undo and open runs. OpenType features reach the layout through the `Shaping` interface that `io/fonts.ts` installs, so the engine stays free of opentype.js.
 
+Some live objects keep only their inputs in the document and derive the rest. A Live Paint group stores its paths and paint seeds; `livepaint.ts` finds the faces by walking the planar graph of the flattened paths and caches them per children array. A tracing object keeps its source image beside the traced paths. A stained symbol instance is drawn from its symbol's art with the paints mixed toward the tint (`symbolism.ts`). Pattern tiles come from one lattice (`pattern.ts`) shared by the renderer, the SVG writer and pattern editing mode, whose session lives on the project rather than in the document.
+
 ## Geometry
 
 `geometry.ts` carries Bezier math, bounds and affines. `kernel.ts` adapts paper.js for booleans, intersections, offset and simplify, so Pathfinder returns curves, not polygons. `ops/` holds object, path, expand and recolor operations.

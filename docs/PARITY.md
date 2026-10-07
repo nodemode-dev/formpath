@@ -10,9 +10,9 @@ formpth is measured against Adobe Illustrator the way formvis is measured agains
 
 Platform rows are shown and not scored.
 
-## Score at v0.11.0
+## Score at v0.12.0
 
-**52.5 of 59 scored rows, 89 percent:** 48 Full, 9 Partial, 2 None. The tally is at the end.
+**55 of 59 scored rows, 93 percent:** 53 Full, 4 Partial, 2 None. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -56,26 +56,26 @@ Platform rows are shown and not scored.
 | --- | --- | --- |
 | Pathfinder | Full | Unite, Minus Front, Intersect, Exclude, Divide, Trim, Merge, Crop, Outline, Minus Back on curves through paper.js |
 | Shape Builder | Full | Drag to merge regions, Alt to delete |
-| Live Paint | Partial | The Live Paint Bucket fills regions of selected paths; no live paint group that stays editable, no gap detection |
+| Live Paint | Partial | Live Paint groups (Make, Merge, Release, Expand) whose faces re-flow as the paths are edited, the Live Paint Bucket on faces and Shift on edges, Gap Options; an edge is painted as its whole path, not per segment between crossings, and there is no Live Paint Selection tool |
 | Compound paths | Full | Make and Release with non-zero and even-odd |
 | Offset Path and Outline Stroke | Full | With joins and miter limit, as commands and as live effects |
 | Simplify, Average, Join, anchors | Full | Simplify with preview, Smooth, Average, Join, Add and Remove Anchors, Reverse, Divide Objects Below, Split into Grid, Clean Up |
 | Width tool and profiles | Full | Width points dragged on strokes; eight width profiles |
 
-## Paint and colour · 7 of 8
+## Paint and colour · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Colour panel and modes | Full | Grayscale, RGB, HSB, CMYK, Web Safe, hex, spectrum, global tints |
 | Swatches, global and spot | Full | Colours, gradients and patterns, global and spot swatches, groups for agents |
 | Gradients on fill and stroke, gradient tool | Full | Linear and radial with stops, midpoints, opacity and aspect; within, along and across strokes; the Gradient tool and annotator; freeform gradients in points and lines modes, made in the Gradient panel, edited with the Gradient tool (add, move, spread, recolour, delete points) and exported to SVG and PDF |
-| Gradient mesh | Partial | Create Gradient Mesh and the Mesh tool with coloured points; no mesh patch reshaping by handles |
-| Patterns | Partial | Make Pattern with grid, brick and hex tiles; no pattern editing mode |
+| Gradient mesh | Full | Create Gradient Mesh and the Mesh tool: add lines in a colour, move points, drag each point's handles to reshape patches, point colour and opacity, Alt-click to remove lines |
+| Patterns | Full | Pattern editing mode from Make or a swatch double-click: Pattern Options with grid, brick (with offset) and hex tiles, size to art or exact size, spacing, overlap order, copies, dimming and the tile edge; Done, Save a Copy, Cancel |
 | Recolor and harmony | Full | Recolor Artwork maps and palettes, invert, grayscale, CMYK, RGB, saturate; the Color Guide with twelve harmony rules, tints and shades, warm and cool and vivid and muted variations, saved as swatch groups |
 | Stroke panel | Full | Weight, caps, joins, miter, alignment, dashes, arrowheads with scale, profiles |
 | Appearance and Graphic Styles | Full | Multiple fills and strokes, effects per item, visibility, Clear and Reduce to Basic, Graphic Styles |
 
-## Effects and live objects · 6.5 of 10
+## Effects and live objects · 8 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -83,10 +83,10 @@ Platform rows are shown and not scored.
 | Warp and Envelope Distort | Full | Fifteen warp styles as effects and envelopes; mesh and top-object envelopes |
 | Stylize effects | Full | Drop Shadow, Inner Glow, Outer Glow, Feather, Round Corners, Scribble |
 | Blends | Full | Smooth colour, steps, distance, Replace Spine, Release, Expand |
-| Symbols and symbolism | Partial | Symbols panel, instances, Break Link, the Symbol Sprayer; no Shifter, Scruncher, Sizer, Spinner, Stainer, Screener or Styler |
+| Symbols and symbolism | Full | Symbols panel, instances, Break Link, the Symbol Sprayer, Shifter, Scruncher, Sizer, Spinner, Stainer, Screener and Styler with diameter, intensity and the user defined, average and random methods |
 | Repeat | Full | Radial, grid and mirror, with options, release and expand |
-| Brushes | Partial | Calligraphic, scatter, art and pattern brushes applied from the Brushes panel; no New Brush from art |
-| Image Trace | Partial | Twelve presets and explicit settings, expanded to paths; no live tracing object with view modes |
+| Brushes | Full | Calligraphic, scatter, art and pattern brushes; New Brush from art for all four kinds, Brush Options, colorization, Delete Brush, previews drawn from the brush |
+| Image Trace | Full | Live tracing objects with eleven presets, colour, grayscale and black and white modes, paths, ignore white and smoothing; five views; the Image Trace panel with preview; Make, Make and Expand, Expand, Release |
 | 3D and Materials | None | Not built |
 | Effect Gallery raster filters | None | Gaussian Blur only; no Effect Gallery |
 
@@ -119,7 +119,7 @@ Platform rows are shown and not scored.
 | --- | --- |
 | Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
 | Web app | The same app in a browser against the local engine |
-| Agents over MCP | 61 tools, one undo step per call, `run_command` over every menu command, consent in the window, the `formpth-harness` skill pack |
+| Agents over MCP | 65 tools, one undo step per call, `run_command` over every menu command, consent in the window, the `formpth-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |
 
 ## Tally
@@ -130,14 +130,14 @@ Platform rows are shown and not scored.
 | Selection and transform | 7 | 7 |
 | Drawing | 6 | 6 |
 | Paths and Pathfinder | 6.5 | 7 |
-| Paint and colour | 7 | 8 |
-| Effects and live objects | 6.5 | 10 |
+| Paint and colour | 8 | 8 |
+| Effects and live objects | 8 | 10 |
 | Type | 5.5 | 6 |
 | Files and output | 6 | 7 |
-| **Total** | **52.5** | **59** |
+| **Total** | **55** | **59** |
 
-48 rows Full, 9 Partial, 2 None.
+53 rows Full, 4 Partial, 2 None.
 
 ## Next to close
 
-Ordered by how often the gap is hit in everyday work: New Brush from art, live paint groups, pattern editing mode, live tracing objects, the remaining symbolism tools, mesh patch handles, contextual alternates, a general PDF reader, the Asset Export panel, Effect Gallery filters, 3D.
+Ordered by how often the gap is hit in everyday work: Live Paint edges per segment and the Live Paint Selection tool, contextual alternates and glyph alternates, a general PDF and `.ai` reader, the Asset Export panel, Effect Gallery filters, 3D.
