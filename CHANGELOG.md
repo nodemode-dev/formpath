@@ -2,6 +2,17 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.8.0 · 2026-10-07
+
+Agents.
+
+### Added
+
+- The agent bridge in the window: every MCP tool runs against the engine, with one undo step per call, `render` and `inspect` for looking, and consent asked once in the window before any outside agent may draw.
+- The plugin host: plugins add commands and draw by calling the same tools agents use.
+- The assistant panel, which drives the same tools through the configured language model.
+- Help: the manual inside the app, with the plugins dialog and the agent consent prompt.
+
 ## 0.7.0 · 2026-10-07
 
 Files.
