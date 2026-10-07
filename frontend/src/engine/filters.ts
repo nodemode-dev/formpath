@@ -1,4 +1,5 @@
 import { parseColor, toRgb } from './paint';
+import { lighting, shadeRgb } from './threed';
 import type { Effect } from './types';
 
 export interface FilterFrame { scale: number; x: number; y: number; w: number; h: number }
@@ -710,6 +711,21 @@ const RUNS: Record<string, Run> = {
       }
     }
     return out;
+  },
+  '3d.inflate': (px, p, F) => {
+    const { w, h } = px, n = w * h, R = Math.max(1, num(p, 'depth', 20) * F.scale), vol = clamp(num(p, 'volume', 100) / 100, 0.1, 1), dist = new Float32Array(n), D2 = Math.SQRT2;
+    for (let i = 0; i < n; i++) dist[i] = px.a[i] > 0.5 ? 1e9 : 0;
+    const at = (x: number, y: number): number => (x < 0 || y < 0 || x >= w || y >= h ? 0 : dist[y * w + x]);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (dist[i]) dist[i] = Math.min(dist[i], at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + D2, at(x + 1, y - 1) + D2); }
+    for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) { const i = y * w + x; if (dist[i]) dist[i] = Math.min(dist[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + D2, at(x - 1, y + 1) + D2); }
+    const H = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const t = Math.min(1, dist[i] / R); H[i] = R * Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t))) * vol; }
+    const S = blurPlane(H, w, h, Math.max(0.8, R * 0.12)), L = lighting(p);
+    return map(px, (r, g, b, i, o) => {
+      const x = i % w, y = (i / w) | 0, hx = (S[y * w + Math.min(w - 1, x + 1)] - S[y * w + Math.max(0, x - 1)]) / 2, hy = (S[Math.min(h - 1, y + 1) * w + x] - S[Math.max(0, y - 1) * w + x]) / 2, l = Math.hypot(hx, hy, 1);
+      const c = shadeRgb([r, g, b], [-hx / l, -hy / l, -1 / l], L);
+      o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
+    });
   },
   'rasterize.raster': (px, p, F) => {
     const c = (F.scale * 72) / Math.max(1, num(p, 'resolution', 72)), white = str(p, 'background', 'transparent') === 'white', out = like(px), { w, h } = px;
