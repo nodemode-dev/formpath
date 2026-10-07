@@ -39,6 +39,16 @@ export class History {
 
   noteSelection(selection: string[]): void { this.states[this.at] = { ...this.current, selection }; }
 
+  mark(): number { return this.at; }
+  squash(from: number): boolean {
+    if (from < 0 || this.at <= from + 1 || this.at !== this.states.length - 1) return false;
+    const first = this.states[from + 1], last = this.states[this.at];
+    this.states = [...this.states.slice(0, from + 1), { ...last, name: first.name }];
+    this.at = this.states.length - 1;
+    this.rev += 1;
+    return true;
+  }
+
   undo(): HistoryState | null { if (!this.canUndo) return null; this.at -= 1; this.rev += 1; return this.current; }
   redo(): HistoryState | null { if (!this.canRedo) return null; this.at += 1; this.rev += 1; return this.current; }
   jump(i: number): HistoryState | null { if (i < 0 || i >= this.states.length || i === this.at) return null; this.at = i; this.rev += 1; return this.current; }

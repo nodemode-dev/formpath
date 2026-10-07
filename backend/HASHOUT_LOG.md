@@ -103,6 +103,13 @@ States that type is black unless `color` is given, matching the bridge's default
 
 `text_flow` folds threading and text wrap into one tool with an `action`, since both decide where a story's lines go and an agent reaches for them at the same moment (copy that does not fit). `text_style` covers both style kinds with `kind`. `find_font` is not marked read-only because `replace` edits. `set_text` gained `caps` and `features`; `features` replaces the whole list, so an agent adds a tag by sending the old tags with it. Object descriptions now carry `overflow`, `next`, `wrapped` and `wrap`, which is how an agent sees that a frame needs threading. The catalogue is at 58 tools.
 
+### app/routers/mcp.py · paint and shape tools
+- refers-to: app/routers/mcp.py :: TOOLS, _FILL, select_similar, edit_shape, color_harmony, set_paint
+- kind: explainer
+- logged: v0.11.0 · 2026-10-07
+
+`set_paint` takes its fill as `_FILL`, which adds freeform gradients to `_COLOR`; strokes keep `_COLOR` because Illustrator has no freeform strokes. Freeform points are fractions of each object's bounds unless `absolute` is true, so one call can paint several objects of different sizes. `select_similar` is the Magic Wand with tolerances; `select_same` stays for exact matches on the twelve Select Same attributes. `edit_shape` reaches the live shape parameters; `get_object` reports them under `shape` in the same units. `color_harmony` is the Color Guide. The window now squashes every history step one call makes into one (`Engine.beginStep` and `endStep`), so an agent's undo always takes back exactly one call. The catalogue is at 61 tools.
+
 ## app/routers/projects.py
 
 ### app/routers/projects.py · save conflicts

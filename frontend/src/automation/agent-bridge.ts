@@ -5,8 +5,10 @@ import { anchor, flatIndex, inflate, isEmptyRect, normRect, reflectAbout, rotate
 import { collectColors, mapFn, nearestFn, RECOLOR, recolorDoc } from '../engine/ops/recolor';
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
 import { DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
+import { harmonyColors, variations, type HarmonyRule, type Variation } from '../engine/harmony';
+import { liveParams, type LivePatch } from '../engine/ops/live-shapes';
 import { transformNode } from '../engine/transform';
-import { UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type Paint, type PathData, type Pt, type Rect, type StrokeItem, type TextNode, type Units, type VNode } from '../engine';
+import { UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type TextNode, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
@@ -85,6 +87,27 @@ export class AgentBridge {
     return p;
   }
 
+  private freeform(o: Record<string, unknown>, ids: string[] | undefined): void {
+    const e = this.engine, doc = e.doc, mode = o.mode === 'lines' ? 'lines' : 'points';
+    if (!doc) return;
+    const targets = ids ?? e.targetIds(), colors = Array.isArray(o.colors) ? o.colors.map((c) => parseColor(String(c))).filter((c): c is Color => !!c) : [];
+    if (!Array.isArray(o.points) || !o.points.length) { e.setFreeform(mode, targets, colors.length ? colors : undefined); return; }
+    const abs = o.absolute === true, raw = o.points as Array<Record<string, unknown>>;
+    e.beginGesture();
+    try {
+      for (const id of targets) {
+        const n = this.node(id), b = geomBounds(doc, n), side = Math.max(b.w, b.h);
+        const points = raw.map((q) => {
+          const x = Number(q.x ?? 0.5), y = Number(q.y ?? 0.5), sp = q.spread === undefined ? null : Number(q.spread);
+          const color = parseColor(String(q.color ?? '#000'));
+          if (!color) throw new ToolError(`${String(q.color)} is not a colour.`);
+          return { x: abs ? x : b.x + x * b.w, y: abs ? y : b.y + y * b.h, color, spread: sp === null ? side * 0.35 : abs ? sp : sp * side };
+        });
+        e.setFill({ type: 'gradient', gradient: { kind: 'freeform', stops: [], angle: 0, aspect: 1, geom: null, mode, points } }, [id]);
+      }
+    } finally { e.endGesture(); }
+  }
+
   private node(id: unknown): VNode {
     const n = this.engine.doc ? findNode(this.engine.doc, String(id ?? '')) : null;
     if (!n) throw new ToolError(`No object has the id ${String(id)}: call get_document for current ids.`);
@@ -127,6 +150,8 @@ export class AgentBridge {
     const num = (k: string, d: number): number => (typeof a[k] === 'number' && Number.isFinite(a[k]) ? a[k] as number : d);
     const str = (k: string, d = ''): string => (typeof a[k] === 'string' ? a[k] as string : d);
     const has = (k: string): boolean => a[k] !== undefined && a[k] !== null;
+    const step = name !== 'undo' && name !== 'redo';
+    if (step) e.beginStep();
     try {
       if (name === 'new_document') {
         const units = (str('units', 'pt') as Units), k = UNIT_PT[units] ?? 1;
@@ -162,7 +187,7 @@ export class AgentBridge {
           return { content: [{ type: 'image', data: await b64(blob), mimeType: 'image/png' }, { type: 'text', text: `The ${str('scope', 'artboard')} as it looks now.` }] };
         }
         case 'get_svg': { const s = await this.deps.svg(str('scope', 'artboard'), has('artboard') ? Math.round(num('artboard', 0)) : undefined, Array.isArray(a.ids) ? a.ids.map(String) : undefined); return text(s.length > 200000 ? `${s.slice(0, 200000)}\n<!-- truncated -->` : s); }
-        case 'get_object': { const n = this.node(a.id); const out = { ...JSON.parse(JSON.stringify(n)) as Record<string, unknown>, bounds: box(geomBounds(p.doc, n)), visual_bounds: box(visualBounds(p.doc, n)), ...(n.kind === 'text' ? { text: plainText(n) } : {}) }; return text(JSON.stringify(out).slice(0, 100000), out); }
+        case 'get_object': { const n = this.node(a.id); const out = { ...JSON.parse(JSON.stringify(n)) as Record<string, unknown>, bounds: box(geomBounds(p.doc, n)), visual_bounds: box(visualBounds(p.doc, n)), ...(n.kind === 'text' ? { text: plainText(n), overflow: layoutText(n).overflow >= 0 } : {}), ...(n.kind === 'path' && n.live ? { shape: { kind: n.live.kind, ...liveParams(n.live) } } : {}) }; return text(JSON.stringify(out).slice(0, 100000), out); }
         case '__place': {
           const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
           const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null);
@@ -263,8 +288,9 @@ export class AgentBridge {
           return text(`Edited the anchors of ${n.id}: now ${d.reduce((s, sp) => s + sp.pts.length, 0)} anchors.`);
         }
         case 'set_paint': {
-          const ids = this.ids(a);
-          if (has('fill')) e.setFill(this.paint(a.fill, 'fill'), ids);
+          const ids = this.ids(a), ff = a.fill && typeof a.fill === 'object' && (a.fill as { type?: string }).type === 'freeform' ? a.fill as Record<string, unknown> : null;
+          if (ff) this.freeform(ff, ids);
+          else if (has('fill')) e.setFill(this.paint(a.fill, 'fill'), ids);
           if (has('stroke')) e.setStroke({ paint: this.paint(a.stroke, 'stroke') }, ids);
           return text('Painted.');
         }
@@ -463,6 +489,40 @@ export class AgentBridge {
           if (has('align')) e.setParaStyle({ align: str('align') as 'left' }, [n.id]);
           return text('Changed the type.', this.describe(this.node(n.id)));
         }
+        case 'select_similar': {
+          const ref = has('id') ? this.node(a.id).id : e.selectedIds()[0];
+          if (!ref) return fail('Give the id of the object to match, or select it first.');
+          const tol = (k: string): number | null => (typeof a[k] === 'number' ? a[k] as number : null);
+          const c = { fill: tol('fill_tolerance'), stroke: tol('stroke_tolerance'), weight: tol('weight_tolerance'), opacity: tol('opacity_tolerance'), blend: a.blend === true };
+          if (c.fill === null && c.stroke === null && c.weight === null && c.opacity === null && !c.blend) c.fill = 32;
+          const n = e.selectSimilar(ref, c, (str('mode', 'replace') as 'replace'));
+          return text(`${n} object(s) match.`, { selection: e.selectedIds() });
+        }
+        case 'edit_shape': {
+          const ids = this.ids(a) ?? e.targetIds();
+          const live = ids.map((id) => this.node(id)).filter((n): n is PathNode => n.kind === 'path' && !!n.live);
+          if (!live.length) return fail('None of those objects is a live shape; draw_shape makes them, and expand turns them into plain paths.');
+          const patch: LivePatch = {
+            ...(has('width') ? { w: num('width', 1) } : {}), ...(has('height') ? { h: num('height', 1) } : {}),
+            ...(has('corner_radius') ? { radius: num('corner_radius', 0) } : {}), ...(Array.isArray(a.radii) && a.radii.length === 4 ? { radii: a.radii.map(Number) as [number, number, number, number] } : {}),
+            ...(has('corner_type') ? { corner: str('corner_type') as 'round' } : {}), ...(has('pie_start') ? { start: num('pie_start', 0) } : {}), ...(has('pie_end') ? { end: num('pie_end', 360) } : {}),
+            ...(has('sides') ? { sides: num('sides', 6) } : {}), ...(has('points') ? { points: num('points', 5) } : {}), ...(has('outer_radius') ? { r1: num('outer_radius', 50) } : {}), ...(has('inner_radius') ? { r2: num('inner_radius', 25) } : {}),
+            ...(has('length') ? { length: num('length', 100) } : {}), ...(has('angle') ? { angle: num('angle', 0) } : {}),
+          };
+          if (has('radius')) { for (const n of live) e.editLiveShape(n.live?.kind === 'polygon' ? { ...patch, r: num('radius', 50) } : patch, [n.id]); }
+          else e.editLiveShape(patch, live.map((n) => n.id));
+          return text(`Changed ${live.length} shape(s).`, { shapes: live.map((n) => { const x = this.node(n.id); return x.kind === 'path' && x.live ? { id: x.id, kind: x.live.kind, ...liveParams(x.live) } : { id: x.id }; }) });
+        }
+        case 'color_harmony': {
+          const fp = e.fillPaint, base = has('color') ? parseColor(str('color')) : fp.type === 'color' ? fp.color : null;
+          if (!base) return fail('Give color as #rrggbb, or set a solid fill colour first.');
+          const rule = str('rule', 'complementary') as HarmonyRule, cols = harmonyColors(base, rule), vary = str('variation', 'none');
+          const out: Record<string, unknown> = { rule, colors: cols.map(hex) };
+          if (vary !== 'none') out.variations = cols.map((c) => variations(c, vary as Variation, 3).map(hex));
+          const group = str('save_group');
+          if (group) { e.beginGesture(); try { cols.forEach((c, i) => e.addSwatch(`${group} ${i + 1}`, solid(c), false, false, group)); } finally { e.endGesture(); } }
+          return text(`${rule.replace(/_/g, ' ')}: ${cols.map(hex).join(' ')}${group ? `; saved as ${group}` : ''}`, out);
+        }
         case 'text_flow': {
           const act = str('action'), ids = this.ids(a);
           if (act === 'thread') { if (!ids || ids.length < 2) return fail('Give ids: the area type first, then the frames or closed paths to thread into, in order.'); return e.threadText(ids) ? text('Threaded the type.', { frames: ids.map((id) => this.describe(this.node(id))) }) : fail('Nothing was threaded: the first id must be area type and the rest area type or closed paths.'); }
@@ -498,7 +558,7 @@ export class AgentBridge {
       }
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
-    } finally { if (!name.startsWith('__') && !/^(get_|list_)/.test(name)) this.deps.note(`An agent used ${name}.`); }
+    } finally { if (step) e.endStep(); if (!name.startsWith('__') && !/^(get_|list_)/.test(name)) this.deps.note(`An agent used ${name}.`); }
   }
 }
 

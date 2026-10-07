@@ -6,9 +6,9 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 
 - Look: `get_document`, `get_image`, `get_svg`, `get_object`
 - Files and documents: `new_document`, `open_file`, `save_project`, `export_file`, `switch_document`, `place_image`, `document_setup`
-- Selecting: `select`, `select_same`
-- Drawing: `draw_path`, `draw_shape`, `add_text`, `edit_anchors`
-- Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `graphic_style`
+- Selecting: `select`, `select_same`, `select_similar`
+- Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`
+- Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `color_harmony`, `graphic_style`
 - Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `clipping_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`
@@ -132,6 +132,18 @@ Selects every object sharing an attribute with the given object (or the first se
 - `attribute`: string (fill_color | stroke_color | stroke_weight | fill_and_stroke | opacity | blending_mode | appearance | graphic_style | shape | font_family | font_size | symbol_instance); required
 - `id`: string; An object id from get_document.
 
+## select_similar
+
+The Magic Wand: selects every object whose chosen attributes are within tolerance of the given object (or the first selected one). Give a tolerance to use an attribute: fill and stroke colour 0..255 per RGB channel, stroke weight in points, opacity in percent; blend true also requires the same blending mode.
+
+- `id`: string; An object id from get_document.
+- `fill_tolerance`: number
+- `stroke_tolerance`: number
+- `weight_tolerance`: number
+- `opacity_tolerance`: number
+- `blend`: boolean; default false
+- `mode`: string (replace | add | subtract); default "replace"
+
 ## draw_path
 
 Draws a path from an SVG path d string (M, L, H, V, C, S, Q, T, A, Z, absolute or relative), or from points (each [x, y]) joined by straight lines or, with smooth true, by a fitted curve.
@@ -171,6 +183,26 @@ Draws a live shape: x and y are the top-left of its bounds (for line and arc the
 - `name`: string
 - `layer`: string
 
+## edit_shape
+
+Changes a live shape after drawing, keeping its kind: a rectangle's width, height, corner radius (all, or radii top-left, top-right, bottom-right, bottom-left) and corner type; an ellipse's width, height and pie angles (degrees counter-clockwise from three o'clock); a polygon's radius, sides and corner radius; a star's points and outer and inner radius; a line's length and angle. get_object shows a shape's current values.
+
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `width`: number
+- `height`: number
+- `corner_radius`: number
+- `radii`: array
+- `corner_type`: string (round | inverted | chamfer)
+- `pie_start`: number
+- `pie_end`: number
+- `radius`: number
+- `sides`: integer
+- `points`: integer
+- `outer_radius`: number
+- `inner_radius`: number
+- `length`: number
+- `angle`: number
+
 ## add_text
 
 Adds type: point type at x, y (the first baseline), area type filling a width by height frame, or type on the path given by path_id. The type is black unless color is given.
@@ -208,10 +240,10 @@ Edits a path's anchor points: move some by dx, dy; replace them all; insert one 
 
 ## set_paint
 
-Sets the fill and or stroke of the objects (their first fill and first stroke): a colour, none, a swatch name or a gradient. Without ids it also sets the paint new art gets.
+Sets the fill and or stroke of the objects (their first fill and first stroke): a colour, none, a swatch name or a gradient; a fill can also be a freeform gradient. Without ids it also sets the paint new art gets.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
-- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}. Or a freeform gradient {type: freeform, mode: points|lines, points: [{x, y, color, spread}]} with x, y and spread as fractions 0..1 of each object's bounds (absolute true for document points), or {type: freeform, colors: [...]} to place the points automatically.
 - `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
 
 ## set_stroke
@@ -254,6 +286,15 @@ Adds a swatch to the document: a colour or gradient, optionally global (editing 
 - `global`: boolean; default false
 - `spot`: boolean; default false
 - `group`: string
+
+## color_harmony
+
+The Color Guide: five colours in a harmony rule around a base colour, with tints and shades, warm and cool, or vivid and muted variations of each; optionally saved to the swatches as a group.
+
+- `color`: string; The base colour, #rrggbb; the current fill colour when left out.
+- `rule`: string (complementary | split_complementary | left_complement | right_complement | analogous | monochromatic | shades | triad | tetrad | compound | high_contrast | pentagram); default "complementary"
+- `variation`: string (none | tints_shades | warm_cool | vivid_muted); default "none"
+- `save_group`: string; Save the five colours as a swatch group with this name.
 
 ## graphic_style
 

@@ -215,6 +215,13 @@ The engine service reads and writes the absolute paths agents give; the window o
 
 `rotateAbout(-deg)`: document space is y-down, so a positive matrix angle turns clockwise on screen. Agents and the Rotate dialog use Illustrator's sign, positive counter-clockwise.
 
+### src/automation/agent-bridge.ts · one step per call
+- refers-to: src/automation/agent-bridge.ts :: run; src/engine/index.ts :: Engine.beginStep, endStep; src/engine/history.ts :: History.mark, squash
+- kind: rationale
+- logged: v0.11.0 · 2026-10-07
+
+The consent prompt promises that each change is one undoable step, but a call such as `set_paint` with a fill and a stroke made two steps, and gestures only merge steps of the same name. `run` now marks the history before a call and squashes everything the call pushed into one step named after its first edit. `undo` and `redo` are left out so they move through history normally.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture

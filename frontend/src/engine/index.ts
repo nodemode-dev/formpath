@@ -151,6 +151,9 @@ export class Engine extends Emitter<EngineEvents> {
 
   beginGesture(): void { if (this.gestureDepth++ === 0) this.gestureEdits = 0; }
   endGesture(): void { this.gestureDepth = Math.max(0, this.gestureDepth - 1); }
+  private step: { p: Project; at: number } | null = null;
+  beginStep(): void { const p = this.current; this.step = p ? { p, at: p.history.mark() } : null; }
+  endStep(): void { const s = this.step; this.step = null; if (s && s.p.history.squash(s.at)) this.emit('history', null); }
 
   beginDrag(name: string): void { const p = this.current; if (!p) return; this.dragBase = p.doc; this.dragName = name; }
   dragTo(doc: Doc): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = reflow(doc); invalidateBounds(); this.emit('render', null); }

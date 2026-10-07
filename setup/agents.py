@@ -26,9 +26,9 @@ LAUNCH = str(ROOT / ("formpth.bat" if os.name == "nt" else "formpth"))
 GROUPS = [
     ("Look", {"get_document", "get_image", "get_svg", "get_object"}),
     ("Files and documents", {"new_document", "open_file", "save_project", "export_file", "switch_document", "place_image", "document_setup"}),
-    ("Selecting", {"select", "select_same"}),
-    ("Drawing", {"draw_path", "draw_shape", "add_text", "edit_anchors"}),
-    ("Paint and appearance", {"set_paint", "set_stroke", "set_appearance", "add_swatch", "graphic_style"}),
+    ("Selecting", {"select", "select_same", "select_similar"}),
+    ("Drawing", {"draw_path", "draw_shape", "edit_shape", "add_text", "edit_anchors"}),
+    ("Paint and appearance", {"set_paint", "set_stroke", "set_appearance", "add_swatch", "color_harmony", "graphic_style"}),
     ("Objects and layers", {"set_object", "arrange", "group", "compound_path", "clipping_mask", "delete_objects", "duplicate_objects", "add_layer", "set_layer", "delete_layer", "move_to_layer"}),
     ("Transform and align", {"transform", "align"}),
     ("Path operations", {"pathfinder", "path_operation", "shape_builder"}),
