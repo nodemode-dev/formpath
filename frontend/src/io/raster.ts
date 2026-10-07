@@ -1,4 +1,7 @@
 import { renderNode, type RenderContext } from '../engine/render';
+import { selectionBounds } from '../engine/bounds';
+import { findNode, makeLayer } from '../engine/doc';
+import { isEmptyRect } from '../engine/geometry';
 import { hex } from '../engine/paint';
 import type { Color, Project, Rect, VNode } from '../engine';
 import { exportRegion, exportSvg } from './svg';
@@ -43,6 +46,32 @@ export async function exportRaster(p: Project, o: RasterOpts): Promise<Blob> {
 }
 
 export interface ScreenItem { artboard: number; scale: number; format: RasterFormat | 'svg' | 'pdf'; suffix: string }
+export interface AssetItem { scale: number; format: RasterFormat | 'svg' | 'pdf'; suffix: string }
+
+export async function exportAssetsZip(p: Project, assets: Array<{ name: string; ids: string[] }>, items: AssetItem[], pdf: (q: Project) => Promise<Blob>): Promise<Blob | null> {
+  const files: Array<{ name: string; blob: Blob }> = [], used = new Set<string>();
+  const safe = (s: string): string => s.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Asset';
+  for (const a of assets) {
+    const nodes = a.ids.map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && !n.hidden);
+    if (!nodes.length) continue;
+    const b = selectionBounds(p.doc, nodes, true);
+    if (isEmptyRect(b) || b.w <= 0 || b.h <= 0) continue;
+    let stem = safe(a.name), k = 1;
+    while (used.has(stem)) stem = `${safe(a.name)}-${++k}`;
+    used.add(stem);
+    for (const it of items) {
+      const name = `${stem}${it.suffix}`;
+      if (it.format === 'svg') files.push({ name: `${name}.svg`, blob: new Blob([await exportSvg(p, { artboard: 'art', ids: nodes.map((n) => n.id), outlineText: false, preserve: false, precision: 3 })], { type: 'image/svg+xml' }) });
+      else if (it.format === 'pdf') {
+        const layer = { ...makeLayer('Asset', 0), children: nodes };
+        const q = Object.create(p) as Project;
+        Object.defineProperty(q, 'doc', { value: { ...p.doc, artboards: [{ id: 'asset', name: stem, x: b.x, y: b.y, w: b.w, h: b.h, bg: null }], layers: [layer] } });
+        files.push({ name: `${name}.pdf`, blob: await pdf(q) });
+      } else files.push({ name: `${name}.${it.format}`, blob: await exportRaster(p, { region: b, scale: it.scale, format: it.format, quality: 0.92, transparent: true, only: nodes }) });
+    }
+  }
+  return files.length ? zipFiles(files) : null;
+}
 
 export async function exportForScreens(p: Project, items: ScreenItem[], pdf: (artboards: number[]) => Promise<Blob>): Promise<Blob> {
   const files: Array<{ name: string; blob: Blob }> = [];

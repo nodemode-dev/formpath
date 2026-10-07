@@ -143,6 +143,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/navigator.ts
 - src/ui/panels/type.ts
 - src/ui/panels/text-styles.ts
+- src/ui/panels/asset-export.ts
 - src/ui/panels/image-trace.ts
 - src/ui/panels/pattern-options.ts
 - src/ui/panels/preview-edit.ts
@@ -881,6 +882,15 @@ One panel class serves both style panels. A span links to its character style th
 - logged: v0.10.0 · 2026-10-07
 
 Lists every family and style the document's type uses with the number of objects using it. Find selects those objects; Change All replaces the family and style in every run that uses it in one undo step and starts loading the new face. The replacement lists come from the same `families` and `stylesOf` as the Character panel, so installed fonts appear once the engine has listed them.
+
+## src/ui/panels/asset-export.ts
+
+### src/ui/panels/asset-export.ts · Asset Export
+- refers-to: src/ui/panels/asset-export.ts :: AssetExportPanel; src/io/raster.ts :: exportAssetsZip; src/engine/index.ts :: addExportAssets, renameExportAsset, removeExportAssets; src/engine/types.ts :: Doc.exportAssets
+- kind: rationale
+- logged: v0.13.0 · 2026-10-07
+
+Assets are stored in the document as names and object ids, not copies, so an asset always exports the art as it is now, and an asset whose art was deleted shows dimmed and is skipped. `exportAssets` is optional on `Doc` so older files need no migration. Each asset exports cropped to its visible bounds: raster formats render only its objects (`only`), SVG uses the writer's `ids`, and PDF writes a one-page document through a view of the project whose `doc` has a single artboard over the asset and a single layer holding its objects (`Object.create(p)` keeps the project's images). Names that repeat in one export get a number. Thumbnails redraw only when one of the asset's node objects changes identity. The format rows are built once and added or removed one at a time.
 
 ## src/ui/panels/image-trace.ts
 

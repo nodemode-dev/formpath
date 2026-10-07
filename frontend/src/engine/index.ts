@@ -22,7 +22,7 @@ import { Project } from './project';
 import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
+import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
 import { Viewport } from './viewport';
 
 export * from './types';
@@ -1179,6 +1179,26 @@ export class Engine extends Emitter<EngineEvents> {
     });
     if (p.history.squash(s.mark)) this.emit('history', null);
     return id;
+  }
+  get exportAssets(): ExportAsset[] { return this.doc?.exportAssets ?? []; }
+  addExportAssets(single = false, ids?: string[]): string[] {
+    const p = this.current; if (!p) return [];
+    const t = topObjects(p.doc, this.targetIds(ids)).filter((id) => { const n = findNode(p.doc, id); return !!n && n.kind !== 'layer'; });
+    if (!t.length) { this.notice('Select the art to collect as assets.'); return []; }
+    const have = new Set((p.doc.exportAssets ?? []).map((a) => a.name));
+    let k = 0;
+    const next = (want?: string): string => { let name = want && !have.has(want) ? want : ''; while (!name) { k += 1; const c = `Asset ${k}`; if (!have.has(c)) name = c; } have.add(name); return name; };
+    const made: ExportAsset[] = single ? [{ id: newId('ea'), name: next(), ids: t }] : t.map((id) => ({ id: newId('ea'), name: next(findNode(p.doc, id)?.name), ids: [id] }));
+    this.edit('Add to Asset Export', (d) => ({ ...d, exportAssets: [...(d.exportAssets ?? []), ...made] }));
+    return made.map((a) => a.id);
+  }
+  renameExportAsset(id: string, name: string): boolean {
+    const v = name.trim();
+    return !!v && this.edit('Rename Asset', (d) => ({ ...d, exportAssets: (d.exportAssets ?? []).map((a) => (a.id === id ? { ...a, name: v } : a)) }));
+  }
+  removeExportAssets(ids: string[]): boolean {
+    const drop = new Set(ids);
+    return this.edit('Remove from Asset Export', (d) => ({ ...d, exportAssets: (d.exportAssets ?? []).filter((a) => !drop.has(a.id)) }));
   }
   setPatternOptions(id: string, o: { name?: string; type?: PatternDef['type']; hs?: number; vs?: number; brick?: number; overlap?: PatternDef['overlap']; width?: number; height?: number }): boolean {
     const def = this.doc?.patterns.find((x) => x.id === id || x.name === id);

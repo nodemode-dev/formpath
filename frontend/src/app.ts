@@ -1,5 +1,5 @@
 import { AgentBridge, regionOf } from './automation/agent-bridge';
-import { Engine, type Color, type Doc, type Pt, type TraceView, type Units, type VNode } from './engine';
+import { Engine, type Color, type Doc, type ExportAsset, type Pt, type TraceView, type Units, type VNode } from './engine';
 import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc';
 import { EFFECTS } from './engine/effects';
 import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
@@ -13,7 +13,7 @@ import { api, type Capabilities, type OpenedProject } from './io/api';
 import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
 import { exportPdf, readPdfNative } from './io/pdf';
 import { docFromManifest, serialize } from './io/project-io';
-import { canvasBlob, exportForScreens, exportRaster, renderRegion } from './io/raster';
+import { canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
 import { exportRegion, exportSvg, importSvg } from './io/svg';
 import { TRACE_VIEWS, traceImage, traceOptions, type TraceOpts } from './io/trace';
@@ -56,6 +56,7 @@ import { FindFontDialog } from './ui/panels/find-font';
 import { ColorGuidePanel } from './ui/panels/color-guide';
 import { PatternOptionsPanel } from './ui/panels/pattern-options';
 import { ImageTracePanel } from './ui/panels/image-trace';
+import { AssetExportPanel } from './ui/panels/asset-export';
 import { CHECKER_CELL, CHECKER_PAIR, applyPrefs, loadPrefs, savePrefs, type Prefs } from './ui/prefs';
 import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './ui/properties';
 import { Rail } from './ui/rail';
@@ -117,7 +118,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -184,7 +185,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }], 'Appearance');
   new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }], 'Symbols');
-  new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }], 'Navigator');
+  new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
   new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }], 'Type');
@@ -406,6 +407,17 @@ export function startApp(): void {
         if (!blob) { toast('There is nothing to export there.', 'error'); return; }
         const suffix = c.scope === 'artboard' && p.doc.artboards.length > 1 ? `-${p.doc.artboards[c.artboard]?.name ?? ''}` : '';
         await deliver(blob, `${p.name}${suffix}.${c.format}`.replace(/[\\/:*?"<>|]+/g, '-'));
+      } catch (err) { toast(message(err), 'error'); }
+    });
+  }
+  async function exportAssetList(list: ExportAsset[], items: AssetItem[]): Promise<void> {
+    const p = engine.current;
+    if (!p || !list.length || !items.length) return;
+    await engine.task(async () => {
+      try {
+        const zip = await exportAssetsZip(p, list, items, (q) => exportPdf(q, { artboards: [0], preserve: false, ppi: p.doc.rasterPpi || 300, version: VERSION }));
+        if (!zip) { toast('Those assets have no art left to export.', 'error'); return; }
+        await deliver(zip, `${p.name}-assets.zip`);
       } catch (err) { toast(message(err), 'error'); }
     });
   }
@@ -724,6 +736,8 @@ export function startApp(): void {
     { id: 'download-project', label: 'Download Project (.fpth)', keys: ['Alt+Mod+S'], enabled: has, run: () => void engine.task(async () => { const b = await projectZip(); const p = engine.current; if (b && p) await deliver(b, `${p.name}.fpth`); }) },
     { id: 'place', label: 'Place...', keys: ['Shift+Mod+P'], enabled: has, run: () => placeInput.click() },
     { id: 'export-screens', label: 'Export for Screens...', keys: ['Alt+Mod+E'], enabled: has, run: () => void exportScreens() },
+    { id: 'collect-single', label: 'Collect for Export as Single Asset', enabled: sel, run: () => { if (engine.addExportAssets(true).length) showPanel('asset-export'); } },
+    { id: 'collect-multiple', label: 'Collect for Export as Multiple Assets', enabled: sel, run: () => { if (engine.addExportAssets(false).length) showPanel('asset-export'); } },
     { id: 'export-as', label: 'Export As...', keys: ['Mod+E'], enabled: has, run: () => void exportAs('svg') },
     { id: 'export-svg', label: 'SVG...', enabled: has, run: () => void exportAs('svg') },
     { id: 'export-pdf', label: 'PDF...', enabled: has, run: () => void exportAs('pdf') },
@@ -944,7 +958,7 @@ export function startApp(): void {
   }
 
   const menus: MenuDef[] = [
-    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-png', 'export-jpg', 'export-webp'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
+    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
     { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'clear', '-', 'find-replace', '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each'] },
