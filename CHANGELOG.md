@@ -2,6 +2,21 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.15.0 · 2026-10-07
+
+3D and Materials.
+
+### Added
+
+- 3D effects: Extrude & Bevel (depth, cap, classic or rounded bevel), Revolve (angle, offset, from the left or right edge), Inflate and Plane, live on paths, compound paths, type and groups. Position presets, X, Y and Z rotation and perspective; plastic, matte, metal, wireframe and flat materials; light direction, intensity, ambient light, highlight and shading colour. Caps keep the object's own paint, gradients included.
+- Window > 3D and Materials panel, and Effect > 3D and Materials for each kind.
+- 3D exports to SVG and PDF as vector faces, and Expand Appearance turns it into shaded paths.
+- The `three_d` MCP tool with named positions and partial updates. 66 tools.
+
+### Changed
+
+- Type outlines are available synchronously once a font has loaded, which 3D uses for type.
+
 ## 0.14.0 · 2026-10-07
 
 The Effect Gallery.
