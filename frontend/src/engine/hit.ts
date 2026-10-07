@@ -2,6 +2,7 @@ import { geomBounds, nodePath } from './bounds';
 import { childrenOf } from './doc';
 import { apply, flatIndex, hasIn, hasOut, inflate, invert, nearestOnPath, rectContains, rectsTouch, segments, segBounds, flattenSub } from './geometry';
 import { liveChildren } from './live';
+import { liveFaceNodes } from './livepaint';
 import { cachedPath, clipGeometry } from './render';
 import { layoutText } from './text';
 import type { Doc, PathData, Pt, Rect, VNode } from './types';
@@ -75,6 +76,7 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
       }
       const h = deepHit(doc, ch, p, o, [...chain, n.id]);
       if (h) return h;
+      if (n.kind === 'group' && n.livePaint && !o.outline && liveFaceNodes(n).some((f) => ctx().isPointInPath(cachedPath(f.d), p.x, p.y, 'evenodd'))) return { id: n.id, chain: [...chain, n.id], part: 'fill' };
       continue;
     }
     const part = leafHit(doc, n, p, o);

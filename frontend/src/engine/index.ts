@@ -5,7 +5,7 @@ import { EFFECT_IDS, effectDefaults, WIDTH_PROFILES } from './effects';
 import { Emitter } from './events';
 import { detachFrames, reflow, threadChains } from './flow';
 import { harmonyColors, isNeutral } from './harmony';
-import { apply, arcPath, ellipsePath, emptyRect, fitCurve, flarePath, invert, isEmptyRect, linePath, mul, normRect, parseSvgD, pathBounds, piePath, polygonPath, rectPath, rectsTouch, reflectAbout, rotateAbout, scaleAbout, shearAbout, spiralPath, starPath, translate, unionRect } from './geometry';
+import { apply, arcPath, ellipsePath, emptyRect, fitCurve, flarePath, insideFill, invert, isEmptyRect, linePath, mul, nearestOnPath, normRect, parseSvgD, pathBounds, piePath, polygonPath, rectPath, rectsTouch, reflectAbout, rotateAbout, scaleAbout, shearAbout, spiralPath, starPath, translate, unionRect } from './geometry';
 import { hitTest, nodeTouchesRect, type Hit } from './hit';
 import { liveChildren } from './live';
 import { buildMesh } from './mesh';
@@ -15,12 +15,13 @@ import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, toRgb, WHITE, withFirstFill, withFirstStroke } from './paint';
+import { edgePaths, faceContains, interiorOf, liveFaceNodes, liveFaces } from './livepaint';
 import { artChildren, sessionGeometry, type PatternGeometry, type PatternSession } from './pattern';
 import { Project } from './project';
 import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, TraceView, Units, VNode } from './types';
+import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
 import { Viewport } from './viewport';
 
 export * from './types';
@@ -474,7 +475,7 @@ export class Engine extends Emitter<EngineEvents> {
   setActivePaint(paint: Paint): void { if (this.activeSlot === 'fill') this.setFill(paint); else this.setStroke({ paint }); }
   syncPaintFromSelection(): void {
     const n = this.selected()[0];
-    if (!n) return;
+    if (!n || (n.kind === 'group' && (n.livePaint || n.trace))) return;
     if (n.kind === 'text') { const st = n.spans[0]?.style; if (st) { this.fillPaint = st.fill; this.strokePaint = st.stroke; this.strokeWidth = st.strokeWidth; } }
     else { const f = firstFill(n.ap), s = firstStroke(n.ap); this.fillPaint = f ? f.paint : NONE; this.strokePaint = s ? s.paint : NONE; if (s) this.strokeWidth = s.width; }
     this.emit('colors', null);
@@ -867,6 +868,74 @@ export class Engine extends Emitter<EngineEvents> {
       return { doc, select: out };
     });
   }
+  livePaintTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return n?.kind === 'group' && !!n.livePaint; }) : []; }
+  makeLivePaint(ids?: string[]): string | null {
+    const p = this.current; if (!p) return null;
+    const nodes = topObjects(p.doc, this.targetIds(ids)).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && n.kind !== 'layer');
+    const host = nodes.find((n): n is GroupNode => n.kind === 'group' && !!n.livePaint) ?? null;
+    const adds = nodes.filter((n) => n !== host && (n.kind === 'path' || n.kind === 'compound' || n.kind === 'group') && edgePaths([n]).length > 0);
+    if (!adds.length) { if (!host) this.notice('Select paths to make a Live Paint group.'); return host?.id ?? null; }
+    const strip = (n: VNode): VNode => { const base = { ...n, ap: { ...n.ap, items: n.ap.items.filter((i) => i.kind !== 'fill') } } as VNode; const ch = base.kind === 'compound' ? null : childrenOf(base); return ch ? ({ ...base, children: ch.map(strip) } as VNode) : base; };
+    const fillAt = (at: Pt): Paint | null => {
+      let out: Paint | null = null;
+      const walk = (n: VNode): void => {
+        if (n.hidden) return;
+        const f = n.ap.items.find((i) => i.kind === 'fill' && i.visible)?.paint;
+        const d = n.kind === 'path' ? n.d : n.kind === 'compound' ? n.children.flatMap((c) => c.d) : null;
+        if (d && f && f.type !== 'none' && insideFill(d, at, n.kind === 'path' || n.kind === 'compound' ? n.rule : 'nonzero')) out = f;
+        if (n.kind !== 'compound') childrenOf(n)?.forEach(walk);
+      };
+      adds.forEach(walk);
+      return out;
+    };
+    const lp = host?.livePaint ?? { fills: [], gap: 0 };
+    const g: GroupNode = { id: host?.id ?? newId('g'), kind: 'group', clip: false, name: host?.name ?? 'Live Paint', children: [...(host?.children ?? []), ...adds.map(strip)], opacity: host?.opacity ?? 1, blend: host?.blend ?? 'normal', ap: host?.ap ?? emptyAppearance(), livePaint: lp };
+    const fills = [...lp.fills];
+    for (const f of liveFaces(g)) {
+      if (lp.fills.some((s) => faceContains(f, s.at))) continue;
+      const at = interiorOf(f);
+      const paint = fillAt(at);
+      if (paint) fills.push({ at, paint });
+    }
+    const made: GroupNode = { ...g, livePaint: { ...lp, fills } };
+    const order = inDocOrder(p.doc, nodes.map((n) => n.id)), last = order[order.length - 1];
+    this.edit(host ? 'Merge Live Paint' : 'Make Live Paint', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => made), select: [made.id] }));
+    return made.id;
+  }
+  livePaintFill(groupId: string, at: Pt, paint: Paint): boolean {
+    const n = this.doc ? findNode(this.doc, groupId) : null;
+    if (n?.kind !== 'group' || !n.livePaint) return false;
+    const faces = liveFaces(n), i = faces.findIndex((f) => faceContains(f, at));
+    if (i < 0) { this.notice('Click inside an area closed by the Live Paint paths, or widen Gap Options.'); return false; }
+    const lp = n.livePaint;
+    return this.edit('Live Paint', (d) => updateNodes(d, [groupId], (x) => (x.kind === 'group' ? { ...x, livePaint: { ...lp, fills: [...lp.fills.filter((s) => !faceContains(faces[i], s.at)), { at, paint }] } } : x)));
+  }
+  livePaintEdge(groupId: string, at: Pt, paint: Paint, tol: number): boolean {
+    const n = this.doc ? findNode(this.doc, groupId) : null;
+    if (n?.kind !== 'group' || !n.livePaint) return false;
+    let best: { id: string; d: number } | null = null;
+    walk(n.children, (c) => { if (c.kind !== 'path') return; const r = nearestOnPath(c.d, at); if (r && r.d <= tol && (!best || r.d < best.d)) best = { id: c.id, d: r.d }; });
+    const hit = best as { id: string; d: number } | null;
+    if (!hit) return false;
+    return this.edit('Live Paint Edge', (d) => updateNodes(d, [hit.id], (x) => (x.kind === 'path' ? { ...x, ap: x.ap.items.some((i) => i.kind === 'stroke') ? withFirstStroke(x.ap, { paint }) : { ...x.ap, items: [...x.ap.items, stroke(paint, this.strokeWidth || 1)] } } : x)));
+  }
+  setLivePaintGap(gap: number, ids?: string[]): boolean {
+    const t = this.livePaintTargets(ids);
+    return t.length > 0 && this.applyToSelection('Gap Options', (n) => (n.kind === 'group' && n.livePaint ? { ...n, livePaint: { ...n.livePaint, gap: Math.max(0, gap) } } : n), t);
+  }
+  private expandedLivePaint(n: GroupNode): GroupNode {
+    const faces = liveFaceNodes(n).map((f) => ({ ...f, id: newId('p') }));
+    const edges = n.children.map((c) => cloneNode(c)).filter((c) => c.ap.items.some((i) => i.kind === 'stroke' && i.paint.type !== 'none') || childrenOf(c));
+    return { ...n, livePaint: undefined, children: [...(faces.length ? [{ id: newId('g'), kind: 'group', clip: false, name: 'Fills', children: faces, opacity: 1, blend: 'normal', ap: emptyAppearance() } as GroupNode] : []), ...(edges.length ? [{ id: newId('g'), kind: 'group', clip: false, name: 'Strokes', children: edges, opacity: 1, blend: 'normal', ap: emptyAppearance() } as GroupNode] : [])] };
+  }
+  expandLivePaint(ids?: string[]): boolean {
+    const t = this.livePaintTargets(ids);
+    return t.length > 0 && this.applyToSelection('Expand Live Paint', (n) => (n.kind === 'group' && n.livePaint ? this.expandedLivePaint(n) : n), t);
+  }
+  releaseLivePaint(ids?: string[]): boolean {
+    const t = this.livePaintTargets(ids);
+    return t.length > 0 && this.applyToSelection('Release Live Paint', (n) => (n.kind === 'group' && n.livePaint ? { ...n, livePaint: undefined, name: undefined } : n), t);
+  }
   breakSymbolLink(ids?: string[]): void {
     const p = this.current; if (!p) return;
     this.run('Break Link to Symbol', (d, t) => {
@@ -933,6 +1002,7 @@ export class Engine extends Emitter<EngineEvents> {
     }
     if (obj && n.kind === 'symbol') { const s = bakedInstance(doc, n); return s ? this.expandNode(doc, transformNode(cloneNode(s), n.xf), what) : [n]; }
     if (obj && n.kind === 'group' && n.trace) return this.expandNode(doc, { ...n, trace: undefined }, what);
+    if (obj && n.kind === 'group' && n.livePaint) return this.expandNode(doc, this.expandedLivePaint(n), what);
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
     if (app && (n.kind === 'path' || n.kind === 'compound')) return expandAppearance(doc, n);
@@ -1198,6 +1268,7 @@ export class Engine extends Emitter<EngineEvents> {
       if (n.ap.effects.length) out.effects = n.ap.effects.map((e) => e.id);
       if (n.ap.items.length > 2) out.appearance_items = n.ap.items.length;
       if (n.kind === 'group' && n.clip) out.clipping = true;
+      if (n.kind === 'group' && n.livePaint) out.live_paint = { faces: liveFaces(n).length, painted: liveFaceNodes(n).length, gap: n.livePaint.gap };
       if (n.kind === 'group' && n.trace) out.tracing = { view: n.trace.view, mode: n.trace.opts.mode, colors: n.trace.opts.colors, threshold: n.trace.opts.threshold };
       if (n.kind === 'symbol' && n.tint) out.tint = { color: hex(n.tint.color), amount: r(n.tint.amount) };
       const ch = childrenOf(n);

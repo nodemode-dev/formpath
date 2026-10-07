@@ -43,6 +43,7 @@ frontend/
     │   ├── harmony.ts          colour harmony rules and variations
     │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
     │   ├── pattern.ts          tile lattices and the pattern editing session
+    │   ├── livepaint.ts        Live Paint faces, gap closing and face paint
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -108,6 +109,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/text.ts
 - src/engine/flow.ts
 - src/engine/symbolism.ts
+- src/engine/livepaint.ts
 - src/engine/pattern.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
@@ -359,6 +361,29 @@ Layout is cached per node by identity and never reads the document, so anything 
 - logged: v0.12.0 · 2026-10-07
 
 A stained instance carries `tint` (a colour and an amount) and every reader draws `instanceArt`, the symbol's art with each paint mixed toward the tint by the amount, cached per art object and tint so a set of a hundred stained instances builds a handful of recoloured copies. Mixing the paints instead of compositing a coloured layer over the instance keeps the result identical in the canvas, SVG (one def per distinct tint) and PDF, and Break Link and Expand bake it with `bakedInstance`, which also carries the instance's opacity, blend and effects onto the art so screened and styled instances look the same after breaking. Every operation weights an instance by where its centre sits in the brush, one minus the square of the distance over the radius, so the edge of the brush barely moves anything; with no point (the agent tool) every instance in the set gets full weight. Intensity scales each step. Average pulls a value toward the mean of the instances under the brush, Random perturbs it, User Defined pushes it one way. The Styler copies a graphic style's effects, opacity and blend onto instances because fills and strokes have no geometry of their own on an instance to paint; Alt clears them.
+
+## src/engine/livepaint.ts
+
+### src/engine/livepaint.ts · faces
+- refers-to: src/engine/livepaint.ts :: planarFaces, cutSegments, computeFaces, liveFaces, gapClosers
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+A Live Paint group is a group carrying `livePaint`: its children are the edges and the faces are derived. Every edge is flattened to a polyline (0.1 pt), every segment is cut where it meets another (a sweep over x keeps that near linear), the pieces become an undirected graph with points snapped to a thousandth of a point, and dangling edges are peeled off because a dead end bounds nothing. Walking each half-edge and turning to the next neighbour clockwise traces every face: positive area is a bounded face, negative is the outside of a connected piece, and that outside becomes a hole in the smallest face that contains it, so a circle drawn inside a square makes a square with a hole plus the circle. Faces are straight polygons; the edges are drawn over them with their own curves. The first version subtracted thin stroked strips from a box with paper.js and took three seconds for a grid and a circle; this takes milliseconds. Faces are cached per children array, and a group that has only moved reuses the last faces translated, so dragging stays cheap. Gap detection joins the end of an open path to the nearest point of another edge, or to its own other end, when it is within the gap.
+
+### src/engine/livepaint.ts · painting
+- refers-to: src/engine/livepaint.ts :: liveFaceNodes, faceContains, interiorOf; src/engine/index.ts :: makeLivePaint, livePaintFill, livePaintEdge, setLivePaintGap, expandLivePaint, releaseLivePaint, syncPaintFromSelection
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+A face's paint is stored as a seed: a point and a paint. The face that contains a seed takes its paint, the last seed winning, so editing the edges re-flows colour the way Illustrator does: a face split in two keeps the colour in the half that holds the seed. Painting a face replaces the seeds already inside it. Make seeds every face from the fill of the topmost original shape that covered it, measured at a point inside the face (the middle of the widest run across a few scanlines), then strips the fills from the children so they are only edges. Edge painting sets the stroke of the whole child nearest the click. Face nodes are synthesised with ids derived from the group's id and cached per faces and seeds, and the renderer, hit test, SVG and PDF writers all draw them under the edges. Selecting a Live Paint group or a tracing object no longer resets the Fill and Stroke widget to none, which made the bucket paint black after the first click.
+
+### src/engine/ops/paths.ts · removed live paint helpers
+- refers-to: src/engine/ops/paths.ts :: shapeRegions, livePaintFill, openAsRegion, interior
+- kind: removed-code
+- logged: v0.12.0 · 2026-10-07
+
+The old bucket cut the selected shapes into a static group of filled faces and edges with `livePaintFill`, using `shapeRegions` for the hover preview and `openAsRegion` to turn open paths into thin regions. Both are replaced by the live faces in `src/engine/livepaint.ts`; the four functions (about 40 lines) were deleted.
 
 ## src/engine/pattern.ts
 

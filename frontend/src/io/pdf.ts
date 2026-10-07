@@ -3,6 +3,7 @@ import { childrenOf } from '../engine/doc';
 import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline } from '../engine/effects';
 import { inflate, isEmptyRect, isLineSeg, segments } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
+import { liveFaceNodes } from '../engine/livepaint';
 import { instanceArt } from '../engine/symbolism';
 import { gradientAt, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { clipGeometry, gradientGeom } from '../engine/render';
@@ -220,6 +221,7 @@ class Painter {
           const strokes = geo ? this.shape({ ...clipper, ap: { ...clipper.ap, items: clipper.ap.items.filter((i) => i.kind === 'stroke') } }, geo.d, geo.rule, page) : '';
           return `q\n${geo ? `${this.path(geo.d)}\n${geo.rule === 'evenodd' ? 'W*' : 'W'} n\n` : ''}${inner}\nQ\n${strokes}`;
         }
+        if (n.kind === 'group' && n.livePaint) return this.children([...liveFaceNodes(n), ...n.children], page);
         return this.children(n.children, page);
       }
       case 'blend': case 'envelope': case 'repeat': return this.children(liveChildren(this.doc, n), page);

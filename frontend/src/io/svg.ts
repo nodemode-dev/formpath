@@ -3,6 +3,7 @@ import { childrenOf, findNode, newDoc, newId } from '../engine/doc';
 import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline, type RasterFx } from '../engine/effects';
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
+import { liveFaceNodes } from '../engine/livepaint';
 import { meshQuads } from '../engine/mesh';
 import { latticeCopies, patternLattice } from '../engine/pattern';
 import { instanceArt } from '../engine/symbolism';
@@ -208,7 +209,7 @@ class Writer {
           const inner = `<g${geo ? ` clip-path="url(#${cid})"` : ''}>${body}</g>${strokes}`;
           return n.kind === 'layer' ? `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}">${inner}</g>` : this.wrap(n, inner);
         }
-        const body = n.children.map((c) => this.node(c)).join('');
+        const body = (n.kind === 'group' && n.livePaint ? liveFaceNodes(n).map((f) => this.node(f)).join('') : '') + n.children.map((c) => this.node(c)).join('');
         if (n.kind === 'layer') return `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}"${n.opacity < 1 ? ` opacity="${num(n.opacity)}"` : ''}>${body}</g>`;
         let extra = '';
         if (n.ap.items.length) { const geo: PathData = []; const collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); }; collect(n); if (geo.length) extra = this.shape(n, geo, 'nonzero'); }
