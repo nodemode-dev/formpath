@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.13.0 · 2026-10-07
+
+Reading other people's files, and the last partial rows.
+
+### Added
+
+- Any PDF or PDF-compatible `.ai` opens: one artboard per page with editable paths (fills, strokes, dashes, opacity, blend modes), clipping groups, gradients from axial and radial shadings, images, Type 3 glyphs as paths and point type. Gray, RGB and CMYK colours stay native; ICCBased, Indexed, Separation, DeviceN and Lab convert. Type takes the installed font with the same PostScript name or family, otherwise Helvetica, Times New Roman or Courier New, and is tracked to the width the PDF gave it. The open reports substituted fonts and anything left out.
+- The Live Paint Selection tool (Shift+L): select faces and edges, Shift to add or remove, then change their fill, stroke and width from the panels or delete them. Edges are now painted per segment between crossings, and a fill chosen with the whole group selected paints every face.
+- The Asset Export panel with File > Export > Collect for Export as Single Asset and as Multiple Assets: rename assets, set scales, suffixes and formats, and export each asset cropped to its art as PNG, JPEG, WebP, SVG or PDF in one ZIP.
+- Contextual alternates (calt), with contextual and chaining contextual GSUB lookups now applied for every feature, and the Glyphs panel's alternates row for the selected character.
+- `live_paint` with action `edge` takes a `width`; 0 hides the edge.
+
+### Changed
+
+- On Linux the font list includes every folder fontconfig is configured with, so fonts installed outside `/usr/share/fonts` appear in the Character panel and match PDFs.
+
 ## 0.12.0 · 2026-10-07
 
 Live objects.
