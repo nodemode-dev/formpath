@@ -2,6 +2,24 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.11.0 · 2026-10-07
+
+Paint and selection gaps.
+
+### Added
+
+- Freeform gradients in points and lines modes: Freeform in the Gradient panel lays colour points over each selected object; the Gradient tool adds, moves, spreads and deletes points, and the panel sets a point's colour and spread. They export to SVG and PDF.
+- The Color Guide panel: twelve harmony rules around the current colour, tints and shades, warm and cool, and vivid and muted variations, and saving a harmony as a swatch group.
+- Live shapes stay editable after drawing: a Shape section in Properties (size, each corner radius and corner type, pie angles, sides, points, radii, line length and angle) and corner widgets on the canvas for rectangles and polygons.
+- Magic Wand tolerances for fill colour, stroke colour, stroke weight and opacity, plus blending mode, with Shift to add and Alt to subtract.
+- Ctrl-click (Cmd-click) selects the object behind; equal-spacing smart guides; View > Snap to Pixel and Show Corner Widget.
+- MCP tools `edit_shape`, `select_similar` and `color_harmony`; freeform fills in `set_paint`; `get_object` reports live shape values. 61 tools.
+
+### Fixed
+
+- Moving or scaling an object with a freeform fill left the colour points behind.
+- An agent call that made several changes (a fill and a stroke, say) took several undos; each call is now one step.
+
 ## 0.10.0 · 2026-10-07
 
 Type gaps.
