@@ -5,6 +5,7 @@ import { emptyRect, inflate, isEmptyRect, toPath2D, tracePath, transformRect } f
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
 import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './paint';
+import { instanceArt } from './symbolism';
 import { drawText } from './text';
 import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type Paint, type PathData, type Rect, type StrokeItem, type VNode } from './types';
 
@@ -434,11 +435,11 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
       return;
     }
     case 'symbol': {
-      const s = rc.doc.symbols.find((x) => x.id === n.symbol);
-      if (!s) return;
+      const art = instanceArt(rc.doc, n);
+      if (!art) return;
       ctx.save();
       ctx.transform(n.xf[0], n.xf[1], n.xf[2], n.xf[3], n.xf[4], n.xf[5]);
-      renderNode(ctx, s.art, rc);
+      renderNode(ctx, art, rc);
       ctx.restore();
       return;
     }

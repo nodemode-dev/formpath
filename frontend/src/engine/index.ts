@@ -16,6 +16,7 @@ import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUse
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, toRgb, WHITE, withFirstFill, withFirstStroke } from './paint';
 import { Project } from './project';
+import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
 import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
@@ -23,6 +24,8 @@ import { Viewport } from './viewport';
 
 export * from './types';
 export { Project } from './project';
+export type { SymbolismArgs, SymbolismMethod, SymbolismOp } from './symbolism';
+export const SYMBOLISM_NAMES: Record<SymbolismOp, string> = { shift: 'Symbol Shifter', scrunch: 'Symbol Scruncher', size: 'Symbol Sizer', spin: 'Symbol Spinner', stain: 'Symbol Stainer', screen: 'Symbol Screener', style: 'Symbol Styler' };
 export { Viewport } from './viewport';
 
 export interface ViewFlags {
@@ -33,7 +36,7 @@ export interface ViewFlags {
 export interface ToolOptions {
   polygonSides: number; starPoints: number; starRatio: number; cornerRadius: number; spiralDecay: number; spiralSegments: number; flareRays: number;
   gridRows: number; gridCols: number; pencilFidelity: number; pencilSmooth: number; keepSelected: boolean; brushSize: number; blobSize: number;
-  eraserSize: number; widthPreset: string; magicTolerance: number; symbolDensity: number; meshRows: number; meshCols: number; blendSteps: number;
+  eraserSize: number; widthPreset: string; magicTolerance: number; symbolDensity: number; symbolIntensity: number; symbolMethod: SymbolismMethod; meshRows: number; meshCols: number; blendSteps: number;
   shapeMode: 'normal' | 'behind' | 'inside'; textMode: 'point' | 'area' | 'path'; vertical: boolean; arcConvex: boolean; liquifySize: number; liquifyKind: string;
 }
 export interface ClipboardData { stamp: string; nodes: VNode[]; symbols: Doc['symbols']; swatches: Doc['swatches']; patterns: Doc['patterns']; brushes: Doc['brushes']; images: Doc['images']; assets: Map<string, Blob>; bounds: Rect }
@@ -53,9 +56,10 @@ export class Engine extends Emitter<EngineEvents> {
   activeSlot: 'fill' | 'stroke' = 'fill';
   newArtBasic = true;
   view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false };
-  options: ToolOptions = { polygonSides: 6, starPoints: 5, starRatio: 0.5, cornerRadius: 0, spiralDecay: 0.8, spiralSegments: 10, flareRays: 15, gridRows: 5, gridCols: 5, pencilFidelity: 0.5, pencilSmooth: 0.3, keepSelected: false, brushSize: 3, blobSize: 12, eraserSize: 12, widthPreset: 'uniform', magicTolerance: 32, symbolDensity: 5, meshRows: 4, meshCols: 4, blendSteps: 8, shapeMode: 'normal', textMode: 'point', vertical: false, arcConvex: true, liquifySize: 60, liquifyKind: 'warp' };
+  options: ToolOptions = { polygonSides: 6, starPoints: 5, starRatio: 0.5, cornerRadius: 0, spiralDecay: 0.8, spiralSegments: 10, flareRays: 15, gridRows: 5, gridCols: 5, pencilFidelity: 0.5, pencilSmooth: 0.3, keepSelected: false, brushSize: 3, blobSize: 12, eraserSize: 12, widthPreset: 'uniform', magicTolerance: 32, symbolDensity: 5, symbolIntensity: 5, symbolMethod: 'user', meshRows: 4, meshCols: 4, blendSteps: 8, shapeMode: 'normal', textMode: 'point', vertical: false, arcConvex: true, liquifySize: 60, liquifyKind: 'warp' };
   currentBrush: string | null = null;
   currentSymbol: string | null = null;
+  currentStyle: string | null = null;
   clipboard: ClipboardData | null = null;
   readonly failures: ErrorEntry[] = [];
   lastTransform: { m: Mat; copy: boolean } | null = null;
@@ -797,6 +801,7 @@ export class Engine extends Emitter<EngineEvents> {
   applyGraphicStyle(id: string, ids?: string[]): void {
     const st = this.doc?.styles.find((s) => s.id === id || s.name === id);
     if (!st) return;
+    this.currentStyle = st.id;
     this.applyToSelection('Graphic Style', (n) => (n.kind === 'text' ? { ...n, ap: st.ap, style: st.id } : { ...n, ap: st.ap, opacity: st.opacity, blend: st.blend, style: st.id }), ids);
   }
 
@@ -827,15 +832,21 @@ export class Engine extends Emitter<EngineEvents> {
     if (!sym) return '';
     return this.addNodes('Place Symbol Instance', [{ id: newId('i'), kind: 'symbol', symbol: sym.id, xf: [scale, 0, 0, scale, at.x, at.y], opacity: 1, blend: 'normal', ap: emptyAppearance() }])[0] ?? '';
   }
+  symbolism(args: SymbolismArgs, ids?: string[]): number {
+    const t = this.targetIds(ids);
+    let touched = 0;
+    this.edit(SYMBOLISM_NAMES[args.op], (d) => { const r = applySymbolism(d, t, args); touched = r.touched; return r.doc; });
+    return touched;
+  }
   breakSymbolLink(ids?: string[]): void {
     const p = this.current; if (!p) return;
     this.run('Break Link to Symbol', (d, t) => {
       const ids2: string[] = [];
       const out = updateNodes(d, t, (n) => {
         if (n.kind !== 'symbol') return n;
-        const s = d.symbols.find((x) => x.id === n.symbol);
-        if (!s) return n;
-        const art = transformNode(cloneNode(s.art), n.xf);
+        const baked = bakedInstance(d, n);
+        if (!baked) return n;
+        const art = transformNode(cloneNode(baked), n.xf);
         ids2.push(art.id);
         return art;
       });
@@ -891,7 +902,7 @@ export class Engine extends Emitter<EngineEvents> {
       const kids = liveChildren(doc, n).map((c) => ({ ...cloneNode(c) }));
       return [{ id: newId('g'), kind: 'group', clip: false, children: kids.flatMap((k) => this.expandNode(doc, k, what)), opacity: n.opacity, blend: n.blend, ap: emptyAppearance(), name: nodeLabel(n) }];
     }
-    if (obj && n.kind === 'symbol') { const s = doc.symbols.find((x) => x.id === n.symbol); return s ? this.expandNode(doc, transformNode(cloneNode(s.art), n.xf), what) : [n]; }
+    if (obj && n.kind === 'symbol') { const s = bakedInstance(doc, n); return s ? this.expandNode(doc, transformNode(cloneNode(s), n.xf), what) : [n]; }
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
     if (app && (n.kind === 'path' || n.kind === 'compound')) return expandAppearance(doc, n);

@@ -3,6 +3,7 @@ import { childrenOf } from '../engine/doc';
 import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline } from '../engine/effects';
 import { inflate, isEmptyRect, isLineSeg, segments } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
+import { instanceArt } from '../engine/symbolism';
 import { gradientAt, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { clipGeometry, gradientGeom } from '../engine/render';
 import type { BlendMode, Color, Doc, Gradient, Mat, Paint, PathData, Project, Rect, StrokeItem, VNode } from '../engine';
@@ -238,9 +239,9 @@ class Painter {
         return `q ${n.xf.map(f).join(' ')} cm ${f(n.w)} 0 0 ${f(-n.h)} 0 ${f(n.h)} cm /Im${id} Do Q`;
       }
       case 'symbol': {
-        const s = this.doc.symbols.find((x) => x.id === n.symbol);
-        if (!s) return '';
-        return `q ${n.xf.map(f).join(' ')} cm\n${await this.node(s.art, page)}\nQ`;
+        const art = instanceArt(this.doc, n);
+        if (!art) return '';
+        return `q ${n.xf.map(f).join(' ')} cm\n${await this.node(art, page)}\nQ`;
       }
       default: return '';
     }

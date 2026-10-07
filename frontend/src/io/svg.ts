@@ -4,6 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline,
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { meshQuads } from '../engine/mesh';
+import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
 import { clipGeometry, docArtBounds, gradientGeom } from '../engine/render';
 import { layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
@@ -216,10 +217,11 @@ class Writer {
       case 'text': return this.wrap(n, this.text(n));
       case 'image': { const href = this.images.get(n.src); return href ? this.wrap(n, `<image data-formpth-src="${esc(n.src)}" width="${n.w}" height="${n.h}" transform="${mat(n.xf, this.o.precision)}" preserveAspectRatio="none" href="${href}"/>`) : ''; }
       case 'symbol': {
-        const s = this.doc.symbols.find((x) => x.id === n.symbol);
-        if (!s) return '';
-        let sid = this.symbols.get(s.id);
-        if (!sid) { sid = this.id('sym'); this.symbols.set(s.id, sid); this.defs.push(`<g id="${sid}" data-name="${esc(s.name)}">${this.node(s.art)}</g>`); }
+        const s = this.doc.symbols.find((x) => x.id === n.symbol), art = instanceArt(this.doc, n);
+        if (!s || !art) return '';
+        const key = n.tint && n.tint.amount > 0 ? `${s.id}:${hex(n.tint.color)}:${n.tint.amount.toFixed(3)}` : s.id;
+        let sid = this.symbols.get(key);
+        if (!sid) { sid = this.id('sym'); this.symbols.set(key, sid); this.defs.push(`<g id="${sid}" data-name="${esc(s.name)}">${this.node(art)}</g>`); }
         return this.wrap(n, `<use href="#${sid}" transform="${mat(n.xf, this.o.precision)}"/>`);
       }
       case 'mesh': return this.wrap(n, meshQuads(n, 4).map((q) => `<path d="M${q.pts.map((v) => `${num(v.x)} ${num(v.y)}`).join('L')}Z" fill="${cssColor(q.color)}"${q.opacity < 1 ? ` fill-opacity="${num(q.opacity)}"` : ''} stroke="${cssColor(q.color)}" stroke-width="0.25"/>`).join(''));

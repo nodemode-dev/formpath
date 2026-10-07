@@ -41,6 +41,7 @@ frontend/
     │   ├── text.ts             type layout, styles, caret and index math
     │   ├── flow.ts             reflow: text wrap shapes and threaded stories
     │   ├── harmony.ts          colour harmony rules and variations
+    │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -49,6 +50,7 @@ frontend/
     │       ├── objects.ts      align, arrange, transform
     │       ├── expand.ts       expand appearance and live objects
     │       ├── text-styles.ts  character and paragraph styles: apply, redefine, delete
+    │       ├── live-shapes.ts  editing live shapes after drawing
     │       └── recolor.ts      colour maps for Recolor and Edit Colors
     ├── extensions/
     │   └── registry.ts         Tool, ToolContext, OptionSpec, registerTool, toolHost
@@ -61,6 +63,7 @@ frontend/
     │   ├── freehand.ts         Pencil, Smooth, Path Eraser, Join, brushes, Eraser, Scissors, Knife
     │   ├── transform.ts        Rotate, Reflect, Scale, Shear, Free Transform, Reshape, Width, liquify
     │   ├── paint.ts            Eyedropper, Gradient, Mesh, Live Paint, Shape Builder, Blend, Sprayer, Measure
+    │   ├── symbolism.ts        Symbol Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler
     │   ├── type.ts             type tools and their options
     │   └── view.ts             Hand, Rotate View, Zoom, Artboard
     ├── io/
@@ -98,11 +101,12 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/render.ts
 - src/engine/effects.ts
 - src/engine/live.ts
+- src/engine/snap.ts
 - src/engine/kernel.ts
 - src/engine/ops/recolor.ts
 - src/engine/text.ts
 - src/engine/flow.ts
-- src/engine/snap.ts
+- src/engine/symbolism.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
 - src/tools/pen.ts
@@ -110,6 +114,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/tools/freehand.ts
 - src/tools/transform.ts
 - src/tools/paint.ts
+- src/tools/symbolism.ts
 - src/tools/type.ts
 - src/tools/view.ts
 - src/io/project-io.ts
@@ -290,6 +295,15 @@ Every style works in a unit box (u and v from -1 to 1, swapped for vertical orie
 
 Each subpath's anchors are placed by their fraction of its length; each side is cut at the other side's fractions, so both end up with the same anchors at the same fractions. Straight segments are cut as straight lines with retracted handles, so a blend between polygons stays straight. Closed shapes are turned to the same winding and the second is rotated so its first anchor sits at the same angle from its centroid as the first's. Smooth Color picks the step count from the CIE76 difference between the two solid fills (one step per 1.15, between 1 and 220), and 24 when either fill is not a solid colour.
 
+## src/engine/snap.ts
+
+### src/engine/snap.ts · targets and matching
+- refers-to: src/engine/snap.ts :: collectTargets, nearestRule, nearestSpot, snapPoint, fitAxis, snapRect
+- kind: explainer
+- logged: v0.9.0 · 2026-10-07
+
+Built once per drag. Every visible object adds its box as three columns and three rows (sides and centre) and a centre spot; the anchors of the first 6000 objects are added as spots; artboards add their rules and four corner spots; guides add rules that span the pasteboard. Columns and rows are kept sorted and searched by bisection. Spots sit in a spatial hash of 64-unit cells; when the search window covers more cells than the hash holds, it scans every spot instead. A point takes the best spot first, scored by distance plus a rank penalty (anchor, then artboard corner, then centre) so an anchor wins a close call, and otherwise the nearest column and row. `hit` tells the stage which happened, so the angle guide only runs when no spot won. A moving box tries its sides and centre on each axis and prefers like-for-like matches (centre to centre, side to side) by a quarter of the tolerance.
+
 ## src/engine/kernel.ts
 
 ### src/engine/kernel.ts · paper.js
@@ -333,14 +347,14 @@ Line breaking and line placement used to run in two passes, breaking every parag
 
 Layout is cached per node by identity and never reads the document, so anything that depends on other nodes is written into the text node as derived data by one pass, `reflow`, which `Engine.edit`, `dragTo`, `restore` and `addProject` run on every new document. `wrapShape` holds the outlines of the wrap objects above the type in its layer, in the type's local space, plus its own `framePath`; threaded frames hold their share of one story. The story is the concatenation of every frame's spans in chain order, so typing into any frame works without knowing about threads, and the pass deals the story back out frame by frame using each frame's overflow index. `reflow` returns the same document when nothing changed and costs one walk when there are no wraps, threads or shaped frames. Links that point at a missing, duplicated or non-area frame are dropped by the pass, which is how a duplicated threaded frame comes out unthreaded. `detachFrames` runs before a delete and for Release Selection so the text of a removed frame flows back into the rest of the thread instead of being lost. `reflowAll` reruns the pass without a history step when fonts finish loading, because the distribution depends on glyph widths.
 
-## src/engine/snap.ts
+## src/engine/symbolism.ts
 
-### src/engine/snap.ts · targets and matching
-- refers-to: src/engine/snap.ts :: collectTargets, nearestRule, nearestSpot, snapPoint, fitAxis, snapRect
-- kind: explainer
-- logged: v0.9.0 · 2026-10-07
+### src/engine/symbolism.ts · instance tint and the symbolism operations
+- refers-to: src/engine/symbolism.ts :: instanceArt, bakedInstance, applySymbolism; src/engine/types.ts :: SymbolNode.tint; src/engine/index.ts :: Engine.symbolism, breakSymbolLink, expandNode
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
 
-Built once per drag. Every visible object adds its box as three columns and three rows (sides and centre) and a centre spot; the anchors of the first 6000 objects are added as spots; artboards add their rules and four corner spots; guides add rules that span the pasteboard. Columns and rows are kept sorted and searched by bisection. Spots sit in a spatial hash of 64-unit cells; when the search window covers more cells than the hash holds, it scans every spot instead. A point takes the best spot first, scored by distance plus a rank penalty (anchor, then artboard corner, then centre) so an anchor wins a close call, and otherwise the nearest column and row. `hit` tells the stage which happened, so the angle guide only runs when no spot won. A moving box tries its sides and centre on each axis and prefers like-for-like matches (centre to centre, side to side) by a quarter of the tolerance.
+A stained instance carries `tint` (a colour and an amount) and every reader draws `instanceArt`, the symbol's art with each paint mixed toward the tint by the amount, cached per art object and tint so a set of a hundred stained instances builds a handful of recoloured copies. Mixing the paints instead of compositing a coloured layer over the instance keeps the result identical in the canvas, SVG (one def per distinct tint) and PDF, and Break Link and Expand bake it with `bakedInstance`, which also carries the instance's opacity, blend and effects onto the art so screened and styled instances look the same after breaking. Every operation weights an instance by where its centre sits in the brush, one minus the square of the distance over the radius, so the edge of the brush barely moves anything; with no point (the agent tool) every instance in the set gets full weight. Intensity scales each step. Average pulls a value toward the mean of the instances under the brush, Random perturbs it, User Defined pushes it one way. The Styler copies a graphic style's effects, opacity and blend onto instances because fills and strokes have no geometry of their own on an instance to paint; Alt clears them.
 
 ## src/extensions/registry.ts
 
@@ -460,6 +474,15 @@ Dragging sets the gradient's geometry (`geom`) on the selection's active paint; 
 - logged: v0.11.0 · 2026-10-07
 
 Freeform points live in document coordinates inside the gradient, so each object owns its own points: `setFreeform` lays out four points (three in Lines mode) over each selected object's bounds instead of copying one gradient to every object, and the Gradient panel edits only the first selected object with a freeform fill. Colours come from the current gradient, or an analogous set around a saturated solid fill, or a fixed bright set for neutral fills. The field is inverse-distance weighting with the cube of the distance over each point's spread; Lines mode weights the nearest point on each segment and blends the two end colours along it. The renderer caches the field per gradient object and bounds, so a static freeform costs one image draw. A click inside the object adds a point in the colour already showing there, so adding a point never changes the picture until it is moved or recoloured. `FF.sel` is shared with the Gradient panel, which shows that point's colour and spread. `xfGradient` ignored the points of a gradient without `geom`, so moved freeform fills left their colours behind; points and spreads now transform. SVG has no freeform paint, so export writes the field as a 256 px image clipped to the shape.
+
+## src/tools/symbolism.ts
+
+### src/tools/symbolism.ts · Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler
+- refers-to: src/tools/symbolism.ts :: S, step, stop, targets
+- kind: explainer
+- logged: v0.12.0 · 2026-10-07
+
+One stroke is one drag preview (`beginDrag`, `dragTo` per step, `commitDrag` on release) so a whole stroke is one undo step and nothing reaches history while the mouse is down. Scruncher, Sizer, Stainer, Screener and Styler keep working while the pointer is held still, on a 90 ms timer at the last point, as the originals do; Shifter and Spinner need movement and use the drag vector. With no symbol set selected, a press on an instance selects its set. Diameter is shared with the Symbol Sprayer and the liquify tools; `[` and `]` change it.
 
 ## src/tools/type.ts
 

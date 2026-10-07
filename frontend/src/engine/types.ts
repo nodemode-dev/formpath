@@ -135,7 +135,7 @@ export interface TextNode extends NodeBase {
 }
 
 export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; trace?: Record<string, number | string | boolean> }
-export interface SymbolNode extends NodeBase { kind: 'symbol'; symbol: string; xf: Mat }
+export interface SymbolNode extends NodeBase { kind: 'symbol'; symbol: string; xf: Mat; tint?: { color: Color; amount: number } }
 
 export interface BlendSpec { spacing: 'smooth' | 'steps' | 'distance'; steps: number; distance: number; alignToPath: boolean; spine: PathData | null }
 export interface BlendNode extends NodeBase { kind: 'blend'; children: VNode[]; spec: BlendSpec }
