@@ -3,6 +3,7 @@ import { anchorHit, segmentHit } from '../engine/hit';
 import { flatIndex, hasIn, hasOut, nearestOnPath, normRect, pointInPolygon, rectContains, rotateAbout, scaleAbout, translate, unflatIndex } from '../engine/geometry';
 import { transformNodes } from '../engine/ops/objects';
 import { constrainAngle } from '../engine/snap';
+import { framePort } from '../engine/flow';
 import type { Anchor, Doc, Engine, PathData, Pt, Rect, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
@@ -83,12 +84,41 @@ export function endTransform(ctx: ToolContext, S: Drag): void {
 
 const S = newDrag();
 let hover: string | null = null;
+const L = { id: null as string | null, drag: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 } };
+
+function outPortAt(ctx: ToolContext, p: ToolPointer): string | null {
+  const e = ctx.engine, pr = e.current;
+  if (!pr || !e.view.edges) return null;
+  const v = ctx.view();
+  for (const id of pr.selection) {
+    const n = findNode(pr.doc, id);
+    if (n?.kind !== 'text' || n.mode !== 'area' || !n.frame) continue;
+    const s = v.toScreen(framePort(n, true));
+    if (Math.abs(p.screen.x - s.x) <= 6 && Math.abs(p.screen.y - (s.y - 10)) <= 6) return n.id;
+  }
+  return null;
+}
+
+function placeLoaded(ctx: ToolContext, p: ToolPointer): void {
+  const e = ctx.engine, pr = e.current, from = L.id ? findNode(pr?.doc as Doc, L.id) : null;
+  L.id = null; L.drag = false;
+  if (!pr || from?.kind !== 'text' || !from.frame) return;
+  const hit = e.hit(p.doc), target = hit ? findNode(pr.doc, e.selectableFor(hit.id)) : null;
+  if (target && target.id !== from.id && (target.kind === 'path' || target.kind === 'compound' || (target.kind === 'text' && target.mode === 'area'))) { e.threadText([from.id, target.id]); return; }
+  const r = normRect(L.start.x, L.start.y, p.doc.x, p.doc.y), z = ctx.view().zoom;
+  const box = r.w * z > 6 && r.h * z > 6 ? r : { x: p.doc.x, y: p.doc.y, w: from.frame.w, h: from.frame.h };
+  e.beginGesture();
+  const id = e.addText('', box.x, box.y, { mode: 'area', width: box.w, height: box.h, style: from.spans[0]?.style, para: from.para });
+  if (id) e.threadText([from.id, id]);
+  e.endGesture();
+}
 
 registerTool({
   id: 'selection', label: 'Selection Tool', group: 'select', order: 10, shortcut: 'V',
   icon: () => 'vSelect',
   hint: () => 'Click or drag a marquee to select. Drag to move, Alt-drag to copy, Shift to constrain. Drag a handle to scale, just outside a corner to rotate. Double-click a group to isolate it.',
   cursor: (ctx, p) => {
+    if (L.id) return CURSORS.loadedText;
     if (!p) return CURSORS.select;
     const h = handleAt(ctx, p);
     if (h >= 100) return CURSORS.rotate;
@@ -98,6 +128,9 @@ registerTool({
   down: (ctx, p) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
+    if (L.id) { L.drag = true; L.start = p.doc; L.cur = p.doc; return; }
+    const port = outPortAt(ctx, p);
+    if (port) { L.id = port; ctx.redraw(); return; }
     const h = handleAt(ctx, p);
     if (h >= 0) { beginTransform(ctx, S, p, h >= 100 ? 'rotate' : 'scale', h % 100); return; }
     const hit = e.hit(p.doc);
@@ -112,11 +145,13 @@ registerTool({
     S.mode = 'marquee'; S.start = p.doc; S.cur = p.doc;
   },
   move: (ctx, p) => {
+    if (L.drag) { L.cur = p.doc; ctx.redraw(); return; }
     if (S.mode === 'marquee') { S.cur = p.doc; ctx.redraw(); return; }
     dragTransform(ctx, S, p);
   },
   up: (ctx, p) => {
     const e = ctx.engine;
+    if (L.drag) { placeLoaded(ctx, p); ctx.redraw(); return; }
     if (S.mode === 'marquee') {
       const r = normRect(S.start.x, S.start.y, p.doc.x, p.doc.y), z = ctx.view().zoom;
       S.mode = null;
@@ -126,7 +161,8 @@ registerTool({
     }
     endTransform(ctx, S);
   },
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; ctx.redraw(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; L.id = null; L.drag = false; ctx.redraw(); },
+  deactivate: () => { L.id = null; L.drag = false; },
   hover: (ctx, p) => {
     const next = p && ctx.engine.view.smartGuides ? (() => { const h = ctx.engine.hit(p.doc); return h ? ctx.engine.selectableFor(h.id) : null; })() : null;
     if (next !== hover) { hover = next; ctx.redraw(); }
@@ -144,7 +180,8 @@ registerTool({
   overlay: (ctx, g) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
-    if (S.mode === 'marquee') marquee(ctx, g, S.start, S.cur);
+    if (L.drag) marquee(ctx, g, L.start, L.cur);
+    else if (S.mode === 'marquee') marquee(ctx, g, S.start, S.cur);
     else if (!S.mode && hover && !pr.selection.has(hover)) { const n = findNode(pr.doc, hover); if (n) outlineNode(ctx, g, pr.doc, n, layerColor(e, hover), 1.5); }
     if (S.mode && S.moved) hud(ctx, g, ctx.view().toScreen(S.cur), S.info);
   },

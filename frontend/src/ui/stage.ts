@@ -4,7 +4,7 @@ import { apply, flatIndex, hasIn, hasOut, tracePath, transformPath } from '../en
 import { cachedPath, renderDocument, renderNode, type RenderContext } from '../engine/render';
 import { collectTargets, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
 import { layoutText } from '../engine/text';
-import { threadChains } from '../engine/flow';
+import { framePort, threadChains } from '../engine/flow';
 import { cssColor } from '../engine/paint';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
 import type { Project } from '../engine/project';
@@ -419,7 +419,7 @@ export class Stage {
     if (!sel.length) return;
     const chains = threadChains(doc), shown = new Map<string, TextNode>();
     for (const t of sel) { const c = chains.find((ch) => ch.some((x) => x.id === t.id)); for (const x of c ?? [t]) shown.set(x.id, x); }
-    const port = (n: TextNode, out: boolean): Pt => { const f = n.frame as Rect, q = apply(n.xf, out ? f.x + f.w : f.x, out ? f.y + f.h : f.y), s = v.toScreen(q.x, q.y); return { x: Math.round(s.x + (out ? -6 : 6)) + 0.5, y: Math.round(s.y + (out ? -6 : 6)) + 0.5 }; };
+    const port = (n: TextNode, out: boolean): Pt => { const q = framePort(n, out), s = v.toScreen(q.x, q.y); return { x: Math.round(s.x) + 0.5, y: Math.round(s.y + (out ? -10 : 10)) + 0.5 }; };
     const pointed = new Set([...shown.values()].map((n) => n.next).filter((x): x is string => !!x));
     g.save();
     g.lineWidth = 1;

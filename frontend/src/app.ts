@@ -518,6 +518,7 @@ export function startApp(): void {
 
   const has = (): boolean => !!engine.current;
   const sel = (): boolean => engine.hasSelection;
+  const wrapDefaults = { offset: 6, invert: false };
   const many = (): boolean => engine.selected().length > 1;
   const kindSel = (...k: string[]): boolean => engine.selected().some((n) => k.includes(n.kind));
   const xfo = () => ({ strokes: engine.view.scaleStrokes, patterns: engine.view.transformPatterns, gradients: true });
@@ -802,6 +803,12 @@ export function startApp(): void {
     { id: 'create-outlines', label: 'Create Outlines', keys: ['Shift+Mod+O'], enabled: () => kindSel('text'), run: () => void makeOutlines() },
     { id: 'edit-text', label: 'Edit Text', enabled: () => kindSel('text'), run: () => { const t = engine.selected().find((n) => n.kind === 'text'); if (t) { engine.setTool('type'); typing.begin({ id: t.id }); } } },
     { id: 'toggle-area-type', label: 'Convert Point and Area Type', enabled: () => kindSel('text'), run: () => { const t = engine.selected().find((n) => n.kind === 'text'); if (t?.kind !== 'text' || t.mode === 'path') return; const b = engine.boundsOf(t); if (t.mode === 'point') engine.setTextNode(t.id, { mode: 'area', frame: { x: b.x, y: b.y, w: Math.max(20, b.w + 4), h: Math.max(20, b.h + 4) }, xf: [1, 0, 0, 1, 0, 0], area: { columns: 1, rows: 1, gutter: 12, inset: 0, firstBaseline: 'ascent' } }, 'Convert to Area Type'); else { const first = t.spans[0]?.style.size ?? 12; engine.setTextNode(t.id, { mode: 'point', frame: undefined, xf: [1, 0, 0, 1, (t.frame?.x ?? b.x), (t.frame?.y ?? b.y) + first * 0.8] }, 'Convert to Point Type'); } } },
+    { id: 'thread-create', label: 'Create', enabled: () => engine.selected().length > 1 && engine.selected().some((n) => n.kind === 'text' && n.mode === 'area'), run: () => engine.threadText() },
+    { id: 'thread-release', label: 'Release Selection', enabled: () => kindSel('text'), run: () => engine.releaseThread() },
+    { id: 'thread-remove', label: 'Remove Threading', enabled: () => kindSel('text'), run: () => engine.releaseThread(undefined, true) },
+    { id: 'wrap-make', label: 'Make', enabled: sel, run: () => engine.setTextWrap({ offset: wrapDefaults.offset, invert: wrapDefaults.invert }) },
+    { id: 'wrap-release', label: 'Release', enabled: () => engine.selected().some((n) => !!n.wrap), run: () => engine.setTextWrap(null) },
+    { id: 'wrap-options', label: 'Text Wrap Options...', enabled: sel, run: () => { const cur = engine.selected().find((n) => n.wrap)?.wrap ?? wrapDefaults; void askForm('Text Wrap Options', [{ kind: 'number', key: 'offset', label: 'Offset', value: cur.offset, min: -500, max: 500, unit: 'pt' }, { kind: 'check', key: 'invert', label: 'Invert Wrap', value: cur.invert }], { ok: 'OK' }).then((v) => { if (!v) return; wrapDefaults.offset = Number(v.offset); wrapDefaults.invert = !!v.invert; engine.setTextWrap({ offset: wrapDefaults.offset, invert: wrapDefaults.invert }); }); } },
     { id: 'area-type-options', label: 'Area Type Options...', enabled: () => engine.selected().some((n) => n.kind === 'text' && n.mode === 'area'), run: () => showPanel('paragraph') },
     { id: 'type-on-path-options', label: 'Type on a Path Options...', enabled: () => engine.selected().some((n) => n.kind === 'text' && n.mode === 'path'), run: () => { const t = engine.selected().find((n) => n.kind === 'text'); if (t?.kind !== 'text') return; void askForm('Type on a Path Options', [{ kind: 'select', key: 'effect', label: 'Effect', value: t.pathEffect ?? 'rainbow', choices: [['rainbow', 'Rainbow'], ['skew', 'Skew'], ['ribbon', '3D Ribbon'], ['stair', 'Stair Step'], ['gravity', 'Gravity']] }, { kind: 'number', key: 'start', label: 'Start', value: Math.round((t.pathStart ?? 0) * 100), min: 0, max: 100, unit: '%' }, { kind: 'check', key: 'flip', label: 'Flip', value: !!t.pathFlip }]).then((v) => { if (v) engine.setTextNode(t.id, { pathEffect: v.effect as 'rainbow', pathStart: Number(v.start) / 100, pathFlip: !!v.flip }); }); } },
     { id: 'case-upper', label: 'UPPERCASE', enabled: () => kindSel('text'), run: () => changeCase('upper') },
@@ -847,6 +854,7 @@ export function startApp(): void {
     viewFlag('snap-point', 'Snap to Point', 'snapPoint', ["Alt+Mod+'"]),
     viewFlag('toggle-artboards', 'Show Artboards', 'artboards'),
     viewFlag('toggle-gradient-annotator', 'Show Gradient Annotator', 'gradientAnnotator', ['Alt+Mod+G']),
+    viewFlag('toggle-threads', 'Show Text Threads', 'threads', ['Shift+Mod+Y']),
     { id: 'reset-rotation', label: 'Reset Rotate View', keys: ['Shift+Mod+1'], enabled: () => !!engine.current?.viewport.rotation, run: () => engine.setViewRotation(0) },
     { id: 'screen-standard', label: 'Normal Screen Mode', checked: () => screen === 'standard', run: () => { screen = 'standard'; applyScreen(); } },
     { id: 'screen-menu', label: 'Full Screen Mode with Menu Bar', checked: () => screen === 'menu', run: () => { screen = 'menu'; applyScreen(); } },
@@ -913,15 +921,16 @@ export function startApp(): void {
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'expand-object'] },
       { label: 'Image Trace', items: ['image-trace', 'embed-image'] }, '-',
+      { label: 'Text Wrap', items: ['wrap-make', 'wrap-release', '-', 'wrap-options'] },
       { label: 'Clipping Mask', items: ['make-clip', 'release-clip'] },
       { label: 'Compound Path', items: ['compound-make', 'compound-release'] },
       { label: 'Opacity Mask', items: ['opacity-mask', 'release-opacity-mask'] },
       { label: 'Symbol', items: ['new-symbol', 'break-symbol'] },
       { label: 'Artboards', items: ['artboards-from-selection', 'artboards-rearrange', 'artboard-fit-art', 'artboard-fit-selection', '-', 'artboard-options'] }] },
-    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-glyphs', '-', 'area-type-options', 'type-on-path-options', 'toggle-area-type', '-', 'create-outlines', 'edit-text', 'find-replace', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
+    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-glyphs', '-', 'area-type-options', 'type-on-path-options', { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', '-', 'create-outlines', 'edit-text', 'find-replace', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', ...effectItems()] },
-    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', 'toggle-grid', 'snap-grid', 'snap-point', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
+    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', 'toggle-grid', 'snap-grid', 'snap-point', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
     { label: 'Window', items: ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },

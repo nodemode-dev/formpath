@@ -363,6 +363,13 @@ Dragging a segment reshapes the curve by the minimum-norm change to both handles
 
 Matches the chosen attribute exactly. Illustrator's tolerance setting is the parity gap for this row.
 
+### src/tools/select.ts · loaded text
+- refers-to: src/tools/select.ts :: L, outPortAt, placeLoaded
+- kind: explainer
+- logged: v0.10.0 · 2026-10-07
+
+Clicking the out port of selected area type loads its text, as in Illustrator: the cursor turns into the loaded-text cursor, a click on a closed path or another text frame threads into it, a click on empty canvas makes a frame the size of the source, and a drag makes one the size of the drag. The new frame and the link are one gesture, so one undo removes both. Escape or another tool drops the loaded text. The port sits on the right edge 10 px above the corner, the same place `Stage.drawTextPorts` draws it.
+
 ## src/tools/pen.ts
 
 ### src/tools/pen.ts · shortcuts

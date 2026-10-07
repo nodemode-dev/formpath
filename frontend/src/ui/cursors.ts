@@ -36,6 +36,7 @@ export const CURSORS = {
   scissors: svg('<circle cx="6" cy="17" r="3" fill="#fff" stroke="#000" stroke-width="1.2"/><circle cx="18" cy="17" r="3" fill="#fff" stroke="#000" stroke-width="1.2"/><path d="M8 15 L16 3 M16 15 L8 3" stroke="#000" stroke-width="1.6"/>', 12, 9, 'crosshair'),
   knife: svg('<path d="M4 20 L18 4 L20 6 L8 20 Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>', 4, 20, 'crosshair'),
   cross: 'crosshair',
+  loadedText: svg('<rect x="4" y="5" width="13" height="15" fill="#fff" stroke="#000" stroke-width="1.2"/><path d="M6.5 9 h8 M6.5 12 h8 M6.5 15 h5" stroke="#000" stroke-width="1.4"/><path d="M1 1 v6 M1 1 h6" stroke="#000" stroke-width="1.6"/>', 1, 1, 'crosshair'),
   type: 'text',
   typeVertical: 'vertical-text',
   zoomIn: 'zoom-in',

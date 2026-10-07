@@ -58,7 +58,10 @@ export function threadChains(doc: Doc): TextNode[][] {
   return chains;
 }
 
-export function validNext(doc: Doc, t: TextNode): boolean { return threadChains(doc).some((c) => c.slice(0, -1).some((x) => x.id === t.id)); }
+export function framePort(t: TextNode, out: boolean): Pt {
+  const f = t.frame ?? { x: 0, y: 0, w: 0, h: 0 };
+  return apply(t.xf, out ? f.x + f.w : f.x, out ? f.y + f.h : f.y);
+}
 
 export function storyOf(chain: TextNode[]): Span[] { return mergeSpans(chain.flatMap((t) => t.spans.filter((s, i) => s.text || i === 0))); }
 
