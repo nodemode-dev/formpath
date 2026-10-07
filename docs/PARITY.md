@@ -10,9 +10,9 @@ formpth is measured against Adobe Illustrator the way formvis is measured agains
 
 Platform rows are shown and not scored.
 
-## Score at v0.15.0
+## Score at v0.16.0
 
-**58.5 of 59 scored rows, 99 percent:** 58 Full, 1 Partial, 0 None. The tally is at the end.
+**59 of 59 scored rows, 100 percent:** 59 Full, 0 Partial, 0 None. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -87,7 +87,7 @@ Platform rows are shown and not scored.
 | Repeat | Full | Radial, grid and mirror, with options, release and expand |
 | Brushes | Full | Calligraphic, scatter, art and pattern brushes; New Brush from art for all four kinds, Brush Options, colorization, Delete Brush, previews drawn from the brush |
 | Image Trace | Full | Live tracing objects with eleven presets, colour, grayscale and black and white modes, paths, ignore white and smoothing; five views; the Image Trace panel with preview; Make, Make and Expand, Expand, Release |
-| 3D and Materials | Partial | Extrude & Bevel (depth, cap, classic and rounded bevels), Revolve (angle, offset, either edge), Inflate and Plane as live effects on paths, compound paths, type and groups; position presets, X, Y and Z rotation and perspective; plastic, matte, metal, wireframe and flat materials; light direction, intensity, ambient, highlight and shading colour; the 3D and Materials panel; vector faces in SVG and PDF; Expand Appearance to shaded paths. No Map Art (graphics on surfaces), no cast shadows or ray-traced rendering, and Inflate is drawn face-on only |
+| 3D and Materials | Full | Extrude & Bevel (depth, cap, classic and rounded bevels), Revolve (angle, offset, either edge), Inflate and Plane as live effects on paths, compound paths, type and groups; position presets, X, Y and Z rotation and perspective, Inflate included; plastic, matte, metal, wireframe and flat materials; light direction, intensity, ambient, highlight and shading colour; Map Art (a symbol on the front face of an Extrude or Plane, scaled, offset and shaded with the surface); shadows behind or below with distance, softness and opacity; the 3D and Materials panel; vector faces in SVG and PDF; Expand Appearance to shaded paths. Not built: ray-traced rendering, more than one light, and Substance materials |
 | Effect Gallery raster filters | Full | The Effect Gallery with live thumbnails, options and preview; 55 Photoshop effects (Artistic 15, Blur 2 beside Gaussian Blur, Brush Strokes 8, Distort 3, Pixelate 4, Sketch 14, Stylize 1, Texture 6, Video 2) as live effects in the Appearance panel; the Rasterize effect and Document Raster Effects Settings; PDF and SVG export them at the document's raster resolution |
 
 ## Type · 6 of 6
@@ -131,13 +131,13 @@ Platform rows are shown and not scored.
 | Drawing | 6 | 6 |
 | Paths and Pathfinder | 7 | 7 |
 | Paint and colour | 8 | 8 |
-| Effects and live objects | 9.5 | 10 |
+| Effects and live objects | 10 | 10 |
 | Type | 6 | 6 |
 | Files and output | 7 | 7 |
-| **Total** | **58.5** | **59** |
+| **Total** | **59** | **59** |
 
-58 rows Full, 1 Partial, 0 None.
+59 rows Full, 0 Partial, 0 None.
 
 ## Next to close
 
-Map Art onto 3D surfaces, cast shadows and Inflate at an angle, which would make 3D and Materials Full. Beyond the scored rows: the Effect Gallery's stacked effect layers in one dialog, and signed desktop bundles.
+Every scored row is Full. Beyond them: ray-traced 3D rendering with more than one light, the Effect Gallery's stacked effect layers in one dialog, and signed desktop bundles.

@@ -171,8 +171,11 @@ ask it questions.
   space, Extrude gives it depth (with a cap and an optional classic or rounded bevel), Revolve spins the art around
   its left or right edge like a lathe (draw half a bottle, revolve it), and Inflate puffs it up. Pick a position or
   set the X, Y and Z rotation and perspective, a material (plastic, matte, metal, wireframe, flat) and the light's
-  direction, intensity, ambient level, highlight and shading colour. Type and groups turn as one object. The effect
-  stays live in the Appearance panel; Expand Appearance makes plain shaded shapes.
+  direction, intensity, ambient level, highlight and shading colour. Inflate turns too (no perspective). Type and
+  groups turn as one object. Map Art puts a symbol on the front face of an Extrude or Plane: make the label a symbol,
+  pick it under Map Art, then set its scale and offset; Shade Artwork darkens it with the face. Shadow casts a soft
+  shadow behind the object or below it on the ground, with distance, softness and opacity. The effect stays live in
+  the Appearance panel; Expand Appearance makes plain shaded shapes.
 - Rasterize (Effect > Rasterize) shows the object as pixels at a resolution you pick, optionally on white with a
   margin. Effect > Document Raster Effects Settings sets the resolution raster effects are written at in PDF and SVG.
 - Brushes: calligraphic, scatter, art and pattern brushes apply to any stroke from the Brushes panel. New Brush
