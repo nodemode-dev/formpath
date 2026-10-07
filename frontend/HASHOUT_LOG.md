@@ -40,6 +40,7 @@ frontend/
     │   ├── brushes.ts          calligraphic, scatter, art, pattern brushes
     │   ├── text.ts             type layout, styles, caret and index math
     │   ├── flow.ts             reflow: text wrap shapes and threaded stories
+    │   ├── harmony.ts          colour harmony rules and variations
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -127,6 +128,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/titlebar-tools.ts
 - src/ui/panels/kit.ts
 - src/ui/panels/color.ts
+- src/ui/panels/color-guide.ts
 - src/ui/panels/color-picker.ts
 - src/ui/panels/navigator.ts
 - src/ui/panels/type.ts
@@ -664,6 +666,15 @@ Replaced by a guarded `--paint` variable, so an unchanged swatch is never rewrit
 setStyleVar(b, 'background', '');
 b.style.background = s.name === '[Registration]' ? 'repeating-linear-gradient(45deg, #000 0 2px, #fff 2px 4px)' : paintCss(s.paint, this.engine);
 ```
+
+## src/ui/panels/color-guide.ts
+
+### src/ui/panels/color-guide.ts · Color Guide
+- refers-to: src/ui/panels/color-guide.ts :: ColorGuidePanel; src/engine/harmony.ts :: harmonyColors, variations, HARMONY_RULES
+- kind: rationale
+- logged: v0.11.0 · 2026-10-07
+
+The base colour follows the active fill or stroke colour, except when that colour came from the guide itself (its hex is in `shown`), so picking a harmony swatch does not move the harmony under the pointer. Twelve rules rotate and adjust the base in HSB; each gives five colours, and each colour gets seven variations (tints and shades, warm and cool, vivid and muted) in a fixed 5 by 7 grid. The cells are made once and only their `--sw` variable changes, so switching rules repaints without touching the DOM structure. The plus saves the five harmony colours as a swatch group in one undo step.
 
 ## src/ui/panels/color-picker.ts
 
