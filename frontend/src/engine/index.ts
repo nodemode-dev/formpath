@@ -10,7 +10,7 @@ import { liveChildren } from './live';
 import { buildMesh } from './mesh';
 import { align, arrange, duplicateNodes, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
 import { expandAppearance } from './ops/expand';
-import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, redefineTextStyle, renameTextStyle, type TextStyleKind } from './ops/text-styles';
+import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, hex, NONE, resolvePaint, sameColor, solid, stroke, WHITE, withFirstFill, withFirstStroke } from './paint';
 import { Project } from './project';
@@ -681,6 +681,12 @@ export class Engine extends Emitter<EngineEvents> {
     const from = this.styleSource();
     if (!from) { this.notice('Select type with the attributes the style should take.'); return false; }
     return this.edit('Redefine Style', (d) => redefineTextStyle(d, kind, id, from, range));
+  }
+  fontsUsed(): FontUse[] { const d = this.doc; return d ? fontsUsed(d) : []; }
+  replaceFont(from: { font: string; style?: string }, to: { font: string; style: string }, ids?: string[]): number {
+    let count = 0;
+    this.edit('Replace Font', (d) => { const r = replaceFont(d, from, to, ids); count = r.count; return r.doc; });
+    return count;
   }
   deleteTextStyle(kind: TextStyleKind, id: string): boolean { return this.edit('Delete Style', (d) => deleteTextStyle(d, kind, id)); }
   renameTextStyle(kind: TextStyleKind, id: string, name: string): boolean { return this.edit('Style Options', (d) => renameTextStyle(d, kind, id, name)); }

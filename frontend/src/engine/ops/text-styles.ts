@@ -81,6 +81,29 @@ export function renameTextStyle(doc: Doc, kind: TextStyleKind, id: string, name:
   return kind === 'char' ? { ...doc, charStyles: doc.charStyles.map((s) => (s.id === id ? { ...s, name } : s)) } : { ...doc, paraStyles: doc.paraStyles.map((s) => (s.id === id ? { ...s, name } : s)) };
 }
 
+export interface FontUse { font: string; style: string; count: number; ids: string[] }
+export function fontsUsed(doc: Doc): FontUse[] {
+  const map = new Map<string, FontUse>();
+  for (const n of allNodes(doc)) {
+    if (n.kind !== 'text') continue;
+    for (const s of n.spans) {
+      const k = `${s.style.font}\u0000${s.style.style}`;
+      let u = map.get(k);
+      if (!u) { u = { font: s.style.font, style: s.style.style, count: 0, ids: [] }; map.set(k, u); }
+      u.count += s.text.length;
+      if (!u.ids.includes(n.id)) u.ids.push(n.id);
+    }
+  }
+  return [...map.values()].sort((a, b) => a.font.localeCompare(b.font) || a.style.localeCompare(b.style));
+}
+export function replaceFont(doc: Doc, from: { font: string; style?: string }, to: { font: string; style: string }, ids?: string[]): { doc: Doc; count: number } {
+  let count = 0;
+  const hit = (st: CharStyle): boolean => st.font === from.font && (from.style === undefined || st.style === from.style);
+  const targets = (ids ?? allNodes(doc).filter((n) => n.kind === 'text').map((n) => n.id));
+  const out = updateNodes(doc, targets, (n) => (n.kind === 'text' && n.spans.some((s) => hit(s.style)) ? { ...n, spans: n.spans.map((s) => (hit(s.style) ? (count++, { ...s, style: { ...s.style, font: to.font, style: to.style } }) : s)) } : n));
+  return { doc: count ? out : doc, count };
+}
+
 function spanStyleAt(t: TextNode, index: number): CharStyle {
   let pos = 0;
   for (const s of t.spans) { if (index < pos + s.text.length) return s.style; pos += s.text.length; }

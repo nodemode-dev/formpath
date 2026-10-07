@@ -52,6 +52,7 @@ import { BrushesPanel, StrokePanel, TransparencyPanel } from './ui/panels/stroke
 import { ArtboardsPanel, LinksPanel, SymbolsPanel } from './ui/panels/symbols';
 import { CharacterPanel, findReplaceDialog, GlyphsPanel, ParagraphPanel } from './ui/panels/type';
 import { TextStylesPanel } from './ui/panels/text-styles';
+import { FindFontDialog } from './ui/panels/find-font';
 import { CHECKER_CELL, CHECKER_PAIR, applyPrefs, loadPrefs, savePrefs, type Prefs } from './ui/prefs';
 import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './ui/properties';
 import { Rail } from './ui/rail';
@@ -521,6 +522,7 @@ export function startApp(): void {
   const has = (): boolean => !!engine.current;
   const sel = (): boolean => engine.hasSelection;
   const wrapDefaults = { offset: 6, invert: false };
+  let findFont: FindFontDialog | null = null;
   const many = (): boolean => engine.selected().length > 1;
   const kindSel = (...k: string[]): boolean => engine.selected().some((n) => k.includes(n.kind));
   const xfo = () => ({ strokes: engine.view.scaleStrokes, patterns: engine.view.transformPatterns, gradients: true });
@@ -726,6 +728,7 @@ export function startApp(): void {
     { id: 'paste-in-place', label: 'Paste in Place', keys: ['Shift+Mod+V'], enabled: () => has() && !!engine.clipboard, run: () => engine.paste('in_place') },
     { id: 'clear', label: 'Clear', keys: ['Delete', 'Backspace'], enabled: sel, run: () => engine.deleteSelection() },
     { id: 'find-replace', label: 'Find and Replace...', enabled: has, run: () => void findReplaceDialog(engine) },
+    { id: 'find-font', label: 'Find Font...', enabled: () => engine.fontsUsed().length > 0, run: () => { findFont ??= new FindFontDialog(engine); findFont.show(); } },
     { id: 'recolor', label: 'Recolor Artwork...', enabled: sel, run: () => void recolorDialog() },
     ...(['invert', 'grayscale', 'cmyk', 'rgb'] as const).map((k) => ({ id: `colors-${k}`, label: { invert: 'Invert Colors', grayscale: 'Convert to Grayscale', cmyk: 'Convert to CMYK', rgb: 'Convert to RGB' }[k], enabled: sel, run: () => { const ids = engine.targetIds(); engine.edit({ invert: 'Invert Colors', grayscale: 'Convert to Grayscale', cmyk: 'Convert to CMYK', rgb: 'Convert to RGB' }[k], (d) => recolorDoc(d, ids, RECOLOR[k](0))); } })),
     { id: 'shortcuts', label: 'Keyboard Shortcuts...', keys: ['Alt+Shift+Mod+K'], run: () => shortcuts.show() },
@@ -929,7 +932,7 @@ export function startApp(): void {
       { label: 'Opacity Mask', items: ['opacity-mask', 'release-opacity-mask'] },
       { label: 'Symbol', items: ['new-symbol', 'break-symbol'] },
       { label: 'Artboards', items: ['artboards-from-selection', 'artboards-rearrange', 'artboard-fit-art', 'artboard-fit-selection', '-', 'artboard-options'] }] },
-    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', '-', 'area-type-options', 'type-on-path-options', { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', '-', 'create-outlines', 'edit-text', 'find-replace', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
+    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', '-', 'area-type-options', 'type-on-path-options', { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', 'toggle-grid', 'snap-grid', 'snap-point', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
