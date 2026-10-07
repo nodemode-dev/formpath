@@ -2,6 +2,17 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.5.0 · 2026-10-07
+
+Panels.
+
+### Added
+
+- Properties, Transform, Align and Pathfinder; the Layers tree with layer colours, solo, lock, layer options, locate and drag to restack or nest.
+- Color in five models, Swatches with global and spot colours, Gradient with stops and midpoints, the colour picker.
+- Stroke with dashes, arrowheads and profiles; Transparency with opacity masks; Brushes; Appearance and Graphic Styles.
+- Symbols, Artboards, Links, Navigator, Info, History and Actions with recording; dialogs that preview through the engine.
+
 ## 0.4.0 · 2026-10-07
 
 Stage, transform and paint tools.
