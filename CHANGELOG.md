@@ -2,6 +2,27 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.12.0 · 2026-10-07
+
+Live objects.
+
+### Added
+
+- Live Paint groups: Object > Live Paint > Make, Merge, Release, Gap Options and Expand. The Live Paint Bucket fills the areas the paths close and Shift-click paints a path's stroke; colours follow their areas when the paths are moved or reshaped, and gap detection closes small openings.
+- Pattern editing mode from Object > Pattern > Make, Edit Pattern or a double-click on a pattern swatch, with the Pattern Options panel (tile type, brick offset, size to art or exact size, spacing, overlap, copies, dimming, tile edge) and Done, Save a Copy and Cancel. Brick and hex tiles now repeat as bricks and hexes.
+- Image Trace makes a live tracing object that keeps the image: the Image Trace panel with presets, mode, colours or threshold, paths, ignore white, smoothing and preview; five views; Make and Expand, Expand and Release. Three more presets: Silhouettes, Line Art and Technical Drawing.
+- The Symbol Shifter, Scruncher, Sizer, Spinner, Stainer, Screener and Styler, with diameter, intensity and the user defined, average and random methods.
+- New Brush from the selected art for calligraphic, scatter, art and pattern brushes, Brush Options, Delete Brush and previews drawn from each brush.
+- Gradient mesh editing: drag a point's handles to bend the patches, set a point's colour and opacity in the options bar, Shift-click to add lines in the colour already there, Alt-click to remove lines.
+- MCP tools `live_paint`, `symbolism`, `gradient_mesh` and `edit_pattern`; `image_trace` makes, retraces, views, expands and releases tracing objects; `group` returns the new group's id. 65 tools.
+
+### Fixed
+
+- Image Trace produced slivers instead of shapes: closed outlines were simplified down to two points.
+- The nearest point on a straight segment was found off along the line, so clicking straight edges, Add Anchor Point and the Scissors missed or cut in the wrong place, and anchors added to straight lines gained handles.
+- Moving a mesh point moved its handles a second time.
+- A pattern whose tile was not at the document origin exported to SVG as an empty fill, and an edited pattern could keep showing its old tile.
+
 ## 0.11.0 · 2026-10-07
 
 Paint and selection gaps.
