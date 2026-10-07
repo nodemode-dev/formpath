@@ -2,6 +2,16 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.6.0 · 2026-10-07
+
+Type.
+
+### Added
+
+- Typing on the canvas with a caret, selection, IME and the clipboard.
+- Type, Area Type, Type on a Path and Vertical Type; Character, Paragraph and Glyphs; Find and Replace.
+- Bundled Inter and JetBrains Mono, installed fonts through the engine, and glyph outlines through opentype.js for Create Outlines and PDF.
+
 ## 0.5.0 · 2026-10-07
 
 Panels.
