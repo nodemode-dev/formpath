@@ -2,6 +2,25 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.10.0 · 2026-10-07
+
+Type gaps.
+
+### Added
+
+- Threaded text: Type > Threaded Text > Create, Release Selection and Remove Threading; in and out ports with overflow marks; loaded text from the out port into a click, a drag or a closed path; View > Show Text Threads.
+- Text wrap: Object > Text Wrap > Make, Release and Options with offset and invert, around any object above area type in its layer.
+- Area type in a closed shape flows inside the shape, not just its bounds.
+- OpenType features shaped from the font (ligatures, discretionary ligatures, swash, alternates, stylistic sets, titling, ordinals, fractions, slashed zero, case forms, figure styles and positions) in a new section of the Character panel, drawn as the font's own glyphs on the canvas, in outlines, in PDF and in SVG.
+- Small Caps from the font's small capitals, or synthesized when it has none.
+- Character Styles and Paragraph Styles panels: new from the selection, apply, redefine, delete, rename, override marks and the Normal styles.
+- Find Font: the fonts in use, find their type, replace a family and style everywhere.
+- MCP tools `text_flow`, `text_style` and `find_font`; `set_text` takes `caps` and `features`; object descriptions report `overflow` and threads. 58 tools.
+
+### Fixed
+
+- The outline of a moved or rotated text box followed its original place.
+
 ## 0.9.0 · 2026-10-07
 
 The application and the harness.

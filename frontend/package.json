@@ -1,7 +1,7 @@
 {
   "name": "formpth",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "formpth · vector illustration editor in the NodeMode style",
   "license": "Apache-2.0",
   "type": "module",
