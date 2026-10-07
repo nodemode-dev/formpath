@@ -1,11 +1,12 @@
 import { geomBounds } from '../engine/bounds';
 import { findNode, layerOf, topObjects } from '../engine/doc';
-import { apply, flatIndex, hasIn, hasOut, tracePath } from '../engine/geometry';
+import { apply, flatIndex, hasIn, hasOut, tracePath, transformPath } from '../engine/geometry';
 import { cachedPath, renderDocument, renderNode, type RenderContext } from '../engine/render';
 import { collectTargets, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
 import { layoutText } from '../engine/text';
+import { threadChains } from '../engine/flow';
 import { cssColor } from '../engine/paint';
-import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type VNode } from '../engine';
+import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
 import type { Project } from '../engine/project';
 import { getTool, type SnapAt, type Tool, type ToolContext, type ToolPointer, type ViewInfo } from '../extensions/registry';
 import { isMac, q, setHidden } from './dom';
@@ -349,7 +350,7 @@ export class Stage {
     g.setTransform(d, 0, 0, d, 0, 0);
     this.drawGuides(g, p, pal);
     this.drawArtboardNames(g, p, pal);
-    try { this.drawSelection(g, p, pal); } catch (err) { console.error(err); }
+    try { this.drawSelection(g, p, pal); this.drawTextPorts(g, p, pal); } catch (err) { console.error(err); }
     this.drawSmart(g, p, pal);
     try { this.tool()?.overlay?.(this.ctx, g); } catch (err) { console.error(err); }
   }
@@ -411,6 +412,40 @@ export class Stage {
     g.restore();
   }
 
+  private drawTextPorts(g: CanvasRenderingContext2D, p: Project, pal: StagePaint): void {
+    if (!p.selection.size || !this.engine.view.edges) return;
+    const doc = p.doc, v = p.viewport;
+    const sel = topObjects(doc, p.selection).map((id) => findNode(doc, id)).filter((n): n is TextNode => n?.kind === 'text' && n.mode === 'area' && !!n.frame);
+    if (!sel.length) return;
+    const chains = threadChains(doc), shown = new Map<string, TextNode>();
+    for (const t of sel) { const c = chains.find((ch) => ch.some((x) => x.id === t.id)); for (const x of c ?? [t]) shown.set(x.id, x); }
+    const port = (n: TextNode, out: boolean): Pt => { const f = n.frame as Rect, q = apply(n.xf, out ? f.x + f.w : f.x, out ? f.y + f.h : f.y), s = v.toScreen(q.x, q.y); return { x: Math.round(s.x + (out ? -6 : 6)) + 0.5, y: Math.round(s.y + (out ? -6 : 6)) + 0.5 }; };
+    const pointed = new Set([...shown.values()].map((n) => n.next).filter((x): x is string => !!x));
+    g.save();
+    g.lineWidth = 1;
+    if (this.engine.view.threads) {
+      for (const n of shown.values()) {
+        const nx = n.next ? shown.get(n.next) : null;
+        if (!nx) continue;
+        const a = port(n, true), b = port(nx, false);
+        g.strokeStyle = layerOf(doc, n.id)?.color || pal.layer;
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+      }
+    }
+    for (const n of shown.values()) {
+      const color = layerOf(doc, n.id)?.color || pal.layer, over = !n.next && layoutText(n).overflow >= 0;
+      for (const out of [false, true]) {
+        const c = port(n, out);
+        g.fillStyle = pal.handle; g.strokeStyle = out && over ? pal.danger : color;
+        g.fillRect(c.x - 4, c.y - 4, 8, 8); g.strokeRect(c.x - 4, c.y - 4, 8, 8);
+        g.beginPath();
+        if (out && over) { g.moveTo(c.x - 2.5, c.y); g.lineTo(c.x + 2.5, c.y); g.moveTo(c.x, c.y - 2.5); g.lineTo(c.x, c.y + 2.5); g.stroke(); }
+        else if (out ? !!n.next : pointed.has(n.id)) { g.fillStyle = color; g.moveTo(c.x - 2, c.y - 2.5); g.lineTo(c.x + 2.5, c.y); g.lineTo(c.x - 2, c.y + 2.5); g.closePath(); g.fill(); }
+      }
+    }
+    g.restore();
+  }
+
   private drawSelection(g: CanvasRenderingContext2D, p: Project, pal: StagePaint): void {
     if (!p.selection.size) return;
     const doc = p.doc, v = p.viewport, vw = this.engine.view;
@@ -448,7 +483,8 @@ export class Stage {
       case 'envelope': g.strokeRect(n.frame.x, n.frame.y, n.frame.w, n.frame.h); break;
       case 'mesh': { const b = geomBounds(this.engine.doc as Doc, n); g.strokeRect(b.x, b.y, b.w, b.h); break; }
       case 'text': {
-        if (n.mode === 'area' && n.frame) g.strokeRect(n.frame.x, n.frame.y, n.frame.w, n.frame.h);
+        if (n.mode === 'area' && n.framePath) g.stroke(cachedPath(transformPath(n.framePath, n.xf)));
+        else if (n.mode === 'area' && n.frame) { const f = n.frame, c = [[f.x, f.y], [f.x + f.w, f.y], [f.x + f.w, f.y + f.h], [f.x, f.y + f.h]].map(([x, y]) => apply(n.xf, x, y)); g.beginPath(); c.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); g.closePath(); g.stroke(); }
         else if (n.mode === 'path' && n.path) g.stroke(cachedPath(n.path));
         const lay = layoutText(n), m = n.xf;
         g.beginPath();

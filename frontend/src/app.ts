@@ -1084,7 +1084,7 @@ export function startApp(): void {
 
   window.addEventListener('beforeunload', (e) => { if (!engine.projects.some((p) => p.modified)) return; e.preventDefault(); e.returnValue = ''; });
 
-  onFontsLoaded(() => { fontsChanged(); engine.repaint(); engine.emit('options', null); });
+  onFontsLoaded(() => { fontsChanged(); engine.reflowAll(); engine.emit('options', null); });
   void ensureFace(typeDefaults.font, typeDefaults.style);
   status.setEngine('Engine: checking');
   void api.capabilities().then((c) => {

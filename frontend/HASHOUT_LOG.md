@@ -39,6 +39,7 @@ frontend/
     │   ├── mesh.ts             gradient mesh
     │   ├── brushes.ts          calligraphic, scatter, art, pattern brushes
     │   ├── text.ts             type layout, styles, caret and index math
+    │   ├── flow.ts             reflow: text wrap shapes and threaded stories
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -98,6 +99,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/kernel.ts
 - src/engine/ops/recolor.ts
 - src/engine/text.ts
+- src/engine/flow.ts
 - src/engine/snap.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
@@ -303,6 +305,22 @@ One `ColorFn` per Edit Colors action (invert, grayscale, cmyk, rgb, saturate, hu
 - logged: v0.9.0 · 2026-10-07
 
 Point type lays out lines from the baseline at the node's origin; area type wraps in its frame with columns and rows; path type places glyphs along the path. Caret math works in the node's local space; callers invert `xf` first.
+
+### src/engine/text.ts · line slots
+- refers-to: src/engine/text.ts :: layoutLines, bandRange, cutBand, keepBand
+- kind: rationale
+- logged: v0.10.0 · 2026-10-07
+
+Line breaking and line placement used to run in two passes, breaking every paragraph at the column width before any line had a y. Text wrap makes the width depend on y, so `layoutLines` now places a line first, asks `slots` which horizontal runs of the column are free in that line's band (ascent to descent), and breaks into each run in turn, so type can sit on both sides of a wrap object. A band with no run wide enough (one and a half times the type size) moves the line down by its leading. The break rules are unchanged: break after a space, tab or hyphen, keep a trailing space on the line, split a word only when it alone is wider than the run. A wrap shape with `invert` keeps only the run inside the shape, measured at both edges of the band so a line never pokes out of a curve; area type in a non-rectangular shape uses that for its own `framePath`.
+
+## src/engine/flow.ts
+
+### src/engine/flow.ts · reflow
+- refers-to: src/engine/flow.ts :: reflow, threadChains, detachFrames; src/engine/index.ts :: edit, dragTo, restore, addProject, reflowAll
+- kind: rationale
+- logged: v0.10.0 · 2026-10-07
+
+Layout is cached per node by identity and never reads the document, so anything that depends on other nodes is written into the text node as derived data by one pass, `reflow`, which `Engine.edit`, `dragTo`, `restore` and `addProject` run on every new document. `wrapShape` holds the outlines of the wrap objects above the type in its layer, in the type's local space, plus its own `framePath`; threaded frames hold their share of one story. The story is the concatenation of every frame's spans in chain order, so typing into any frame works without knowing about threads, and the pass deals the story back out frame by frame using each frame's overflow index. `reflow` returns the same document when nothing changed and costs one walk when there are no wraps, threads or shaped frames. Links that point at a missing, duplicated or non-area frame are dropped by the pass, which is how a duplicated threaded frame comes out unthreaded. `detachFrames` runs before a delete and for Release Selection so the text of a removed frame flows back into the rest of the thread instead of being lost. `reflowAll` reruns the pass without a history step when fonts finish loading, because the distribution depends on glyph widths.
 
 ## src/engine/snap.ts
 
@@ -511,6 +529,13 @@ The scene canvas draws the pasteboard, artboards, the grid when it is in back, t
 - logged: v0.9.0 · 2026-10-07
 
 Mesh edges came from `n.outline`, which mesh nodes do not have; they now use the mesh's geometric bounds. An `else if` bound to the inner `for` loop's `if` in the anchor collector; braces fixed the binding.
+
+### src/ui/stage.ts · text ports
+- refers-to: src/ui/stage.ts :: drawTextPorts, traceEdges (text)
+- kind: rationale
+- logged: v0.10.0 · 2026-10-07
+
+Selected area type shows an in port at its top left and an out port at its bottom right, and so does every other frame of its thread. A filled triangle marks a port that is threaded; a red plus on the out port marks overflow, in the `--danger` token through `StagePaint.danger`. Thread lines join an out port to the next in port when View > Show Text Threads is on (`ViewFlags.threads`). The overflow mark used to live in the text editor's overlay, so it showed only while typing; it moved here. The frame outline now goes through the node's `xf`, which it ignored before, so a moved or rotated text box outlined its original place; a frame with a `framePath` outlines that shape.
 
 ## src/ui/text-editor.ts
 

@@ -71,6 +71,8 @@ export type AppearanceItem = FillItem | StrokeItem;
 export interface Appearance { items: AppearanceItem[]; effects: Effect[] }
 
 export interface OpacityMask { art: VNode; clip: boolean; invert: boolean; disabled: boolean; linked: boolean }
+export interface TextWrap { offset: number; invert: boolean }
+export interface WrapShape { pts: Pt[]; offset: number; invert: boolean }
 
 export type LiveShape =
   | { kind: 'rect'; x: number; y: number; w: number; h: number; radii: [number, number, number, number]; corner: 'round' | 'inverted' | 'chamfer'; xf: Mat }
@@ -92,6 +94,7 @@ export interface NodeBase {
   mask?: OpacityMask | null;
   style?: string;
   note?: string;
+  wrap?: TextWrap | null;
 }
 
 export interface LayerNode extends NodeBase { kind: 'layer'; children: VNode[]; color: string; template?: boolean; printable?: boolean; clip?: boolean }
@@ -123,6 +126,7 @@ export interface TextNode extends NodeBase {
   vertical?: boolean;
   area?: AreaOptions;
   next?: string;
+  wrapShape?: WrapShape[];
 }
 
 export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; trace?: Record<string, number | string | boolean> }

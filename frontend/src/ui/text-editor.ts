@@ -140,7 +140,7 @@ export class TextEditor {
       this.pending = null;
       const style = this.style();
       if (pd.mode === 'path' || (pd.mode === 'area' && pd.replace)) {
-        const id = e.addText(s, pd.x, pd.y, pd.mode === 'path' ? { mode: 'path', path: pd.path, style } : { mode: 'area', width: pd.box?.w, height: pd.box?.h, style });
+        const id = e.addText(s, pd.x, pd.y, pd.mode === 'path' ? { mode: 'path', path: pd.path, style } : { mode: 'area', width: pd.box?.w, height: pd.box?.h, framePath: pd.path, style });
         if (pd.replace) e.deleteSelection([pd.replace]);
         this.id = id;
         if (id) e.select([id]);
@@ -256,13 +256,6 @@ export class TextEditor {
     if (this.on && !r) {
       const c = caretAt(n, this.caret), a = v.toScreen({ x: c.x, y: c.y }), len = c.h * v.zoom, ang = c.angle;
       g.save(); g.strokeStyle = accent; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - Math.sin(ang) * len, a.y + Math.cos(ang) * len); g.stroke(); g.restore();
-    }
-    if (n.mode === 'area' && n.frame) {
-      const lay = layoutText(n);
-      if (lay.overflow >= 0) {
-        const s = v.toScreen({ x: n.frame.x + n.frame.w, y: n.frame.y + n.frame.h });
-        g.save(); g.fillStyle = '#fff'; g.strokeStyle = '#e03030'; g.fillRect(s.x - 8, s.y - 8, 9, 9); g.strokeRect(s.x - 8 + 0.5, s.y - 8 + 0.5, 8, 8); g.beginPath(); g.moveTo(s.x - 6, s.y - 3.5); g.lineTo(s.x - 1, s.y - 3.5); g.moveTo(s.x - 3.5, s.y - 6); g.lineTo(s.x - 3.5, s.y - 1); g.stroke(); g.restore();
-      }
     }
   }
 }

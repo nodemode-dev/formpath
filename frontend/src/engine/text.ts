@@ -95,9 +95,30 @@ export function layoutText(n: TextNode): TextLayout {
   return r;
 }
 
+type Band = Array<[number, number]>;
+function bandRange(pts: Pt[], y0: number, y1: number): [number, number] | null {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    if (Math.max(a.y, b.y) < y0 || Math.min(a.y, b.y) > y1) continue;
+    if (a.y === b.y) { lo = Math.min(lo, a.x, b.x); hi = Math.max(hi, a.x, b.x); continue; }
+    for (const y of [Math.max(Math.min(a.y, b.y), y0), Math.min(Math.max(a.y, b.y), y1)]) { const x = a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x); lo = Math.min(lo, x); hi = Math.max(hi, x); }
+  }
+  return lo <= hi ? [lo, hi] : null;
+}
+function cutBand(free: Band, a: number, b: number): Band {
+  const out: Band = [];
+  for (const [s, e] of free) { if (b <= s || a >= e) { out.push([s, e]); continue; } if (a > s) out.push([s, a]); if (b < e) out.push([b, e]); }
+  return out;
+}
+function keepBand(free: Band, a: number, b: number): Band {
+  const out: Band = [];
+  for (const [s, e] of free) { const x = Math.max(s, a), y = Math.min(e, b); if (y > x) out.push([x, y]); }
+  return out;
+}
+
 function layoutLines(n: TextNode): TextLayout {
-  const all = items(n.spans), para = n.para, area = n.mode === 'area' && n.frame;
-  const frame = area ? n.frame as Rect : null;
+  const all = items(n.spans), para = n.para, frame = n.mode === 'area' && n.frame ? n.frame : null;
   const inset = n.area?.inset ?? 0;
   const cols = Math.max(1, n.area?.columns ?? 1), gutter = n.area?.gutter ?? 12;
   const colW = frame ? (frame.w - inset * 2 - gutter * (cols - 1)) / cols : Infinity;
@@ -108,70 +129,95 @@ function layoutLines(n: TextNode): TextLayout {
   const top = frame ? frame.y + inset : 0;
   const bottom = frame ? frame.y + frame.h - inset : Infinity;
   const startCol = (c: number): number => (frame ? frame.x + inset + c * (colW + gutter) : 0);
+  const wraps = frame ? n.wrapShape ?? [] : [];
+  const slots = (c: number, y0: number, y1: number, minW: number): Band => {
+    let free: Band = [[startCol(c), startCol(c) + colW]];
+    for (const w of wraps) {
+      if (w.invert) {
+        const a = bandRange(w.pts, y0, y0), b = bandRange(w.pts, y1, y1);
+        free = a && b ? keepBand(free, Math.max(a[0], b[0]) + w.offset, Math.min(a[1], b[1]) - w.offset) : [];
+      } else {
+        const r = bandRange(w.pts, y0 - w.offset, y1 + w.offset);
+        if (r) free = cutBand(free, r[0] - w.offset, r[1] + w.offset);
+      }
+    }
+    return free.filter(([a, b]) => b - a >= minW);
+  };
+  const tail = n.spans[n.spans.length - 1]?.style ?? DEFAULT_CHAR;
   let paraStart = 0;
-  for (let pi = 0; pi < paragraphs.length; pi++) {
+  outer: for (let pi = 0; pi < paragraphs.length; pi++) {
     const p = paragraphs[pi];
     const pIndex = p.length ? p[0].index : paraStart;
-    const raw: Item[][] = [];
-    if (!frame) raw.push(p);
-    else {
-      let line: Item[] = [], width = 0, lastBreak = -1;
-      const avail = (firstLine: boolean): number => colW - para.indentLeft - para.indentRight - (firstLine ? para.indentFirst : 0);
-      for (let i = 0; i < p.length; i++) {
-        const it = p[i], w = advance(it, p[i + 1]);
-        line.push(it); width += w;
-        if (it.ch === ' ' || it.ch === '\t' || it.ch === '-') lastBreak = line.length;
-        if (width > avail(raw.length === 0) && line.length > 1) {
-          let cut = lastBreak > 0 ? lastBreak : line.length - 1;
-          if (cut <= 0) cut = line.length - 1;
-          raw.push(line.slice(0, cut));
-          line = line.slice(cut);
-          width = line.reduce((s, x, k) => s + advance(x, line[k + 1]), 0);
-          lastBreak = -1;
-          for (let k = 0; k < line.length; k++) if (line[k].ch === ' ') lastBreak = k + 1;
-        }
-      }
-      raw.push(line);
-    }
-    if (pi > 0 || !first) y += para.spaceBefore;
-    raw.forEach((li, liIdx) => {
-      const sizes = li.length ? li.map((x) => x.st) : [n.spans[n.spans.length - 1]?.style ?? DEFAULT_CHAR];
-      const lead = Math.max(...sizes.map(leadingOf)), maxSize = Math.max(...sizes.map((s) => s.size));
-      const asc = metrics(sizes[0], maxSize).ascent, desc = metrics(sizes[0], maxSize).descent;
-      if (first) { y = frame ? top + asc : 0; first = false; }
-      else y += lead;
-      if (frame && y + desc > bottom + 0.01) {
-        if (col + 1 < cols) { col++; y = top + asc; }
-        else { if (overflowAt < 0) overflowAt = li.length ? li[0].index : pIndex; return; }
-      }
-      const visible = li.filter((x, k) => !(k === li.length - 1 && x.ch === ' '));
-      const widths = visible.map((x, k) => advance(x, visible[k + 1]));
-      const lineW = widths.reduce((a, b) => a + b, 0);
-      const indent = para.indentLeft + (liIdx === 0 ? para.indentFirst : 0);
-      const availW = frame ? colW - para.indentLeft - para.indentRight - (liIdx === 0 ? para.indentFirst : 0) : 0;
-      const lastLine = liIdx === raw.length - 1;
-      let x0 = startCol(col) + indent, extraSpace = 0;
-      const align = para.align;
+    if (pi > 0) y += para.spaceBefore;
+    let i = 0, lineNo = 0;
+    do {
+      const st0 = p[i]?.st ?? tail, lead0 = leadingOf(st0), m0 = metrics(st0, st0.size);
+      let ly = first ? (frame ? top + m0.ascent : 0) : y + lead0, fromTop = first && !!frame;
+      let band: Band = [[startCol(col), Infinity]];
       if (frame) {
-        if (align === 'center' || (align === 'justify_center' && lastLine)) x0 += (availW - lineW) / 2;
-        else if (align === 'right' || (align === 'justify_right' && lastLine)) x0 += availW - lineW;
-        else if (align.startsWith('justify') && (!lastLine || align === 'justify_all')) {
-          const spaces = visible.filter((x) => x.ch === ' ').length;
-          if (spaces > 0) extraSpace = (availW - lineW) / spaces;
+        for (let guard = 0; ; guard++) {
+          if (ly + m0.descent > bottom + 0.01) {
+            if (col + 1 < cols) { col++; ly = top + m0.ascent; fromTop = true; continue; }
+            overflowAt = p[i]?.index ?? pIndex;
+            break outer;
+          }
+          band = wraps.length ? slots(col, ly - m0.ascent, ly + m0.descent, Math.max(st0.size * 1.5, 4)) : [[startCol(col), startCol(col) + colW]];
+          if (band.length || guard > 4000) break;
+          ly += Math.max(1, lead0);
+          fromTop = false;
         }
-      } else {
-        if (align === 'center' || align === 'justify_center') x0 = -lineW / 2;
-        else if (align === 'right' || align === 'justify_right') x0 = -lineW;
       }
-      const glyphs: Glyph[] = [];
-      let x = x0;
-      visible.forEach((it, k) => {
-        glyphs.push({ ch: it.ch, x, y: y + effShift(it.st), w: widths[k], size: effSize(it.st), style: it.st, index: it.index, angle: 0 });
-        x += widths[k] + (it.ch === ' ' ? extraSpace : 0);
-      });
-      const start = li.length ? li[0].index : pIndex, end = li.length ? li[li.length - 1].index + li[li.length - 1].ch.length : pIndex;
-      lines.push({ y, x: x0, width: x - x0, ascent: asc, descent: desc, glyphs, start, end });
-    });
+      first = false;
+      let lineY = ly;
+      for (let si = 0; si < band.length; si++) {
+        if (si > 0 && i >= p.length) break;
+        const [sx0, sx1] = band[si];
+        const firstLine = lineNo === 0;
+        const indent = para.indentLeft + (firstLine ? para.indentFirst : 0);
+        const availW = frame ? sx1 - sx0 - indent - para.indentRight : Infinity;
+        let j = i, width = 0, lastBreak = -1, end = p.length;
+        while (j < p.length) {
+          const w = advance(p[j], p[j + 1]);
+          if (width + w > availW && j > i) { end = p[j].ch === ' ' || p[j].ch === '\t' ? j + 1 : lastBreak > i ? lastBreak : j; break; }
+          width += w;
+          if (p[j].ch === ' ' || p[j].ch === '\t' || p[j].ch === '-') lastBreak = j + 1;
+          j++;
+        }
+        const li = p.slice(i, end);
+        i = end;
+        const sizes = li.length ? li.map((x) => x.st) : [st0];
+        const lead = Math.max(...sizes.map(leadingOf)), maxSize = Math.max(...sizes.map((s) => s.size));
+        const asc = metrics(sizes[0], maxSize).ascent, desc = metrics(sizes[0], maxSize).descent;
+        if (si === 0) lineY = ly + (fromTop ? asc - m0.ascent : lines.length ? lead - lead0 : 0);
+        const visible = li.filter((x, k) => !(k === li.length - 1 && x.ch === ' '));
+        const widths = visible.map((x, k) => advance(x, visible[k + 1]));
+        const lineW = widths.reduce((a, b) => a + b, 0);
+        const lastLine = i >= p.length;
+        let x0 = (frame ? sx0 : startCol(col)) + indent, extraSpace = 0;
+        const align = para.align;
+        if (frame) {
+          if (align === 'center' || (align === 'justify_center' && lastLine)) x0 += (availW - lineW) / 2;
+          else if (align === 'right' || (align === 'justify_right' && lastLine)) x0 += availW - lineW;
+          else if (align.startsWith('justify') && (!lastLine || align === 'justify_all')) {
+            const spaces = visible.filter((x) => x.ch === ' ').length;
+            if (spaces > 0) extraSpace = (availW - lineW) / spaces;
+          }
+        } else {
+          if (align === 'center' || align === 'justify_center') x0 = -lineW / 2;
+          else if (align === 'right' || align === 'justify_right') x0 = -lineW;
+        }
+        const glyphs: Glyph[] = [];
+        let x = x0;
+        visible.forEach((it, k) => {
+          glyphs.push({ ch: it.ch, x, y: lineY + effShift(it.st), w: widths[k], size: effSize(it.st), style: it.st, index: it.index, angle: 0 });
+          x += widths[k] + (it.ch === ' ' ? extraSpace : 0);
+        });
+        const start = li.length ? li[0].index : pIndex, stop = li.length ? li[li.length - 1].index + li[li.length - 1].ch.length : pIndex;
+        lines.push({ y: lineY, x: x0, width: x - x0, ascent: asc, descent: desc, glyphs, start, end: stop });
+        lineNo++;
+      }
+      y = lineY;
+    } while (i < p.length);
     y += para.spaceAfter;
     paraStart = pIndex + p.reduce((s, it) => s + it.ch.length, 0) + 1;
   }
@@ -343,6 +389,17 @@ export function deleteText(spans: Span[], start: number, end: number): Span[] {
   }
   const merged = mergeSpans(out);
   return merged.length ? merged : [{ text: '', style: spans[0]?.style ?? DEFAULT_CHAR }];
+}
+export function sliceSpans(spans: Span[], start: number, end = Infinity): Span[] {
+  const out: Span[] = [];
+  let pos = 0;
+  for (const sp of spans) {
+    const a = pos, b = pos + sp.text.length;
+    pos = b;
+    if (b <= start || a >= end) continue;
+    out.push({ text: sp.text.slice(Math.max(0, start - a), Math.min(sp.text.length, end - a)), style: sp.style });
+  }
+  return out.length ? mergeSpans(out) : [{ text: '', style: styleAt(spans, start) }];
 }
 export function styleAt(spans: Span[], index: number): CharStyle {
   let pos = 0;

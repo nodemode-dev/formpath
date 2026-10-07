@@ -1,8 +1,9 @@
-import { geomBounds, invalidateBounds, selectionBounds, visualBounds } from './bounds';
+import { geomBounds, invalidateBounds, nodePath, selectionBounds, visualBounds } from './bounds';
 import { defaultBrushes } from './brushes';
 import { allNodes, ancestors, childrenOf, cloneNode, findNode, inDocOrder, insertInto, isContainer, isLocked, isVisible, layerOf, makeLayer, newDoc, newId, nodeAt, nodeLabel, pathOf, removeNodes, topObjects, topSelectable, updateNodes, walk, type IndexPath } from './doc';
 import { EFFECT_IDS, effectDefaults, WIDTH_PROFILES } from './effects';
 import { Emitter } from './events';
+import { detachFrames, reflow, threadChains } from './flow';
 import { apply, arcPath, ellipsePath, emptyRect, fitCurve, flarePath, invert, isEmptyRect, linePath, mul, normRect, parseSvgD, pathBounds, piePath, polygonPath, rectPath, rectsTouch, reflectAbout, rotateAbout, scaleAbout, shearAbout, spiralPath, starPath, translate, unionRect } from './geometry';
 import { hitTest, nodeTouchesRect, type Hit } from './hit';
 import { liveChildren } from './live';
@@ -14,7 +15,7 @@ import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, first
 import { Project } from './project';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, BlendMode, CharStyle, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, ToolId, Units, VNode } from './types';
+import type { Appearance, Artboard, BlendMode, CharStyle, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
 import { Viewport } from './viewport';
 
 export * from './types';
@@ -90,7 +91,7 @@ export class Engine extends Emitter<EngineEvents> {
   }
 
   addProject(doc: Doc, name: string): Project {
-    const p = new Project(newId('d'), doc, name);
+    const p = new Project(newId('d'), reflow(doc), name);
     p.viewport.width = this.viewSize.w || p.viewport.width;
     p.viewport.height = this.viewSize.h || p.viewport.height;
     const ab = doc.artboards[0];
@@ -124,7 +125,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (this.dragBase) this.cancelDrag();
     try {
       const r = fn(p.doc, p);
-      const next = 'layers' in r ? r : r.doc, sel = 'layers' in r ? undefined : r.select;
+      const next = reflow('layers' in r ? r : r.doc), sel = 'layers' in r ? undefined : r.select;
       if (next === p.doc && sel === undefined) return false;
       p.doc = next;
       if (sel) p.selection = new Set(sel);
@@ -149,7 +150,8 @@ export class Engine extends Emitter<EngineEvents> {
   endGesture(): void { this.gestureDepth = Math.max(0, this.gestureDepth - 1); }
 
   beginDrag(name: string): void { const p = this.current; if (!p) return; this.dragBase = p.doc; this.dragName = name; }
-  dragTo(doc: Doc): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = doc; invalidateBounds(); this.emit('render', null); }
+  dragTo(doc: Doc): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = reflow(doc); invalidateBounds(); this.emit('render', null); }
+  reflowAll(): void { for (const p of this.projects) { if (p.id === this.currentId && this.dragBase) continue; const d = reflow(p.doc); if (d !== p.doc) p.doc = d; } this.refresh(); }
   get dragging(): boolean { return this.dragBase !== null; }
   get dragOrigin(): Doc | null { return this.dragBase; }
   commitDrag(select?: string[]): boolean {
@@ -169,7 +171,7 @@ export class Engine extends Emitter<EngineEvents> {
   redo(steps = 1): boolean { const p = this.current; if (!p) return false; let s = null; for (let i = 0; i < steps; i++) s = p.history.redo() ?? s; if (!s) return false; this.restore(p, s.doc, s.selection); return true; }
   jumpHistory(i: number): void { const p = this.current; if (!p) return; const s = p.history.jump(i); if (s) this.restore(p, s.doc, s.selection); }
   get historySteps(): { names: string[]; current: number } { return this.current?.history.steps() ?? { names: [], current: 0 }; }
-  private restore(p: Project, doc: Doc, sel: string[]): void { this.cancelDrag(); p.doc = doc; p.selection = new Set(sel); p.anchors.clear(); this.pruneSelection(p); this.refresh(); }
+  private restore(p: Project, doc: Doc, sel: string[]): void { this.cancelDrag(); p.doc = reflow(doc); p.selection = new Set(sel); p.anchors.clear(); this.pruneSelection(p); this.refresh(); }
 
   private viewSize = { w: 0, h: 0 };
   setViewSize(w: number, h: number): void { this.viewSize = { w, h }; for (const p of this.projects) { if (p.viewport.width === w && p.viewport.height === h) continue; const ab = p.doc.artboards[p.activeArtboard]; const fitted = p.viewport.fitted; p.viewport.resize(w, h); if (fitted && ab) p.viewport.fitRect(ab.x, ab.y, ab.w, ab.h); } this.emit('viewport', null); }
@@ -464,7 +466,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (!ids && p.anchors.size) { this.deleteAnchors(); return; }
     const t = this.targetIds(ids);
     if (!t.length) return;
-    this.edit('Clear', (d) => ({ doc: removeNodes(d, t), select: [] }));
+    this.edit('Clear', (d) => ({ doc: removeNodes(detachFrames(d, new Set(t)), t), select: [] }));
   }
   deleteAnchors(): void {
     const p = this.current; if (!p) return;
@@ -618,12 +620,12 @@ export class Engine extends Emitter<EngineEvents> {
   makeGuides(ids?: string[]): void { const t = this.targetIds(ids); this.edit('Make Guides', (d) => updateNodes(d, t, (n) => (n.kind === 'path' ? { ...n, guide: true } : n))); }
   releaseGuides(): void { const p = this.current; if (!p) return; const ids = allNodes(p.doc).filter((n) => n.kind === 'path' && n.guide).map((n) => n.id); this.edit('Release Guides', (d) => ({ doc: updateNodes(d, ids, (n) => (n.kind === 'path' ? { ...n, guide: false } : n)), select: ids })); }
 
-  addText(text: string, x: number, y: number, opts: { mode?: 'point' | 'area' | 'path'; width?: number; height?: number; path?: PathData; style?: Partial<CharStyle>; para?: Partial<ParaStyle>; name?: string; layer?: string } = {}): string {
+  addText(text: string, x: number, y: number, opts: { mode?: 'point' | 'area' | 'path'; width?: number; height?: number; path?: PathData; framePath?: PathData; style?: Partial<CharStyle>; para?: Partial<ParaStyle>; name?: string; layer?: string } = {}): string {
     const fillPaint = this.fillPaint.type === 'none' ? solid(BLACK) : this.fillPaint;
     const style: CharStyle = { ...DEFAULT_CHAR, fill: fillPaint, stroke: NONE, ...(opts.style ?? {}) };
     const mode = opts.mode ?? 'point';
     const node: TextNode = { id: newId('t'), kind: 'text', mode, spans: [{ text, style }], para: { ...DEFAULT_PARA, ...(opts.para ?? {}) }, xf: [1, 0, 0, 1, mode === 'area' ? 0 : x, mode === 'area' ? 0 : y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(opts.name ? { name: opts.name } : {}) };
-    if (mode === 'area') { node.frame = { x, y, w: opts.width ?? 200, h: opts.height ?? 100 }; node.area = { columns: 1, rows: 1, gutter: 12, inset: 0, firstBaseline: 'ascent' }; }
+    if (mode === 'area') { node.frame = { x, y, w: opts.width ?? 200, h: opts.height ?? 100 }; node.area = { columns: 1, rows: 1, gutter: 12, inset: 0, firstBaseline: 'ascent' }; if (opts.framePath?.some((sp) => sp.closed)) node.framePath = opts.framePath; }
     if (mode === 'path') { node.path = opts.path; node.pathStart = 0; node.xf = [1, 0, 0, 1, 0, 0]; }
     return this.addNodes('Type', [node], { layer: opts.layer })[0] ?? '';
   }
@@ -634,6 +636,34 @@ export class Engine extends Emitter<EngineEvents> {
   setParaStyle(patch: Partial<ParaStyle>, ids?: string[]): boolean { return this.applyToSelection('Paragraph', (n) => (n.kind === 'text' ? { ...n, para: { ...n.para, ...patch } } : n), ids); }
   setTextNode(id: string, patch: Partial<TextNode>, name = 'Type Options'): boolean { return this.edit(name, (d) => updateNodes(d, [id], (n) => (n.kind === 'text' ? ({ ...n, ...patch } as TextNode) : n))); }
   textOf(id: string): string { const n = this.doc ? findNode(this.doc, id) : null; return n?.kind === 'text' ? plainText(n) : ''; }
+  threadText(ids?: string[]): boolean {
+    const p = this.current; if (!p) return false;
+    const t = this.targetIds(ids).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n);
+    const ok = t.filter((n) => (n.kind === 'text' && n.mode === 'area') || ((n.kind === 'path' || n.kind === 'compound') && (nodePath(n) ?? []).some((sp) => sp.closed)));
+    const head = ok.find((n): n is TextNode => n.kind === 'text');
+    if (ok.length < 2 || !head) { this.notice('Select area type and at least one more area type object or closed path to thread into.'); return false; }
+    return this.edit('Threaded Text', (d) => {
+      const chains = threadChains(d), order: string[] = [];
+      for (const n of ok) { if (order.includes(n.id)) continue; const c = chains.find((ch) => ch.some((x) => x.id === n.id)); if (c) order.push(...c.map((x) => x.id).filter((id) => !order.includes(id))); else order.push(n.id); }
+      const st = head.spans[0]?.style ?? DEFAULT_CHAR;
+      return updateNodes(d, order, (n) => {
+        const next = order[order.indexOf(n.id) + 1];
+        if (n.kind === 'text') return { ...n, next };
+        const d0 = nodePath(n) ?? [], b = geomBounds(d, n);
+        const frame: TextNode = { id: n.id, kind: 'text', mode: 'area', spans: [{ text: '', style: st }], para: head.para, xf: [1, 0, 0, 1, 0, 0], frame: b, framePath: d0, area: head.area ?? { columns: 1, rows: 1, gutter: 12, inset: 0, firstBaseline: 'ascent' }, opacity: 1, blend: 'normal', ap: emptyAppearance(), next, ...(n.name ? { name: n.name } : {}) };
+        return frame;
+      });
+    });
+  }
+  releaseThread(ids?: string[], all = false): boolean {
+    const p = this.current; if (!p) return false;
+    const t = new Set(this.targetIds(ids));
+    const hit = threadChains(p.doc).filter((c) => c.some((x) => t.has(x.id)));
+    if (!hit.length) { this.notice('Select threaded type first.'); return false; }
+    if (all) return this.edit('Remove Threading', (d) => updateNodes(d, hit.flat().map((x) => x.id), (n) => (n.kind === 'text' ? { ...n, next: undefined } : n)));
+    return this.edit('Release Threaded Text', (d) => detachFrames(d, t));
+  }
+  setTextWrap(wrap: TextWrap | null, ids?: string[]): boolean { return this.applyToSelection(wrap ? 'Text Wrap' : 'Release Text Wrap', (n) => (n.kind === 'layer' ? n : ({ ...n, wrap: wrap ?? undefined }) as VNode), ids); }
   async createOutlines(provider: (n: TextNode) => Promise<PathData | null>, ids?: string[]): Promise<boolean> {
     const p = this.current; if (!p) return false;
     const texts = this.targetIds(ids).map((id) => findNode(p.doc, id)).filter((n): n is TextNode => n?.kind === 'text');
