@@ -74,6 +74,26 @@ export function meshPointAt(m: MeshNode, p: Pt, tol: number): number {
   return best;
 }
 
+export function removeMeshLines(m: MeshNode, idx: number): MeshNode {
+  const w = m.cols + 1, r = Math.floor(idx / w), c = idx % w;
+  const dropRow = r > 0 && r < m.rows, dropCol = c > 0 && c < m.cols;
+  if (!dropRow && !dropCol) return m;
+  const rows = Array.from({ length: m.rows + 1 }, (_, j) => j).filter((j) => !(dropRow && j === r));
+  const cols = Array.from({ length: m.cols + 1 }, (_, i) => i).filter((i) => !(dropCol && i === c));
+  const at = (j: number, i: number): MeshPoint => m.points[j * w + i];
+  const pts: MeshPoint[] = [];
+  rows.forEach((j, jj) => cols.forEach((i, ii) => {
+    const q = at(j, i), h = [...q.h] as MeshPoint['h'];
+    const toward = (o: MeshPoint): Pt => ({ x: (o.x - q.x) / 3, y: (o.y - q.y) / 3 });
+    if (ii + 1 < cols.length && cols[ii + 1] !== i + 1) h[0] = toward(at(j, cols[ii + 1]));
+    if (ii > 0 && cols[ii - 1] !== i - 1) h[1] = toward(at(j, cols[ii - 1]));
+    if (jj + 1 < rows.length && rows[jj + 1] !== j + 1) h[2] = toward(at(rows[jj + 1], i));
+    if (jj > 0 && rows[jj - 1] !== j - 1) h[3] = toward(at(rows[jj - 1], i));
+    pts.push({ ...q, h });
+  }));
+  return { ...m, rows: rows.length - 1, cols: cols.length - 1, points: pts };
+}
+
 export function addMeshLine(m: MeshNode, p: Pt): MeshNode {
   for (let r = 0; r < m.rows; r++) for (let c = 0; c < m.cols; c++) {
     const f = patchEval(m, r, c);

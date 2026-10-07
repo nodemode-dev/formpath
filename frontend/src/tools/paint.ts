@@ -1,9 +1,9 @@
 import { findNode, newId } from '../engine/doc';
 import { cachedPath } from '../engine/render';
-import { addMeshLine, meshPointAt } from '../engine/mesh';
+import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
 import { computeFaces, faceAt, liveFaces } from '../engine/livepaint';
-import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, withFirstFill } from '../engine/paint';
-import type { Doc, Engine, FreeformPoint, Gradient, GroupNode, MeshNode, PathData, Pt, VNode } from '../engine';
+import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, toRgb, withFirstFill } from '../engine/paint';
+import type { Doc, Engine, FreeformPoint, Gradient, GroupNode, MeshNode, MeshPoint, PathData, Pt, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { replaceNode } from './select';
@@ -182,32 +182,51 @@ registerTool({
   },
 });
 
-const M = { on: false, id: '', idx: -1, start: { x: 0, y: 0 }, moved: false };
+const M = { on: false, id: '', idx: -1, handle: -1, start: { x: 0, y: 0 }, moved: false, sel: null as { id: string; idx: number } | null };
+const meshSel = (e: Engine): { m: MeshNode; idx: number } | null => {
+  const s = M.sel, d = e.doc;
+  if (!s || !d) return null;
+  const m = findNode(d, s.id);
+  return m?.kind === 'mesh' && s.idx < m.points.length && e.selectedIds().includes(m.id) ? { m, idx: s.idx } : null;
+};
+const meshHandleAt = (e: Engine, p: Pt, tol: number): number => { const s = meshSel(e); if (!s) return -1; const q = s.m.points[s.idx]; return q.h.findIndex((h) => Math.hypot(h.x, h.y) > 1e-6 && Math.hypot(q.x + h.x - p.x, q.y + h.y - p.y) <= tol); };
+function setMeshPoint(e: Engine, patch: Partial<MeshPoint>, name: string): void {
+  const s = meshSel(e);
+  if (!s) return;
+  e.edit(name, (d) => { const m = findNode(d, s.m.id); return m?.kind === 'mesh' ? replaceNode(d, m.id, { ...m, points: m.points.map((q, i) => (i === s.idx ? { ...q, ...patch } : q)) }) : d; }, { merge: true });
+}
 registerTool({
   id: 'mesh', label: 'Mesh Tool', group: 'gradient', order: 72, shortcut: 'U',
   icon: () => 'vMesh',
-  hint: () => 'Click a shape to turn it into a gradient mesh, click inside a mesh to add a mesh line in the current fill color, drag a mesh point to move it.',
+  hint: () => 'Click a shape to make a gradient mesh. Click inside a mesh to add lines in the fill colour (Shift keeps the colour there); drag points and their handles; Alt-click a point to remove its lines.',
   cursor: () => CURSORS.cross,
+  activate: () => { M.sel = null; },
   down: (ctx, p) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
+    const tol = 6 / ctx.view().zoom, hk = meshHandleAt(e, p.doc, tol);
+    if (hk >= 0 && M.sel) { M.on = true; M.id = M.sel.id; M.idx = M.sel.idx; M.handle = hk; M.start = p.doc; M.moved = false; e.beginDrag('Move Mesh Handle'); return; }
     const h = e.hit(p.doc, 5);
     const n = h ? findNode(pr.doc, h.id) : null;
-    if (!n) return;
+    if (!n) { M.sel = null; e.emit('options', null); ctx.redraw(); return; }
     if (n.kind === 'mesh') {
-      const idx = meshPointAt(n, p.doc, 6 / ctx.view().zoom);
+      const idx = meshPointAt(n, p.doc, tol);
       e.select([n.id]);
-      if (idx >= 0) { M.on = true; M.id = n.id; M.idx = idx; M.start = p.doc; M.moved = false; e.beginDrag('Move Mesh Point'); return; }
-      const color = e.fillPaint.type === 'color' ? e.fillPaint.color : null;
+      if (idx >= 0 && p.alt) { M.sel = null; e.edit('Delete Mesh Point', (d) => { const m = findNode(d, n.id); return m?.kind === 'mesh' ? replaceNode(d, n.id, removeMeshLines(m, idx)) : d; }); return; }
+      if (idx >= 0) { M.sel = { id: n.id, idx }; M.on = true; M.id = n.id; M.idx = idx; M.handle = -1; M.start = p.doc; M.moved = false; e.beginDrag('Move Mesh Point'); e.emit('options', null); return; }
+      const color = !p.shift && e.fillPaint.type === 'color' ? e.fillPaint.color : null;
+      let added = -1;
       e.edit('Add Mesh Line', (d) => {
         const m = findNode(d, n.id) as MeshNode;
         let next = addMeshLine(m, p.doc);
-        if (color) { const k = meshPointAt(next, p.doc, 1e9); if (k >= 0) next = { ...next, points: next.points.map((q, i) => (i === k ? { ...q, color } : q)) }; }
+        added = meshPointAt(next, p.doc, 1e9);
+        if (color && added >= 0) next = { ...next, points: next.points.map((q, i) => (i === added ? { ...q, color } : q)) };
         return replaceNode(d, n.id, next);
       });
+      if (added >= 0) { M.sel = { id: n.id, idx: added }; e.emit('options', null); }
       return;
     }
-    if (n.kind === 'path' || n.kind === 'compound') { e.select([n.id]); e.createMesh(Math.max(1, e.options.meshRows), Math.max(1, e.options.meshCols), 'flat'); }
+    if (n.kind === 'path' || n.kind === 'compound') { M.sel = null; e.select([n.id]); e.createMesh(Math.max(1, e.options.meshRows), Math.max(1, e.options.meshCols), 'flat'); }
   },
   move: (ctx, p) => {
     const e = ctx.engine, base = e.dragOrigin;
@@ -216,28 +235,49 @@ registerTool({
     if (!m) return;
     M.moved = true;
     const dx = p.doc.x - M.start.x, dy = p.doc.y - M.start.y;
-    const pts = m.points.map((q, i) => (i === M.idx ? { ...q, x: q.x + dx, y: q.y + dy, h: q.h.map((hh) => ({ x: hh.x + dx, y: hh.y + dy })) as typeof q.h } : q));
+    const pts = m.points.map((q, i) => {
+      if (i !== M.idx) return q;
+      if (M.handle < 0) return { ...q, x: q.x + dx, y: q.y + dy };
+      const hs = [...q.h] as MeshPoint['h'];
+      hs[M.handle] = { x: p.doc.x - q.x, y: p.doc.y - q.y };
+      return { ...q, h: hs };
+    });
     e.dragTo(replaceNode(base, M.id, { ...m, points: pts }));
   },
-  up: (ctx) => { const e = ctx.engine; if (!M.on) return; M.on = false; if (M.moved) e.commitDrag(); else e.cancelDrag(); },
-  options: (e) => [{ kind: 'title', text: 'Mesh' }, { kind: 'range', label: 'Rows', min: 1, max: 20, get: () => e.options.meshRows, set: (v) => e.update({ meshRows: Math.round(v) }) }, { kind: 'range', label: 'Columns', min: 1, max: 20, get: () => e.options.meshCols, set: (v) => e.update({ meshCols: Math.round(v) }) }],
+  up: (ctx) => { const e = ctx.engine; if (!M.on) return; M.on = false; if (M.moved) e.commitDrag(); else e.cancelDrag(); ctx.redraw(); },
+  options: (e) => [
+    { kind: 'title', text: 'Mesh' },
+    { kind: 'range', label: 'Rows', min: 1, max: 20, get: () => e.options.meshRows, set: (v) => e.update({ meshRows: Math.round(v) }) },
+    { kind: 'range', label: 'Columns', min: 1, max: 20, get: () => e.options.meshCols, set: (v) => e.update({ meshCols: Math.round(v) }) },
+    { kind: 'color', label: 'Point', when: () => !!meshSel(e), get: () => { const s = meshSel(e); return s ? toRgb(s.m.points[s.idx].color) : { r: 0, g: 0, b: 0 }; }, set: (c) => setMeshPoint(e, { color: { kind: 'rgb', r: c.r, g: c.g, b: c.b } }, 'Mesh Point Color') },
+    { kind: 'range', label: 'Opacity', min: 0, max: 100, unit: '%', when: () => !!meshSel(e), get: () => { const s = meshSel(e); return s ? Math.round(s.m.points[s.idx].opacity * 100) : 100; }, set: (v) => setMeshPoint(e, { opacity: Math.max(0, Math.min(1, v / 100)) }, 'Mesh Point Opacity') },
+  ],
   overlay: (ctx, g) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
-    const v = ctx.view(), color = layerColor(e);
+    const v = ctx.view(), color = layerColor(e), sel = meshSel(e);
     for (const id of e.selectedIds()) {
       const m = findNode(pr.doc, id);
       if (m?.kind !== 'mesh') continue;
       g.save(); g.strokeStyle = color; g.lineWidth = 1;
-      const at = (r: number, c: number): Pt => m.points[r * (m.cols + 1) + c];
+      const at = (r: number, c: number): MeshPoint => m.points[r * (m.cols + 1) + c];
+      const curve = (a: MeshPoint, ah: Pt, b: MeshPoint, bh: Pt): void => { const s0 = v.toScreen(a), s1 = v.toScreen({ x: a.x + ah.x, y: a.y + ah.y }), s2 = v.toScreen({ x: b.x + bh.x, y: b.y + bh.y }), s3 = v.toScreen(b); g.moveTo(s0.x, s0.y); g.bezierCurveTo(s1.x, s1.y, s2.x, s2.y, s3.x, s3.y); };
       g.beginPath();
       for (let r = 0; r <= m.rows; r++) for (let c = 0; c <= m.cols; c++) {
-        const a = v.toScreen(at(r, c));
-        if (c < m.cols) { const b = v.toScreen(at(r, c + 1)); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); }
-        if (r < m.rows) { const b = v.toScreen(at(r + 1, c)); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); }
+        if (c < m.cols) curve(at(r, c), at(r, c).h[0], at(r, c + 1), at(r, c + 1).h[1]);
+        if (r < m.rows) curve(at(r, c), at(r, c).h[2], at(r + 1, c), at(r + 1, c).h[3]);
       }
       g.stroke();
-      for (const q of m.points) { const s = v.toScreen(q); g.fillStyle = '#fff'; g.fillRect(s.x - 3, s.y - 3, 6, 6); g.strokeRect(s.x - 3 + 0.5, s.y - 3 + 0.5, 5, 5); }
+      m.points.forEach((q, i) => { const s = v.toScreen(q), on = sel?.m.id === m.id && sel.idx === i; g.fillStyle = on ? color : '#fff'; g.fillRect(s.x - 3, s.y - 3, 6, 6); g.strokeRect(s.x - 3 + 0.5, s.y - 3 + 0.5, 5, 5); });
+      if (sel?.m.id === m.id) {
+        const q = m.points[sel.idx], s = v.toScreen(q);
+        for (const hh of q.h) {
+          if (Math.hypot(hh.x, hh.y) < 1e-6) continue;
+          const t = v.toScreen({ x: q.x + hh.x, y: q.y + hh.y });
+          g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(t.x, t.y); g.stroke();
+          g.beginPath(); g.arc(t.x, t.y, 3, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+        }
+      }
       g.restore();
     }
   },
