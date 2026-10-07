@@ -42,6 +42,7 @@ export async function effectDialog(engine: Engine, id: string, at?: { node: stri
     if (p.kind === 'number') return { kind: 'number', key: p.key, label: p.label, value: Number(v), min: p.min, max: p.max, step: p.step, unit: p.unit };
     if (p.kind === 'boolean') return { kind: 'check', key: p.key, label: p.label, value: !!v };
     if (p.kind === 'color') return { kind: 'color', key: p.key, label: p.label, value: String(v) };
+    if (p.kind === 'text') return { kind: 'text', key: p.key, label: p.label, value: String(v ?? '') };
     return { kind: 'select', key: p.key, label: p.label, value: String(v), choices: (p.choices ?? []).map((c) => [c, titleCase(c)] as const) };
   });
   const r = await previewEdit(engine, def.label, fields, (origin, v) => updateNodes(origin, ids, (n) => ({
