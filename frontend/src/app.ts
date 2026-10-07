@@ -54,6 +54,7 @@ import { CharacterPanel, findReplaceDialog, GlyphsPanel, ParagraphPanel } from '
 import { TextStylesPanel } from './ui/panels/text-styles';
 import { FindFontDialog } from './ui/panels/find-font';
 import { ColorGuidePanel } from './ui/panels/color-guide';
+import { PatternOptionsPanel } from './ui/panels/pattern-options';
 import { CHECKER_CELL, CHECKER_PAIR, applyPrefs, loadPrefs, savePrefs, type Prefs } from './ui/prefs';
 import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './ui/properties';
 import { Rail } from './ui/rail';
@@ -99,7 +100,7 @@ const SHELL = `<div class="cv-app">
 <canvas class="cv-canvas cv-overlay-canvas"></canvas>
 <canvas class="cv-ruler cv-ruler-h" hidden></canvas>
 <canvas class="cv-ruler cv-ruler-v" hidden></canvas>
-<div class="cv-isolation" hidden><span class="cv-isolation-label"></span><button class="cv-btn" type="button" data-cmd="exit-isolation">${icon('exitIsolation', 14)}Exit Isolation Mode</button></div>
+<div class="cv-isolation" hidden><span class="cv-isolation-label"></span><button class="cv-btn cv-iso-exit" type="button" data-cmd="exit-isolation">${icon('exitIsolation', 14)}Exit Isolation Mode</button><span class="cv-iso-pattern" hidden><button class="cv-btn cv-btn-primary" type="button" data-cmd="pattern-done">Done</button><button class="cv-btn" type="button" data-cmd="pattern-copy">Save a Copy</button><button class="cv-btn" type="button" data-cmd="pattern-cancel">Cancel</button></span></div>
 <div class="cv-welcome"><div class="cv-welcome-card">
 <div class="cv-welcome-title">${brandMark(28)}formpth</div>
 <div class="cv-welcome-sub">Vector illustration. Start a document, open a project, or drop an SVG anywhere on this stage.</div>
@@ -115,7 +116,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -184,7 +185,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
-  new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }], 'Properties');
+  new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
   new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }], 'Type');
   const dock = new Dock(dockHost, sideHost);
   const propsShown = (): boolean => stored('formpth.propsCol') !== 'hidden';
@@ -527,6 +528,7 @@ export function startApp(): void {
   let findFont: FindFontDialog | null = null;
   const many = (): boolean => engine.selected().length > 1;
   const kindSel = (...k: string[]): boolean => engine.selected().some((n) => k.includes(n.kind));
+  const selectedPattern = (): string | null => { for (const n of engine.selected()) for (const i of n.ap.items) if (i.paint.type === 'pattern') return i.paint.pattern; return null; };
   const xfo = () => ({ strokes: engine.view.scaleStrokes, patterns: engine.view.transformPatterns, gradients: true });
   const centerOfSel = (): Pt => { const b = engine.selectionBounds(false); return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : { x: 0, y: 0 }; };
 
@@ -775,7 +777,11 @@ export function startApp(): void {
     { id: 'split-grid', label: 'Split Into Grid...', enabled: sel, run: () => void splitGridDialog() },
     { id: 'clean-up', label: 'Clean Up', enabled: has, run: () => engine.pathOp('clean_up', {}, allNodes(engine.doc as Doc).filter((n) => n.kind !== 'layer').map((n) => n.id)) },
     { id: 'close-path', label: 'Close Path', enabled: sel, run: () => engine.pathOp('close') },
-    { id: 'make-pattern', label: 'Make Pattern...', enabled: sel, run: () => void askForm('Make Pattern', [{ kind: 'text', key: 'name', label: 'Name', value: `Pattern ${(engine.doc?.patterns.length ?? 0) + 1}` }, { kind: 'select', key: 'tile', label: 'Tile Type', value: 'grid', choices: [['grid', 'Grid'], ['brick_row', 'Brick by Row'], ['brick_col', 'Brick by Column'], ['hex_col', 'Hex by Column'], ['hex_row', 'Hex by Row']] }, { kind: 'number', key: 'hs', label: 'H Spacing', value: 0, unit: 'pt' }, { kind: 'number', key: 'vs', label: 'V Spacing', value: 0, unit: 'pt' }]).then((v) => { if (v) { engine.makePattern(String(v.name), undefined, v.tile as 'grid', Number(v.hs), Number(v.vs)); toast('The pattern is in the Swatches panel.'); } }) },
+    { id: 'make-pattern', label: 'Make Pattern', enabled: () => sel() && !engine.patternSession, run: () => { if (engine.enterPatternEdit(null)) showPanel('pattern-options'); } },
+    { id: 'edit-pattern', label: 'Edit Pattern', enabled: () => !!selectedPattern() && !engine.patternSession, run: () => { const id = selectedPattern(); if (id && engine.enterPatternEdit(id)) showPanel('pattern-options'); } },
+    { id: 'pattern-done', label: 'Exit Pattern Editing Mode', enabled: () => !!engine.patternSession, run: () => { if (engine.exitPatternEdit(true)) toast('The pattern is in the Swatches panel.'); } },
+    { id: 'pattern-copy', label: 'Save Pattern as a Copy', enabled: () => !!engine.patternSession, run: () => { if (engine.exitPatternEdit(true, true)) toast('The copy is in the Swatches panel.'); } },
+    { id: 'pattern-cancel', label: 'Cancel Pattern Editing', enabled: () => !!engine.patternSession, run: () => engine.exitPatternEdit(false) },
     { id: 'repeat-radial', label: 'Radial', enabled: sel, run: () => engine.makeRepeat('radial') },
     { id: 'repeat-grid', label: 'Grid', enabled: sel, run: () => engine.makeRepeat('grid') },
     { id: 'repeat-mirror', label: 'Mirror', enabled: sel, run: () => engine.makeRepeat('mirror') },
@@ -925,7 +931,7 @@ export function startApp(): void {
       'group', 'ungroup', 'isolate', '-', 'lock', 'unlock-all', 'hide', 'show-all', '-', 'expand-object', 'expand-appearance', 'rasterize', 'create-mesh', '-',
       { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
       { label: 'Shape', items: ['expand-shape'] },
-      { label: 'Pattern', items: ['make-pattern'] },
+      { label: 'Pattern', items: ['make-pattern', 'edit-pattern'] },
       { label: 'Repeat', items: ['repeat-radial', 'repeat-grid', 'repeat-mirror', '-', 'release-live', 'repeat-options'] },
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'expand-object'] },
@@ -995,8 +1001,11 @@ export function startApp(): void {
       const p = engine.current;
       setText(zoomLabel, p ? `${Math.round(p.viewport.zoom * 100)}%` : '');
       const iso = p?.isolation ? findNode(p.doc, p.isolation) : null;
+      const pe = p?.patternEdit ?? null;
       setHidden(isoBar, !iso);
-      if (iso) setText(q(isoBar, '.cv-isolation-label'), `Isolation Mode: ${nodeLabel(iso)}`);
+      setHidden(q(isoBar, '.cv-iso-exit'), !!pe);
+      setHidden(q(isoBar, '.cv-iso-pattern'), !pe);
+      if (iso) setText(q(isoBar, '.cv-isolation-label'), pe ? `Pattern Editing Mode: ${pe.name}` : `Isolation Mode: ${nodeLabel(iso)}`);
       root.classList.toggle('is-isolated', !!iso);
     });
   };

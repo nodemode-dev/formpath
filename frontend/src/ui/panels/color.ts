@@ -6,6 +6,7 @@ import { askForm } from '../form-dialog';
 import { paintCss } from '../rail';
 import { numField, selectCtl, seg, slider, type Ctl } from './kit';
 import { FF } from '../../tools/paint';
+import { toolHost } from '../../extensions/registry';
 
 type Model = 'gray' | 'rgb' | 'hsb' | 'cmyk' | 'web';
 const CH: Record<Model, Array<[string, number, number]>> = {
@@ -201,6 +202,7 @@ export class SwatchesPanel {
   private async edit(id: string): Promise<void> {
     const e = this.engine, sw = e.doc?.swatches.find((s) => s.id === id);
     if (!sw || sw.name.startsWith('[')) return;
+    if (sw.paint.type === 'pattern') { if (e.enterPatternEdit(sw.paint.pattern)) toolHost.run('panel-pattern-options'); return; }
     const v = await askForm('Swatch Options', [
       { kind: 'text', key: 'name', label: 'Name', value: sw.name },
       ...(sw.paint.type === 'color' ? [{ kind: 'color' as const, key: 'color', label: 'Color', value: hex(sw.paint.color) }] : []),

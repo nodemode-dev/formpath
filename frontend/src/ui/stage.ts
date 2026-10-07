@@ -6,6 +6,7 @@ import { collectTargets, snapPoint, snapRect, type SnapLine, type SnapTargets } 
 import { layoutText } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
 import { cssColor } from '../engine/paint';
+import { latticeCopies, tileOutline } from '../engine/pattern';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
 import type { Project } from '../engine/project';
 import { getTool, type SnapAt, type Tool, type ToolContext, type ToolPointer, type ViewInfo } from '../extensions/registry';
@@ -247,7 +248,19 @@ export class Stage {
       g.globalAlpha = 0.55;
       g.fillRect(0, 0, W, H);
       g.globalAlpha = 1;
+      const pe = p.patternEdit, geo = n && pe ? this.engine.patternGeometry() : null;
+      if (n && pe && geo && pe.copies) {
+        const rc = this.renderContext(p, v.zoom);
+        g.save(); g.setTransform(...view); g.globalAlpha = Math.max(0.05, pe.dim);
+        for (const o of latticeCopies(geo, (pe.copies - 1) / 2, true)) { g.save(); g.translate(o.x, o.y); renderNode(g, n, rc); g.restore(); }
+        g.restore();
+      }
       if (n) { g.save(); g.setTransform(...view); renderNode(g, n, this.renderContext(p, v.zoom)); g.restore(); }
+      if (pe && geo && pe.edge) {
+        g.save(); g.lineWidth = Math.max(1, this.dpr); g.strokeStyle = pal.accent; g.setLineDash([4 * this.dpr, 3 * this.dpr]);
+        g.beginPath(); tileOutline(geo).forEach((q, i) => { const sx = q.x * z + view[4], sy = q.y * z + view[5]; if (i) g.lineTo(sx, sy); else g.moveTo(sx, sy); }); g.closePath(); g.stroke();
+        g.restore();
+      }
     }
     if (vw.grid && !Stage.prefs.gridInBack) this.drawGrid(g, p, pal, view);
     if (vw.artboards) {

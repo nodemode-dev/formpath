@@ -4,6 +4,10 @@
 .cv-isolation[hidden] { display: none; }
 .cv-isolation-label { color: var(--text-secondary); }
 .cv-isolation .cv-btn { height: 26px; }
+.cv-iso-pattern { display: flex; gap: var(--space-1); }
+.cv-isolation [hidden] { display: none; }
+.cv-patp-status { margin: var(--space-2) 0; color: var(--text-secondary); font-size: 11px; line-height: 1.4; white-space: normal; }
+.cv-patp-form[hidden], .cv-patp-idle[hidden] { display: none; }
 .cv-stage:has(> .cv-ruler-h:not([hidden])) > .cv-isolation { top: calc(18px + var(--space-2)); }
 .cv-app.is-isolated .cv-doc-tabs { box-shadow: inset 0 -2px 0 var(--accent-line); }
 
