@@ -49,6 +49,7 @@ import { HelpDialog } from './ui/panels/help';
 import { ActionsPanel, HistoryPanel, InfoPanel, NavigatorPanel } from './ui/panels/navigator';
 import { PluginsDialog } from './ui/panels/plugins-dialog';
 import { effectDialog, previewEdit } from './ui/panels/preview-edit';
+import { EffectGallery } from './ui/panels/effect-gallery';
 import { BrushesPanel, StrokePanel, TransparencyPanel } from './ui/panels/stroke';
 import { ArtboardsPanel, LinksPanel, SymbolsPanel } from './ui/panels/symbols';
 import { CharacterPanel, findReplaceDialog, GlyphsPanel, ParagraphPanel } from './ui/panels/type';
@@ -558,6 +559,7 @@ export function startApp(): void {
   const sel = (): boolean => engine.hasSelection;
   const wrapDefaults = { offset: 6, invert: false };
   let findFont: FindFontDialog | null = null;
+  let gallery: EffectGallery | null = null;
   const many = (): boolean => engine.selected().length > 1;
   const kindSel = (...k: string[]): boolean => engine.selected().some((n) => k.includes(n.kind));
   const selectedPattern = (): string | null => { for (const n of engine.selected()) for (const i of n.ap.items) if (i.paint.type === 'pattern') return i.paint.pattern; return null; };
@@ -886,6 +888,7 @@ export function startApp(): void {
     { id: 'apply-last-effect', label: () => `Apply Last Effect${engine.lastEffect ? `: ${EFFECTS.find((x) => x.id === engine.lastEffect?.id)?.label ?? ''}` : ''}`, keys: ['Shift+Mod+E'], enabled: () => sel() && !!engine.lastEffect, run: () => engine.applyLastEffect() },
     { id: 'last-effect', label: 'Last Effect...', keys: ['Alt+Shift+Mod+E'], enabled: () => sel() && !!engine.lastEffect, run: () => { if (engine.lastEffect) void effectDialog(engine, engine.lastEffect.id); } },
     ...EFFECTS.map((fx) => ({ id: `fx-${fx.id}`, label: `${fx.label}...`, enabled: sel, run: () => void effectDialog(engine, fx.id) })),
+    { id: 'effect-gallery', label: 'Effect Gallery...', enabled: sel, run: () => void (gallery ??= new EffectGallery(engine)).run() },
 
     { id: 'outline', label: () => (engine.view.outline ? 'Preview' : 'Outline'), keys: ['Mod+Y'], enabled: has, checked: () => engine.view.outline, run: () => engine.setView({ outline: !engine.view.outline }) },
     { id: 'zoom-in', label: 'Zoom In', keys: ['Mod+=', 'Mod++'], enabled: has, run: () => engine.zoomStep(1) },
@@ -958,9 +961,9 @@ export function startApp(): void {
   }
 
   function effectItems(): MenuItem[] {
-    const byMenu = new Map<string, string[]>();
-    for (const fx of EFFECTS) byMenu.set(fx.menu, [...(byMenu.get(fx.menu) ?? []), `fx-${fx.id}`]);
-    return [...byMenu.entries()].map(([label, items]) => ({ label, items }));
+    const own = new Map<string, string[]>(), ps = new Map<string, string[]>();
+    for (const fx of EFFECTS) { const m = fx.family === 'photoshop' ? ps : own; m.set(fx.menu, [...(m.get(fx.menu) ?? []), `fx-${fx.id}`]); }
+    return [...[...own.entries()].map(([label, items]) => ({ label, items })), '-', 'effect-gallery', ...[...ps.entries()].map(([label, items]) => ({ label, items }))];
   }
 
   const menus: MenuDef[] = [
