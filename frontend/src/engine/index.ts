@@ -18,7 +18,7 @@ import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, first
 import { Project } from './project';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, BlendMode, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
+import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
 import { Viewport } from './viewport';
 
 export * from './types';
@@ -976,6 +976,37 @@ export class Engine extends Emitter<EngineEvents> {
     return id;
   }
 
+  newBrush(name: string, kind: BrushKind['type'], o: Record<string, number | string | boolean> = {}, colorize: BrushDef['colorize'] = 'none', ids?: string[]): string {
+    const p = this.current; if (!p) return '';
+    const num = (k: string, d: number): number => (typeof o[k] === 'number' && Number.isFinite(o[k]) ? o[k] as number : d);
+    let brush: BrushKind;
+    if (kind === 'calligraphic') brush = { type: 'calligraphic', angle: num('angle', 0), roundness: Math.max(1, Math.min(100, num('roundness', 100))), size: Math.max(0.1, num('size', 3)) };
+    else {
+      const nodes = this.targetIds(ids).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n);
+      const flat = (n: VNode): VNode[] => (n.hidden ? [] : n.kind === 'group' || n.kind === 'layer' ? n.children.flatMap(flat) : expandAppearance(p.doc, n).flatMap((x) => (x.kind === 'group' ? x.children.flatMap(flat) : [x])));
+      const parts = nodes.flatMap(flat).filter((n) => n.kind === 'path' || n.kind === 'compound');
+      if (!parts.length) { this.notice('Select the artwork for the brush first: filled or stroked paths.'); return ''; }
+      const b = selectionBounds(p.doc, parts);
+      const art: VNode = { id: newId('b'), kind: 'group', clip: false, opacity: 1, blend: 'normal', ap: emptyAppearance(), children: parts.map((n) => transformNode(cloneNode(n), translate(-b.x, -b.y))) };
+      brush = kind === 'scatter' ? { type: 'scatter', art, size: num('size', 100), spacing: num('spacing', 100), scatter: num('scatter', 0), rotation: num('rotation', 0), relative: o.relative === true }
+        : kind === 'art' ? { type: 'art', art, stretch: o.stretch !== false, flip: o.flip === true, width: num('width', 100) }
+        : { type: 'pattern', art, spacing: num('spacing', 0), fit: (['stretch', 'space', 'approximate'].includes(String(o.fit)) ? o.fit : 'stretch') as 'stretch' };
+    }
+    const id = newId('br');
+    this.edit('New Brush', (d) => ({ ...d, brushes: [...d.brushes, { id, name: name || `Brush ${d.brushes.length + 1}`, brush, colorize }] }));
+    this.currentBrush = id;
+    this.emit('options', null);
+    return id;
+  }
+  editBrush(id: string, patch: { name?: string; colorize?: BrushDef['colorize']; brush?: Partial<Record<string, number | string | boolean>> }): boolean {
+    return this.edit('Brush Options', (d) => ({ ...d, brushes: d.brushes.map((b) => (b.id !== id ? b : { ...b, ...(patch.name ? { name: patch.name } : {}), ...(patch.colorize ? { colorize: patch.colorize } : {}), brush: { ...b.brush, ...(patch.brush ?? {}) } as BrushKind })) }));
+  }
+  deleteBrush(id: string): boolean {
+    const p = this.current; if (!p) return false;
+    const used = allNodes(p.doc).filter((n) => n.ap.items.some((i) => i.kind === 'stroke' && i.brush === id)).map((n) => n.id);
+    if (this.currentBrush === id) this.currentBrush = null;
+    return this.edit('Delete Brush', (d) => ({ ...updateNodes(d, used, (n) => ({ ...n, ap: { ...n.ap, items: n.ap.items.map((i) => (i.kind === 'stroke' && i.brush === id ? { ...i, brush: null } : i)) } }) as VNode), brushes: d.brushes.filter((b) => b.id !== id) }));
+  }
   applyBrush(brush: string | null, ids?: string[]): boolean {
     const def = brush ? this.doc?.brushes.find((b) => b.id === brush || b.name === brush) : null;
     if (brush && !def) { this.notice(`There is no brush called ${brush}.`, 'error'); return false; }

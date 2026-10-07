@@ -11,6 +11,7 @@ export class ErrorLog {
   install(): void {
     window.addEventListener('error', (e) => {
       if (!(e.error instanceof Error) && !e.message) return;
+      if (/^ResizeObserver loop/.test(e.message ?? '')) return;
       this.add('Uncaught error', e.error instanceof Error ? `${e.error.name}: ${e.error.message}` : e.message);
     });
     window.addEventListener('unhandledrejection', (e) => {

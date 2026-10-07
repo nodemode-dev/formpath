@@ -1,6 +1,9 @@
-import { ARROWHEADS, WIDTH_PROFILES } from '../../engine/effects';
-import { firstStroke, stroke as makeStroke } from '../../engine/paint';
-import { BLEND_MODES, type BlendMode, type BrushDef, type Engine, type StrokeItem } from '../../engine';
+import { ARROWHEADS, brushGeometry, WIDTH_PROFILES } from '../../engine/effects';
+import { geomBounds } from '../../engine/bounds';
+import { anchor, toPath2D } from '../../engine/geometry';
+import { cssColor, firstStroke, parseColor, rgb, solid, stroke as makeStroke } from '../../engine/paint';
+import { BLEND_MODES, type BlendMode, type BrushDef, type Engine, type PathData, type StrokeItem } from '../../engine';
+import { askForm, type Field } from '../form-dialog';
 import { el, patchList, q, setClass, setHidden, setText, setTitle } from '../dom';
 import { icon } from '../icons';
 import { check, numField, row, section, seg, selectCtl, slider } from './kit';
@@ -151,9 +154,12 @@ export class BrushesPanel {
 
   constructor(private readonly engine: Engine) {
     const foot = el('<div class="cv-panel-foot"></div>');
-    const remove = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="Remove Brush Stroke" aria-label="Remove Brush Stroke">${icon('close', 16)}</button>`);
-    remove.addEventListener('click', () => engine.applyBrush(null));
-    foot.appendChild(remove);
+    const mk = (name: string, label: string, run: () => void): void => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', run); foot.appendChild(b); };
+    mk('close', 'Remove Brush Stroke', () => engine.applyBrush(null));
+    mk('settings', 'Options of Selected Brush', () => void this.options());
+    mk('add', 'New Brush', () => void this.create());
+    mk('delete', 'Delete Brush', () => { const id = engine.currentBrush; if (id) engine.deleteBrush(id); });
+    this.list.addEventListener('dblclick', (e) => { const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-brushp-row'); if (r?.dataset.key) { engine.currentBrush = r.dataset.key; void this.options(); } });
     this.list.addEventListener('click', (e) => {
       const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-brushp-row');
       if (!r?.dataset.key) return;
@@ -173,8 +179,45 @@ export class BrushesPanel {
     patchList<BrushDef>(this.list, brushes, {
       key: (b) => b.id,
       create: (b) => { const n = el(`<button class="cv-brushp-row" type="button" role="option"><canvas class="cv-brushp-preview" width="120" height="24"></canvas><span class="cv-brushp-name"></span><span class="cv-brushp-kind"></span></button>`); this.fill(n, b); this.preview(n, b); return n; },
-      update: (n, b) => this.fill(n, b),
+      update: (n, b) => { this.fill(n, b); this.preview(n, b); },
     });
+  }
+
+  private async create(): Promise<void> {
+    const e = this.engine;
+    const v = await askForm('New Brush', [
+      { kind: 'select', key: 'kind', label: 'Type', value: e.hasSelection ? 'art' : 'calligraphic', choices: [['calligraphic', 'Calligraphic Brush'], ['scatter', 'Scatter Brush'], ['art', 'Art Brush'], ['pattern', 'Pattern Brush']] },
+      { kind: 'text', key: 'name', label: 'Name', value: `Brush ${(e.doc?.brushes.length ?? 0) + 1}` },
+      { kind: 'note', text: 'Scatter, art and pattern brushes are made from the selected artwork; its strokes become filled shapes.' },
+    ], { ok: 'Next' });
+    if (!v) return;
+    const kind = String(v.kind) as BrushDef['brush']['type'], o = await this.ask(kind, null);
+    if (!o) return;
+    const { colorize, ...rest } = o;
+    const id = e.newBrush(String(v.name), kind, rest, (colorize as BrushDef['colorize']) ?? 'none');
+    if (id && e.hasSelection && kind === 'calligraphic') e.notice('The brush is in the Brushes panel; select a path and click it to apply.');
+  }
+
+  private async options(): Promise<void> {
+    const b = this.engine.doc?.brushes.find((x) => x.id === this.engine.currentBrush);
+    if (!b) { this.engine.notice('Click a brush in the Brushes panel first.'); return; }
+    const o = await this.ask(b.brush.type, b);
+    if (!o) return;
+    const { colorize, name, ...rest } = o;
+    this.engine.editBrush(b.id, { name: typeof name === 'string' && name.trim() ? name.trim() : undefined, colorize: colorize as BrushDef['colorize'], brush: rest });
+  }
+
+  private ask(kind: BrushDef['brush']['type'], b: BrushDef | null): Promise<Record<string, number | string | boolean> | null> {
+    const cur = (b?.brush ?? {}) as Record<string, unknown>, n = (k: string, d: number): number => (typeof cur[k] === 'number' ? cur[k] as number : d);
+    const title = `${kind[0].toUpperCase()}${kind.slice(1)} Brush Options`;
+    const colorize = { kind: 'select' as const, key: 'colorize', label: 'Colorization', value: b?.colorize ?? 'none', choices: [['none', 'None'], ['tints', 'Tints'], ['tints_shades', 'Tints and Shades'], ['hue_shift', 'Hue Shift']] as Array<readonly [string, string]> };
+    const name = b ? [{ kind: 'text' as const, key: 'name', label: 'Name', value: b.name }] : [];
+    const fields: Field[] =
+      kind === 'calligraphic' ? [...name, { kind: 'number', key: 'angle', label: 'Angle', value: n('angle', 0), min: -180, max: 180, unit: '°' }, { kind: 'number', key: 'roundness', label: 'Roundness', value: n('roundness', 100), min: 1, max: 100, unit: '%' }, { kind: 'number', key: 'size', label: 'Size', value: n('size', 3), min: 0.1, max: 1296, unit: 'pt' }]
+      : kind === 'scatter' ? [...name, { kind: 'number', key: 'size', label: 'Size', value: n('size', 100), min: 1, max: 1000, unit: '%' }, { kind: 'number', key: 'spacing', label: 'Spacing', value: n('spacing', 100), min: 1, max: 1000, unit: '%' }, { kind: 'number', key: 'scatter', label: 'Scatter', value: n('scatter', 0), min: -1000, max: 1000, unit: '%' }, { kind: 'number', key: 'rotation', label: 'Rotation', value: n('rotation', 0), min: -360, max: 360, unit: '°' }, { kind: 'check', key: 'relative', label: 'Rotation relative to path', value: cur.relative === true }, colorize]
+      : kind === 'art' ? [...name, { kind: 'number', key: 'width', label: 'Width', value: n('width', 100), min: 1, max: 1000, unit: '%' }, { kind: 'check', key: 'stretch', label: 'Stretch to fit stroke length', value: cur.stretch !== false }, { kind: 'check', key: 'flip', label: 'Flip across', value: cur.flip === true }, colorize]
+      : [...name, { kind: 'number', key: 'spacing', label: 'Spacing', value: n('spacing', 0), min: 0, max: 1000, unit: '%' }, { kind: 'select', key: 'fit', label: 'Fit', value: typeof cur.fit === 'string' ? cur.fit : 'stretch', choices: [['stretch', 'Stretch to fit'], ['space', 'Add space to fit'], ['approximate', 'Approximate path']] }, colorize];
+    return askForm(title, fields, { ok: b ? 'OK' : 'Create' });
   }
 
   private fill(n: HTMLElement, b: BrushDef): void {
@@ -185,15 +228,22 @@ export class BrushesPanel {
   }
 
   private preview(n: HTMLElement, b: BrushDef): void {
-    const c = q<HTMLCanvasElement>(n, 'canvas'), g = c.getContext('2d');
-    if (!g) return;
-    g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary') || '#ccc';
-    g.fillStyle = g.strokeStyle;
-    g.lineCap = 'round';
-    const t = b.brush.type;
-    if (t === 'calligraphic') { g.lineWidth = 4; g.beginPath(); g.moveTo(6, 16); g.bezierCurveTo(40, 2, 80, 22, 114, 8); g.stroke(); }
-    else if (t === 'scatter') { for (let x = 10; x < 115; x += 14) { g.beginPath(); g.arc(x, 12 + Math.sin(x / 9) * 5, 3, 0, Math.PI * 2); g.fill(); } }
-    else if (t === 'art') { g.beginPath(); g.moveTo(6, 12); g.quadraticCurveTo(60, -2, 114, 12); g.quadraticCurveTo(60, 26, 6, 12); g.fill(); }
-    else { g.lineWidth = 2; g.setLineDash([8, 4, 2, 4]); g.beginPath(); g.moveTo(6, 12); g.lineTo(114, 12); g.stroke(); }
+    const sig = JSON.stringify(b.brush) + b.colorize;
+    if (n.dataset.sig === sig) return;
+    n.dataset.sig = sig;
+    const c = q<HTMLCanvasElement>(n, 'canvas'), g = c.getContext('2d'), doc = this.engine.doc;
+    if (!g || !doc) return;
+    g.clearRect(0, 0, c.width, c.height);
+    const ink = (getComputedStyle(document.documentElement).getPropertyValue('--text-secondary') || '#cccccc').trim(), col = parseColor(ink) ?? rgb(204, 204, 204);
+    const d: PathData = [{ closed: false, pts: [anchor(8, 14, 8, 14, 40, 0), anchor(112, 10, 80, 24, 112, 10)] }];
+    const art = b.brush.type === 'calligraphic' ? null : geomBounds(doc, b.brush.art);
+    const h = art && Number.isFinite(art.h) && art.h > 0 ? art.h : 10;
+    const width = b.brush.type === 'calligraphic' ? 1 : b.brush.type === 'scatter' ? Math.min(2, 9 / h) : b.brush.type === 'art' ? Math.min(2, 9 / h) : Math.min(2, 7 / h);
+    const pieces = brushGeometry({ ...doc, brushes: [b] }, d, { ...makeStroke(solid(col), width), brush: b.id }) ?? [];
+    for (const piece of pieces) {
+      const p = piece.paint ?? solid(col);
+      g.fillStyle = p.type === 'color' ? cssColor(p.color) : ink;
+      g.fill(toPath2D(piece.d), 'nonzero');
+    }
   }
 }

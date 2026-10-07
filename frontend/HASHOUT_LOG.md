@@ -729,6 +729,24 @@ The picker keeps saturation and brightness in 0..1; `hsbToRgb` takes 0..100. Mul
 
 Rows store their action in `dataset.action`. `dataset.key` belongs to `patchList`; writing it broke row identity.
 
+## src/ui/panels/stroke.ts
+
+### src/ui/panels/stroke.ts · new brushes and previews
+- refers-to: src/ui/panels/stroke.ts :: BrushesPanel.create, options, ask, preview; src/engine/index.ts :: Engine.newBrush, editBrush, deleteBrush
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+New Brush asks the type and name, then the type's options, the same dialog Brush Options uses. Scatter, art and pattern brushes take the selected artwork: groups are flattened and every stroke is expanded into filled shapes first, because the brush engine draws filled pieces only, then the art moves to the origin. New brushes keep the art's own colours (colorization None), as Illustrator does. Deleting a brush that is in use leaves those strokes as plain strokes. The panel draws each brush along the same S-curve through the real brush geometry instead of a sketch of its type, at a stroke weight that fits its art in the row; a row redraws only when its brush's definition changes (`data-sig`).
+
+## src/ui/errors.ts
+
+### src/ui/errors.ts · ResizeObserver loop
+- refers-to: src/ui/errors.ts :: ErrorLog.install
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+Browsers report "ResizeObserver loop completed with undelivered notifications" as a window error when a layout settles over two frames, for example when a hidden panel group is shown. Nothing failed, so the log ignores it instead of showing the error toast.
+
 ## src/ui/panels/type.ts
 
 ### src/ui/panels/type.ts · findReplaceDialog
