@@ -134,17 +134,6 @@ export function pathfinder(doc: Doc, ids: string[], op: PathfinderOp): OpResult 
   return replaceSelection(doc, tops, lines);
 }
 
-export function shapeRegions(doc: Doc, ids: string[]): Array<{ d: PathData; top: string; sources: string[] }> {
-  const tops = topObjects(doc, ids);
-  const shapes = tops.map((id) => ({ id, n: findNode(doc, id) as VNode })).map((x) => ({ ...x, g: x.n ? geometryOf(x.n) : null })).filter((x): x is { id: string; n: VNode; g: { d: PathData; rule: FillRule } } => !!x.g);
-  return arrangement(shapes.map((s) => s.g)).map((f) => ({ d: f.d, top: shapes[f.top].id, sources: shapes.filter((s) => contains(s.g.d, s.g.rule, interior(f.d))).map((s) => s.id) }));
-}
-
-function interior(d: PathData): Pt {
-  const p = toPaper(d, 'nonzero') as paper.PathItem & { interiorPoint: paper.Point };
-  return { x: p.interiorPoint.x, y: p.interiorPoint.y };
-}
-
 export function shapeBuild(doc: Doc, ids: string[], points: Pt[], erase: boolean, paintOverride?: Paint | null): OpResult {
   const tops = topObjects(doc, ids);
   const shapes = tops.map((id) => ({ id, n: findNode(doc, id) as VNode })).map((x) => ({ ...x, g: x.n ? geometryOf(x.n) : null })).filter((x): x is { id: string; n: VNode; g: { d: PathData; rule: FillRule } } => !!x.g);
@@ -167,27 +156,6 @@ export function shapeBuild(doc: Doc, ids: string[], points: Pt[], erase: boolean
   return replaceSelection(doc, used, made);
 }
 
-export function livePaintFill(doc: Doc, ids: string[], p: Pt, paint: Paint): OpResult {
-  const tops = topObjects(doc, ids);
-  const shapes = tops.map((id) => findNode(doc, id) as VNode).filter(Boolean).map((n) => ({ n, g: geometryOf(n) ?? openAsRegion(n) })).filter((x): x is { n: VNode; g: { d: PathData; rule: FillRule } } => !!x.g);
-  if (!shapes.length) return { doc, ids: tops };
-  const faces = arrangement(shapes.map((s) => s.g));
-  const hit = faces.findIndex((f) => contains(f.d, 'nonzero', p));
-  if (hit < 0) return { doc, ids: tops };
-  const parts = faces.map((f, i) => {
-    const base = shapes[f.top].n;
-    const n = shapeNode(f.d, base, { items: [fill(i === hit ? paint : fillPaint(base))], effects: [] });
-    n.name = 'Face';
-    return n;
-  });
-  const edges = shapes.map(({ n }) => ({ ...n, id: newId(), ap: { items: n.ap.items.filter((i) => i.kind === 'stroke'), effects: [] }, name: 'Edge' }) as VNode).filter((n) => n.ap.items.length);
-  const group: GroupNode = { id: newId('g'), kind: 'group', clip: false, name: 'Live Paint', children: [...parts, ...edges], opacity: 1, blend: 'normal', ap: emptyAppearance() };
-  return replaceSelection(doc, shapes.map((s) => s.n.id), [group]);
-}
-function openAsRegion(n: VNode): { d: PathData; rule: FillRule } | null {
-  if (n.kind === 'path' && n.d.some((sp) => !sp.closed)) return { d: strokeToPath(n.d.filter((sp) => !sp.closed), 0.5, 'butt', 'miter', 4), rule: 'nonzero' };
-  return null;
-}
 
 export type PathOp = 'offset' | 'outline_stroke' | 'simplify' | 'smooth' | 'join' | 'average' | 'reverse' | 'add_anchors' | 'remove_anchors' | 'divide_objects_below' | 'split_into_grid' | 'clean_up' | 'close' | 'open';
 export interface PathOpArgs { offset?: number; joins?: Join; miterLimit?: number; precision?: number; axis?: 'horizontal' | 'vertical' | 'both'; rows?: number; columns?: number; gutter?: number; anchors?: Map<string, Set<number>> }

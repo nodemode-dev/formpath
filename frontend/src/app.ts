@@ -448,6 +448,20 @@ export function startApp(): void {
     return next.id;
   }
 
+  async function gapOptions(): Promise<void> {
+    const n = engine.selected().find((x) => x.kind === 'group' && !!x.livePaint);
+    if (n?.kind !== 'group' || !n.livePaint) return;
+    const gap = n.livePaint.gap, sizes: Record<string, number> = { small: 3, medium: 6, large: 12 };
+    const pick = gap <= 0 ? 'off' : Object.keys(sizes).find((k) => sizes[k] === gap) ?? 'custom';
+    const v = await askForm('Gap Options', [
+      { kind: 'select', key: 'stop', label: 'Paint stops at', value: pick, choices: [['off', 'No gap detection'], ['small', 'Small gaps (3 pt)'], ['medium', 'Medium gaps (6 pt)'], ['large', 'Large gaps (12 pt)'], ['custom', 'Custom']] },
+      { kind: 'number', key: 'custom', label: 'Custom gap', value: gap > 0 ? gap : 6, min: 0.5, max: 72, unit: 'pt' },
+    ], { ok: 'Apply' });
+    if (!v) return;
+    const s = String(v.stop);
+    engine.setLivePaintGap(s === 'off' ? 0 : s === 'custom' ? Number(v.custom) : sizes[s] ?? 0, [n.id]);
+  }
+
   async function makeTrace(expand: boolean): Promise<void> {
     const imgs = engine.selected().filter((x) => x.kind === 'image');
     if (!imgs.length) { toast('Select a placed image to trace.'); return; }
@@ -797,6 +811,11 @@ export function startApp(): void {
     { id: 'envelope-top', label: 'Make with Top Object', keys: ['Alt+Mod+C'], enabled: many, run: () => engine.makeEnvelope('top') },
     { id: 'image-trace', label: 'Make Image Trace', enabled: () => kindSel('image'), run: () => void makeTrace(false) },
     { id: 'image-trace-expand', label: 'Make Image Trace and Expand', enabled: () => kindSel('image'), run: () => void makeTrace(true) },
+    { id: 'live-paint-make', label: 'Make Live Paint', keys: ['Mod+Alt+X'], enabled: () => sel() && !engine.livePaintTargets().length, run: () => { if (engine.makeLivePaint()) engine.setTool('livePaint'); } },
+    { id: 'live-paint-merge', label: 'Merge Live Paint', enabled: () => engine.livePaintTargets().length > 0 && engine.selected().length > 1, run: () => engine.makeLivePaint() },
+    { id: 'live-paint-release', label: 'Release Live Paint', enabled: () => engine.livePaintTargets().length > 0, run: () => engine.releaseLivePaint() },
+    { id: 'live-paint-gap', label: 'Live Paint Gap Options...', enabled: () => engine.livePaintTargets().length > 0, run: () => void gapOptions() },
+    { id: 'live-paint-expand', label: 'Expand Live Paint', enabled: () => engine.livePaintTargets().length > 0, run: () => engine.expandLivePaint() },
     { id: 'trace-expand', label: 'Expand Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.expandTrace() },
     { id: 'trace-release', label: 'Release Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.releaseTrace() },
     { id: 'embed-image', label: 'Embed Image', enabled: () => kindSel('image'), run: () => engine.applyToSelection('Embed Image', (n) => (n.kind === 'image' ? { ...n, link: undefined } : n)) },
@@ -938,7 +957,8 @@ export function startApp(): void {
       { label: 'Repeat', items: ['repeat-radial', 'repeat-grid', 'repeat-mirror', '-', 'release-live', 'repeat-options'] },
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'expand-object'] },
-      { label: 'Image Trace', items: ['image-trace', 'image-trace-expand', '-', 'trace-release', 'trace-expand', '-', 'embed-image'] }, '-',
+      { label: 'Image Trace', items: ['image-trace', 'image-trace-expand', '-', 'trace-release', 'trace-expand', '-', 'embed-image'] },
+      { label: 'Live Paint', items: ['live-paint-make', 'live-paint-merge', 'live-paint-release', 'live-paint-gap', 'live-paint-expand'] }, '-',
       { label: 'Text Wrap', items: ['wrap-make', 'wrap-release', '-', 'wrap-options'] },
       { label: 'Clipping Mask', items: ['make-clip', 'release-clip'] },
       { label: 'Compound Path', items: ['compound-make', 'compound-release'] },

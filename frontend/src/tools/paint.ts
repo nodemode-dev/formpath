@@ -1,13 +1,13 @@
 import { findNode, newId } from '../engine/doc';
 import { cachedPath } from '../engine/render';
 import { addMeshLine, meshPointAt } from '../engine/mesh';
-import { livePaintFill, shapeRegions } from '../engine/ops/paths';
+import { computeFaces, faceAt, liveFaces } from '../engine/livepaint';
 import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, withFirstFill } from '../engine/paint';
-import type { Doc, Engine, FreeformPoint, Gradient, MeshNode, PathData, Pt, VNode } from '../engine';
+import type { Doc, Engine, FreeformPoint, Gradient, GroupNode, MeshNode, PathData, Pt, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { replaceNode } from './select';
-import { fmt, hud, inView, layerColor, unitLabel } from './util';
+import { fmt, hud, inView, layerColor, tolDoc, unitLabel } from './util';
 
 registerTool({
   id: 'eyedropper', label: 'Eyedropper Tool', group: 'eyedropper', order: 70, shortcut: 'I',
@@ -247,33 +247,50 @@ let lpHover: PathData | null = null;
 registerTool({
   id: 'livePaint', label: 'Live Paint Bucket', group: 'shapeBuilder', order: 74, shortcut: 'K',
   icon: () => 'vLivePaint',
-  hint: () => 'Click a region formed by the selected paths to fill it with the current fill; the paths stay editable as separate pieces.',
+  hint: () => 'Click an area closed by the selected paths to fill it; they become a Live Paint group and stay editable. Shift-click an edge to paint its stroke.',
   cursor: () => CURSORS.bucket,
   hover: (ctx, p) => {
     const e = ctx.engine, pr = e.current;
     lpHover = null;
-    if (p && pr && e.hasSelection) for (const r of regions(e)) if (ctxHit(r.d, p.doc)) { lpHover = r.d; break; }
+    const g = p ? livePaintAt(ctx, p.doc) : null;
+    if (g && p) { const i = faceAt(g, p.doc); if (i >= 0) lpHover = liveFaces(g)[i].d; }
+    else if (p && pr && e.hasSelection) for (const r of regions(e)) if (ctxHit(r.d, p.doc)) { lpHover = r.d; break; }
     ctx.redraw();
   },
   down: (ctx, p) => {
-    const e = ctx.engine;
+    const e = ctx.engine, black = solid({ kind: 'rgb', r: 0, g: 0, b: 0 });
+    const paint = p.shift ? (e.strokePaint.type === 'none' ? black : e.strokePaint) : e.fillPaint.type === 'none' ? black : e.fillPaint;
+    const paintAt = (id: string): boolean => (p.shift ? e.livePaintEdge(id, p.doc, paint, tolDoc(ctx, 5)) : e.livePaintFill(id, p.doc, paint));
+    const g = livePaintAt(ctx, p.doc);
+    if (g) { paintAt(g.id); cache = null; return; }
     if (!e.hasSelection) { const h = e.hit(p.doc); if (h) e.select([e.selectableFor(h.id)]); return; }
-    const paint = e.fillPaint.type === 'none' ? solid({ kind: 'rgb', r: 0, g: 0, b: 0 }) : e.fillPaint;
-    e.run('Live Paint', (d, ids) => livePaintFill(d, ids, p.doc, paint));
+    e.beginStep();
+    const id = e.makeLivePaint();
+    if (id) paintAt(id);
+    e.endStep();
     cache = null;
   },
   overlay: (ctx, g) => { if (lpHover) { const d = lpHover; inView(ctx, g, () => { g.fillStyle = 'rgba(255, 64, 64, 0.25)'; g.fill(cachedPath(d)); g.strokeStyle = '#ff4040'; g.lineWidth = 2 / ctx.view().zoom; g.stroke(cachedPath(d)); }); } },
 });
 
-let cache: { key: string; doc: unknown; regions: Array<{ d: PathData; top: string; sources: string[] }> } | null = null;
-function regions(e: Engine): Array<{ d: PathData; top: string; sources: string[] }> {
+let cache: { key: string; doc: unknown; regions: Array<{ d: PathData }> } | null = null;
+function regions(e: Engine): Array<{ d: PathData }> {
   const pr = e.current;
   if (!pr) return [];
   const key = e.targetIds().join(',');
   if (!cache || cache.key !== key || cache.doc !== pr.doc) {
-    try { cache = { key, doc: pr.doc, regions: shapeRegions(pr.doc, e.targetIds()) }; } catch { cache = { key, doc: pr.doc, regions: [] }; }
+    try { cache = { key, doc: pr.doc, regions: computeFaces(e.targetIds().map((id) => findNode(pr.doc, id)).filter((n): n is VNode => !!n), 0) }; } catch { cache = { key, doc: pr.doc, regions: [] }; }
   }
   return cache.regions;
+}
+
+function livePaintAt(ctx: ToolContext, at: Pt): GroupNode | null {
+  const e = ctx.engine, doc = e.doc, pr = e.current;
+  if (!doc || !pr) return null;
+  const h = e.hit(at);
+  for (const id of [...(h?.chain ?? [])].reverse()) { const n = findNode(doc, id); if (n?.kind === 'group' && n.livePaint) return n; }
+  for (const id of pr.selection) { const n = findNode(doc, id); if (n?.kind === 'group' && n.livePaint && faceAt(n, at) >= 0) return n; }
+  return null;
 }
 
 let hc: CanvasRenderingContext2D | null = null;
