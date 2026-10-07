@@ -2,6 +2,23 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.16.0 · 2026-10-07
+
+Map Art, 3D shadows and a tilting Inflate. Every parity row is Full.
+
+### Added
+
+- Map Art: a symbol on the front face of an Extrude or Plane, with scale, offset and Shade Artwork. It follows the face's rotation and perspective, is clipped to the face and exports to SVG and PDF.
+- 3D shadows behind or below the object, with distance, softness and opacity.
+- Inflate turns in X, Y and Z, ray-cast with soft edges.
+- Map Art and Shadow sections in the 3D and Materials panel, which now shows Rotation for Inflate too.
+- `three_d` takes `map_symbol`, `map_scale`, `map_x`, `map_y`, `shade_art`, `shadow`, `shadow_position`, `shadow_distance`, `shadow_softness` and `shadow_opacity`, and rx, ry, rz for Inflate.
+
+### Changed
+
+- Effect dialogs edit text parameters.
+- Parity is 59 of 59.
+
 ## 0.15.0 · 2026-10-07
 
 3D and Materials.
