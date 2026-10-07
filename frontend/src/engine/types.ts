@@ -1,0 +1,197 @@
+export interface Pt { x: number; y: number }
+export type Mat = [number, number, number, number, number, number];
+export interface Rect { x: number; y: number; w: number; h: number }
+export interface RGB { r: number; g: number; b: number }
+
+export interface Anchor { x: number; y: number; ix: number; iy: number; ox: number; oy: number; smooth?: boolean }
+export interface SubPath { pts: Anchor[]; closed: boolean }
+export type PathData = SubPath[];
+export type FillRule = 'nonzero' | 'evenodd';
+
+export type Color =
+  | { kind: 'rgb'; r: number; g: number; b: number }
+  | { kind: 'cmyk'; c: number; m: number; y: number; k: number }
+  | { kind: 'gray'; k: number };
+
+export interface GradientStop { offset: number; color: Color; opacity: number; mid: number }
+export interface GradientGeom { x1: number; y1: number; x2: number; y2: number; fx?: number; fy?: number }
+export interface FreeformPoint { x: number; y: number; color: Color; spread: number }
+export interface Gradient {
+  kind: 'linear' | 'radial' | 'freeform';
+  stops: GradientStop[];
+  angle: number;
+  aspect: number;
+  geom: GradientGeom | null;
+  points?: FreeformPoint[];
+  strokeMode?: 'within' | 'along' | 'across';
+}
+
+export type Paint =
+  | { type: 'none' }
+  | { type: 'color'; color: Color; swatch?: string; tint?: number }
+  | { type: 'gradient'; gradient: Gradient; swatch?: string }
+  | { type: 'pattern'; pattern: string; xf: Mat };
+
+export type BlendMode = 'normal' | 'darken' | 'multiply' | 'color_burn' | 'lighten' | 'screen' | 'color_dodge' | 'overlay' | 'soft_light' | 'hard_light' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity';
+export const BLEND_MODES: ReadonlyArray<{ id: BlendMode; label: string; css: GlobalCompositeOperation }> = [
+  { id: 'normal', label: 'Normal', css: 'source-over' },
+  { id: 'darken', label: 'Darken', css: 'darken' },
+  { id: 'multiply', label: 'Multiply', css: 'multiply' },
+  { id: 'color_burn', label: 'Color Burn', css: 'color-burn' },
+  { id: 'lighten', label: 'Lighten', css: 'lighten' },
+  { id: 'screen', label: 'Screen', css: 'screen' },
+  { id: 'color_dodge', label: 'Color Dodge', css: 'color-dodge' },
+  { id: 'overlay', label: 'Overlay', css: 'overlay' },
+  { id: 'soft_light', label: 'Soft Light', css: 'soft-light' },
+  { id: 'hard_light', label: 'Hard Light', css: 'hard-light' },
+  { id: 'difference', label: 'Difference', css: 'difference' },
+  { id: 'exclusion', label: 'Exclusion', css: 'exclusion' },
+  { id: 'hue', label: 'Hue', css: 'hue' },
+  { id: 'saturation', label: 'Saturation', css: 'saturation' },
+  { id: 'color', label: 'Color', css: 'color' },
+  { id: 'luminosity', label: 'Luminosity', css: 'luminosity' },
+];
+
+export type Cap = 'butt' | 'round' | 'square';
+export type Join = 'miter' | 'round' | 'bevel';
+export type StrokeAlign = 'center' | 'inside' | 'outside';
+export interface WidthPoint { t: number; l: number; r: number }
+
+export interface Effect { id: string; params: Record<string, number | string | boolean>; visible: boolean }
+
+export interface FillItem { kind: 'fill'; paint: Paint; opacity: number; blend: BlendMode; visible: boolean; effects: Effect[] }
+export interface StrokeItem {
+  kind: 'stroke'; paint: Paint; width: number; cap: Cap; join: Join; miter: number; align: StrokeAlign;
+  dash: number[]; dashOffset: number; dashCorners: boolean;
+  startArrow: string; endArrow: string; arrowScale: [number, number]; arrowAlign: 'extend' | 'tip';
+  profile: WidthPoint[] | null; brush: string | null;
+  opacity: number; blend: BlendMode; visible: boolean; effects: Effect[];
+}
+export type AppearanceItem = FillItem | StrokeItem;
+export interface Appearance { items: AppearanceItem[]; effects: Effect[] }
+
+export interface OpacityMask { art: VNode; clip: boolean; invert: boolean; disabled: boolean; linked: boolean }
+
+export type LiveShape =
+  | { kind: 'rect'; x: number; y: number; w: number; h: number; radii: [number, number, number, number]; corner: 'round' | 'inverted' | 'chamfer'; xf: Mat }
+  | { kind: 'ellipse'; x: number; y: number; w: number; h: number; start: number; end: number; xf: Mat }
+  | { kind: 'polygon'; cx: number; cy: number; r: number; sides: number; radius: number; xf: Mat }
+  | { kind: 'star'; cx: number; cy: number; r1: number; r2: number; points: number; xf: Mat }
+  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number };
+
+export interface NodeBase {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  opacity: number;
+  blend: BlendMode;
+  isolate?: boolean;
+  knockout?: boolean;
+  ap: Appearance;
+  mask?: OpacityMask | null;
+  style?: string;
+  note?: string;
+}
+
+export interface LayerNode extends NodeBase { kind: 'layer'; children: VNode[]; color: string; template?: boolean; printable?: boolean; clip?: boolean }
+export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean }
+export interface PathNode extends NodeBase { kind: 'path'; d: PathData; rule: FillRule; live?: LiveShape; guide?: boolean }
+export interface CompoundNode extends NodeBase { kind: 'compound'; children: PathNode[]; rule: FillRule }
+
+export interface CharStyle {
+  font: string; style: string; size: number; leading: number | null; tracking: number; kerning: 'auto' | 'optical' | 'none';
+  baseline: number; hscale: number; vscale: number; fill: Paint; stroke: Paint; strokeWidth: number;
+  underline: boolean; strike: boolean; caps: 'none' | 'all' | 'small'; position: 'normal' | 'super' | 'sub'; features: string[];
+}
+export type TextAlign = 'left' | 'center' | 'right' | 'justify' | 'justify_center' | 'justify_right' | 'justify_all';
+export interface ParaStyle { align: TextAlign; indentLeft: number; indentRight: number; indentFirst: number; spaceBefore: number; spaceAfter: number; hyphenate: boolean; name?: string }
+export interface Span { text: string; style: CharStyle }
+export interface AreaOptions { columns: number; rows: number; gutter: number; inset: number; firstBaseline: 'ascent' | 'cap' | 'x' | 'leading' | 'fixed' }
+export interface TextNode extends NodeBase {
+  kind: 'text';
+  mode: 'point' | 'area' | 'path';
+  spans: Span[];
+  para: ParaStyle;
+  xf: Mat;
+  frame?: Rect;
+  framePath?: PathData;
+  path?: PathData;
+  pathStart?: number;
+  pathEffect?: 'rainbow' | 'skew' | 'ribbon' | 'stair' | 'gravity';
+  pathFlip?: boolean;
+  vertical?: boolean;
+  area?: AreaOptions;
+  next?: string;
+}
+
+export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; trace?: Record<string, number | string | boolean> }
+export interface SymbolNode extends NodeBase { kind: 'symbol'; symbol: string; xf: Mat }
+
+export interface BlendSpec { spacing: 'smooth' | 'steps' | 'distance'; steps: number; distance: number; alignToPath: boolean; spine: PathData | null }
+export interface BlendNode extends NodeBase { kind: 'blend'; children: VNode[]; spec: BlendSpec }
+
+export type EnvelopeSpec =
+  | { kind: 'warp'; style: string; bend: number; h: number; v: number; vertical: boolean }
+  | { kind: 'mesh'; rows: number; cols: number; points: Pt[] }
+  | { kind: 'top'; shape: PathData };
+export interface EnvelopeNode extends NodeBase { kind: 'envelope'; children: VNode[]; spec: EnvelopeSpec; frame: Rect }
+
+export interface MeshPoint { x: number; y: number; color: Color; opacity: number; h: [Pt, Pt, Pt, Pt] }
+export interface MeshNode extends NodeBase { kind: 'mesh'; rows: number; cols: number; points: MeshPoint[] }
+
+export type RepeatSpec =
+  | { kind: 'radial'; instances: number; radius: number; cx: number; cy: number; start: number; end: number; reverse: boolean }
+  | { kind: 'grid'; rows: number; cols: number; hs: number; vs: number; flipRows: boolean; flipCols: boolean }
+  | { kind: 'mirror'; angle: number; cx: number; cy: number };
+export interface RepeatNode extends NodeBase { kind: 'repeat'; children: VNode[]; spec: RepeatSpec }
+
+export type VNode = LayerNode | GroupNode | PathNode | CompoundNode | TextNode | ImageNode | SymbolNode | BlendNode | EnvelopeNode | MeshNode | RepeatNode;
+export type NodeKind = VNode['kind'];
+export type ContainerNode = LayerNode | GroupNode | CompoundNode | BlendNode | EnvelopeNode | RepeatNode;
+
+export interface Artboard { id: string; name: string; x: number; y: number; w: number; h: number; bg?: Color | null }
+export interface Swatch { id: string; name: string; paint: Paint; global: boolean; spot: boolean; group?: string }
+export interface SymbolDef { id: string; name: string; art: VNode; reg: Pt }
+export interface GraphicStyle { id: string; name: string; ap: Appearance; opacity: number; blend: BlendMode }
+export type BrushKind =
+  | { type: 'calligraphic'; angle: number; roundness: number; size: number }
+  | { type: 'scatter'; art: VNode; size: number; spacing: number; scatter: number; rotation: number; relative: boolean }
+  | { type: 'art'; art: VNode; stretch: boolean; flip: boolean; width: number }
+  | { type: 'pattern'; art: VNode; spacing: number; fit: 'stretch' | 'space' | 'approximate' };
+export interface BrushDef { id: string; name: string; brush: BrushKind; colorize: 'none' | 'tints' | 'tints_shades' | 'hue_shift' }
+export interface PatternDef { id: string; name: string; tile: Rect; art: VNode; type: 'grid' | 'brick_row' | 'brick_col' | 'hex_col' | 'hex_row'; hs: number; vs: number }
+export interface Guide { id: string; vertical: boolean; pos: number }
+export interface ImageAsset { mime: string; w: number; h: number }
+export type Units = 'pt' | 'px' | 'mm' | 'cm' | 'in' | 'pc';
+
+export interface Doc {
+  version: 1;
+  title: string;
+  units: Units;
+  colorMode: 'rgb' | 'cmyk';
+  artboards: Artboard[];
+  layers: LayerNode[];
+  swatches: Swatch[];
+  symbols: SymbolDef[];
+  styles: GraphicStyle[];
+  brushes: BrushDef[];
+  patterns: PatternDef[];
+  charStyles: Array<{ id: string; name: string; style: Partial<CharStyle> }>;
+  paraStyles: Array<{ id: string; name: string; style: Partial<ParaStyle> }>;
+  guides: Guide[];
+  grid: { spacing: number; subdivisions: number };
+  images: Record<string, ImageAsset>;
+  rasterPpi: number;
+}
+
+export type ToolId = string;
+export interface Notice { text: string; kind: 'info' | 'error' }
+
+export interface EngineEvents {
+  projects: null; doc: null; selection: null; active: null; viewport: null; tool: null; options: null;
+  history: null; colors: null; render: null; overlay: null; busy: boolean; notice: Notice;
+}
+
+export const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+export const UNIT_PT: Record<Units, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
