@@ -156,10 +156,11 @@ class Writer {
         const st = cur[0].style, { weight, italic } = weightOf(st.style);
         const f = this.paint(st.fill, b), s = st.stroke.type !== 'none' && st.strokeWidth > 0 ? ` stroke="${this.paint(st.stroke, b).v}" stroke-width="${num(st.strokeWidth)}"` : '';
         const deco = [st.underline ? 'underline' : '', st.strike ? 'line-through' : ''].filter(Boolean).join(' ');
-        parts.push(`<tspan x="${cur.map((g) => num(g.x)).join(' ')}" y="${num(cur[0].y)}" font-family="${esc(st.font)}" font-size="${num(cur[0].size)}"${weight !== 400 ? ` font-weight="${weight}"` : ''}${italic ? ' font-style="italic"' : ''} fill="${f.v}"${s}${deco ? ` text-decoration="${deco}"` : ''}>${esc(cur.map((g) => g.ch).join(''))}</tspan>`);
+        const feats = st.features.filter((t) => /^[a-z0-9]{4}$/.test(t)), ff = feats.length ? ` style="font-feature-settings:${feats.map((t) => `'${t}'`).join(',')}"` : '';
+        parts.push(`<tspan x="${cur.map((g) => num(g.x)).join(' ')}" y="${num(cur[0].y)}" font-family="${esc(st.font)}" font-size="${num(cur[0].size)}"${weight !== 400 ? ` font-weight="${weight}"` : ''}${italic ? ' font-style="italic"' : ''} fill="${f.v}"${s}${deco ? ` text-decoration="${deco}"` : ''}${ff}>${esc(cur.map((g) => g.ch).join(''))}</tspan>`);
         cur = [];
       };
-      for (const g of gs) { if (cur.length && cur[0].style !== g.style) flush(); cur.push(g); }
+      for (const g of gs) { if (cur.length && (cur[0].style !== g.style || g.style.features.length)) flush(); cur.push(g); }
       flush();
       return parts.join('');
     };

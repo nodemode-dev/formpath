@@ -1,5 +1,5 @@
 import { allNodes } from '../../engine/doc';
-import { styleAt } from '../../engine/text';
+import { DEFAULT_CHAR, fontHasFeature, styleAt } from '../../engine/text';
 import type { CharStyle, Engine, ParaStyle, TextNode } from '../../engine';
 import { el, patchList, setClass, setText } from '../dom';
 import { askForm } from '../form-dialog';
@@ -9,6 +9,13 @@ import { typeDefaults } from '../../tools/type';
 import { check, numField, row, section, seg, selectCtl } from './kit';
 
 function texts(e: Engine): TextNode[] { return e.selected().filter((n): n is TextNode => n.kind === 'text'); }
+
+const OT_TOGGLES: ReadonlyArray<readonly [string, string]> = [['liga', 'Ligatures'], ['dlig', 'Discretionary'], ['swsh', 'Swash'], ['salt', 'Alternates'], ['titl', 'Titling'], ['ordn', 'Ordinals'], ['frac', 'Fractions'], ['zero', 'Slashed Zero'], ['case', 'Case Forms']];
+const FIGURES: ReadonlyArray<readonly [string, string]> = [['', 'Default Figure'], ['tnum+lnum', 'Tabular Lining'], ['pnum+onum', 'Proportional Oldstyle'], ['pnum+lnum', 'Proportional Lining'], ['tnum+onum', 'Tabular Oldstyle']];
+const FIG_TAGS = new Set(['tnum', 'pnum', 'lnum', 'onum']);
+const OT_POS: ReadonlyArray<readonly [string, string]> = [['', 'Default Position'], ['sups', 'Superior'], ['subs', 'Inferior'], ['numr', 'Numerator'], ['dnom', 'Denominator']];
+const POS_TAGS = new Set(['sups', 'subs', 'numr', 'dnom']);
+const SETS: ReadonlyArray<readonly [string, string]> = [['', 'None'], ...Array.from({ length: 20 }, (_, i) => [`ss${String(i + 1).padStart(2, '0')}`, `Set ${i + 1}`] as const)];
 
 function currentStyle(e: Engine): CharStyle | null {
   const ed = typing.editor, n = ed?.node();
@@ -41,9 +48,18 @@ export class CharacterPanel {
   private readonly position;
   private readonly underline;
   private readonly strike;
+  private readonly ot;
+  private readonly figures;
+  private readonly otPos;
+  private readonly sset;
 
   constructor(private readonly engine: Engine) {
     const set = (p: Partial<CharStyle>): void => setChar(engine, p);
+    const swap = (drop: (f: string) => boolean, add: string[]): void => set({ features: [...(currentStyle(engine)?.features ?? []).filter((f) => !drop(f)), ...add] });
+    this.ot = OT_TOGGLES.map(([tag, label]) => ({ tag, ctl: check(label, (on) => swap((f) => f === tag, on ? [tag] : [])) }));
+    this.figures = selectCtl('Figures', FIGURES, (v) => swap((f) => FIG_TAGS.has(f), v ? v.split('+') : []));
+    this.otPos = selectCtl('Position', OT_POS, (v) => swap((f) => POS_TAGS.has(f), v ? [v] : []));
+    this.sset = selectCtl('Stylistic Set', SETS, (v) => swap((f) => /^ss\d\d$/.test(f), v ? [v] : []));
     this.font = selectCtl('', [], (v) => set({ font: v, style: stylesOf(v).includes(currentStyle(engine)?.style ?? 'Regular') ? currentStyle(engine)?.style ?? 'Regular' : stylesOf(v)[0] ?? 'Regular' }));
     this.style = selectCtl('', [], (v) => set({ style: v }));
     this.size = numField('Size', 'pt', (v) => set({ size: v }), { min: 0.1, max: 1296 });
@@ -57,7 +73,8 @@ export class CharacterPanel {
     this.position = seg([{ id: 'normal', label: 'Normal' }, { id: 'super', label: 'Superscript' }, { id: 'sub', label: 'Subscript' }], (id) => set({ position: id as CharStyle['position'] }));
     this.underline = check('Underline', (v) => set({ underline: v }));
     this.strike = check('Strikethrough', (v) => set({ strike: v }));
-    this.body.append(this.font.el, this.style.el, row(this.size.el, this.leading.el), row(this.kerning.el, this.tracking.el), row(this.hscale.el, this.vscale.el), this.baseline.el, section('Case'), this.caps.el, section('Position'), this.position.el, row(this.underline.el, this.strike.el));
+    this.body.append(this.font.el, this.style.el, row(this.size.el, this.leading.el), row(this.kerning.el, this.tracking.el), row(this.hscale.el, this.vscale.el), this.baseline.el, section('Case'), this.caps.el, section('Position'), this.position.el, row(this.underline.el, this.strike.el), section('OpenType'), this.figures.el, this.otPos.el, this.sset.el);
+    for (let i = 0; i < this.ot.length; i += 2) this.body.append(row(...this.ot.slice(i, i + 2).map((o) => o.ctl.el)));
     for (const k of ['selection', 'doc', 'active', 'options'] as const) engine.on(k, () => this.queue());
     this.sync();
   }
@@ -81,6 +98,15 @@ export class CharacterPanel {
     this.position.set(st?.position ?? 'normal');
     this.underline.set(!!st?.underline);
     this.strike.set(!!st?.strike);
+    const f = new Set(st?.features ?? []), probe: CharStyle = st ?? { ...DEFAULT_CHAR, font: fam, style: typeDefaults.style };
+    const has = (t: string): boolean => f.has(t) || fontHasFeature(probe, t);
+    for (const o of this.ot) { o.ctl.set(f.has(o.tag)); o.ctl.enable(has(o.tag)); }
+    this.figures.set(FIGURES.find(([v]) => v && v.split('+').every((t) => f.has(t)))?.[0] ?? '');
+    this.figures.enable([...FIG_TAGS].some(has));
+    this.otPos.set([...POS_TAGS].find((t) => f.has(t)) ?? '');
+    this.otPos.enable([...POS_TAGS].some(has));
+    this.sset.set([...f].find((t) => /^ss\d\d$/.test(t)) ?? '');
+    this.sset.enable(SETS.some(([t]) => !!t && has(t)));
   }
 }
 

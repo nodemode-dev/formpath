@@ -1,6 +1,6 @@
-import { apply, emptyRect, pathLength, pointAtLength, transformRect, unionRect } from './geometry';
+import { apply, emptyRect, pathLength, pointAtLength, toPath2D, transformRect, unionRect } from './geometry';
 import { BLACK, NONE, solid } from './paint';
-import type { CharStyle, Mat, ParaStyle, Pt, Rect, Span, TextNode } from './types';
+import type { CharStyle, Mat, ParaStyle, PathData, Pt, Rect, Span, TextNode } from './types';
 
 export const DEFAULT_CHAR: CharStyle = {
   font: 'Inter', style: 'Regular', size: 12, leading: null, tracking: 0, kerning: 'auto', baseline: 0, hscale: 100, vscale: 100,
@@ -8,7 +8,7 @@ export const DEFAULT_CHAR: CharStyle = {
 };
 export const DEFAULT_PARA: ParaStyle = { align: 'left', indentLeft: 0, indentRight: 0, indentFirst: 0, spaceBefore: 0, spaceAfter: 0, hyphenate: false };
 
-export interface Glyph { ch: string; x: number; y: number; w: number; size: number; style: CharStyle; index: number; angle: number }
+export interface Glyph { ch: string; x: number; y: number; w: number; size: number; style: CharStyle; index: number; angle: number; gid?: number }
 export interface Line { y: number; x: number; width: number; ascent: number; descent: number; glyphs: Glyph[]; start: number; end: number }
 export interface TextLayout { lines: Line[]; glyphs: Glyph[]; bounds: Rect; overflow: number; text: string }
 
@@ -62,13 +62,46 @@ function metrics(st: CharStyle, size: number): { ascent: number; descent: number
 
 export function plainText(n: TextNode): string { return n.spans.map((s) => s.text).join(''); }
 
-interface Item { ch: string; st: CharStyle; index: number }
+export interface ShapedGlyph { gid: number; chars: number; adv: number }
+export interface Shaping {
+  shape(st: CharStyle, text: string, features: string[]): ShapedGlyph[] | null;
+  outline(st: CharStyle, gid: number): PathData | null;
+  has(st: CharStyle, feature: string): boolean;
+}
+let shaping: Shaping | null = null;
+export function setShaping(s: Shaping | null): void { shaping = s; fontsChanged(); }
+export function glyphOutline(st: CharStyle, gid: number): PathData | null { return shaping?.outline(st, gid) ?? null; }
+export function fontHasFeature(st: CharStyle, feature: string): boolean { return !!shaping?.has(st, feature); }
+
+interface Item { ch: string; st: CharStyle; index: number; gid?: number; adv?: number }
+const smallCaps = new WeakMap<CharStyle, CharStyle>();
+function smallOf(st: CharStyle): CharStyle {
+  let s = smallCaps.get(st);
+  if (!s) { s = { ...st, size: st.size * 0.72, caps: 'none', leading: st.leading ?? st.size * 1.2 }; smallCaps.set(st, s); }
+  return s;
+}
 function items(spans: Span[]): Item[] {
   const out: Item[] = [];
   let i = 0;
   for (const sp of spans) {
-    const text = sp.style.caps === 'all' ? sp.text.toUpperCase() : sp.text;
-    for (const ch of text) { out.push({ ch, st: sp.style, index: i }); i += ch.length; }
+    const st = sp.style, text = st.caps === 'all' ? sp.text.toUpperCase() : sp.text;
+    const smcp = st.caps === 'small' && fontHasFeature(st, 'smcp');
+    const feats = smcp ? [...st.features, 'smcp'] : st.features;
+    for (const piece of text.split(/(\r\n|\r|\n)/)) {
+      if (!piece) continue;
+      if (piece === '\n' || piece === '\r' || piece === '\r\n') { out.push({ ch: '\n', st, index: i }); i += piece.length; continue; }
+      const shaped = feats.length && shaping ? shaping.shape(st, piece, feats) : null;
+      if (shaped) {
+        let k = 0;
+        for (const g of shaped) { const ch = piece.slice(k, k + g.chars); out.push({ ch, st, index: i, gid: g.gid, adv: g.adv }); i += ch.length; k += g.chars; }
+        continue;
+      }
+      for (const ch of piece) {
+        if (st.caps === 'small' && ch !== ch.toUpperCase()) out.push({ ch: ch.toUpperCase(), st: smallOf(st), index: i });
+        else out.push({ ch, st, index: i });
+        i += ch.length;
+      }
+    }
   }
   return out;
 }
@@ -77,7 +110,9 @@ function effSize(st: CharStyle): number { return st.position === 'normal' ? st.s
 function effShift(st: CharStyle): number { return st.baseline + (st.position === 'super' ? -st.size * 0.333 : st.position === 'sub' ? st.size * 0.15 : 0); }
 
 function advance(it: Item, next: Item | undefined): number {
-  const size = effSize(it.st), font = cssFont(it.st, size);
+  const size = effSize(it.st);
+  if (it.adv !== undefined) return it.adv * size * (it.st.hscale / 100) + (it.st.tracking / 1000) * it.st.size;
+  const font = cssFont(it.st, size);
   let w = charWidth(font, it.ch) * (it.st.hscale / 100);
   if (next && next.st === it.st && it.st.kerning !== 'none') w += pairKern(font, it.ch, next.ch) * (it.st.hscale / 100);
   return w + (it.st.tracking / 1000) * it.st.size;
@@ -209,7 +244,7 @@ function layoutLines(n: TextNode): TextLayout {
         const glyphs: Glyph[] = [];
         let x = x0;
         visible.forEach((it, k) => {
-          glyphs.push({ ch: it.ch, x, y: lineY + effShift(it.st), w: widths[k], size: effSize(it.st), style: it.st, index: it.index, angle: 0 });
+          glyphs.push({ ch: it.ch, x, y: lineY + effShift(it.st), w: widths[k], size: effSize(it.st), style: it.st, index: it.index, angle: 0, gid: it.gid });
           x += widths[k] + (it.ch === ' ' ? extraSpace : 0);
         });
         const start = li.length ? li[0].index : pIndex, stop = li.length ? li[li.length - 1].index + li[li.length - 1].ch.length : pIndex;
@@ -249,7 +284,7 @@ function layoutOnPath(n: TextNode): TextLayout {
     const at = pointAtLength(sp, mid), ang = Math.atan2(at.tangent.y, at.tangent.x), shift = effShift(it.st) + (n.pathFlip ? 0 : 0);
     const nx = -at.tangent.y, ny = at.tangent.x;
     const cx = at.p.x - at.tangent.x * (widths[k] / 2) + nx * shift, cy = at.p.y - at.tangent.y * (widths[k] / 2) + ny * shift;
-    glyphs.push({ ch: it.ch, x: cx, y: cy, w: widths[k], size: effSize(it.st), style: it.st, index: it.index, angle: n.pathEffect === 'skew' ? 0 : ang });
+    glyphs.push({ ch: it.ch, x: cx, y: cy, w: widths[k], size: effSize(it.st), style: it.st, index: it.index, angle: n.pathEffect === 'skew' ? 0 : ang, gid: it.gid });
     const sz = effSize(it.st);
     b = unionRect(b, { x: Math.min(cx, at.p.x) - sz, y: Math.min(cy, at.p.y) - sz, w: widths[k] + sz * 2, h: sz * 2 });
     s += widths[k];
@@ -264,6 +299,7 @@ export function textBounds(n: TextNode): Rect {
   return transformRect(l.bounds, n.xf);
 }
 
+const glyphPaths = new WeakMap<PathData, Path2D>();
 export function drawText(ctx: CanvasRenderingContext2D, n: TextNode, paintStyle: (p: CharStyle['fill'], b: Rect) => string | CanvasGradient | CanvasPattern | null, extraFills: Array<string | CanvasGradient | CanvasPattern>): void {
   const lay = layoutText(n);
   ctx.save();
@@ -281,11 +317,24 @@ export function drawText(ctx: CanvasRenderingContext2D, n: TextNode, paintStyle:
     if (st.hscale !== 100 || st.vscale !== 100) ctx.scale(st.hscale / 100, st.vscale / 100);
     ctx.font = cssFont(st, g.size);
     const fillStyle = paintStyle(st.fill, b);
-    if (fillStyle) { ctx.fillStyle = fillStyle; ctx.fillText(g.ch, 0, 0); }
-    for (const f of extraFills) { ctx.fillStyle = f; ctx.fillText(g.ch, 0, 0); }
-    if (st.stroke.type !== 'none' && st.strokeWidth > 0) {
-      const ss = paintStyle(st.stroke, b);
-      if (ss) { ctx.strokeStyle = ss; ctx.lineWidth = st.strokeWidth; ctx.lineJoin = 'round'; ctx.strokeText(g.ch, 0, 0); }
+    const shape = g.gid !== undefined ? glyphOutline(st, g.gid) : null;
+    if (shape) {
+      let p2 = glyphPaths.get(shape);
+      if (!p2) { p2 = toPath2D(shape); glyphPaths.set(shape, p2); }
+      ctx.save();
+      ctx.scale(g.size, g.size);
+      if (fillStyle) { ctx.fillStyle = fillStyle; ctx.fill(p2); }
+      for (const f of extraFills) { ctx.fillStyle = f; ctx.fill(p2); }
+      const ss = st.stroke.type !== 'none' && st.strokeWidth > 0 ? paintStyle(st.stroke, b) : null;
+      if (ss) { ctx.strokeStyle = ss; ctx.lineWidth = st.strokeWidth / Math.max(1e-6, g.size); ctx.lineJoin = 'round'; ctx.stroke(p2); }
+      ctx.restore();
+    } else {
+      if (fillStyle) { ctx.fillStyle = fillStyle; ctx.fillText(g.ch, 0, 0); }
+      for (const f of extraFills) { ctx.fillStyle = f; ctx.fillText(g.ch, 0, 0); }
+      if (st.stroke.type !== 'none' && st.strokeWidth > 0) {
+        const ss = paintStyle(st.stroke, b);
+        if (ss) { ctx.strokeStyle = ss; ctx.lineWidth = st.strokeWidth; ctx.lineJoin = 'round'; ctx.strokeText(g.ch, 0, 0); }
+      }
     }
     if (st.underline || st.strike) {
       ctx.fillStyle = fillStyle ?? '#000';

@@ -10,7 +10,7 @@ import { hex, parseColor, solid, defaultGradient, NONE } from './engine/paint';
 import { fontsChanged, plainText } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
-import { ensureFace, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
+import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
 import { exportPdf, readPdfNative } from './io/pdf';
 import { docFromManifest, serialize } from './io/project-io';
 import { canvasBlob, exportForScreens, exportRaster, renderRegion } from './io/raster';
@@ -1094,6 +1094,7 @@ export function startApp(): void {
   window.addEventListener('beforeunload', (e) => { if (!engine.projects.some((p) => p.modified)) return; e.preventDefault(); e.returnValue = ''; });
 
   onFontsLoaded(() => { fontsChanged(); engine.reflowAll(); engine.emit('options', null); });
+  installShaping();
   void ensureFace(typeDefaults.font, typeDefaults.style);
   status.setEngine('Engine: checking');
   void api.capabilities().then((c) => {
