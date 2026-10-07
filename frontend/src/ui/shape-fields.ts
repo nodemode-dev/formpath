@@ -20,7 +20,7 @@ export class ShapeFields {
     const radii = (i: number) => (v: number): LivePatch => { const n = this.node(); const p = n?.live ? liveParams(n.live) : null; const r: [number, number, number, number] = p ? [Number(p.r0), Number(p.r1), Number(p.r2), Number(p.r3)] : [0, 0, 0, 0]; r[i] = v; return { radii: r }; };
     this.corner = selectCtl('Corners', [['round', 'Round'], ['inverted', 'Inverted Round'], ['chamfer', 'Chamfer']], (v) => send({ corner: v as 'round' }));
     const rect = el('<div class="cv-shapef-group"></div>');
-    rect.append(row(len('w', 'W', (v) => ({ w: v }), { min: 0.01 }).el, len('h', 'H', (v) => ({ h: v }), { min: 0.01 }).el), row(this.corner.el, len('all', 'Radius', (v) => ({ radius: v }), { title: 'Every corner radius' }).el));
+    rect.append(row(len('w', 'W', (v) => ({ w: v }), { min: 0.01 }).el, len('h', 'H', (v) => ({ h: v }), { min: 0.01 }).el), this.corner.el, row(len('all', 'Radius', (v) => ({ radius: v }), { title: 'Every corner radius' }).el));
     const grid = el('<div class="cv-props-grid cv-shapef-radii"></div>');
     grid.append(len('r0', '', radii(0), { title: 'Top-left corner radius' }).el, len('r1', '', radii(1), { title: 'Top-right corner radius' }).el, len('r3', '', radii(3), { title: 'Bottom-left corner radius' }).el, len('r2', '', radii(2), { title: 'Bottom-right corner radius' }).el);
     for (const [key, label] of [['r0', 'TL'], ['r1', 'TR'], ['r3', 'BL'], ['r2', 'BR']] as const) setText(q(this.f[key].el, '.cv-pf-label'), label);
