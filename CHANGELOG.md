@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.14.0 · 2026-10-07
+
+The Effect Gallery.
+
+### Added
+
+- 55 Photoshop effects as live raster effects: Artistic (Colored Pencil, Cutout, Dry Brush, Film Grain, Fresco, Neon Glow, Paint Daubs, Palette Knife, Plastic Wrap, Poster Edges, Rough Pastels, Smudge Stick, Sponge, Underpainting, Watercolor), Blur (Radial Blur, Smart Blur, beside Gaussian Blur), Brush Strokes (Accented Edges, Angled Strokes, Crosshatch, Dark Strokes, Ink Outlines, Spatter, Sprayed Strokes, Sumi-e), Distort (Diffuse Glow, Glass, Ocean Ripple), Pixelate (Color Halftone, Crystallize, Mezzotint, Pointillize), Sketch (Bas Relief, Chalk & Charcoal, Charcoal, Chrome, Conté Crayon, Graphic Pen, Halftone Pattern, Note Paper, Photocopy, Plaster, Reticulation, Stamp, Torn Edges, Water Paper), Stylize (Glowing Edges), Texture (Craquelure, Grain, Mosaic Tiles, Patchwork, Stained Glass, Texturizer) and Video (De-Interlace, NTSC Colors). They stay editable in the Appearance panel and keep their look at any zoom.
+- Effect > Effect Gallery: every effect as a thumbnail of the selection, a large preview, and the chosen effect's options. The Effect menu now lists Illustrator effects above and Photoshop effects below.
+- Effect > Rasterize as a live effect (resolution, white or transparent background, Add Around Object), and Effect > Document Raster Effects Settings.
+- `apply_effect` lists and applies the new effects (`gallery.*`, `blur.radial`, `blur.smart`, `rasterize.raster`).
+
+### Changed
+
+- SVG export writes objects with these effects as images at the document's raster resolution; PDF export already rasterised raster effects there.
+- A layer with one of these effects is rendered once per zoom and reused while panning.
+
 ## 0.13.0 · 2026-10-07
 
 Reading other people's files, and the last partial rows.
