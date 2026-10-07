@@ -15,11 +15,12 @@ import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, toRgb, WHITE, withFirstFill, withFirstStroke } from './paint';
+import { artChildren, sessionGeometry, type PatternGeometry, type PatternSession } from './pattern';
 import { Project } from './project';
 import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
+import type { Appearance, Artboard, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
 import { Viewport } from './viewport';
 
 export * from './types';
@@ -151,6 +152,7 @@ export class Engine extends Emitter<EngineEvents> {
     for (const id of [...p.anchors.keys()]) if (!findNode(p.doc, id) || !keepAnchors) p.anchors.delete(id);
     if (!findNode(p.doc, p.activeLayer) || layerOf(p.doc, p.activeLayer)?.id !== p.activeLayer) p.activeLayer = p.doc.layers[p.doc.layers.length - 1]?.id ?? '';
     if (p.isolation && !findNode(p.doc, p.isolation)) p.isolation = null;
+    if (p.patternEdit && !findNode(p.doc, p.patternEdit.group)) { p.patternEdit = null; if (p.isolation) p.isolation = null; }
   }
 
   beginGesture(): void { if (this.gestureDepth++ === 0) this.gestureEdits = 0; }
@@ -634,6 +636,7 @@ export class Engine extends Emitter<EngineEvents> {
   }
   isolate(id: string | null): void {
     const p = this.current; if (!p) return;
+    if (p.patternEdit) { if (id === null) this.exitPatternEdit(true); return; }
     const n = id ? findNode(p.doc, id) : null;
     p.isolation = n && (isContainer(n) && n.kind !== 'layer' && n.kind !== 'compound') ? id : null;
     p.selection.clear();
@@ -985,6 +988,72 @@ export class Engine extends Emitter<EngineEvents> {
     const id = newId('pt');
     this.edit('Make Pattern', (d) => ({ ...d, patterns: [...d.patterns, { id, name, tile: b, art, type, hs, vs }], swatches: [...d.swatches, { id: newId('s'), name, paint: { type: 'pattern', pattern: id, xf: [1, 0, 0, 1, 0, 0] }, global: false, spot: false }] }));
     return id;
+  }
+
+  get patternSession(): PatternSession | null { return this.current?.patternEdit ?? null; }
+  patternGeometry(): PatternGeometry | null {
+    const p = this.current, s = p?.patternEdit, g = s && p ? findNode(p.doc, s.group) : null;
+    if (!p || !s || !g) return null;
+    const b = selectionBounds(p.doc, [g]);
+    return isEmptyRect(b) ? null : sessionGeometry(s, b);
+  }
+  enterPatternEdit(patternId?: string | null, ids?: string[]): boolean {
+    const p = this.current; if (!p) return false;
+    if (p.patternEdit) this.exitPatternEdit(true);
+    const def = patternId ? p.doc.patterns.find((x) => x.id === patternId || x.name === patternId) ?? null : null;
+    if (patternId && !def) { this.notice(`No pattern named ${patternId}.`); return false; }
+    const kids = def ? artChildren(def.art).map((n) => cloneNode(n)) : this.targetIds(ids).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && n.kind !== 'layer').map((n) => cloneNode(n));
+    if (!kids.length) { this.notice('Select the artwork for the pattern first.'); return false; }
+    const g: VNode = { id: newId('g'), kind: 'group', name: 'Pattern Tile', clip: false, children: kids, opacity: 1, blend: 'normal', ap: emptyAppearance() };
+    const mark = p.history.mark(), before = [...p.selection];
+    const ok = this.edit(def ? 'Edit Pattern' : 'Make Pattern', (d) => { const at = this.insertionPoint(d, p, { layer: p.activeLayer }); return { doc: insertInto(d, at.parent, at.index, [g]), select: [] }; });
+    if (!ok) return false;
+    const b = selectionBounds(p.doc, [g]), fit = !def || (Math.abs(def.tile.w - b.w) < 0.01 && Math.abs(def.tile.h - b.h) < 0.01);
+    p.patternEdit = {
+      pattern: def?.id ?? null, group: g.id, name: def?.name ?? `New Pattern ${p.doc.patterns.length + 1}`, type: def?.type ?? 'grid',
+      hs: fit ? def?.hs ?? 0 : 0, vs: fit ? def?.vs ?? 0 : 0, brick: def?.brick ?? 0.5, overlap: def?.overlap ?? ['left', 'top'],
+      fit, w: def?.tile.w ?? b.w, h: def?.tile.h ?? b.h, copies: 3, dim: 0.7, edge: true, mark, before,
+    };
+    p.isolation = g.id;
+    this.emit('selection', null); this.emit('render', null); this.emit('overlay', null); this.emit('options', null);
+    return true;
+  }
+  setPatternSession(patch: Partial<Omit<PatternSession, 'pattern' | 'group' | 'mark' | 'before'>>): void {
+    const p = this.current; if (!p?.patternEdit) return;
+    p.patternEdit = { ...p.patternEdit, ...patch };
+    this.emit('render', null); this.emit('overlay', null); this.emit('options', null);
+  }
+  exitPatternEdit(save: boolean, copy = false): string | null {
+    const p = this.current, s = p?.patternEdit;
+    if (!p || !s) return null;
+    const g = findNode(p.doc, s.group), geo = this.patternGeometry();
+    p.patternEdit = null;
+    p.isolation = null;
+    if (!save || !g || !geo || g.kind !== 'group' || !g.children.length) {
+      const st = p.history.rewind(s.mark);
+      if (st) this.restore(p, st.doc, s.before); else this.refresh();
+      this.emit('history', null);
+      return null;
+    }
+    const id = s.pattern && !copy ? s.pattern : newId('pt'), name = copy && s.pattern ? `${s.name} copy` : s.name;
+    const def: PatternDef = { id, name, art: { ...cloneNode(g), name: undefined }, tile: geo.tile, type: geo.type, hs: geo.hs, vs: geo.vs, brick: s.brick, overlap: s.overlap };
+    this.edit(s.pattern && !copy ? 'Edit Pattern' : 'Make Pattern', (d) => {
+      const out = removeNodes(d, [s.group]), exists = out.patterns.some((x) => x.id === id);
+      const patterns = exists ? out.patterns.map((x) => (x.id === id ? def : x)) : [...out.patterns, def];
+      const swatches = exists ? out.swatches.map((w) => (w.paint.type === 'pattern' && w.paint.pattern === id ? { ...w, name } : w)) : [...out.swatches, { id: newId('s'), name, paint: { type: 'pattern' as const, pattern: id, xf: [1, 0, 0, 1, 0, 0] as Mat }, global: false, spot: false }];
+      return { doc: { ...out, patterns, swatches }, select: s.before };
+    });
+    if (p.history.squash(s.mark)) this.emit('history', null);
+    return id;
+  }
+  setPatternOptions(id: string, o: { name?: string; type?: PatternDef['type']; hs?: number; vs?: number; brick?: number; overlap?: PatternDef['overlap']; width?: number; height?: number }): boolean {
+    const def = this.doc?.patterns.find((x) => x.id === id || x.name === id);
+    if (!def) { this.notice(`No pattern named ${id}.`); return false; }
+    const b = this.doc ? selectionBounds(this.doc, [def.art]) : def.tile, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    const w = o.width && o.width > 0 ? o.width : def.tile.w, h = o.height && o.height > 0 ? o.height : def.tile.h;
+    const tile = o.width || o.height ? { x: cx - w / 2, y: cy - h / 2, w, h } : def.tile;
+    const next: PatternDef = { ...def, name: o.name ?? def.name, type: o.type ?? def.type, hs: o.hs ?? def.hs, vs: o.vs ?? def.vs, brick: o.brick ?? def.brick, overlap: o.overlap ?? def.overlap, tile };
+    return this.edit('Pattern Options', (d) => ({ ...d, patterns: d.patterns.map((x) => (x.id === def.id ? next : x)), swatches: o.name ? d.swatches.map((sw) => (sw.paint.type === 'pattern' && sw.paint.pattern === def.id ? { ...sw, name: o.name as string } : sw)) : d.swatches }));
   }
 
   newBrush(name: string, kind: BrushKind['type'], o: Record<string, number | string | boolean> = {}, colorize: BrushDef['colorize'] = 'none', ids?: string[]): string {

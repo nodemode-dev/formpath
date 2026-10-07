@@ -4,6 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline,
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { meshQuads } from '../engine/mesh';
+import { latticeCopies, patternLattice } from '../engine/pattern';
 import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
 import { clipGeometry, docArtBounds, gradientGeom } from '../engine/render';
@@ -41,8 +42,10 @@ class Writer {
     if (p.type === 'gradient') return { v: `url(#${this.gradient(p.gradient, b)})`, op: 1 };
     const def = this.doc.patterns.find((x) => x.id === p.pattern);
     if (!def) return { v: 'none', op: 1 };
-    const id = this.id('pat');
-    this.defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" x="${num(def.tile.x)}" y="${num(def.tile.y)}" width="${num(def.tile.w)}" height="${num(def.tile.h)}"${p.xf ? ` patternTransform="${mat(p.xf, this.o.precision)}"` : ''}>${this.node(def.art)}</pattern>`);
+    const id = this.id('pat'), art = this.id('patart'), l = patternLattice(def);
+    this.defs.push(`<g id="${art}">${this.node(def.art)}</g>`);
+    const copies = latticeCopies(def, 1).map((o) => `<use href="#${art}" transform="translate(${num(o.x - def.tile.x)} ${num(o.y - def.tile.y)})"/>`).join('');
+    this.defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" x="${num(def.tile.x)}" y="${num(def.tile.y)}" width="${num(l.w)}" height="${num(l.h)}"${p.xf ? ` patternTransform="${mat(p.xf, this.o.precision)}"` : ''}>${copies}</pattern>`);
     return { v: `url(#${id})`, op: 1 };
   }
 

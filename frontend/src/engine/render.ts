@@ -5,9 +5,10 @@ import { emptyRect, inflate, isEmptyRect, toPath2D, tracePath, transformRect } f
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
 import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './paint';
+import { latticeCopies, patternLattice } from './pattern';
 import { instanceArt } from './symbolism';
 import { drawText } from './text';
-import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type Paint, type PathData, type Rect, type StrokeItem, type VNode } from './types';
+import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type VNode } from './types';
 
 export interface RenderContext {
   doc: Doc;
@@ -80,22 +81,22 @@ export function paintStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, raw
   return patternStyle(ctx, rc, p.pattern, p.xf, alpha);
 }
 
-const patternTiles = new Map<string, { key: string; canvas: HTMLCanvasElement | OffscreenCanvas; scale: number }>();
+const patternTiles = new Map<string, { key: string; def: PatternDef; canvas: HTMLCanvasElement | OffscreenCanvas; scale: number }>();
 function patternStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, id: string, xf: Mat, alpha: number): Style | null {
   const def = rc.doc.patterns.find((p) => p.id === id);
   if (!def || def.tile.w <= 0 || def.tile.h <= 0) return null;
   const scale = Math.min(8, Math.max(1, rc.scale * (rc.pixelRatio ?? 1)));
   const key = `${def.id}:${scale.toFixed(2)}`;
   let tile = patternTiles.get(def.id);
-  const stamp = `${key}:${JSON.stringify(def).length}`;
-  if (!tile || tile.key !== stamp) {
-    const tw = def.tile.w + def.hs, th = def.tile.h + def.vs;
-    const w = Math.ceil(tw * scale), h = Math.ceil(th * scale);
+  const stamp = key;
+  if (!tile || tile.key !== stamp || tile.def !== def) {
+    const l = patternLattice(def);
+    const w = Math.ceil(l.w * scale), h = Math.ceil(l.h * scale);
     const { canvas, ctx: t } = canvas2d(Math.min(4096, w), Math.min(4096, h));
     t.scale(scale, scale);
     t.translate(-def.tile.x, -def.tile.y);
-    for (const dx of [-tw, 0, tw]) for (const dy of [-th, 0, th]) { t.save(); t.translate(dx, dy); renderNode(t, def.art, { ...rc, scale }); t.restore(); }
-    tile = { key: stamp, canvas, scale };
+    for (const o of latticeCopies(def, 1)) { t.save(); t.translate(o.x, o.y); renderNode(t, def.art, { ...rc, scale }); t.restore(); }
+    tile = { key: stamp, def, canvas, scale };
     patternTiles.set(def.id, tile);
   }
   const pat = ctx.createPattern(tile.canvas as CanvasImageSource, 'repeat');

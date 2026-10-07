@@ -42,6 +42,7 @@ frontend/
     │   ├── flow.ts             reflow: text wrap shapes and threaded stories
     │   ├── harmony.ts          colour harmony rules and variations
     │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
+    │   ├── pattern.ts          tile lattices and the pattern editing session
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -107,6 +108,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/text.ts
 - src/engine/flow.ts
 - src/engine/symbolism.ts
+- src/engine/pattern.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
 - src/tools/pen.ts
@@ -138,6 +140,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/navigator.ts
 - src/ui/panels/type.ts
 - src/ui/panels/text-styles.ts
+- src/ui/panels/pattern-options.ts
 - src/ui/panels/preview-edit.ts
 - src/ui/form-dialog.ts
 - src/ui/palette.ts
@@ -355,6 +358,22 @@ Layout is cached per node by identity and never reads the document, so anything 
 - logged: v0.12.0 · 2026-10-07
 
 A stained instance carries `tint` (a colour and an amount) and every reader draws `instanceArt`, the symbol's art with each paint mixed toward the tint by the amount, cached per art object and tint so a set of a hundred stained instances builds a handful of recoloured copies. Mixing the paints instead of compositing a coloured layer over the instance keeps the result identical in the canvas, SVG (one def per distinct tint) and PDF, and Break Link and Expand bake it with `bakedInstance`, which also carries the instance's opacity, blend and effects onto the art so screened and styled instances look the same after breaking. Every operation weights an instance by where its centre sits in the brush, one minus the square of the distance over the radius, so the edge of the brush barely moves anything; with no point (the agent tool) every instance in the set gets full weight. Intensity scales each step. Average pulls a value toward the mean of the instances under the brush, Random perturbs it, User Defined pushes it one way. The Styler copies a graphic style's effects, opacity and blend onto instances because fills and strokes have no geometry of their own on an instance to paint; Alt clears them.
+
+## src/engine/pattern.ts
+
+### src/engine/pattern.ts · lattices
+- refers-to: src/engine/pattern.ts :: patternLattice, latticeCopies, tileOutline; src/engine/render.ts :: patternStyle; src/io/svg.ts :: Writer.paint
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+Every tile type is a rectangular repeat unit holding one or two copies of the art: grid is one copy per tile; brick by row is two rows with the second shifted by the brick offset; brick by column the same on columns; hex by column puts columns three quarters of a tile apart with every other one half a tile down, and hex by row the transpose. Because the unit is a rectangle, the canvas pattern, the SVG `<pattern>` and the pattern editing preview all repeat the same unit. The tile canvas draws the copies of the unit and its eight neighbours so art that spills over the tile edge wraps; the draw order follows the overlap setting, last drawn in front. The canvas tile is cached per pattern object, not per id, so an edited pattern always redraws (the old key, the JSON length, missed edits that kept the length). SVG pattern content is measured from the tile's corner, not the document origin, so the art is placed with the tile's position subtracted; before this the art of any pattern not made at the origin fell outside its own tile and exported empty.
+
+### src/engine/pattern.ts · pattern editing sessions
+- refers-to: src/engine/pattern.ts :: PatternSession, sessionGeometry; src/engine/index.ts :: enterPatternEdit, setPatternSession, exitPatternEdit, setPatternOptions, isolate, pruneSelection; src/engine/history.ts :: rewind
+- kind: rationale
+- logged: v0.12.0 · 2026-10-07
+
+Pattern editing mode is isolation mode on a temporary group named Pattern Tile holding copies of the selection (Make) or of the pattern's art (Edit), so every tool, panel and agent call works on the tile unchanged. The session lives on the project, outside the document, so its preview settings (copies, dim, tile edge) never become history steps; only the art does. Size Tile to Art takes the tile from the art's bounds on every read, so moving or growing the art moves the tile; with it off, the width and height are centred on the art and spacing does not apply. Done removes the group, writes the pattern and its swatch, and squashes every step since entering into one Make Pattern or Edit Pattern step. Cancel rewinds history to the mark taken on entering, dropping those steps, so redo cannot bring the temporary group back. Undoing past the entry removes the group, and `pruneSelection` ends the session when its group is gone. Escape and Exit Isolation Mode mean Done.
 
 ## src/extensions/registry.ts
 
@@ -798,6 +817,15 @@ One panel class serves both style panels. A span links to its character style th
 - logged: v0.10.0 · 2026-10-07
 
 Lists every family and style the document's type uses with the number of objects using it. Find selects those objects; Change All replaces the family and style in every run that uses it in one undo step and starts loading the new face. The replacement lists come from the same `families` and `stylesOf` as the Character panel, so installed fonts appear once the engine has listed them.
+
+## src/ui/panels/pattern-options.ts
+
+### src/ui/panels/pattern-options.ts · Pattern Options
+- refers-to: src/ui/panels/pattern-options.ts :: PatternOptionsPanel; src/ui/stage.ts :: renderScene; src/app.ts :: syncChrome, make-pattern, edit-pattern, pattern-done, pattern-copy, pattern-cancel
+- kind: explainer
+- logged: v0.12.0 · 2026-10-07
+
+Both states of the panel (the hint with Make Pattern, and the options form) are built once and swapped with `hidden`; every field writes the engine's session, which emits `render` and `options`, and the panel reads back on the next frame. Width and height show the tile the engine will save, so with Size Tile to Art on they follow the art as it is edited, and typing a size turns fitting off. The stage draws the copies at the dim opacity under the tile and the dashed tile outline in screen pixels, from the same lattice the pattern fill uses. The isolation bar swaps its exit button for Done, Save a Copy and Cancel while a session is open.
 
 ## src/ui/panels/preview-edit.ts
 

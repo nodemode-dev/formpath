@@ -1,4 +1,5 @@
 import { History } from './history';
+import type { PatternSession } from './pattern';
 import type { Doc } from './types';
 import { Viewport } from './viewport';
 
@@ -12,6 +13,7 @@ export class Project {
   anchors = new Map<string, Set<number>>();
   activeLayer: string;
   isolation: string | null = null;
+  patternEdit: PatternSession | null = null;
   activeArtboard = 0;
   readonly history: History;
   readonly viewport = new Viewport();

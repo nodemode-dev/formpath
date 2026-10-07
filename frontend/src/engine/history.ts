@@ -49,6 +49,14 @@ export class History {
     return true;
   }
 
+  rewind(to: number): HistoryState | null {
+    if (to < 0 || to >= this.states.length || to > this.at) return null;
+    this.states = this.states.slice(0, to + 1);
+    this.at = to;
+    this.rev += 1;
+    return this.current;
+  }
+
   undo(): HistoryState | null { if (!this.canUndo) return null; this.at -= 1; this.rev += 1; return this.current; }
   redo(): HistoryState | null { if (!this.canRedo) return null; this.at += 1; this.rev += 1; return this.current; }
   jump(i: number): HistoryState | null { if (i < 0 || i >= this.states.length || i === this.at) return null; this.at = i; this.rev += 1; return this.current; }

@@ -169,7 +169,7 @@ export type BrushKind =
   | { type: 'art'; art: VNode; stretch: boolean; flip: boolean; width: number }
   | { type: 'pattern'; art: VNode; spacing: number; fit: 'stretch' | 'space' | 'approximate' };
 export interface BrushDef { id: string; name: string; brush: BrushKind; colorize: 'none' | 'tints' | 'tints_shades' | 'hue_shift' }
-export interface PatternDef { id: string; name: string; tile: Rect; art: VNode; type: 'grid' | 'brick_row' | 'brick_col' | 'hex_col' | 'hex_row'; hs: number; vs: number }
+export interface PatternDef { id: string; name: string; tile: Rect; art: VNode; type: 'grid' | 'brick_row' | 'brick_col' | 'hex_col' | 'hex_row'; hs: number; vs: number; brick?: number; overlap?: ['left' | 'right', 'top' | 'bottom'] }
 export interface Guide { id: string; vertical: boolean; pos: number }
 export interface ImageAsset { mime: string; w: number; h: number }
 export type Units = 'pt' | 'px' | 'mm' | 'cm' | 'in' | 'pc';
