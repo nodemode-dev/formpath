@@ -32,7 +32,7 @@ GROUPS = [
     ("Objects and layers", {"set_object", "arrange", "group", "compound_path", "clipping_mask", "delete_objects", "duplicate_objects", "add_layer", "set_layer", "delete_layer", "move_to_layer"}),
     ("Transform and align", {"transform", "align"}),
     ("Path operations", {"pathfinder", "path_operation", "shape_builder"}),
-    ("Effects and live objects", {"apply_effect", "expand", "make_blend", "envelope", "repeat", "symbol", "symbolism", "apply_brush", "image_trace", "live_paint", "gradient_mesh", "make_pattern", "edit_pattern", "recolor"}),
+    ("Effects and live objects", {"apply_effect", "three_d", "expand", "make_blend", "envelope", "repeat", "symbol", "symbolism", "apply_brush", "image_trace", "live_paint", "gradient_mesh", "make_pattern", "edit_pattern", "recolor"}),
     ("Artboards", {"artboard"}),
     ("Type", {"set_text", "text_flow", "text_style", "find_font", "create_outlines"}),
     ("Commands", {"list_commands", "run_command"}),

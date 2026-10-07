@@ -1,6 +1,7 @@
 import { geomBounds, selectionBounds, visualBounds } from '../engine/bounds';
 import { findNode, nodeLabel, updateNodes } from '../engine/doc';
 import { EFFECTS, effectDef, WIDTH_PROFILES } from '../engine/effects';
+import { ROTATION_PRESETS } from '../engine/threed';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, mapFn, nearestFn, RECOLOR, recolorDoc } from '../engine/ops/recolor';
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
@@ -410,6 +411,23 @@ export class AgentBridge {
           if (!effectDef(id)) return fail(`There is no effect ${id}: call apply_effect with list true.`);
           const ok = e.addEffect(id, (a.params && typeof a.params === 'object' ? a.params : {}) as Record<string, number | string | boolean>, this.ids(a));
           return ok ? text(`Applied ${effectDef(id)?.label}; it stays editable until expanded.`) : fail('Nothing changed.');
+        }
+        case 'three_d': {
+          const ids = this.ids(a);
+          if (a.remove === true) return e.set3d(null, {}, ids) ? text('Removed the 3D effect.') : fail('Nothing had a 3D effect.');
+          const KIND: Record<string, string> = { extrude: '3d.extrude', revolve: '3d.revolve', inflate: '3d.inflate', plane: '3d.rotate' }, kind = has('kind') ? KIND[str('kind')] : null;
+          if (has('kind') && !kind) return fail('kind is extrude, revolve, inflate or plane.');
+          const patch: Record<string, number | string | boolean> = {};
+          for (const k of ['rx', 'ry', 'rz', 'perspective', 'depth', 'bevel_height', 'angle', 'offset', 'volume', 'intensity', 'ambient', 'highlight']) if (has(k)) patch[k] = num(k, 0);
+          for (const k of ['bevel', 'from', 'material', 'light']) if (has(k)) patch[k] = str(k);
+          if (has('cap')) patch.cap = a.cap === true;
+          if (has('shading_color')) { const p = this.paint(a.shading_color, 'shading_color'); if (p.type === 'color') patch.shading_color = hex(p.color); }
+          if (has('position')) { const r = ROTATION_PRESETS[str('position')]; if (!r) return fail(`position is one of ${Object.keys(ROTATION_PRESETS).join(', ')}.`); patch.rx = r[0]; patch.ry = r[1]; patch.rz = r[2]; }
+          const targets = e.targetIds(ids), before = targets.map((id) => e.nodeById(id)).filter((n): n is VNode => !!n && n.ap.effects.some((x) => x.id.startsWith('3d.')));
+          if (!targets.length) return fail('Select objects or pass ids.');
+          if (!kind && !before.length) return fail('Pass kind (extrude, revolve, inflate or plane) to give the objects depth.');
+          const ok = e.set3d(kind, patch, ids), n = e.nodeById(targets[0]), fx = n?.ap.effects.find((x) => x.id.startsWith('3d.'));
+          return ok && fx ? text(`${effectDef(fx.id)?.label ?? '3D'}: ${Object.entries(fx.params).map(([k, v]) => `${k} ${v}`).join(', ')}. get_image shows it; expand makes it plain paths.`) : fail('Nothing changed.');
         }
         case 'expand': { const ok = e.expand(str('what', 'all') as 'all', this.ids(a)); return ok ? text('Expanded to plain objects.', { selection: e.selectedIds() }) : fail('Nothing to expand.'); }
         case 'make_blend': {

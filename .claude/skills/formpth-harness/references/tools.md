@@ -12,7 +12,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `clipping_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`
-- Effects and live objects: `apply_effect`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
+- Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
 - Type: `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
 - Commands: `list_commands`, `run_command`
@@ -467,6 +467,33 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 - `effect`: string
 - `params`: object
 - `list`: boolean; default false
+
+## three_d
+
+3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed, face-on surface: depth, volume) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, wireframe or flat (plane); light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. Leave kind out to change only the parameters you pass; remove true takes 3D off. Type and groups extrude as one object; expand turns the result into plain shaded paths.
+
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `kind`: string (extrude | revolve | inflate | plane)
+- `remove`: boolean
+- `position`: string
+- `rx`: number
+- `ry`: number
+- `rz`: number
+- `perspective`: number
+- `depth`: number
+- `cap`: boolean
+- `bevel`: string (none | classic | rounded)
+- `bevel_height`: number
+- `angle`: number
+- `offset`: number
+- `from`: string (left | right)
+- `volume`: number
+- `material`: string (plastic | matte | metal | wireframe | flat)
+- `light`: string
+- `intensity`: number
+- `ambient`: number
+- `highlight`: number
+- `shading_color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
 
 ## expand
 
