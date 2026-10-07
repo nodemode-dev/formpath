@@ -10,9 +10,9 @@ formpth is measured against Adobe Illustrator the way formvis is measured agains
 
 Platform rows are shown and not scored.
 
-## Score at v0.12.0
+## Score at v0.13.0
 
-**55 of 59 scored rows, 93 percent:** 53 Full, 4 Partial, 2 None. The tally is at the end.
+**57 of 59 scored rows, 97 percent:** 57 Full, 0 Partial, 2 None. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -50,13 +50,13 @@ Platform rows are shown and not scored.
 | Paintbrush and Blob Brush | Full | Paintbrush with the current brush; Blob Brush merging same-fill shapes |
 | Eraser, Scissors and Knife | Full | All three cut real geometry |
 
-## Paths and Pathfinder · 6.5 of 7
+## Paths and Pathfinder · 7 of 7
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Pathfinder | Full | Unite, Minus Front, Intersect, Exclude, Divide, Trim, Merge, Crop, Outline, Minus Back on curves through paper.js |
 | Shape Builder | Full | Drag to merge regions, Alt to delete |
-| Live Paint | Partial | Live Paint groups (Make, Merge, Release, Expand) whose faces re-flow as the paths are edited, the Live Paint Bucket on faces and Shift on edges, Gap Options; an edge is painted as its whole path, not per segment between crossings, and there is no Live Paint Selection tool |
+| Live Paint | Full | Live Paint groups (Make, Merge, Release, Expand) whose faces re-flow as the paths are edited, the Live Paint Bucket on faces and Shift on edges, each edge painted per segment between crossings, the Live Paint Selection tool (faces and edges, Shift to add, fill and stroke from the panels, Delete), Gap Options |
 | Compound paths | Full | Make and Release with non-zero and even-odd |
 | Offset Path and Outline Stroke | Full | With joins and miter limit, as commands and as live effects |
 | Simplify, Average, Join, anchors | Full | Simplify with preview, Smooth, Average, Join, Add and Remove Anchors, Reverse, Divide Objects Below, Split into Grid, Clean Up |
@@ -90,7 +90,7 @@ Platform rows are shown and not scored.
 | 3D and Materials | None | Not built |
 | Effect Gallery raster filters | None | Gaussian Blur only; no Effect Gallery |
 
-## Type · 5.5 of 6
+## Type · 6 of 6
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -98,18 +98,18 @@ Platform rows are shown and not scored.
 | Type on a path | Full | Type on any path, including live shapes, with options |
 | Character and paragraph with styles | Full | Character and Paragraph panels in full; Character Styles and Paragraph Styles panels with new from selection, apply to a range or an object, redefine, delete, rename, override marks and the Normal styles |
 | Threading and text wrap | Full | Threaded Text Create, Release Selection and Remove Threading; in and out ports, overflow marks, thread lines, loaded text from the out port into a click, a drag or a closed path; Text Wrap Make, Release and Options with offset and invert, around any object above the type in its layer |
-| OpenType and glyphs | Partial | Ligatures, discretionary ligatures, swash, stylistic alternates and sets, titling, ordinals, fractions, slashed zero, case forms, four figure styles and four positions, shaped from the font and drawn as its glyphs on the canvas, in outlines and PDF; Find Font; the Glyphs panel inserts any glyph; no contextual alternates and no per-glyph alternates in the Glyphs panel |
+| OpenType and glyphs | Full | Ligatures, contextual alternates, discretionary ligatures, swash, stylistic alternates and sets, titling, ordinals, fractions, slashed zero, case forms, four figure styles and four positions, shaped from the font through its GSUB lookups (contextual and chaining included) and drawn as its glyphs on the canvas, in outlines and PDF; Find Font; the Glyphs panel inserts any glyph and offers the alternates of the selected character |
 | Create Outlines | Full | Glyph outlines through opentype.js, per glyph (shaped glyphs included), as compound paths in their colours |
 
-## Files and output · 6 of 7
+## Files and output · 7 of 7
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Native projects | Full | `.fpth` with the whole document and its images, library with conflict copies, recovery, session restore |
 | SVG in and out | Full | Gradients, patterns, clipping, masks, symbols, type, images; editing data embedded for exact round trips |
-| PDF in and out | Partial | Export with vectors, shadings, transparency, CMYK and outlined type, one page per artboard; import reads only PDFs and `.ai` files saved by formpth |
+| PDF in and out | Full | Export with vectors, shadings, transparency, CMYK and outlined type, one page per artboard; formpth's own PDFs and `.ai` files reopen exactly; any other PDF or PDF-compatible `.ai` opens one artboard per page with paths, gradients, clipping, images and point type in installed fonts, and reports what it left out |
 | Raster export | Full | PNG, JPEG, WebP of an artboard, all artboards or the selection, at any scale, with transparency |
-| Export for Screens and asset export | Partial | Export for Screens with artboards, scales, suffixes and formats in a zip; no Asset Export panel |
+| Export for Screens and asset export | Full | Export for Screens with artboards, scales, suffixes and formats in a zip; the Asset Export panel with Collect for Export as single or multiple assets, renaming, and each asset cropped to its art in PNG, JPEG, WebP, SVG or PDF |
 | Placed images and links | Full | Place embedded or linked, Links panel, relink, embed |
 | History and Actions | Full | History panel with every step; Actions record and play commands |
 
@@ -129,15 +129,15 @@ Platform rows are shown and not scored.
 | Objects and layers | 8 | 8 |
 | Selection and transform | 7 | 7 |
 | Drawing | 6 | 6 |
-| Paths and Pathfinder | 6.5 | 7 |
+| Paths and Pathfinder | 7 | 7 |
 | Paint and colour | 8 | 8 |
 | Effects and live objects | 8 | 10 |
-| Type | 5.5 | 6 |
-| Files and output | 6 | 7 |
-| **Total** | **55** | **59** |
+| Type | 6 | 6 |
+| Files and output | 7 | 7 |
+| **Total** | **57** | **59** |
 
-53 rows Full, 4 Partial, 2 None.
+57 rows Full, 0 Partial, 2 None.
 
 ## Next to close
 
-Ordered by how often the gap is hit in everyday work: Live Paint edges per segment and the Live Paint Selection tool, contextual alternates and glyph alternates, a general PDF and `.ai` reader, the Asset Export panel, Effect Gallery filters, 3D.
+Ordered by how often the gap is hit in everyday work: Effect Gallery filters, 3D and Materials.

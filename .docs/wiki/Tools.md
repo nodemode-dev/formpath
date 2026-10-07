@@ -9,7 +9,7 @@ Tools live in `frontend/src/tools/`, one module per family, and register through
 | `draw.ts` | Rectangle, Rounded Rectangle, Ellipse, Polygon, Star, Flare, Line Segment, Arc, Spiral, Rectangular and Polar Grid |
 | `freehand.ts` | Pencil, Smooth, Path Eraser, Join, Paintbrush, Blob Brush, Eraser, Scissors, Knife |
 | `transform.ts` | Rotate, Reflect, Scale, Shear, Free Transform, Reshape, Width, Warp, Twirl, Pucker, Bloat |
-| `paint.ts` | Eyedropper, Gradient, Mesh, Live Paint Bucket, Shape Builder, Blend, Symbol Sprayer, Measure |
+| `paint.ts` | Eyedropper, Gradient, Mesh, Live Paint Bucket, Live Paint Selection, Shape Builder, Blend, Symbol Sprayer, Measure |
 | `type.ts` | Type, Area Type, Type on a Path, Vertical Type |
 | `view.ts` | Hand, Rotate View, Zoom, Artboard |
 

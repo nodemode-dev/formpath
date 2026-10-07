@@ -12,7 +12,7 @@ ask it questions.
   more) or a custom size in points, pixels, millimetres, centimetres, inches or picas, with any number of artboards
   and RGB or CMYK colour.
 - Open: File > Open lists the projects saved in the library; Open File opens formpth projects (.fpth), SVG and SVGZ,
-  PDFs and .ai files saved by formpth, and images (PNG, JPEG, WebP, GIF) as a new document. Dropping files on the
+  any PDF and PDF-compatible .ai file, and images (PNG, JPEG, WebP, GIF) as a new document. Dropping files on the
   stage opens them; dropping them while a document is open places them.
 - Save: File > Save (Ctrl+S) keeps everything editable in the library as a .fpth project; Save As names a copy;
   Download Project writes the .fpth to your downloads.
@@ -113,8 +113,11 @@ ask it questions.
 - Shape Builder (Shift+M): drag across regions of the selected shapes to merge them; Alt-drag to delete regions.
 - Live Paint Bucket (K): click an area closed by the selected paths to fill it with the current fill, as if the
   paths were a colouring book. The paths become a Live Paint group (Object > Live Paint > Make, Ctrl+Alt+X) that stays
-  editable: move or reshape a path and the colours follow their areas. Shift-click a path to paint its stroke.
-  Gap Options closes small openings so an area that is not quite closed still fills; Merge adds more paths; Expand
+  editable: move or reshape a path and the colours follow their areas. Shift-click an edge to paint its stroke; only
+  the stretch of path between two crossings changes.
+- Live Paint Selection (Shift+L): click faces and edges of a Live Paint group to select them (Shift-click adds or
+  removes); the Fill and Stroke colours, the Stroke panel and Delete then act on just those. Selecting the whole
+  group and choosing a fill paints every face. Gap Options closes small openings so an area that is not quite closed still fills; Merge adds more paths; Expand
   makes ordinary filled shapes and strokes; Release gives the paths back.
 - Compound paths (Ctrl+8) cut holes by the fill rule; clipping masks (Ctrl+7) clip objects with the topmost path.
 
@@ -170,9 +173,11 @@ ask it questions.
   Ctrl+A selects all of the type, copy and paste.
 - Character panel: font family and style, size, leading, kerning, tracking, scale, baseline shift, case, and the fonts
   installed on your computer when the engine runs. Paragraph panel: alignment, indents, space before and after,
-  and Area Type Options (rows, columns, gutter, inset). Glyphs shows a font's characters to insert.
-- OpenType, at the foot of the Character panel: figure style, position, stylistic set, and ligatures, swash,
-  alternates, titling, ordinals, fractions, slashed zero and case forms. Options the font does not have are dimmed;
+  and Area Type Options (rows, columns, gutter, inset). Glyphs shows a font's characters to insert; with a character
+  selected in type, the row above the grid shows its alternates, and clicking one sets that character in it.
+- OpenType, at the foot of the Character panel: figure style, position, stylistic set, and ligatures, contextual
+  alternates, swash, alternates, titling, ordinals, fractions, slashed zero and case forms. Options the font does
+  not have are dimmed;
   the bundled Inter offers fractions and figure styles, installed fonts offer whatever they carry. Small Caps uses
   the font's small capitals, or smaller capitals when it has none.
 - Character Styles and Paragraph Styles: select type set the way you want, click the plus to make a style from it,
@@ -226,12 +231,19 @@ ask it questions.
   brushes and the images inside.
 - File > Export > Export As writes SVG, PDF, PNG, JPEG or WebP of the active artboard, every artboard, or the
   selection. Export for Screens writes chosen artboards at several scales and formats in one ZIP.
+- Asset Export: File > Export > Collect for Export as Single Asset adds the selection as one asset, as Multiple
+  Assets adds each selected object. The Asset Export panel (Window) shows them; double-click to rename, set scales,
+  suffixes and formats (PNG, JPEG, WebP, SVG, PDF), and Export writes each asset cropped to its art in one ZIP.
 - SVG export keeps gradients, patterns, clipping, masks, symbols (as use) and type (as text or outlined), and can embed
   formpth's editing data so formpth reopens it fully editable. SVG import reads paths, shapes, transforms, CSS
   classes, gradients, clip paths, use and symbol, text and embedded images, with top-level groups becoming layers.
 - PDF export writes every artboard as a page with real vector paths, gradients as smooth shadings, transparency and
   blend modes, outlined type and images; effects a PDF cannot express are rasterised at the document's resolution.
   It carries formpth's editing data, so formpth reopens its own PDFs fully editable.
+- Opening any other PDF, or an .ai file saved with PDF compatibility, gives one artboard per page with its art as
+  editable paths, gradients, clipping groups, images and point type. Type takes the installed font of the same name,
+  or the nearest of Helvetica, Times New Roman and Courier New; a message lists the substitutions and anything left
+  out (encrypted files, mesh shadings, tiling patterns and some scanned image formats do not come in).
 - File > Send to NodeMode sends the active artboard as an image to a NodeMode canvas (Preferences > Plugins sets its
   address).
 
