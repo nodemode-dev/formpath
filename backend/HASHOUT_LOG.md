@@ -117,6 +117,13 @@ States that type is black unless `color` is given, matching the bridge's default
 
 `image_trace` now leaves a live tracing object, as the app does; `expand: true` keeps the old one-call behaviour for agents that only want paths, and passing a tracing object's id traces it again. Its preset list names the presets that exist (the old list advertised outline, line art and technical drawing that the tracer did not have, and `corners` and `noise`, which it ignored; the last two are gone and the three presets now exist). Preset names match by their words, so `6_colors`, `colors 6` and `6 Colors` are the same preset, and a subset such as `black_and_white` finds Black and White Logo. `live_paint` answers with the face count and a point inside each of the first twelve faces, because an agent cannot see where faces are and needs a point to fill. `symbolism` applies to every instance unless x, y and radius give a brush, and `repeat` stands in for holding the mouse down; all repeats are one undo step. `gradient_mesh` addresses points by row and column, which `list` reports with their colours. `edit_pattern` changes a swatch in place without pattern editing mode, which is modal and meant for people. `group` now returns the new group's `id` beside `selection`. The catalogue is at 65 tools.
 
+### app/routers/mcp.py · three_d
+- refers-to: app/routers/mcp.py :: TOOLS three_d; frontend/src/automation/agent-bridge.ts :: three_d
+- kind: rationale
+- logged: v0.15.0 · 2026-10-07
+
+3D could be reached through `apply_effect` alone, but an agent then has to know four effect ids, rotate in raw degrees and resend every parameter to change one. `three_d` takes a plain kind, named positions and only the parameters to change, keeps the rest (as the panel does through `Engine.set3d`), and answers with the full parameter set so the next call can adjust from it. The catalogue is at 66 tools.
+
 ## app/routers/projects.py
 
 ### app/routers/projects.py · save conflicts
