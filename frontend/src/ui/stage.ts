@@ -111,6 +111,11 @@ export class Stage {
   }
 
   private snap(p: Pt, exclude: Set<string> = new Set(), opts: { from?: Pt } = {}): SnapAt {
+    const out = this.snapRaw(p, exclude, opts);
+    return this.engine.view.snapPixel ? { ...out, p: { x: Math.round(out.p.x), y: Math.round(out.p.y) } } : out;
+  }
+
+  private snapRaw(p: Pt, exclude: Set<string> = new Set(), opts: { from?: Pt } = {}): SnapAt {
     const pr = this.engine.current, v = this.engine.view;
     if (!pr || (!v.smartGuides && !v.snapGrid && !v.snapPoint)) { this.engine.clearOverlay(); return { p, lines: [], label: null }; }
     const base = this.engine.dragOrigin ?? pr.doc, key = [...exclude].sort().join(',');
@@ -134,6 +139,11 @@ export class Stage {
   }
 
   private snapBox(r: Rect, exclude: Set<string>): { dx: number; dy: number } {
+    const s = this.snapBoxRaw(r, exclude);
+    return this.engine.view.snapPixel ? { dx: Math.round(r.x + s.dx) - r.x, dy: Math.round(r.y + s.dy) - r.y } : s;
+  }
+
+  private snapBoxRaw(r: Rect, exclude: Set<string>): { dx: number; dy: number } {
     const pr = this.engine.current, v = this.engine.view;
     if (!pr || (!v.smartGuides && !v.snapGrid)) return { dx: 0, dy: 0 };
     const base = this.engine.dragOrigin ?? pr.doc, key = [...exclude].sort().join(',');

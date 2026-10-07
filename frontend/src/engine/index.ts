@@ -28,7 +28,7 @@ export { Viewport } from './viewport';
 export interface ViewFlags {
   outline: boolean; rulers: boolean; guides: boolean; guidesLocked: boolean; grid: boolean; smartGuides: boolean; snapGrid: boolean; snapPoint: boolean;
   boundingBox: boolean; edges: boolean; artboards: boolean; threads: boolean; transparencyGrid: boolean; previewBounds: boolean; scaleStrokes: boolean;
-  transformPatterns: boolean; cornerWidget: boolean; gradientAnnotator: boolean; pixelPreview: boolean;
+  transformPatterns: boolean; cornerWidget: boolean; gradientAnnotator: boolean; pixelPreview: boolean; snapPixel: boolean;
 }
 export interface ToolOptions {
   polygonSides: number; starPoints: number; starRatio: number; cornerRadius: number; spiralDecay: number; spiralSegments: number; flareRays: number;
@@ -52,7 +52,7 @@ export class Engine extends Emitter<EngineEvents> {
   strokeWidth = 1;
   activeSlot: 'fill' | 'stroke' = 'fill';
   newArtBasic = true;
-  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false };
+  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false };
   options: ToolOptions = { polygonSides: 6, starPoints: 5, starRatio: 0.5, cornerRadius: 0, spiralDecay: 0.8, spiralSegments: 10, flareRays: 15, gridRows: 5, gridCols: 5, pencilFidelity: 0.5, pencilSmooth: 0.3, keepSelected: false, brushSize: 3, blobSize: 12, eraserSize: 12, widthPreset: 'uniform', magicTolerance: 32, symbolDensity: 5, meshRows: 4, meshCols: 4, blendSteps: 8, shapeMode: 'normal', textMode: 'point', vertical: false, arcConvex: true, liquifySize: 60, liquifyKind: 'warp' };
   currentBrush: string | null = null;
   currentSymbol: string | null = null;

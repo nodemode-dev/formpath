@@ -388,6 +388,13 @@ Ctrl-click (Cmd-click on macOS) hits again with the current selection excluded, 
 
 Smart guides now also snap a moved object to equal gaps along each axis, among top-level objects that overlap it across that axis: centred between its two neighbours, or one gap past a neighbour that matches the gap between that neighbour and the next one. The nearer of the alignment snap and the spacing snap wins; when both land on the same spot both are drawn. Each matched gap is drawn as a measuring line with end ticks at the middle of the shared band.
 
+### src/ui/stage.ts · Snap to Pixel
+- refers-to: src/ui/stage.ts :: snap, snapRaw, snapBox, snapBoxRaw; src/engine/index.ts :: ViewFlags.snapPixel
+- kind: explainer
+- logged: v0.11.0 · 2026-10-07
+
+View > Snap to Pixel rounds the result of every other snap: points land on whole document points (one point is one CSS pixel at 100 percent) and moved objects put their top-left corner on one. It works with smart guides and the grid off, since the rounding runs after them, so pixel art and icons stay crisp.
+
 ### src/tools/select.ts · loaded text
 - refers-to: src/tools/select.ts :: L, outPortAt, placeLoaded
 - kind: explainer
