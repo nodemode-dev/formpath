@@ -1,0 +1,18 @@
+# Tools
+
+Tools live in `frontend/src/tools/`, one module per family, and register through `registerTool` in `frontend/src/extensions/registry.ts`. A tool is an object with an id, a label, a group (its rail slot), an order, a shortcut, an icon and handlers: `down`, `move`, `up`, `hover`, `dblclick`, `keydown`, `cancel`, `activate`, `deactivate`, `overlay` and `options`.
+
+| Module | Tools |
+| --- | --- |
+| `select.ts` | Selection, Direct Selection, Group Selection, Magic Wand, Lasso |
+| `pen.ts` | Pen, Add and Delete Anchor Point, Anchor Point, Curvature |
+| `draw.ts` | Rectangle, Rounded Rectangle, Ellipse, Polygon, Star, Flare, Line Segment, Arc, Spiral, Rectangular and Polar Grid |
+| `freehand.ts` | Pencil, Smooth, Path Eraser, Join, Paintbrush, Blob Brush, Eraser, Scissors, Knife |
+| `transform.ts` | Rotate, Reflect, Scale, Shear, Free Transform, Reshape, Width, Warp, Twirl, Pucker, Bloat |
+| `paint.ts` | Eyedropper, Gradient, Mesh, Live Paint Bucket, Shape Builder, Blend, Symbol Sprayer, Measure |
+| `type.ts` | Type, Area Type, Type on a Path, Vertical Type |
+| `view.ts` | Hand, Rotate View, Zoom, Artboard |
+
+The stage hands each tool a `ToolContext`: the engine, the view, the paint tokens, `snap` (point, grid, smart alignment and angle construction) and `snapRect`, `redraw`, `typeAt` and `invalidateTargets`.
+
+A new tool is a new module that calls `registerTool`, imported once from `tools/index.ts`. Nothing else changes.
