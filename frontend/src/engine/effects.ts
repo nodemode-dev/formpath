@@ -3,8 +3,11 @@ import { FILTER_IDS, filterReach } from './filters';
 import { anchor, bezPoint, bezTangent, centerOf, dist, flattenSub, hasIn, hasOut, pathBounds, pathLength, pointAtLength, rectPath, ellipsePath, roundCorners, segments, transformPath, rotateAbout, scaleAbout, translate, mul } from './geometry';
 import { offsetPath, strokeToPath } from './kernel';
 import { mapPathNonlinear, warpPoint } from './live';
-import { parseColor, cssColor, BLACK } from './paint';
-import type { Anchor, BlendMode, Doc, Effect, Mat, PathData, Pt, StrokeItem, VNode, WidthPoint } from './types';
+import { parseColor, cssColor, BLACK, fill, gradientAt, resolvePaint, rgb, solid, stroke, toRgb } from './paint';
+import { childrenOf } from './doc';
+import { textOutline, textEpoch } from './text';
+import { lighting, outline3d, scene3d, VECTOR_3D, type RGB3, type Solid } from './threed';
+import type { Anchor, BlendMode, Doc, Effect, Mat, Paint, PathData, PathNode, Pt, StrokeItem, VNode, WidthPoint } from './types';
 
 export interface EffectParam { key: string; label: string; kind: 'number' | 'boolean' | 'select' | 'color'; min?: number; max?: number; step?: number; unit?: string; choices?: string[]; def: number | boolean | string }
 export interface EffectDef { id: string; label: string; menu: string; raster?: boolean; family?: 'photoshop'; params: EffectParam[] }
@@ -24,6 +27,17 @@ const DIRECTIONS = ['right_diagonal', 'horizontal', 'left_diagonal', 'vertical']
 const surface = (light: string, relief: number): EffectParam[] => [sel('texture', 'Texture', 'canvas', TEXTURES), num('scaling', 'Scaling', 100, 50, 200, '%'), num('relief', 'Relief', relief, 0, 50), sel('light', 'Light', light, LIGHTS)];
 const tones = (fg = '#000000'): EffectParam[] => [col('foreground', 'Foreground', fg), col('background', 'Background', '#ffffff')];
 const ps = (menu: string, id: string, label: string, params: EffectParam[]): EffectDef => ({ id, label, menu, raster: true, family: 'photoshop', params });
+
+const MATERIALS = ['plastic', 'matte', 'metal', 'wireframe'];
+const LIGHT_PRESETS = ['top_left', 'top', 'top_right', 'left', 'front', 'right', 'bottom_left', 'bottom', 'bottom_right'];
+const turn = (rx: number, ry: number, rz: number): EffectParam[] => [num('rx', 'X Rotation', rx, -180, 180, 'deg'), num('ry', 'Y Rotation', ry, -180, 180, 'deg'), num('rz', 'Z Rotation', rz, -180, 180, 'deg'), num('perspective', 'Perspective', 0, 0, 160, 'deg')];
+const light = (materials = MATERIALS, material = 'plastic'): EffectParam[] => [sel('material', 'Material', material, materials), sel('light', 'Light', 'top_left', LIGHT_PRESETS), num('intensity', 'Intensity', 100, 0, 200, '%'), num('ambient', 'Ambient Light', 40, 0, 100, '%'), num('highlight', 'Highlight', 60, 0, 100, '%'), col('shading_color', 'Shading Color', '#000000')];
+const THREE_D: EffectDef[] = [
+  { id: '3d.extrude', label: 'Extrude & Bevel', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('depth', 'Depth', 50, 0, 2000, 'pt'), bool('cap', 'Cap', true), sel('bevel', 'Bevel', 'none', ['none', 'classic', 'rounded']), num('bevel_height', 'Bevel Height', 4, 0, 100, 'pt'), ...light()] },
+  { id: '3d.revolve', label: 'Revolve', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('angle', 'Revolve Angle', 360, 1, 360, 'deg'), num('offset', 'Offset', 0, 0, 1000, 'pt'), sel('from', 'From', 'left', ['left', 'right']), bool('cap', 'Cap', true), ...light()] },
+  { id: '3d.inflate', label: 'Inflate', menu: '3D and Materials', raster: true, params: [num('depth', 'Depth', 20, 1, 500, 'pt'), num('volume', 'Volume', 100, 10, 100, '%'), ...light(['plastic', 'matte', 'metal'])] },
+  { id: '3d.rotate', label: 'Rotate', menu: '3D and Materials', params: [...turn(-18, -26, 8), ...light([...MATERIALS, 'flat'], 'flat')] },
+];
 
 const GALLERY: EffectDef[] = [
   ps('Artistic', 'gallery.colored_pencil', 'Colored Pencil', [num('width', 'Pencil Width', 4, 1, 24), num('pressure', 'Stroke Pressure', 8, 0, 15), num('paper', 'Paper Brightness', 25, 0, 50)]),
@@ -100,6 +114,7 @@ export const EFFECTS: EffectDef[] = [
   { id: 'stylize.inner_glow', label: 'Inner Glow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'screen', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#ffffff')] },
   { id: 'stylize.outer_glow', label: 'Outer Glow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'screen', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#ffd400')] },
   { id: 'stylize.feather', label: 'Feather', menu: 'Stylize', raster: true, params: [num('radius', 'Feather Radius', 5, 0, 1000, 'pt')] },
+  ...THREE_D,
   { id: 'rasterize.raster', label: 'Rasterize', menu: 'Rasterize', raster: true, params: [num('resolution', 'Resolution', 72, 1, 2400, 'ppi'), sel('background', 'Background', 'transparent', ['transparent', 'white']), num('around', 'Add Around Object', 0, 0, 1000, 'pt')] },
   { id: 'blur.gaussian', label: 'Gaussian Blur', menu: 'Blur', raster: true, family: 'photoshop', params: [num('radius', 'Radius', 5, 0, 250, 'pt')] },
   ...GALLERY,
@@ -149,6 +164,7 @@ function applyOne(d: PathData, e: Effect): PathData {
   const b = pathBounds(d);
   if (!Number.isFinite(b.x)) return d;
   const id = e.id;
+  if (VECTOR_3D.has(id)) return outline3d(d, e);
   if (id.startsWith('warp.')) {
     const style = id.slice(5);
     return mapPathNonlinear(d, (p) => warpPoint(style, P(e, 'bend', 50), P(e, 'horizontal', 0), P(e, 'vertical', 0), B(e, 'vertical_orientation', false), b, p), 6);
@@ -274,6 +290,36 @@ export function effectPath(d: PathData, effects: Effect[]): PathData {
   for (const e of active) { try { out = applyOne(out, e); } catch { } }
   byFx.set(effects, out);
   return out;
+}
+
+const facesCache = new WeakMap<VNode, { epoch: number; faces: PathNode[] }>();
+export const has3d = (n: VNode): boolean => n.ap.effects.some((e) => e.visible && VECTOR_3D.has(e.id));
+export function threeDFaces(doc: Doc, n: VNode): PathNode[] | null {
+  const at = n.kind === 'layer' ? -1 : n.ap.effects.findIndex((e) => e.visible && VECTOR_3D.has(e.id));
+  if (at < 0) return null;
+  const ep = textEpoch(), hit = facesCache.get(n);
+  if (hit && hit.epoch === ep) return hit.faces;
+  const tone = (raw: Paint): RGB3 | null => { const p = resolvePaint(doc, raw); if (p.type === 'color') { const v = toRgb(p.color); return [v.r / 255, v.g / 255, v.b / 255]; } if (p.type === 'gradient') { const v = toRgb(gradientAt(p.gradient, 0.5).color); return [v.r / 255, v.g / 255, v.b / 255]; } return null; };
+  const solids: Solid[] = [], paints: Array<Paint | null> = [];
+  const add = (x: VNode, own: Effect[]): void => {
+    if (x.hidden) return;
+    const f = x.ap.items.find((i) => i.visible && i.kind === 'fill'), s = x.ap.items.find((i): i is StrokeItem => i.visible && i.kind === 'stroke');
+    const vec = own.filter((e) => e.visible && !VECTOR_3D.has(e.id) && !effectDef(e.id)?.raster);
+    if (x.kind === 'path' || x.kind === 'compound') { solids.push({ d: effectPath(x.kind === 'path' ? x.d : x.children.flatMap((c) => c.d), vec), rule: x.rule, fill: f ? tone(f.paint) : null, stroke: s ? tone(s.paint) : null, strokeWidth: s?.width ?? 0 }); paints.push(f && f.paint.type !== 'none' ? f.paint : null); }
+    else if (x.kind === 'text') { const d = textOutline(x), st = x.spans[0]?.style; if (d && d.length) { solids.push({ d, rule: 'nonzero', fill: st ? tone(st.fill) : [0, 0, 0], stroke: null, strokeWidth: 0 }); paints.push(st && st.fill.type !== 'none' ? st.fill : null); } }
+    else childrenOf(x)?.forEach((c) => add(c, c.ap.effects));
+  };
+  add(n, n.ap.effects.slice(0, at));
+  if (!solids.length) return null;
+  const col = (c: RGB3): Paint => solid(rgb(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)));
+  const fx = n.ap.effects[at], L = lighting(fx.params), keep = L.material !== 'wireframe';
+  const faces = scene3d(solids, fx).map((f, i): PathNode => {
+    const own = f.cap && keep ? paints[f.solid] : null;
+    const items = own ? [fill(own), ...(f.t < 0.998 ? [fill(col(L.shade), 1 - f.t)] : []), ...(f.s > 0.002 ? [fill(solid(rgb(255, 255, 255)), f.s)] : [])] : [...(f.fill ? [fill(col(f.fill))] : []), ...(f.stroke && f.strokeWidth > 0 ? [stroke(col(f.stroke), f.strokeWidth, { join: 'round' })] : [])];
+    return { id: `${n.id}~3d${i}`, kind: 'path', d: f.d, rule: f.rule, opacity: 1, blend: 'normal', ap: { items, effects: [] } };
+  });
+  facesCache.set(n, { epoch: ep, faces });
+  return faces;
 }
 
 export interface RasterFx { kind: 'drop_shadow' | 'outer_glow' | 'inner_glow' | 'feather' | 'blur' | 'filter'; dx: number; dy: number; blur: number; color: string; opacity: number; blend: BlendMode; reach: number; filter?: { id: string; params: Effect['params'] } }

@@ -1,6 +1,6 @@
 import { selectionBounds, visualBounds } from './bounds';
 import { childrenOf } from './doc';
-import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline, type RasterFx } from './effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, strokeOutline, threeDFaces, type RasterFx } from './effects';
 import { emptyRect, inflate, isEmptyRect, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
@@ -396,7 +396,7 @@ export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderCo
   if (rc.printing && n.kind === 'layer' && (n.printable === false || n.template)) return;
   const fx = rc.outline ? [] : rasterEffects(n);
   const ch = n.kind === 'compound' ? null : childrenOf(n);
-  const multi = !!ch || n.ap.items.filter((i) => i.visible).length > 1 || n.kind === 'text' || n.kind === 'symbol' || n.kind === 'mesh';
+  const multi = !!ch || n.ap.items.filter((i) => i.visible).length > 1 || n.kind === 'text' || n.kind === 'symbol' || n.kind === 'mesh' || has3d(n);
   if (!rc.outline && needsLayer(n, multi)) {
     const vb = visualBounds(rc.doc, n);
     if (isEmptyRect(vb)) return;
@@ -412,6 +412,10 @@ export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderCo
 }
 
 function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): void {
+  if (!rc.outline && n.kind !== 'layer' && has3d(n)) {
+    const faces = threeDFaces(rc.doc, n);
+    if (faces) { for (const f of faces) renderNode(ctx, f, rc); return; }
+  }
   switch (n.kind) {
     case 'layer': {
       if (n.template && !rc.printing) { ctx.save(); ctx.globalAlpha *= 0.5; for (const c of n.children) renderNode(ctx, c, rc); ctx.restore(); return; }

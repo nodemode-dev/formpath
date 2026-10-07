@@ -1,4 +1,5 @@
 import { childrenOf } from './doc';
+import { has3d, threeDFaces } from './effects';
 import { filterReach } from './filters';
 import { emptyRect, inflate, isEmptyRect, pathBounds, transformRect, unionRect } from './geometry';
 import { liveChildren } from './live';
@@ -75,7 +76,9 @@ export function visualBounds(doc: Doc, n: VNode): Rect {
   visEpoch.set(n, epoch);
   let r: Rect;
   const ch = childrenOf(n);
-  if (n.kind === 'group' && n.clip && n.children.length) r = geomBounds(doc, n.children[n.children.length - 1]);
+  const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(doc, n) : null;
+  if (faces) r = faces.reduce((acc, f) => unionRect(acc, inflate(pathBounds(f.d), 1)), emptyRect());
+  else if (n.kind === 'group' && n.clip && n.children.length) r = geomBounds(doc, n.children[n.children.length - 1]);
   else if (ch && n.kind !== 'compound') r = ch.reduce((acc, c) => (c.hidden ? acc : unionRect(acc, visualBounds(doc, c))), emptyRect());
   else {
     r = geomBounds(doc, n);

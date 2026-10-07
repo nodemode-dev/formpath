@@ -112,6 +112,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/flow.ts
 - src/engine/symbolism.ts
 - src/engine/livepaint.ts
+- src/engine/threed.ts
 - src/engine/pattern.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
@@ -150,6 +151,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/pattern-options.ts
 - src/ui/panels/preview-edit.ts
 - src/ui/panels/effect-gallery.ts
+- src/ui/panels/three-d.ts
 - src/ui/form-dialog.ts
 - src/ui/palette.ts
 - src/styles/tokens.css
@@ -345,6 +347,13 @@ Each Effect Gallery effect is a function from unpremultiplied float planes to pl
 
 Every kernel is linear in the pixel count whatever its size. Blurs are three box passes, the vertical ones accumulated row by row for cache locality. Directional strokes are sliding windows along lines at 0, 45, 90 and 135 degrees rather than per-pixel sampling, which took seconds on a million pixels. The Kuwahara filter (Dry Brush, Fresco, Paint Daubs, Palette Knife, Sponge, Watercolor, Cutout) uses summed-area tables weighted by alpha, so quadrants outside the object never win. Cutout reduces colours with a few rounds of k-means on a sample instead of per-channel posterisation, which gave false colours on hue gradients.
 
+### src/engine/filters.ts · Inflate
+- refers-to: src/engine/filters.ts :: RUNS 3d.inflate
+- kind: explainer
+- logged: v0.15.0 · 2026-10-07
+
+Inflate takes a chamfer distance transform of the object's silhouette, turns it into a quarter-circle height profile that reaches full height at the depth in from the edge (scaled by volume), smooths it in proportion to the depth so the ridges of the medial axis round off, and shades each pixel's own colour with the same lighting as the vector 3D effects. It is drawn face-on: the rotation of Extrude and Revolve does not apply.
+
 ### src/engine/filters.ts · Rasterize
 - refers-to: src/engine/filters.ts :: RUNS rasterize.raster
 - kind: explainer
@@ -381,6 +390,13 @@ One `ColorFn` per Edit Colors action (invert, grayscale, cmyk, rgb, saturate, hu
 
 ## src/engine/text.ts
 
+### src/engine/text.ts · textOutline
+- refers-to: src/engine/text.ts :: textOutline
+- kind: warning-context
+- logged: v0.15.0 · 2026-10-07
+
+Builds type outlines synchronously from the shaping layer's loaded fonts, glyph by glyph in the layout's positions, and returns null until every face is loaded (the loader bumps the font epoch, so callers that cache on it retry). Glyph contours from the font arrive without close commands, so every subpath is marked closed; 3D needs closed contours for its caps.
+
 ### src/engine/text.ts · layout
 - refers-to: src/engine/text.ts :: layoutText, caretAt, indexAt
 - kind: explainer
@@ -412,6 +428,22 @@ Layout is cached per node by identity and never reads the document, so anything 
 - logged: v0.12.0 · 2026-10-07
 
 A stained instance carries `tint` (a colour and an amount) and every reader draws `instanceArt`, the symbol's art with each paint mixed toward the tint by the amount, cached per art object and tint so a set of a hundred stained instances builds a handful of recoloured copies. Mixing the paints instead of compositing a coloured layer over the instance keeps the result identical in the canvas, SVG (one def per distinct tint) and PDF, and Break Link and Expand bake it with `bakedInstance`, which also carries the instance's opacity, blend and effects onto the art so screened and styled instances look the same after breaking. Every operation weights an instance by where its centre sits in the brush, one minus the square of the distance over the radius, so the edge of the brush barely moves anything; with no point (the agent tool) every instance in the set gets full weight. Intensity scales each step. Average pulls a value toward the mean of the instances under the brush, Random perturbs it, User Defined pushes it one way. The Styler copies a graphic style's effects, opacity and blend onto instances because fills and strokes have no geometry of their own on an instance to paint; Alt clears them.
+
+## src/engine/threed.ts
+
+### src/engine/threed.ts · scene
+- refers-to: src/engine/threed.ts :: scene3d, Solid, Face; src/engine/effects.ts :: threeDFaces
+- kind: explainer
+- logged: v0.15.0 · 2026-10-07
+
+Extrude & Bevel, Revolve and Rotate turn the object into solids (each path, compound path or outlined type with its fill and stroke colour), flatten them, build quads for the sides (and the bevel rings, inset along vertex normals), caps for the ends, and project them through a rotation about the solids' centre with optional perspective. The result is a list of plain painted faces, so the canvas, SVG, PDF, hit testing and Expand Appearance all consume the same geometry; `threeDFaces` caches it per node and font epoch and `effectPath` returns the faces' outlines for bounds and hit tests. Inflate is a raster effect instead (`filters.ts`), because a puffed surface has no clean polygon form.
+
+### src/engine/threed.ts · ordering and shading
+- refers-to: src/engine/threed.ts :: scene3d, shadeRgb, lightFactors
+- kind: rationale
+- logged: v0.15.0 · 2026-10-07
+
+Sorting all faces by mean depth let side quads near the front edge of a wide cap (type, especially) paint over the cap, whose mean depth is its centre. Each solid is now drawn as a block: the cap facing away, its sides from far to near, then the cap facing the viewer; blocks are ordered by mean depth. Shading is two-sided (a normal is flipped to face the viewer) so face winding never matters. Sides take a flat shaded colour; a cap keeps the object's own paint (gradients and patterns included) with the shading laid over it as a shading-colour fill at one minus the light factor and a white fill at the highlight, which reproduces the flat shading exactly for plastic and matte. Thin strokes of each side's own colour hide antialiasing seams between neighbouring faces.
 
 ## src/engine/livepaint.ts
 
@@ -1002,6 +1034,15 @@ Both states of the panel (the hint with Make Pattern, and the options form) are 
 - logged: v0.9.0 · 2026-10-07
 
 Dialog previews run through the engine's drag preview (`beginDrag`, `dragTo`), so Cancel restores the document exactly and OK commits one history step.
+
+## src/ui/panels/three-d.ts
+
+### src/ui/panels/three-d.ts · ThreeDPanel
+- refers-to: src/ui/panels/three-d.ts :: ThreeDPanel; src/engine/index.ts :: Engine.set3d
+- kind: explainer
+- logged: v0.15.0 · 2026-10-07
+
+The panel edits the first 3D effect on the selection through `set3d`: a kind button adds one or switches it while keeping the parameters the new kind shares (rotation, material, lighting), a select value the new kind does not offer falls back to its default, and sliders run inside a gesture so a drag is one history step. All controls are built once; the parts for each kind are only hidden and shown.
 
 ## src/ui/panels/effect-gallery.ts
 
