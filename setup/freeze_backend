@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -e
+source "$(dirname "$0")/lib.sh"
+fp_venv
+python -c "import PyInstaller" 2>/dev/null || fp_die "PyInstaller missing, run ./formpth install-desktop"
+triple="$(fp_target_triple)" || fp_die "rustc not found; install Rust or set FORMPTH_TARGET"
+[ -f "$FORMPTH_ROOT/frontend/dist/index.html" ] || "$FORMPTH_ROOT/setup/build_frontend"
+cd "$FORMPTH_ROOT/backend"
+sep=":"
+[ "$(fp_os)" = windows ] && sep=";"
+ext="$(fp_exe)"
+rm -rf build/pyinstaller dist-engine
+pyinstaller --noconfirm --clean --onefile --name formpth-engine \
+  --distpath dist-engine --workpath build/pyinstaller --specpath build/pyinstaller \
+  --add-data "$FORMPTH_ROOT/frontend/dist${sep}frontend_dist" \
+  --collect-submodules app --collect-submodules uvicorn --collect-submodules keyring \
+  "$FORMPTH_ROOT/backend/formpth_engine.py"
+mkdir -p "$FORMPTH_ROOT/src-tauri/binaries"
+out="$FORMPTH_ROOT/src-tauri/binaries/formpth-engine-${triple}${ext}"
+cp "dist-engine/formpth-engine${ext}" "$out"
+"$out" --selfcheck
+fp_say "sidecar ready: $out"

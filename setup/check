@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+source "$(dirname "$0")/lib.sh"
+fail=0
+py="$FORMPTH_ROOT/backend/venv/bin/python"
+[ -x "$py" ] || py="$(fp_python)" || { fp_say "Python 3.12+ is required"; exit 1; }
+run() { fp_say "$1"; shift; "$@" || fail=1; }
+run "frontend typecheck and build" bash -c "cd '$FORMPTH_ROOT/frontend' && npm run build --silent"
+run "engine compile" "$py" -m compileall -q "$FORMPTH_ROOT/backend/app"
+run "engine self-check" bash -c "cd '$FORMPTH_ROOT/backend' && '$py' formpth_engine.py --selfcheck"
+run "harness skill in step with the MCP catalogue" "$py" "$FORMPTH_ROOT/setup/agents.py" sync --check
+exit "$fail"

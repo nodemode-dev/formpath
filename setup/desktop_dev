@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+source "$(dirname "$0")/lib.sh"
+triple="$(fp_target_triple)" || fp_die "rustc not found; run ./formpth install-desktop"
+[ -x "$FORMPTH_ROOT/src-tauri/binaries/formpth-engine-${triple}$(fp_exe)" ] || "$FORMPTH_ROOT/setup/freeze_backend"
+cd "$FORMPTH_ROOT"
+[ -f src-tauri/icons/icon.icns ] || frontend/node_modules/.bin/tauri icon assets/formpth_icon.png
+exec frontend/node_modules/.bin/tauri dev "$@"
