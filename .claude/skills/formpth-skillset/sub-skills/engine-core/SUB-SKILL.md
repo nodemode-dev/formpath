@@ -44,7 +44,7 @@ The engine owns the document and every change to it. It has no DOM, so the canva
 
 ## Rendering (`render.ts`)
 
-Canvas 2D with a `Path2D` cached per node in a `WeakMap`: an unchanged node is free. Raster effects render through offscreen canvases. Never mutate a node, or the cache serves a stale path. Group renders branch on `trace` and `livePaint` before the ordinary children loop.
+Canvas 2D with a `Path2D` cached per node in a `WeakMap`: an unchanged node is free. Raster effects render through offscreen canvases. The Effect Gallery and Rasterize effects are kernels in `filters.ts` (`RUNS`, keyed by effect id; their definitions and parameters live in `effects.ts` with `family: 'photoshop'` for the gallery); `rasterEffects` turns them into `kind: 'filter'` entries and `withLayer` caches a filtered layer per node, invalidated by `invalidateLayers` when an image decodes. A new kernel takes `FilterFrame` sizes in points times `scale` and must stay linear in pixels. Never mutate a node, or the cache serves a stale path. Group renders branch on `trace` and `livePaint` before the ordinary children loop.
 
 ## Adding an operation
 

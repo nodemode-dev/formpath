@@ -11,7 +11,7 @@ A zip of `manifest.json` (`format: com.nodemode.formpth`, `version: 1`, `app`, `
 
 ## SVG (`io/svg.ts`)
 
-- Export: `exportSvg(project, { artboard, outlineText, preserve, precision, ids })`. Gradients in user space with midpoint stops expanded, patterns, filters for raster effects, clip paths, masks, symbols as `defs` and `use`, mesh as quads. With `preserve`, the manifest rides in a `metadata` element with the id `formpth-data` and images carry `data-formpth-src`, so formpth reopens it exactly.
+- Export: `exportSvg(project, { artboard, outlineText, preserve, precision, ids })`. Gradients in user space with midpoint stops expanded, patterns, filters for raster effects (objects with Effect Gallery or Rasterize effects are baked to an image at `rasterPpi`), clip paths, masks, symbols as `defs` and `use`, mesh as quads. With `preserve`, the manifest rides in a `metadata` element with the id `formpth-data` and images carry `data-formpth-src`, so formpth reopens it exactly.
 - Import: `importSvg(text, title)` reads transforms, CSS classes, gradients with `href` chains, clip paths, `use` and `symbol`, text, data URI images; named top-level groups become layers.
 
 ## PDF (`io/pdf.ts`)

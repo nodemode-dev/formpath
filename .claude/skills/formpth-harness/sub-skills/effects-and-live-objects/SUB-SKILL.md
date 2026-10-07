@@ -1,6 +1,6 @@
 ---
 name: effects-and-live-objects
-description: Live effects and live objects in formpth through MCP. Owns apply_effect (warps, roughen, zig zag, pucker and bloat, twist, transform, drop shadow, glows, feather, round corners, scribble, offset path, gaussian blur, convert to shape), expand, make_blend, envelope, repeat radial, grid and mirror, symbol and symbolism, apply_brush, make_pattern and edit_pattern, live_paint, gradient_mesh and image_trace. Load when the art needs depth, distortion, repetition, colouring of line art, soft colour or a traced image.
+description: Live effects and live objects in formpth through MCP. Owns apply_effect (warps, roughen, zig zag, pucker and bloat, twist, transform, drop shadow, glows, feather, round corners, scribble, offset path, convert to shape, rasterize, and the Effect Gallery's blurs and Artistic, Brush Strokes, Distort, Pixelate, Sketch, Stylize, Texture and Video effects), expand, make_blend, envelope, repeat radial, grid and mirror, symbol and symbolism, apply_brush, make_pattern and edit_pattern, live_paint, gradient_mesh and image_trace. Load when the art needs depth, distortion, repetition, colouring of line art, soft colour or a traced image.
 ---
 
 # effects-and-live-objects
@@ -18,6 +18,7 @@ The base shapes exist and are painted.
 1. **Discover parameters.** `apply_effect` with list true returns every effect id with its parameters and defaults; pass only the parameters to change in `params`.
 2. **Depth.** stylize.drop_shadow (opacity 30 to 50, blur 6 to 12, offsets 4 to 8 points) and stylize.outer_glow; stylize.inner_glow for embossed looks; blur.gaussian for soft backgrounds.
 3. **Character.** distort.roughen for hand-made edges, distort.zig_zag for waves, distort.pucker_bloat for flowers, stylize.round_corners to soften polygons, warp.arc, warp.flag and the other warps for banners and type.
+   - **Painterly and print looks** come from the Effect Gallery's raster effects, applied with the same `apply_effect`: gallery.watercolor, gallery.dry_brush or gallery.colored_pencil for illustration, gallery.halftone_pattern, gallery.color_halftone or gallery.mezzotint for print texture, gallery.stained_glass, gallery.crystallize or gallery.mosaic_tiles for cells, gallery.charcoal, gallery.stamp or gallery.photocopy for two-tone (set foreground and background colours), gallery.texturizer for canvas or brick, blur.radial spin or zoom for motion. Sizes are in points and look the same at any zoom. They export to PDF and SVG as images at the document's raster resolution, so put them on the parts that should be pixels and keep type and logos clean. rasterize.raster pixelates on purpose (resolution 10 to 30 ppi).
 4. **Envelopes** reshape groups and type: `envelope` warp with a style and bend, mesh with rows and columns, or top_object to pour the art into the top shape.
 5. **Blends** make in-between steps: select two shapes, `make_blend` with steps, or spacing smooth for colour gradients between shapes.
 6. **Repeats**: `repeat` radial (instances, radius) for flowers, dials and mandalas; grid (rows, columns, spacing) for patterns; mirror for symmetry.
