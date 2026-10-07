@@ -2,6 +2,17 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.7.0 · 2026-10-07
+
+Files.
+
+### Added
+
+- `.fpth` projects: a versioned manifest with the document and its images, saved to the engine's library with conflict copies, or to disk.
+- SVG import and export with gradients, clipping, masks, text and symbols; PDF export with a formpth stream so a saved PDF opens back as live artwork.
+- PNG, JPEG and WebP export at any scale; Export for Screens across artboards and assets with suffixes and formats; image trace with presets, thresholds and colour counts.
+- The home screen with recent projects, Preferences, and the New Document, Open, Export, Settings, Shortcuts and About dialogs.
+
 ## 0.6.0 · 2026-10-07
 
 Type.
