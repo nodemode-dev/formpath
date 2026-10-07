@@ -1,15 +1,16 @@
 import { brushOutline } from './brushes';
 import { FILTER_IDS, filterReach } from './filters';
-import { anchor, bezPoint, bezTangent, centerOf, dist, flattenSub, hasIn, hasOut, pathBounds, pathLength, pointAtLength, rectPath, ellipsePath, roundCorners, segments, transformPath, rotateAbout, scaleAbout, translate, mul } from './geometry';
+import { anchor, apply, bezPoint, bezTangent, centerOf, dist, flattenSub, hasIn, hasOut, pathBounds, pathLength, pointAtLength, rectPath, ellipsePath, roundCorners, segments, transformPath, rotateAbout, scaleAbout, translate, mul } from './geometry';
 import { offsetPath, strokeToPath } from './kernel';
 import { mapPathNonlinear, warpPoint } from './live';
-import { parseColor, cssColor, BLACK, fill, gradientAt, resolvePaint, rgb, solid, stroke, toRgb } from './paint';
+import { parseColor, cssColor, BLACK, effect, fill, gradientAt, resolvePaint, rgb, solid, stroke, toRgb } from './paint';
 import { childrenOf } from './doc';
-import { textOutline, textEpoch } from './text';
-import { lighting, outline3d, scene3d, VECTOR_3D, type RGB3, type Solid } from './threed';
-import type { Anchor, BlendMode, Doc, Effect, Mat, Paint, PathData, PathNode, Pt, StrokeItem, VNode, WidthPoint } from './types';
+import { textBounds, textOutline, textEpoch } from './text';
+import { lighting, outline3d, scene3dWith, VECTOR_3D, type RGB3, type Scene, type Solid } from './threed';
+import { transformNode } from './transform';
+import type { Anchor, BlendMode, Doc, Effect, GroupNode, Mat, Paint, PathData, PathNode, Pt, Rect, StrokeItem, VNode, WidthPoint } from './types';
 
-export interface EffectParam { key: string; label: string; kind: 'number' | 'boolean' | 'select' | 'color'; min?: number; max?: number; step?: number; unit?: string; choices?: string[]; def: number | boolean | string }
+export interface EffectParam { key: string; label: string; kind: 'number' | 'boolean' | 'select' | 'color' | 'text'; min?: number; max?: number; step?: number; unit?: string; choices?: string[]; def: number | boolean | string }
 export interface EffectDef { id: string; label: string; menu: string; raster?: boolean; family?: 'photoshop'; params: EffectParam[] }
 
 const num = (key: string, label: string, def: number, min: number, max: number, unit = '', step = 1): EffectParam => ({ key, label, kind: 'number', def, min, max, unit, step });
@@ -32,11 +33,14 @@ const MATERIALS = ['plastic', 'matte', 'metal', 'wireframe'];
 const LIGHT_PRESETS = ['top_left', 'top', 'top_right', 'left', 'front', 'right', 'bottom_left', 'bottom', 'bottom_right'];
 const turn = (rx: number, ry: number, rz: number): EffectParam[] => [num('rx', 'X Rotation', rx, -180, 180, 'deg'), num('ry', 'Y Rotation', ry, -180, 180, 'deg'), num('rz', 'Z Rotation', rz, -180, 180, 'deg'), num('perspective', 'Perspective', 0, 0, 160, 'deg')];
 const light = (materials = MATERIALS, material = 'plastic'): EffectParam[] => [sel('material', 'Material', material, materials), sel('light', 'Light', 'top_left', LIGHT_PRESETS), num('intensity', 'Intensity', 100, 0, 200, '%'), num('ambient', 'Ambient Light', 40, 0, 100, '%'), num('highlight', 'Highlight', 60, 0, 100, '%'), col('shading_color', 'Shading Color', '#000000')];
+const txt = (key: string, label: string, def: string): EffectParam => ({ key, label, kind: 'text', def });
+const mapArt = (): EffectParam[] => [txt('map_symbol', 'Map Art Symbol', ''), num('map_scale', 'Map Art Scale', 100, 5, 400, '%'), num('map_x', 'Map Art X', 0, -2000, 2000, 'pt'), num('map_y', 'Map Art Y', 0, -2000, 2000, 'pt'), bool('shade_art', 'Shade Artwork', true)];
+const shadows = (): EffectParam[] => [bool('shadow', 'Shadow', false), sel('shadow_position', 'Shadow Position', 'behind', ['behind', 'below']), num('shadow_distance', 'Shadow Distance', 20, 0, 500, 'pt'), num('shadow_softness', 'Shadow Softness', 8, 0, 100, 'pt'), num('shadow_opacity', 'Shadow Opacity', 40, 0, 100, '%')];
 const THREE_D: EffectDef[] = [
-  { id: '3d.extrude', label: 'Extrude & Bevel', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('depth', 'Depth', 50, 0, 2000, 'pt'), bool('cap', 'Cap', true), sel('bevel', 'Bevel', 'none', ['none', 'classic', 'rounded']), num('bevel_height', 'Bevel Height', 4, 0, 100, 'pt'), ...light()] },
-  { id: '3d.revolve', label: 'Revolve', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('angle', 'Revolve Angle', 360, 1, 360, 'deg'), num('offset', 'Offset', 0, 0, 1000, 'pt'), sel('from', 'From', 'left', ['left', 'right']), bool('cap', 'Cap', true), ...light()] },
-  { id: '3d.inflate', label: 'Inflate', menu: '3D and Materials', raster: true, params: [num('depth', 'Depth', 20, 1, 500, 'pt'), num('volume', 'Volume', 100, 10, 100, '%'), ...light(['plastic', 'matte', 'metal'])] },
-  { id: '3d.rotate', label: 'Rotate', menu: '3D and Materials', params: [...turn(-18, -26, 8), ...light([...MATERIALS, 'flat'], 'flat')] },
+  { id: '3d.extrude', label: 'Extrude & Bevel', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('depth', 'Depth', 50, 0, 2000, 'pt'), bool('cap', 'Cap', true), sel('bevel', 'Bevel', 'none', ['none', 'classic', 'rounded']), num('bevel_height', 'Bevel Height', 4, 0, 100, 'pt'), ...light(), ...mapArt(), ...shadows()] },
+  { id: '3d.revolve', label: 'Revolve', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('angle', 'Revolve Angle', 360, 1, 360, 'deg'), num('offset', 'Offset', 0, 0, 1000, 'pt'), sel('from', 'From', 'left', ['left', 'right']), bool('cap', 'Cap', true), ...light(), ...shadows()] },
+  { id: '3d.inflate', label: 'Inflate', menu: '3D and Materials', raster: true, params: [num('depth', 'Depth', 20, 1, 500, 'pt'), num('volume', 'Volume', 100, 10, 100, '%'), num('rx', 'X Rotation', 0, -180, 180, 'deg'), num('ry', 'Y Rotation', 0, -180, 180, 'deg'), num('rz', 'Z Rotation', 0, -180, 180, 'deg'), ...light(['plastic', 'matte', 'metal'])] },
+  { id: '3d.rotate', label: 'Rotate', menu: '3D and Materials', params: [...turn(-18, -26, 8), ...light([...MATERIALS, 'flat'], 'flat'), ...mapArt(), ...shadows()] },
 ];
 
 const GALLERY: EffectDef[] = [
@@ -292,13 +296,13 @@ export function effectPath(d: PathData, effects: Effect[]): PathData {
   return out;
 }
 
-const facesCache = new WeakMap<VNode, { epoch: number; faces: PathNode[] }>();
+const facesCache = new WeakMap<VNode, { epoch: number; symbols: Doc['symbols']; swatches: Doc['swatches']; faces: VNode[] }>();
 export const has3d = (n: VNode): boolean => n.ap.effects.some((e) => e.visible && VECTOR_3D.has(e.id));
-export function threeDFaces(doc: Doc, n: VNode): PathNode[] | null {
+export function threeDFaces(doc: Doc, n: VNode): VNode[] | null {
   const at = n.kind === 'layer' ? -1 : n.ap.effects.findIndex((e) => e.visible && VECTOR_3D.has(e.id));
   if (at < 0) return null;
   const ep = textEpoch(), hit = facesCache.get(n);
-  if (hit && hit.epoch === ep) return hit.faces;
+  if (hit && hit.epoch === ep && hit.symbols === doc.symbols && hit.swatches === doc.swatches) return hit.faces;
   const tone = (raw: Paint): RGB3 | null => { const p = resolvePaint(doc, raw); if (p.type === 'color') { const v = toRgb(p.color); return [v.r / 255, v.g / 255, v.b / 255]; } if (p.type === 'gradient') { const v = toRgb(gradientAt(p.gradient, 0.5).color); return [v.r / 255, v.g / 255, v.b / 255]; } return null; };
   const solids: Solid[] = [], paints: Array<Paint | null> = [];
   const add = (x: VNode, own: Effect[]): void => {
@@ -312,14 +316,66 @@ export function threeDFaces(doc: Doc, n: VNode): PathNode[] | null {
   add(n, n.ap.effects.slice(0, at));
   if (!solids.length) return null;
   const col = (c: RGB3): Paint => solid(rgb(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)));
-  const fx = n.ap.effects[at], L = lighting(fx.params), keep = L.material !== 'wireframe';
-  const faces = scene3d(solids, fx).map((f, i): PathNode => {
-    const own = f.cap && keep ? paints[f.solid] : null;
-    const items = own ? [fill(own), ...(f.t < 0.998 ? [fill(col(L.shade), 1 - f.t)] : []), ...(f.s > 0.002 ? [fill(solid(rgb(255, 255, 255)), f.s)] : [])] : [...(f.fill ? [fill(col(f.fill))] : []), ...(f.stroke && f.strokeWidth > 0 ? [stroke(col(f.stroke), f.strokeWidth, { join: 'round' })] : [])];
-    return { id: `${n.id}~3d${i}`, kind: 'path', d: f.d, rule: f.rule, opacity: 1, blend: 'normal', ap: { items, effects: [] } };
+  const fx = n.ap.effects[at], p = fx.params, L = lighting(p), keep = L.material !== 'wireframe', scene = scene3dWith(solids, fx), out: VNode[] = [];
+  const path = (id: string, d: PathData, rule: PathNode['rule'], items: PathNode['ap']['items']): PathNode => ({ id, kind: 'path', d, rule, opacity: 1, blend: 'normal', ap: { items, effects: [] } });
+  const shade = (f: { t: number; s: number }): PathNode['ap']['items'] => [...(f.t < 0.998 ? [fill(col(L.shade), 1 - f.t)] : []), ...(f.s > 0.002 ? [fill(solid(rgb(255, 255, 255)), f.s)] : [])];
+  const mapName = String(p.map_symbol ?? '').trim(), sym = mapName ? doc.symbols.find((s) => s.id === mapName || s.name === mapName) : undefined;
+  if (p.shadow === true && scene.faces.length) {
+    const dist = P(fx, 'shadow_distance', 20), below = p.shadow_position === 'below', lx = -L.light[0], ly = -L.light[1], ll = Math.hypot(lx, ly) || 1;
+    let bottom = -Infinity;
+    for (const f of scene.faces) for (const sp of f.d) for (const a of sp.pts) bottom = Math.max(bottom, a.y);
+    const m: Mat = below ? [1, 0, -(lx / ll) * 0.6, 0.28, (lx / ll) * 0.6 * bottom + dist * (lx / ll), bottom * 0.72 + dist * 0.15] : [1, 0, 0, 1, (lx / ll) * dist, (ly / ll) * dist];
+    const soft = P(fx, 'shadow_softness', 8), kids = scene.faces.map((f, i) => path(`${n.id}~3ds${i}`, transformPath(f.d, m), f.rule, [fill(solid(rgb(0, 0, 0)))]));
+    out.push({ id: `${n.id}~3dshadow`, kind: 'group', clip: false, children: kids, opacity: Math.max(0, Math.min(1, P(fx, 'shadow_opacity', 40) / 100)), blend: 'multiply', ap: { items: [], effects: soft > 0 ? [effect('blur.gaussian', { radius: soft })] : [] } } as GroupNode);
+  }
+  scene.faces.forEach((f, i) => {
+    const own = f.cap && keep ? paints[f.solid] : null, id = `${n.id}~3d${i}`;
+    if (!own) { out.push(path(id, f.d, f.rule, [...(f.fill ? [fill(col(f.fill))] : []), ...(f.stroke && f.strokeWidth > 0 ? [stroke(col(f.stroke), f.strokeWidth, { join: 'round' })] : [])])); return; }
+    const art = sym && f.role === 'front' && f.facing ? mapped(doc, sym.art, scene, P(fx, 'map_scale', 100) / 100, P(fx, 'map_x', 0), P(fx, 'map_y', 0), `${id}a`) : null;
+    if (!art) { out.push(path(id, f.d, f.rule, [fill(own), ...shade(f)])); return; }
+    const shadeArt = p.shade_art !== false;
+    out.push(path(id, f.d, f.rule, shadeArt ? [fill(own)] : [fill(own), ...shade(f)]));
+    out.push({ id: `${id}m`, kind: 'group', clip: true, children: [art, path(`${id}c`, f.d, f.rule, [])], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } } as GroupNode);
+    if (shadeArt) out.push(path(`${id}s`, f.d, f.rule, shade(f)));
   });
-  facesCache.set(n, { epoch: ep, faces });
-  return faces;
+  facesCache.set(n, { epoch: ep, symbols: doc.symbols, swatches: doc.swatches, faces: out });
+  return out;
+}
+
+function artBounds(doc: Doc, art: VNode): Rect | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const add = (r: Rect): void => { if (!Number.isFinite(r.x) || r.w < 0) return; x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h); };
+  const walk = (x: VNode): void => {
+    if (x.hidden) return;
+    if (x.kind === 'path') add(pathBounds(x.d));
+    else if (x.kind === 'compound') x.children.forEach((c) => add(pathBounds(c.d)));
+    else if (x.kind === 'text') add(textBounds(x));
+    else if (x.kind === 'image') { const a = apply(x.xf, 0, 0), c = apply(x.xf, x.w, x.h); add({ x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), w: Math.abs(c.x - a.x), h: Math.abs(c.y - a.y) }); }
+    else childrenOf(x)?.forEach(walk);
+  };
+  walk(art);
+  void doc;
+  return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
+function reid(x: VNode, prefix: string): VNode {
+  let k = 0;
+  const go = (v: VNode): VNode => {
+    const id = `${prefix}${k++}`, kids = childrenOf(v);
+    if (v.kind === 'compound') return { ...v, id, children: v.children.map((c) => ({ ...c, id: `${prefix}${k++}` })) };
+    return kids ? ({ ...v, id, children: kids.map(go) } as VNode) : { ...v, id };
+  };
+  return go(x);
+}
+
+function mapped(doc: Doc, art: VNode, scene: Scene, scale: number, dx: number, dy: number, prefix: string): VNode | null {
+  const b = artBounds(doc, art);
+  if (!b) return null;
+  const c = scene.center, k = 50, o = scene.project(c.x, c.y, 0), px = scene.project(c.x + k, c.y, 0), py = scene.project(c.x, c.y + k, 0);
+  const A: Mat = [(px.x - o.x) / k, (px.y - o.y) / k, (py.x - o.x) / k, (py.y - o.y) / k, 0, 0];
+  const place: Mat = mul([1, 0, 0, 1, c.x + dx, c.y + dy], mul([scale, 0, 0, scale, 0, 0], [1, 0, 0, 1, -(b.x + b.w / 2), -(b.y + b.h / 2)]));
+  const m = mul([A[0], A[1], A[2], A[3], o.x - (A[0] * c.x + A[2] * c.y), o.y - (A[1] * c.x + A[3] * c.y)], place);
+  return transformNode(reid(art, prefix), m);
 }
 
 export interface RasterFx { kind: 'drop_shadow' | 'outer_glow' | 'inner_glow' | 'feather' | 'blur' | 'filter'; dx: number; dy: number; blur: number; color: string; opacity: number; blend: BlendMode; reach: number; filter?: { id: string; params: Effect['params'] } }
