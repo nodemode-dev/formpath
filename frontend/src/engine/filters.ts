@@ -1,5 +1,5 @@
 import { parseColor, toRgb } from './paint';
-import { lighting, shadeRgb } from './threed';
+import { lighting, rotator, shadeRgb } from './threed';
 import type { Effect } from './types';
 
 export interface FilterFrame { scale: number; x: number; y: number; w: number; h: number }
@@ -720,7 +720,47 @@ const RUNS: Record<string, Run> = {
     for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) { const i = y * w + x; if (dist[i]) dist[i] = Math.min(dist[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + D2, at(x - 1, y + 1) + D2); }
     const H = new Float32Array(n);
     for (let i = 0; i < n; i++) { const t = Math.min(1, dist[i] / R); H[i] = R * Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t))) * vol; }
-    const S = blurPlane(H, w, h, Math.max(0.8, R * 0.12)), L = lighting(p);
+    const S = blurPlane(H, w, h, Math.max(0.8, R * 0.12)), L = lighting(p), rx = num(p, 'rx', 0), ry = num(p, 'ry', 0), rz = num(p, 'rz', 0);
+    if (rx || ry || rz) {
+      const turn = rotator(rx, ry, rz), cx = F.x + F.w / 2, cy = F.y + F.h / 2, out = like(px, new Float32Array(n)), dir = turn.inv([0, 0, 1]);
+      let top = 0, bx0 = w, by0 = h, bx1 = -1, by1 = -1;
+      for (let i = 0; i < n; i++) { top = Math.max(top, S[i]); if (px.a[i] > 0.5) { const x = i % w, y = (i / w) | 0; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; } }
+      if (bx1 < 0) return out;
+      const lo3 = [bx0 - 0.5, by0 - 0.5, -top - 0.5], hi3 = [bx1 + 0.5, by1 + 0.5, 0.5], dt = 0.75 * Math.max(1, F.scale), A = (x: number, y: number): number => px.a[Math.max(0, Math.min(h - 1, y)) * w + Math.max(0, Math.min(w - 1, x))];
+      const solidAt = (o: number[]): number => { const x = Math.round(o[0]), y = Math.round(o[1]); if (x < 0 || y < 0 || x >= w || y >= h) return -1; const i = y * w + x; return px.a[i] > 0.5 && o[2] <= 0 && o[2] >= -S[i] ? i : -1; };
+      const cast = (qx: number, qy: number): RGB3 | null => {
+        const v = turn.inv([qx - cx, qy - cy, 0]), o0 = [cx + v[0], cy + v[1], v[2]], ray = (t: number): number[] => [o0[0] + dir[0] * t, o0[1] + dir[1] * t, o0[2] + dir[2] * t];
+        let t0 = -1e9, t1 = 1e9;
+        for (let k = 0; k < 3; k++) {
+          if (Math.abs(dir[k]) < 1e-9) { if (o0[k] < lo3[k] || o0[k] > hi3[k]) return null; continue; }
+          const a = (lo3[k] - o0[k]) / dir[k], b = (hi3[k] - o0[k]) / dir[k];
+          t0 = Math.max(t0, Math.min(a, b)); t1 = Math.min(t1, Math.max(a, b));
+        }
+        if (t0 > t1) return null;
+        let prev = t0, hit = -1, o = ray(t0);
+        for (let t = t0; t < t1 + dt; t += dt) { const tc = Math.min(t, t1); o = ray(tc); hit = solidAt(o); if (hit >= 0) { let lo = prev, hi = tc; for (let k = 0; k < 5; k++) { const mid = (lo + hi) / 2, om = ray(mid); if (solidAt(om) >= 0) { hi = mid; o = om; } else lo = mid; } hit = solidAt(o); break; } prev = tc; }
+        if (hit < 0) return null;
+        const x = Math.round(o[0]), y = Math.round(o[1]), onTop = Math.abs(o[2] + S[hit]) < 1.5;
+        const gx = A(x + 1, y) - A(x - 1, y), gy = A(x, y + 1) - A(x, y - 1), gl = Math.hypot(gx, gy);
+        let nl: RGB3 = [0, 0, 1];
+        if (!onTop && o[2] < -1.5 && gl > 1e-6) nl = [-gx / gl, -gy / gl, 0];
+        else if (onTop || o[2] < -1.5) { const hx = (S[y * w + Math.min(w - 1, x + 1)] - S[y * w + Math.max(0, x - 1)]) / 2, hy = (S[Math.min(h - 1, y + 1) * w + x] - S[Math.max(0, y - 1) * w + x]) / 2, l = Math.hypot(hx, hy, 1); nl = [-hx / l, -hy / l, -1 / l]; }
+        let nv = turn.fwd(nl);
+        if (nv[2] > 0) nv = [-nv[0], -nv[1], -nv[2]];
+        return shadeRgb([px.r[hit], px.g[hit], px.b[hit]], nv as RGB3, L);
+      };
+      const mask = new Uint8Array(n);
+      for (let qy = 0; qy < h; qy++) for (let qx = 0; qx < w; qx++) { const c = cast(qx, qy), j = qy * w + qx; if (!c) continue; mask[j] = 1; out.r[j] = c[0]; out.g[j] = c[1]; out.b[j] = c[2]; out.a[j] = 1; }
+      for (let qy = 0; qy < h; qy++) for (let qx = 0; qx < w; qx++) {
+        const j = qy * w + qx, m = mask[j];
+        if (!((qx > 0 && mask[j - 1] !== m) || (qx < w - 1 && mask[j + 1] !== m) || (qy > 0 && mask[j - w] !== m) || (qy < h - 1 && mask[j + w] !== m))) continue;
+        let r = 0, g = 0, b = 0, k = 0;
+        for (let s = 0; s < 4; s++) { const c = cast(qx + ((s & 1) - 0.5) * 0.5, qy + ((s >> 1) - 0.5) * 0.5); if (c) { r += c[0]; g += c[1]; b += c[2]; k++; } }
+        if (k) { out.r[j] = r / k; out.g[j] = g / k; out.b[j] = b / k; }
+        out.a[j] = k / 4;
+      }
+      return out;
+    }
     return map(px, (r, g, b, i, o) => {
       const x = i % w, y = (i / w) | 0, hx = (S[y * w + Math.min(w - 1, x + 1)] - S[y * w + Math.max(0, x - 1)]) / 2, hy = (S[Math.min(h - 1, y + 1) * w + x] - S[Math.max(0, y - 1) * w + x]) / 2, l = Math.hypot(hx, hy, 1);
       const c = shadeRgb([r, g, b], [-hx / l, -hy / l, -1 / l], L);
@@ -748,13 +788,14 @@ const RUNS: Record<string, Run> = {
 };
 
 export const FILTER_IDS = new Set(Object.keys(RUNS));
-const MOVES_ALPHA = new Set(['rasterize.raster', 'blur.radial', 'gallery.spatter', 'gallery.sprayed_strokes', 'gallery.glass', 'gallery.ocean_ripple', 'gallery.crystallize']);
+const MOVES_ALPHA = new Set(['rasterize.raster', 'blur.radial', 'gallery.spatter', 'gallery.sprayed_strokes', 'gallery.glass', 'gallery.ocean_ripple', 'gallery.crystallize', '3d.inflate']);
 
 export function filterReach(id: string, p: Params): number {
   if (id === 'gallery.spatter' || id === 'gallery.sprayed_strokes') return num(p, 'radius', 10) * 0.5 + (id === 'gallery.sprayed_strokes' ? num(p, 'length', 12) / 2 : 0);
   if (id === 'gallery.glass') return num(p, 'distortion', 5) * 1.5;
   if (id === 'gallery.ocean_ripple') return num(p, 'magnitude', 9) * 0.6;
   if (id === 'gallery.crystallize') return num(p, 'cell', 10) * 0.5;
+  if (id === '3d.inflate') return num(p, 'rx', 0) || num(p, 'ry', 0) || num(p, 'rz', 0) ? num(p, 'depth', 20) * 1.2 : 0;
   if (id === 'rasterize.raster') return str(p, 'background', 'transparent') === 'white' ? num(p, 'around', 0) : 0;
   return 0;
 }
