@@ -1,0 +1,30 @@
+{
+  "name": "formpth",
+  "private": true,
+  "version": "0.1.0",
+  "description": "formpth · vector illustration editor in the NodeMode style",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@tauri-apps/api": "2.12.1",
+    "opentype.js": "2.0.0",
+    "paper": "0.12.18"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.3"
+  }
+}
