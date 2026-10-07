@@ -12,6 +12,7 @@ import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
 import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
 import { exportPdf, readPdfNative } from './io/pdf';
+import { readPdfVector } from './io/pdf-read';
 import { docFromManifest, serialize } from './io/project-io';
 import { canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
@@ -297,9 +298,13 @@ export function startApp(): void {
           if (lower.endsWith('.fpth')) await openFpth(await f.arrayBuffer(), f.name);
           else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, clipping, type and images; filters and masks it cannot match are left out.`); }
           else if (lower.endsWith('.pdf') || lower.endsWith('.ai')) {
-            const native = await readPdfNative(await f.arrayBuffer());
-            if (!native) { toast(`${f.name} was not saved by formpth with its editing data, and formpth reads only those PDFs so far. Place it as an image after exporting a PNG, or open its SVG.`, 'error'); continue; }
-            adopt(docFromManifest(native.manifest), f.name.replace(/\.(pdf|ai)$/i, ''), native.assets);
+            const data = await f.arrayBuffer(), title = f.name.replace(/\.(pdf|ai)$/i, '');
+            const native = await readPdfNative(data);
+            if (native) { adopt(docFromManifest(native.manifest), title, native.assets); continue; }
+            const r = await readPdfVector(data, title);
+            adopt(r.doc, title, r.assets);
+            const subs = r.fonts.slice(0, 4).map(([from, to]) => `${from} as ${to}`).join(', ') + (r.fonts.length > 4 ? ` and ${r.fonts.length - 4} more` : '');
+            toast(`Opened ${f.name}: ${r.pages === 1 ? 'one page as an artboard' : `${r.pages} pages as artboards`}.${r.fonts.length ? ` Fonts not installed, set in their nearest match: ${subs}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
           } else if (f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
             const s = await imageSize(f);
             const p = engine.newDocument(s.w, s.h, { title: f.name.replace(/\.[^.]+$/, ''), units: 'px' });

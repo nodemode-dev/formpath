@@ -125,6 +125,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/project-io.ts
 - src/io/svg.ts
 - src/io/pdf.ts
+- src/io/pdf-read.ts
 - src/io/raster.ts
 - src/io/fonts.ts
 - src/io/trace.ts
@@ -623,6 +624,43 @@ const bytes = new Uint8Array(await (await fetch(`data:application/octet-stream;b
 - logged: v0.9.0 · 2026-10-07
 
 TypeScript 7 types `Uint8Array` as possibly backed by a SharedArrayBuffer, which `Blob` does not accept; the casts to `Uint8Array<ArrayBuffer>` are safe because every array here is created locally.
+
+## src/io/pdf-read.ts
+
+### src/io/pdf-read.ts · object discovery
+- refers-to: src/io/pdf-read.ts :: PdfFile.init
+- kind: explainer
+- logged: v0.13.0 · 2026-10-07
+
+Objects are found by scanning for `n g obj` rather than trusting the cross-reference table, so files with broken offsets, incremental updates and linearization open the same way; later definitions win, which is what an incremental update means. Compressed object streams are unpacked after the scan and never override an object defined in the clear, and a cross-reference stream only supplies the trailer's Root when no classic trailer exists.
+
+### src/io/pdf-read.ts · page placement
+- refers-to: src/io/pdf-read.ts :: readPdfVector
+- kind: explainer
+- logged: v0.13.0 · 2026-10-07
+
+Each page becomes an artboard laid out left to right with a 40 pt gap, and its art a group named after it. The page matrix flips PDF's y-up space to formpth's y-down space at the crop box (the media box when there is none) and applies the page's Rotate, so rotated pages arrive upright the way a viewer shows them. Pages past 200 are left out to keep a single document workable.
+
+### src/io/pdf-read.ts · clipping
+- refers-to: src/io/pdf-read.ts :: Painter.finish
+- kind: warning-context
+- logged: v0.13.0 · 2026-10-07
+
+A clip set with `W n` applies to everything painted until the graphics state that set it is restored, so each clip opens a clip group that collects the following art and closes at the matching `Q`; the clip path is the group's first child as formpth's clip groups expect. Clip groups that end up empty are pruned, which removes the many page-sized clips that producers emit.
+
+### src/io/pdf-read.ts · type
+- refers-to: src/io/pdf-read.ts :: Painter.show, FontNames, fitRun
+- kind: explainer
+- logged: v0.13.0 · 2026-10-07
+
+Each text-showing operator becomes one point type object with the text decoded through ToUnicode, the encoding's Differences or WinAnsi. TJ gaps wider than 0.18 em become spaces, each in its own span tracked so the space is exactly as wide as the gap, and the whole run is then tracked to the width the PDF gave it, so substituted fonts never overlap the next run. A font resolves first by PostScript name against the installed fonts, then by family name with Latin Modern's `LM` prefix and optical size digits handled, and otherwise falls back to Courier New, Times New Roman or Helvetica by its class; the fallbacks are reported. Fonts without widths (the standard 14) are measured with the resolved family, whose metric-compatible faces keep runs in place. Type 3 fonts are drawn as paths by running their glyph procedures.
+
+### src/io/pdf-read.ts · colour and shading
+- refers-to: src/io/pdf-read.ts :: Painter.color, Painter.shading
+- kind: explainer
+- logged: v0.13.0 · 2026-10-07
+
+DeviceGray, DeviceRGB and DeviceCMYK map to formpth's gray, rgb and cmyk colours so a CMYK document stays CMYK. ICCBased spaces use their alternate by component count, Indexed looks up its palette, and Separation and DeviceN evaluate their tint transform. Axial and radial shadings become linear and radial gradients sampled from their function; mesh shadings and tiling patterns are reported and filled grey, because formpth has no faithful equivalent to translate them to.
 
 ## src/io/raster.ts
 
