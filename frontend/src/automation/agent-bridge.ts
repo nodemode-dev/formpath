@@ -418,16 +418,21 @@ export class AgentBridge {
           const KIND: Record<string, string> = { extrude: '3d.extrude', revolve: '3d.revolve', inflate: '3d.inflate', plane: '3d.rotate' }, kind = has('kind') ? KIND[str('kind')] : null;
           if (has('kind') && !kind) return fail('kind is extrude, revolve, inflate or plane.');
           const patch: Record<string, number | string | boolean> = {};
-          for (const k of ['rx', 'ry', 'rz', 'perspective', 'depth', 'bevel_height', 'angle', 'offset', 'volume', 'intensity', 'ambient', 'highlight']) if (has(k)) patch[k] = num(k, 0);
-          for (const k of ['bevel', 'from', 'material', 'light']) if (has(k)) patch[k] = str(k);
-          if (has('cap')) patch.cap = a.cap === true;
+          for (const k of ['rx', 'ry', 'rz', 'perspective', 'depth', 'bevel_height', 'angle', 'offset', 'volume', 'intensity', 'ambient', 'highlight', 'map_scale', 'map_x', 'map_y', 'shadow_distance', 'shadow_softness', 'shadow_opacity']) if (has(k)) patch[k] = num(k, 0);
+          for (const k of ['bevel', 'from', 'material', 'light', 'shadow_position']) if (has(k)) patch[k] = str(k);
+          for (const k of ['cap', 'shade_art', 'shadow']) if (has(k)) patch[k] = a[k] === true;
+          if (has('map_symbol')) {
+            const want = typeof a.map_symbol === 'string' ? a.map_symbol.trim() : '', syms = e.doc?.symbols ?? [], sym = syms.find((s) => s.id === want || s.name === want);
+            if (want && !sym) return fail(syms.length ? `map_symbol is one of ${syms.map((s) => s.name).join(', ')}, or empty to clear it.` : 'The document has no symbols: make one with the symbol tool first.');
+            patch.map_symbol = sym ? sym.id : '';
+          }
           if (has('shading_color')) { const p = this.paint(a.shading_color, 'shading_color'); if (p.type === 'color') patch.shading_color = hex(p.color); }
           if (has('position')) { const r = ROTATION_PRESETS[str('position')]; if (!r) return fail(`position is one of ${Object.keys(ROTATION_PRESETS).join(', ')}.`); patch.rx = r[0]; patch.ry = r[1]; patch.rz = r[2]; }
           const targets = e.targetIds(ids), before = targets.map((id) => e.nodeById(id)).filter((n): n is VNode => !!n && n.ap.effects.some((x) => x.id.startsWith('3d.')));
           if (!targets.length) return fail('Select objects or pass ids.');
           if (!kind && !before.length) return fail('Pass kind (extrude, revolve, inflate or plane) to give the objects depth.');
           const ok = e.set3d(kind, patch, ids), n = e.nodeById(targets[0]), fx = n?.ap.effects.find((x) => x.id.startsWith('3d.'));
-          return ok && fx ? text(`${effectDef(fx.id)?.label ?? '3D'}: ${Object.entries(fx.params).map(([k, v]) => `${k} ${v}`).join(', ')}. get_image shows it; expand makes it plain paths.`) : fail('Nothing changed.');
+          return ok && fx ? text(`${effectDef(fx.id)?.label ?? '3D'}: ${Object.entries(fx.params).map(([k, v]) => `${k} ${k === 'map_symbol' ? e.doc?.symbols.find((s) => s.id === v)?.name ?? v : v}`).join(', ')}. get_image shows it; expand makes it plain paths.`) : fail('Nothing changed.');
         }
         case 'expand': { const ok = e.expand(str('what', 'all') as 'all', this.ids(a)); return ok ? text('Expanded to plain objects.', { selection: e.selectedIds() }) : fail('Nothing to expand.'); }
         case 'make_blend': {

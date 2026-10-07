@@ -470,7 +470,7 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 
 ## three_d
 
-3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed, face-on surface: depth, volume) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, wireframe or flat (plane); light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. Leave kind out to change only the parameters you pass; remove true takes 3D off. Type and groups extrude as one object; expand turns the result into plain shaded paths.
+3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed surface: depth, volume, and rx, ry, rz to tilt it) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, wireframe or flat (plane); light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. map_symbol wraps a symbol (by name; make one with the symbol tool) onto the front face of an extrude or plane, sized by map_scale percent and moved by map_x, map_y points, shaded with the surface unless shade_art is false; an empty map_symbol clears it. shadow true casts a soft shadow (not for inflate): shadow_position behind or below, shadow_distance and shadow_softness in points, shadow_opacity in percent. Leave kind out to change only the parameters you pass; remove true takes 3D off. Type and groups extrude as one object; expand turns the result into plain shaded paths.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `kind`: string (extrude | revolve | inflate | plane)
@@ -494,6 +494,16 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 - `ambient`: number
 - `highlight`: number
 - `shading_color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `map_symbol`: string
+- `map_scale`: number
+- `map_x`: number
+- `map_y`: number
+- `shade_art`: boolean
+- `shadow`: boolean
+- `shadow_position`: string (behind | below)
+- `shadow_distance`: number
+- `shadow_softness`: number
+- `shadow_opacity`: number
 
 ## expand
 
