@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "formpth",
+  "version": "0.1.0",
+  "identifier": "ai.nodemode.formpth",
+  "build": {
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "splash",
+        "title": "formpth",
+        "url": "splash.html",
+        "width": 360,
+        "height": 180,
+        "resizable": false,
+        "decorations": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "GraphicsAndDesign",
+    "shortDescription": "Vector illustration editor",
+    "longDescription": "formpth is a vector illustration editor in the NodeMode design system: artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, appearance and effects, type with outlines, symbols, blends, image trace, SVG and PDF in and out, and its own .fpth project files.",
+    "copyright": "Copyright 2026 nodemode-ai.",
+    "externalBin": ["binaries/formpth-engine"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.plist"
+    },
+    "fileAssociations": [
+      { "ext": ["fpth"], "name": "formpth Project", "description": "formpth vector illustration project", "role": "Editor", "mimeType": "application/x-formpth" }
+    ],
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": ["https://github.com/nodemode-ai/formpth/releases/latest/download/latest.json"]
+    }
+  }
+}

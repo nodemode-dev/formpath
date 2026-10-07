@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="formpth">
+  <defs>
+    <linearGradient id="fp-tile" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="32"><stop offset="0" stop-color="#1C1C22"/><stop offset="1" stop-color="#0A0A0D"/></linearGradient>
+    <radialGradient id="fp-bloom" gradientUnits="userSpaceOnUse" cx="16" cy="17" r="12"><stop offset="0" stop-color="#9A5CFF" stop-opacity="0.22"/><stop offset="1" stop-color="#9A5CFF" stop-opacity="0"/></radialGradient>
+    <linearGradient id="fp-paint" gradientUnits="userSpaceOnUse" x1="6" y1="0" x2="26" y2="0"><stop offset="0" stop-color="#3A7BFF"/><stop offset="0.32" stop-color="#9A5CFF"/><stop offset="0.66" stop-color="#FF4F7A"/><stop offset="1" stop-color="#FFAE2B"/></linearGradient>
+    <linearGradient id="fp-metal" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="32"><stop offset="0" stop-color="#FDFDFB"/><stop offset="0.55" stop-color="#F3EFE7"/><stop offset="1" stop-color="#BBB8B2"/></linearGradient>
+    <linearGradient id="fp-rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="32"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/><stop offset="0.35" stop-color="#FFFFFF" stop-opacity="0.03"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0.07"/></linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" ry="7" fill="url(#fp-tile)"/>
+  <rect width="32" height="32" rx="7" ry="7" fill="url(#fp-bloom)"/>
+  <path d="M6.5 23.5 L11 12.2" stroke="#DDD9D2" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.85"/>
+  <path d="M25.5 8.5 L21 19.8" stroke="#DDD9D2" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.85"/>
+  <path d="M6.5 23.5 C 11 12.2, 21 19.8, 25.5 8.5" stroke="url(#fp-paint)" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <circle cx="11" cy="12.2" r="1.25" fill="url(#fp-metal)"/>
+  <circle cx="21" cy="19.8" r="1.25" fill="url(#fp-metal)"/>
+  <rect x="4.4" y="21.4" width="4.2" height="4.2" rx="0.9" fill="url(#fp-metal)" stroke="#0A0A0D" stroke-width="0.5"/>
+  <rect x="23.4" y="6.4" width="4.2" height="4.2" rx="0.9" fill="url(#fp-metal)" stroke="#0A0A0D" stroke-width="0.5"/>
+  <rect x="0.2" y="0.2" width="31.6" height="31.6" rx="6.8" ry="6.8" fill="none" stroke="url(#fp-rim)" stroke-width="0.4"/>
+</svg>
