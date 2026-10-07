@@ -25,6 +25,8 @@ Some live objects keep only their inputs in the document and derive the rest. A 
 
 Raster effects run on an offscreen layer per object. The Effect Gallery and Rasterize effects are pixel kernels in `filters.ts`, linear in the pixel count, with sizes in points times the current scale and noise and textures generated in the object's own space, so a look holds at any zoom and does not crawl while panning. A layer with one of them is rendered whole and cached per node, so panning reuses it; PDF and SVG export draw the same layer at the document's raster resolution.
 
+3D Extrude & Bevel, Revolve and Plane are vector: `threed.ts` turns the object's paths, compound paths and outlined type into solids, builds side quads, bevel rings and caps, rotates and projects them, and returns shaded faces drawn back cap, sides, front cap per solid. Caps keep the object's own paint with the shading laid over it. The faces are ordinary path nodes, so the canvas, SVG, PDF, hit testing and Expand Appearance share them. Inflate is a raster kernel shaded with the same lights.
+
 ## Geometry
 
 `geometry.ts` carries Bezier math, bounds and affines. `kernel.ts` adapts paper.js for booleans, intersections, offset and simplify, so Pathfinder returns curves, not polygons. `ops/` holds object, path, expand and recolor operations.

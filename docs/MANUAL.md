@@ -167,6 +167,12 @@ ask it questions.
   click one to see it large and set its options, double-click or OK to apply. Each is also in its own submenu (Blur
   holds Gaussian, Radial and Smart Blur). They stay live in the Appearance panel like any effect. Sizes are in points,
   so a look holds at any zoom; the Sketch effects draw in a foreground and background colour you choose.
+- 3D: select art and open Window > 3D and Materials (or Effect > 3D and Materials). Plane turns the flat art in
+  space, Extrude gives it depth (with a cap and an optional classic or rounded bevel), Revolve spins the art around
+  its left or right edge like a lathe (draw half a bottle, revolve it), and Inflate puffs it up. Pick a position or
+  set the X, Y and Z rotation and perspective, a material (plastic, matte, metal, wireframe, flat) and the light's
+  direction, intensity, ambient level, highlight and shading colour. Type and groups turn as one object. The effect
+  stays live in the Appearance panel; Expand Appearance makes plain shaded shapes.
 - Rasterize (Effect > Rasterize) shows the object as pixels at a resolution you pick, optionally on white with a
   margin. Effect > Document Raster Effects Settings sets the resolution raster effects are written at in PDF and SVG.
 - Brushes: calligraphic, scatter, art and pattern brushes apply to any stroke from the Brushes panel. New Brush
