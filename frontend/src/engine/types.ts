@@ -23,6 +23,7 @@ export interface Gradient {
   aspect: number;
   geom: GradientGeom | null;
   points?: FreeformPoint[];
+  mode?: 'points' | 'lines';
   strokeMode?: 'within' | 'along' | 'across';
 }
 

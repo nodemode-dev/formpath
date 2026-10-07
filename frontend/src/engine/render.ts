@@ -4,7 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline,
 import { emptyRect, inflate, isEmptyRect, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
-import { cssColor, gradientAt, resolvePaint, toRgb } from './paint';
+import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './paint';
 import { drawText } from './text';
 import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type Paint, type PathData, type Rect, type StrokeItem, type VNode } from './types';
 
@@ -334,21 +334,21 @@ function outlineStroke(ctx: CanvasRenderingContext2D, rc: RenderContext, path: P
   ctx.restore();
 }
 
+const ffCache = new WeakMap<Gradient, { key: string; canvas: HTMLCanvasElement | OffscreenCanvas }>();
 function drawFreeform(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Path2D, rule: CanvasFillRule, gr: Gradient, b: Rect, opacity: number, blend: BlendMode): void {
   const pts = gr.points ?? [];
   if (!pts.length || isEmptyRect(b)) return;
   const res = Math.max(8, Math.min(256, Math.ceil(Math.max(b.w, b.h) * rc.scale * 0.5)));
   const W = Math.max(2, Math.round((res * b.w) / Math.max(b.w, b.h))), H = Math.max(2, Math.round((res * b.h) / Math.max(b.w, b.h)));
-  const { canvas, ctx: c } = canvas2d(W, H);
-  const img = c.createImageData(W, H), px = img.data, cols = pts.map((p) => toRgb(p.color));
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const X = b.x + ((x + 0.5) / W) * b.w, Y = b.y + ((y + 0.5) / H) * b.h;
-    let sw = 0, r = 0, g = 0, bl = 0;
-    pts.forEach((p, i) => { const dd = Math.max(1e-3, Math.hypot(X - p.x, Y - p.y) / Math.max(1, p.spread)); const w = 1 / (dd * dd * dd); sw += w; r += cols[i].r * w; g += cols[i].g * w; bl += cols[i].b * w; });
-    const k = (y * W + x) * 4;
-    px[k] = r / sw; px[k + 1] = g / sw; px[k + 2] = bl / sw; px[k + 3] = 255;
+  const key = `${b.x},${b.y},${b.w},${b.h},${W},${H}`, hit = ffCache.get(gr);
+  let canvas = hit && hit.key === key ? hit.canvas : null;
+  if (!canvas) {
+    const made = canvas2d(W, H), img = made.ctx.createImageData(W, H);
+    img.data.set(freeformPixels(gr, b, W, H));
+    made.ctx.putImageData(img, 0, 0);
+    canvas = made.canvas;
+    ffCache.set(gr, { key, canvas });
   }
-  c.putImageData(img, 0, 0);
   ctx.save();
   ctx.clip(path, rule);
   ctx.globalAlpha *= opacity;

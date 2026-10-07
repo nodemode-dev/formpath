@@ -5,6 +5,7 @@ import { icon } from '../icons';
 import { askForm } from '../form-dialog';
 import { paintCss } from '../rail';
 import { numField, selectCtl, seg, slider, type Ctl } from './kit';
+import { FF } from '../../tools/paint';
 
 type Model = 'gray' | 'rgb' | 'hsb' | 'cmyk' | 'web';
 const CH: Record<Model, Array<[string, number, number]>> = {
@@ -244,13 +245,38 @@ export class GradientPanel {
   private readonly opacity: Ctl<number | null>;
   private readonly strokeMode: Ctl<string>;
   private readonly chip: HTMLButtonElement;
+  private readonly ffMode: Ctl<string>;
+  private readonly ffChip: HTMLButtonElement;
+  private readonly ffSpread: Ctl<number | null>;
+  private readonly ffBox = el('<div class="cv-gradp-ff"></div>');
+  private readonly linearBox = el('<div class="cv-gradp-lin"></div>');
   private sel = 0;
   private frame = 0;
 
   constructor(private readonly engine: Engine, private readonly pickColor: (c: Color) => Promise<Color | null>) {
     const swatch = el<HTMLButtonElement>('<button class="cv-gradp-preview" type="button" title="Apply a gradient to the active Fill or Stroke" aria-label="Apply gradient"></button>');
-    swatch.addEventListener('click', () => { const g = this.gradient(); this.set(g ?? defaultGradient()); });
-    this.kind = seg([{ id: 'linear', label: 'Linear' }, { id: 'radial', label: 'Radial' }], (id) => { const g = this.gradient() ?? defaultGradient(); this.set({ ...g, kind: id as 'linear' | 'radial', geom: null }); });
+    swatch.addEventListener('click', () => { const g = this.gradient(); if (g?.kind === 'freeform') engine.setFreeform(g.mode ?? 'points'); else this.set(g ?? defaultGradient()); });
+    this.kind = seg([{ id: 'linear', label: 'Linear' }, { id: 'radial', label: 'Radial' }, { id: 'freeform', label: 'Freeform' }], (id) => {
+      if (id === 'freeform') {
+        if (engine.activeSlot === 'stroke') { engine.notice('Freeform gradients fill objects; switch to Fill.'); return; }
+        if (!engine.setFreeform(this.ffOwner()?.g.mode ?? 'points')) { engine.fillPaint = { type: 'gradient', gradient: { ...defaultGradient(), kind: 'freeform', points: [], mode: 'points' } }; engine.emit('colors', null); }
+        return;
+      }
+      const g = this.gradient() ?? defaultGradient();
+      const stops = g.kind === 'freeform' ? (g.points ?? []).slice(0, 4).map((p, i, a) => stop(a.length > 1 ? i / (a.length - 1) : 0, p.color)) : g.stops;
+      this.set({ ...g, kind: id as 'linear' | 'radial', geom: null, points: undefined, mode: undefined, stops: stops.length > 1 ? stops : defaultGradient().stops });
+    });
+    this.ffMode = seg([{ id: 'points', label: 'Points' }, { id: 'lines', label: 'Lines' }], (id) => { const o = this.ffOwner(); if (o) engine.setFill({ type: 'gradient', gradient: { ...o.g, mode: id as 'points' } }, [o.id]); });
+    this.ffChip = el<HTMLButtonElement>('<button class="cv-gradp-chip" type="button" title="Point color (click to change)" aria-label="Point color"></button>');
+    this.ffChip.addEventListener('click', () => void (async () => { const o = this.ffOwner(), pt = o?.g.points?.[FF.sel]; if (!o || !pt) return; const c = await this.pickColor(pt.color); if (c) this.editPoint({ color: c }); })());
+    this.ffSpread = numField('Spread', 'pt', (v) => this.editPoint({ spread: Math.max(2, v) }), { min: 2, max: 100000 });
+    const ffDel = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="Delete Point" aria-label="Delete Point">${icon('delete', 16)}</button>`);
+    ffDel.addEventListener('click', () => { const o = this.ffOwner(), pts = o?.g.points ?? []; if (!o || FF.sel < 0 || pts.length < 2) return; engine.setFill({ type: 'gradient', gradient: { ...o.g, points: pts.filter((_, i) => i !== FF.sel) } }, [o.id]); FF.sel = Math.min(FF.sel, pts.length - 2); this.queue(); });
+    const ffRow = el('<div class="cv-kit-row cv-gradp-stoprow"></div>');
+    ffRow.append(this.ffChip, this.ffSpread.el, ffDel);
+    const ffNote = el('<p class="cv-note"></p>');
+    setText(ffNote, 'With the Gradient tool, click inside the object to add a point, drag a point to move it, drag the square on its ring to spread it. Lines joins the points so color runs along them.');
+    this.ffBox.append(this.ffMode.el, ffRow, ffNote);
     this.angle = numField('Angle', '°', (v) => { const g = this.gradient(); if (g) this.set({ ...g, angle: v, geom: null }); }, { min: -360, max: 360 });
     this.aspect = numField('Aspect', '%', (v) => { const g = this.gradient(); if (g) this.set({ ...g, aspect: v / 100 }); }, { min: 1, max: 1000 });
     this.strokeMode = seg([{ id: 'within', label: 'Within' }, { id: 'along', label: 'Along' }, { id: 'across', label: 'Across' }], (id) => { const g = this.gradient(); if (g) this.set({ ...g, strokeMode: id as 'within' }); });
@@ -268,10 +294,21 @@ export class GradientPanel {
     stopRow.append(this.chip, this.loc.el, this.opacity.el, del);
     const geo = el('<div class="cv-kit-row"></div>');
     geo.append(this.angle.el, this.aspect.el);
-    this.body.append(top, geo, this.bar, stopRow, this.strokeMode.el);
+    this.linearBox.append(geo, this.bar, stopRow, this.strokeMode.el);
+    this.body.append(top, this.linearBox, this.ffBox);
     this.bindBar();
-    for (const k of ['colors', 'selection', 'active', 'doc'] as const) engine.on(k, () => this.queue());
+    for (const k of ['colors', 'selection', 'active', 'doc', 'options'] as const) engine.on(k, () => this.queue());
     this.sync();
+  }
+
+  private ffOwner(): { id: string; g: Gradient } | null {
+    for (const n of this.engine.selected()) { const f = n.ap.items.find((i) => i.kind === 'fill'); if (f && f.paint.type === 'gradient' && f.paint.gradient.kind === 'freeform') return { id: n.id, g: f.paint.gradient }; }
+    return null;
+  }
+  private editPoint(patch: Partial<NonNullable<Gradient['points']>[number]>): void {
+    const o = this.ffOwner(), pts = o?.g.points ?? [];
+    if (!o || !pts[FF.sel]) return;
+    this.engine.setFill({ type: 'gradient', gradient: { ...o.g, points: pts.map((p, i) => (i === FF.sel ? { ...p, ...patch } : p)) } }, [o.id]);
   }
 
   private gradient(): Gradient | null { const p = activePaint(this.engine); return p.type === 'gradient' ? p.gradient : null; }
@@ -373,5 +410,12 @@ export class GradientPanel {
     setHidden(this.strokeMode.el, e.activeSlot !== 'stroke');
     setClass(this.body, 'is-inactive', !g);
     setText(q(this.body, '.cv-gradp-preview'), '');
+    const ff = shown.kind === 'freeform', owner = ff ? this.ffOwner() : null, pt = owner?.g.points?.[FF.sel];
+    setHidden(this.linearBox, ff);
+    setHidden(this.ffBox, !ff);
+    this.ffMode.set(owner?.g.mode ?? shown.mode ?? 'points');
+    setStyleVar(this.ffChip, '--sw', pt ? cssColor(pt.color) : 'transparent');
+    this.ffSpread.set(pt ? Math.round(pt.spread * 10) / 10 : null);
+    this.ffSpread.enable(!!pt);
   }
 }

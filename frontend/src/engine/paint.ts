@@ -97,6 +97,45 @@ export const stop = (offset: number, color: Color, opacity = 1, mid = 0.5): Grad
 export function linearGradient(stops: GradientStop[], angle = 0): Gradient { return { kind: 'linear', stops, angle, aspect: 1, geom: null }; }
 export function radialGradient(stops: GradientStop[]): Gradient { return { kind: 'radial', stops, angle: 0, aspect: 1, geom: null }; }
 export const defaultGradient = (): Gradient => linearGradient([stop(0, WHITE), stop(1, BLACK)]);
+
+export function freeformSampler(g: Gradient): (x: number, y: number) => RGB {
+  const pts = g.points ?? [], cols = pts.map((p) => toRgb(p.color));
+  const lines = g.mode === 'lines' && pts.length > 1;
+  return (x, y) => {
+    let sw = 0, r = 0, gg = 0, b = 0;
+    const add = (d: number, w0: number, c: RGB): void => { const w = w0 / Math.max(1e-9, d * d * d); sw += w; r += c.r * w; gg += c.g * w; b += c.b * w; };
+    if (lines) {
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p = pts[i], q = pts[i + 1], dx = q.x - p.x, dy = q.y - p.y, L = dx * dx + dy * dy;
+        const t = L > 1e-9 ? Math.max(0, Math.min(1, ((x - p.x) * dx + (y - p.y) * dy) / L)) : 0;
+        const sp = Math.max(1, p.spread + (q.spread - p.spread) * t), d = Math.max(1e-3, Math.hypot(x - p.x - dx * t, y - p.y - dy * t) / sp);
+        const a = cols[i], c = cols[i + 1];
+        add(d, 1, { r: a.r + (c.r - a.r) * t, g: a.g + (c.g - a.g) * t, b: a.b + (c.b - a.b) * t });
+      }
+    } else pts.forEach((p, i) => add(Math.max(1e-3, Math.hypot(x - p.x, y - p.y) / Math.max(1, p.spread)), 1, cols[i]));
+    return sw > 0 ? { r: r / sw, g: gg / sw, b: b / sw } : { r: 0, g: 0, b: 0 };
+  };
+}
+
+export function freeformPixels(g: Gradient, b: { x: number; y: number; w: number; h: number }, W: number, H: number): Uint8ClampedArray<ArrayBuffer> {
+  const px = new Uint8ClampedArray(W * H * 4), at = freeformSampler(g);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = at(b.x + ((x + 0.5) / W) * b.w, b.y + ((y + 0.5) / H) * b.h), k = (y * W + x) * 4;
+    px[k] = c.r; px[k + 1] = c.g; px[k + 2] = c.b; px[k + 3] = 255;
+  }
+  return px;
+}
+
+export function freeformColorAt(g: Gradient, x: number, y: number): Color { const c = freeformSampler(g)(x, y); return rgb(Math.round(c.r), Math.round(c.g), Math.round(c.b)); }
+
+export function freeformGradient(b: { x: number; y: number; w: number; h: number }, colors: Color[], mode: 'points' | 'lines' = 'points'): Gradient {
+  const cs = colors.length ? colors : [rgb(255, 196, 0), rgb(255, 64, 129), rgb(64, 120, 255), rgb(0, 200, 170)];
+  const spots = mode === 'lines'
+    ? [[0.15, 0.25], [0.5, 0.5], [0.85, 0.75]]
+    : [[0.2, 0.2], [0.8, 0.25], [0.75, 0.8], [0.25, 0.75]];
+  const spread = Math.max(b.w, b.h) * 0.35;
+  return { kind: 'freeform', stops: [], angle: 0, aspect: 1, geom: null, mode, points: spots.map(([u, v], i) => ({ x: b.x + b.w * u, y: b.y + b.h * v, color: cs[i % cs.length], spread })) };
+}
 export function gradientAt(g: Gradient, t: number): { color: Color; opacity: number } {
   const s = [...g.stops].sort((a, b) => a.offset - b.offset);
   if (!s.length) return { color: BLACK, opacity: 1 };

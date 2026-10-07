@@ -4,6 +4,7 @@ import { allNodes, ancestors, childrenOf, cloneNode, findNode, inDocOrder, inser
 import { EFFECT_IDS, effectDefaults, WIDTH_PROFILES } from './effects';
 import { Emitter } from './events';
 import { detachFrames, reflow, threadChains } from './flow';
+import { harmonyColors, isNeutral } from './harmony';
 import { apply, arcPath, ellipsePath, emptyRect, fitCurve, flarePath, invert, isEmptyRect, linePath, mul, normRect, parseSvgD, pathBounds, piePath, polygonPath, rectPath, rectsTouch, reflectAbout, rotateAbout, scaleAbout, shearAbout, spiralPath, starPath, translate, unionRect } from './geometry';
 import { hitTest, nodeTouchesRect, type Hit } from './hit';
 import { liveChildren } from './live';
@@ -12,11 +13,11 @@ import { align, arrange, duplicateNodes, groupNodes, makeClip, makeCompound, mov
 import { expandAppearance } from './ops/expand';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
-import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, hex, NONE, resolvePaint, sameColor, solid, stroke, WHITE, withFirstFill, withFirstStroke } from './paint';
+import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, WHITE, withFirstFill, withFirstStroke } from './paint';
 import { Project } from './project';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, BlendMode, CharStyle, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
+import type { Appearance, Artboard, BlendMode, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, Pt, Rect, StrokeItem, TextNode, TextWrap, ToolId, Units, VNode } from './types';
 import { Viewport } from './viewport';
 
 export * from './types';
@@ -397,6 +398,19 @@ export class Engine extends Emitter<EngineEvents> {
     this.fillPaint = paint;
     this.emit('colors', null);
     if (!this.applyToSelection('Fill', (n) => this.paintDeep(n, (ap) => withFirstFill(ap, paint)), ids)) this.emit('options', null);
+  }
+  setFreeform(mode: 'points' | 'lines' = 'points', ids?: string[], colors?: Color[]): boolean {
+    const p = this.current; if (!p) return false;
+    const fp = this.fillPaint, base = colors ?? (fp.type === 'gradient' ? (fp.gradient.points?.length ? fp.gradient.points.map((x) => x.color) : fp.gradient.stops.map((s) => s.color)) : fp.type === 'color' && !isNeutral(fp.color) ? ((h) => [h[2], h[3], h[1], h[4]])(harmonyColors(fp.color, 'analogous')) : []);
+    let first: Paint | null = null;
+    const ok = this.applyToSelection('Freeform Gradient', (n) => {
+      if (n.kind === 'text' || n.kind === 'layer') return n;
+      const g = freeformGradient(geomBounds(p.doc, n), base, mode), paint: Paint = { type: 'gradient', gradient: g };
+      first ??= paint;
+      return { ...n, ap: withFirstFill(n.ap, paint) };
+    }, ids);
+    if (first) { this.fillPaint = first; this.emit('colors', null); }
+    return ok;
   }
   setStroke(patch: Partial<StrokeItem>, ids?: string[]): void {
     if (patch.paint) this.strokePaint = patch.paint;

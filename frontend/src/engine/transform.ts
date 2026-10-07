@@ -4,7 +4,7 @@ import type { Appearance, AppearanceItem, Gradient, LiveShape, Mat, Paint, VNode
 export interface XfOpts { strokes?: boolean; patterns?: boolean; gradients?: boolean }
 
 function xfGradient(g: Gradient, m: Mat): Gradient {
-  if (!g.geom) return g;
+  if (!g.geom) return g.points?.length ? { ...g, points: g.points.map((p) => ({ ...p, ...applyPt(m, p), spread: p.spread * matScale(m) })) } : g;
   const a = apply(m, g.geom.x1, g.geom.y1), b = apply(m, g.geom.x2, g.geom.y2);
   const f = g.geom.fx !== undefined && g.geom.fy !== undefined ? apply(m, g.geom.fx, g.geom.fy) : null;
   return { ...g, geom: { x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...(f ? { fx: f.x, fy: f.y } : {}) }, points: g.points?.map((p) => ({ ...p, ...applyPt(m, p) })) };

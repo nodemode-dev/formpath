@@ -4,7 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, rasterEffects, strokeOutline,
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { meshQuads } from '../engine/mesh';
-import { cssColor, fill, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
+import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
 import { clipGeometry, docArtBounds, gradientGeom } from '../engine/render';
 import { layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
 import { BLEND_MODES, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
@@ -67,6 +67,21 @@ class Writer {
     return id;
   }
 
+  freeform(gr: Gradient, b: Rect, d: PathData, rule: string, opacity: number, blend: string): string {
+    if (!gr.points?.length || isEmptyRect(b) || typeof document === 'undefined') return '';
+    const side = 256, W = Math.max(2, Math.round((side * b.w) / Math.max(b.w, b.h))), H = Math.max(2, Math.round((side * b.h) / Math.max(b.w, b.h)));
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    if (!g) return '';
+    const img = g.createImageData(W, H);
+    img.data.set(freeformPixels(gr, b, W, H));
+    g.putImageData(img, 0, 0);
+    const cid = this.id('clip');
+    this.defs.push(`<clipPath id="${cid}"><path d="${this.d(d)}"${rule === 'evenodd' ? ' clip-rule="evenodd"' : ''}/></clipPath>`);
+    return `<image href="${c.toDataURL('image/png')}" x="${num(b.x)}" y="${num(b.y)}" width="${num(b.w)}" height="${num(b.h)}" preserveAspectRatio="none" clip-path="url(#${cid})"${opacity < 1 ? ` opacity="${num(opacity)}"` : ''}${blend}/>`;
+  }
+
   filter(fx: RasterFx[]): string {
     const id = this.id('fx'), parts: string[] = [];
     let src = 'SourceGraphic';
@@ -112,6 +127,8 @@ class Writer {
       const id = it.effects.some((e) => e.visible) ? effectPath(d, it.effects) : d;
       const blend = it.blend !== 'normal' ? ` style="mix-blend-mode:${BLEND_CSS.get(it.blend)}"` : '';
       if (it.kind === 'fill') {
+        const rp = resolvePaint(this.doc, it.paint);
+        if (rp.type === 'gradient' && rp.gradient.kind === 'freeform') { out.push(this.freeform(rp.gradient, b, id, rule, it.opacity, blend)); continue; }
         const pt = this.paint(it.paint, b);
         if (pt.v === 'none') continue;
         out.push(`<path d="${this.d(id)}" fill="${pt.v}"${rule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${it.opacity < 1 ? ` fill-opacity="${num(it.opacity)}"` : ''}${blend}/>`);

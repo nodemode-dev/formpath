@@ -2,9 +2,9 @@ import { findNode, newId } from '../engine/doc';
 import { cachedPath } from '../engine/render';
 import { addMeshLine, meshPointAt } from '../engine/mesh';
 import { livePaintFill, shapeRegions } from '../engine/ops/paths';
-import { defaultGradient, firstFill, firstStroke, solid, withFirstFill } from '../engine/paint';
-import type { Engine, Gradient, MeshNode, PathData, Pt, VNode } from '../engine';
-import { registerTool, type ToolContext } from '../extensions/registry';
+import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, withFirstFill } from '../engine/paint';
+import type { Doc, Engine, FreeformPoint, Gradient, MeshNode, PathData, Pt, VNode } from '../engine';
+import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { replaceNode } from './select';
 import { fmt, hud, inView, layerColor, unitLabel } from './util';
@@ -38,21 +38,98 @@ registerTool({
 });
 
 const GR = { on: false, id: '', start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, moved: false };
+export const FF = { sel: -1, drag: null as null | { id: string; kind: 'point' | 'spread'; i: number; moved: boolean } };
+
+function freeformTarget(e: Engine, doc?: Doc): { n: VNode; g: Gradient } | null {
+  const d = doc ?? e.doc;
+  if (!d) return null;
+  for (const id of e.targetIds()) {
+    const n = findNode(d, id), f = n ? firstFill(n.ap) : null;
+    if (n && f?.paint.type === 'gradient' && f.paint.gradient.kind === 'freeform') return { n, g: f.paint.gradient };
+  }
+  return null;
+}
+const withPoints = (doc: Doc, n: VNode, g: Gradient, points: FreeformPoint[]): Doc => replaceNode(doc, n.id, { ...n, ap: withFirstFill(n.ap, { type: 'gradient', gradient: { ...g, points } }) });
+
+function freeformDown(ctx: ToolContext, p: ToolPointer, t: { n: VNode; g: Gradient }): void {
+  const e = ctx.engine, v = ctx.view(), pts = t.g.points ?? [], near = (q: Pt, r: number): boolean => { const s = v.toScreen(q); return Math.hypot(s.x - p.screen.x, s.y - p.screen.y) <= r; };
+  const cur = pts[FF.sel];
+  if (cur && near({ x: cur.x + cur.spread, y: cur.y }, 6)) { FF.drag = { id: t.n.id, kind: 'spread', i: FF.sel, moved: false }; e.beginDrag('Gradient Point Spread'); return; }
+  const i = pts.findIndex((q) => near(q, 8));
+  if (i >= 0) { FF.sel = i; FF.drag = { id: t.n.id, kind: 'point', i, moved: false }; e.beginDrag('Move Gradient Point'); e.emit('options', null); ctx.redraw(); return; }
+  const h = e.hit(p.doc);
+  if (!h || e.selectableFor(h.id) !== t.n.id) { const top = h ? e.selectableFor(h.id) : null; if (top) e.select([top]); else e.deselect(); FF.sel = -1; return; }
+  const add: FreeformPoint = { x: p.doc.x, y: p.doc.y, color: freeformColorAt(t.g, p.doc.x, p.doc.y), spread: pts[0]?.spread ?? 60 };
+  let at = pts.length;
+  if (t.g.mode === 'lines' && pts.length > 1) {
+    let best = Infinity;
+    for (let k = 0; k < pts.length - 1; k++) { const a = pts[k], b = pts[k + 1], dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy, u = L ? Math.max(0, Math.min(1, ((p.doc.x - a.x) * dx + (p.doc.y - a.y) * dy) / L)) : 0, d = Math.hypot(p.doc.x - a.x - dx * u, p.doc.y - a.y - dy * u) * v.zoom; if (d < 8 && d < best) { best = d; at = k + 1; } }
+  }
+  const next = [...pts.slice(0, at), add, ...pts.slice(at)];
+  e.edit('Add Gradient Point', (d) => withPoints(d, t.n, t.g, next));
+  FF.sel = at;
+  FF.drag = { id: t.n.id, kind: 'point', i: at, moved: false };
+  e.beginDrag('Move Gradient Point');
+  e.emit('options', null);
+}
+
+function freeformOverlay(ctx: ToolContext, g2: CanvasRenderingContext2D, t: { n: VNode; g: Gradient }): void {
+  const v = ctx.view(), pts = t.g.points ?? [], accent = ctx.paint().accent;
+  g2.save();
+  if (t.g.mode === 'lines' && pts.length > 1) {
+    g2.beginPath(); pts.forEach((q, i) => { const s = v.toScreen(q); if (i) g2.lineTo(s.x, s.y); else g2.moveTo(s.x, s.y); });
+    g2.strokeStyle = '#000'; g2.lineWidth = 3; g2.stroke(); g2.strokeStyle = '#fff'; g2.lineWidth = 1; g2.stroke();
+  }
+  const sel = pts[FF.sel];
+  if (sel) {
+    const s = v.toScreen(sel), r = sel.spread * v.zoom;
+    g2.setLineDash([4, 4]); g2.strokeStyle = '#fff'; g2.lineWidth = 1; g2.beginPath(); g2.arc(s.x, s.y, r, 0, Math.PI * 2); g2.stroke();
+    g2.lineDashOffset = 4; g2.strokeStyle = '#000'; g2.stroke(); g2.setLineDash([]);
+    g2.fillStyle = '#fff'; g2.strokeStyle = '#000'; g2.fillRect(s.x + r - 3.5, s.y - 3.5, 7, 7); g2.strokeRect(s.x + r - 3.5, s.y - 3.5, 7, 7);
+  }
+  pts.forEach((q, i) => {
+    const s = v.toScreen(q);
+    g2.beginPath(); g2.arc(s.x, s.y, i === FF.sel ? 8 : 6, 0, Math.PI * 2);
+    g2.fillStyle = cssColor(q.color); g2.fill();
+    g2.lineWidth = 2; g2.strokeStyle = i === FF.sel ? accent : '#fff'; g2.stroke();
+    g2.lineWidth = 1; g2.strokeStyle = '#000'; g2.beginPath(); g2.arc(s.x, s.y, (i === FF.sel ? 8 : 6) + 1.5, 0, Math.PI * 2); g2.stroke();
+  });
+  g2.restore();
+}
+
 registerTool({
   id: 'gradient', label: 'Gradient Tool', group: 'gradient', order: 71, shortcut: 'G',
   icon: () => 'vGradient',
-  hint: () => 'Drag across the selected objects to set the direction and length of their gradient fill; click to apply the default gradient.',
+  hint: (e) => (freeformTarget(e) ? 'Freeform: click inside the object to add a color point, drag a point to move it, drag the square on its ring to change its spread, Delete removes the selected point.' : 'Drag across the selected objects to set the direction and length of their gradient fill; click to apply the default gradient.'),
   cursor: () => CURSORS.cross,
   down: (ctx, p) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
     if (!e.hasSelection) { const h = e.hit(p.doc); if (h) e.select([e.selectableFor(h.id)]); }
     if (!e.hasSelection) return;
+    const ff = freeformTarget(e);
+    if (ff) { freeformDown(ctx, p, ff); return; }
     GR.on = true; GR.start = p.doc; GR.cur = p.doc; GR.moved = false;
     e.beginDrag('Gradient');
   },
+  keydown: (ctx, ev) => {
+    const e = ctx.engine, t = freeformTarget(e), pts = t?.g.points ?? [];
+    if (!t || (ev.key !== 'Delete' && ev.key !== 'Backspace') || FF.sel < 0 || pts.length < 2) return false;
+    e.edit('Delete Gradient Point', (d) => withPoints(d, t.n, t.g, pts.filter((_, i) => i !== FF.sel)));
+    FF.sel = Math.min(FF.sel, pts.length - 2);
+    e.emit('options', null);
+    return true;
+  },
   move: (ctx, p) => {
     const e = ctx.engine, base = e.dragOrigin;
+    if (FF.drag && base) {
+      const t = freeformTarget(e, base), d = FF.drag;
+      if (!t) return;
+      d.moved = true;
+      const pts = (t.g.points ?? []).map((q, i) => (i !== d.i ? q : d.kind === 'point' ? { ...q, x: p.doc.x, y: p.doc.y } : { ...q, spread: Math.max(2, Math.hypot(p.doc.x - q.x, p.doc.y - q.y)) }));
+      e.dragTo(withPoints(base, t.n, t.g, pts));
+      return;
+    }
     if (!GR.on || !base) return;
     GR.cur = p.shift ? (() => { const dx = p.doc.x - GR.start.x, dy = p.doc.y - GR.start.y, l = Math.hypot(dx, dy), a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4); return { x: GR.start.x + Math.cos(a) * l, y: GR.start.y + Math.sin(a) * l }; })() : p.doc;
     if (Math.hypot(GR.cur.x - GR.start.x, GR.cur.y - GR.start.y) * ctx.view().zoom < 3) return;
@@ -70,6 +147,7 @@ registerTool({
   },
   up: (ctx) => {
     const e = ctx.engine;
+    if (FF.drag) { const d = FF.drag; FF.drag = null; if (d.moved) e.commitDrag(); else e.cancelDrag(); return; }
     if (!GR.on) return;
     GR.on = false;
     if (GR.moved) { e.commitDrag(); return; }
@@ -78,15 +156,19 @@ registerTool({
     if (!pr) return;
     const n = findNode(pr.doc, e.targetIds()[0] ?? '');
     const f = n ? firstFill(n.ap) : null;
+    if (e.fillPaint.type === 'gradient' && e.fillPaint.gradient.kind === 'freeform') { e.setFreeform(e.fillPaint.gradient.mode ?? 'points'); FF.sel = -1; return; }
     if (!f || f.paint.type !== 'gradient') e.setFill({ type: 'gradient', gradient: e.fillPaint.type === 'gradient' ? e.fillPaint.gradient : defaultGradient() });
   },
+  cancel: (ctx) => { if (FF.drag || GR.on) { FF.drag = null; GR.on = false; ctx.engine.cancelDrag(); } },
   overlay: (ctx, g) => {
     const e = ctx.engine, pr = e.current;
     if (!pr || !e.view.gradientAnnotator) return;
+    const ff = freeformTarget(e);
+    if (ff) { freeformOverlay(ctx, g, ff); return; }
     const v = ctx.view();
     for (const id of e.targetIds()) {
       const n = findNode(pr.doc, id), f = n ? firstFill(n.ap) : null;
-      if (!f || f.paint.type !== 'gradient') continue;
+      if (!f || f.paint.type !== 'gradient' || f.paint.gradient.kind === 'freeform') continue;
       const b = e.boundsOf(n as VNode), gr = f.paint.gradient, cx = b.x + b.w / 2, cy = b.y + b.h / 2, a = (gr.angle * Math.PI) / 180;
       const geom = gr.geom ?? { x1: cx - (Math.cos(a) * b.w) / 2, y1: cy + (Math.sin(a) * b.h) / 2, x2: cx + (Math.cos(a) * b.w) / 2, y2: cy - (Math.sin(a) * b.h) / 2 };
       const s = v.toScreen({ x: geom.x1, y: geom.y1 }), t = v.toScreen({ x: geom.x2, y: geom.y2 });

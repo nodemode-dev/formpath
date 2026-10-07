@@ -145,6 +145,8 @@
 .cv-gradp-stoprow > .cv-props-field { flex: 1 1 0; min-width: 0; }
 .cv-gradp-stoprow .cv-num { padding: 0 6px; }
 .cv-gradp-stoprow .cv-num input { width: 100%; }
+.cv-gradp-lin, .cv-gradp-ff { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cv-gradp-lin[hidden], .cv-gradp-ff[hidden] { display: none; }
 .cv-gradp-chip { flex: none; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line-3); border-radius: 5px; background: var(--sw, transparent); cursor: pointer; }
 
 .cv-picker { display: grid; grid-template-columns: 256px 18px minmax(0, 1fr); align-items: start; gap: 12px; }

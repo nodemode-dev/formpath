@@ -10,6 +10,12 @@ export function paintCss(p: Paint, engine?: Engine): string {
   const pp = engine?.doc ? resolvePaint(engine.doc, p) : p;
   if (pp.type === 'none') return 'linear-gradient(to top right, #fff calc(50% - 1px), #e03030 calc(50% - 1px), #e03030 calc(50% + 1px), #fff calc(50% + 1px))';
   if (pp.type === 'color') return cssColor(pp.color);
+  if (pp.type === 'gradient' && pp.gradient.kind === 'freeform') {
+    const pts = pp.gradient.points ?? [];
+    if (!pts.length) return 'conic-gradient(from 30deg, #ffc400, #ff4081, #4078ff, #00c8aa, #ffc400)';
+    const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y), x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(1, Math.max(...xs) - x0), h = Math.max(1, Math.max(...ys) - y0);
+    return [...pts.map((q) => `radial-gradient(circle at ${Math.round(((q.x - x0) / w) * 80 + 10)}% ${Math.round(((q.y - y0) / h) * 80 + 10)}%, ${cssColor(q.color)}, transparent 70%)`), cssColor(pts[0].color)].join(', ');
+  }
   if (pp.type === 'gradient') {
     const stops = [...pp.gradient.stops].sort((a, b) => a.offset - b.offset).map((s) => `${cssColor(s.color, s.opacity)} ${Math.round(s.offset * 100)}%`).join(', ');
     return pp.gradient.kind === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(${90 - pp.gradient.angle}deg, ${stops})`;
