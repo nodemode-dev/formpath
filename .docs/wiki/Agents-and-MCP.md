@@ -16,4 +16,4 @@ The tool runs in the open formpth window, against the same engine a person uses,
 
 ## Tools
 
-55 tools in thirteen groups: looking (`get_document`, `get_image`, `get_svg`, `get_object`), files, selecting, drawing, paint and appearance, objects and layers, transform and align, path operations, effects and live objects, artboards, type, commands (`list_commands`, `run_command` for any menu command) and history. The harness skill's `references/tools.md` lists every parameter.
+58 tools in thirteen groups: looking (`get_document`, `get_image`, `get_svg`, `get_object`), files, selecting, drawing, paint and appearance, objects and layers, transform and align, path operations, effects and live objects, artboards, type (`set_text`, `text_flow` for threads and wrap, `text_style`, `find_font`, `create_outlines`), commands (`list_commands`, `run_command` for any menu command) and history. The harness skill's `references/tools.md` lists every parameter.

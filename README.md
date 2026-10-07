@@ -11,9 +11,9 @@
 
 ## What it is
 
-formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, type that outlines to paths, symbols, blends, repeats and image trace. It saves its own `.fpth` projects, reads and writes SVG, writes PDF, PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 55 tools.
+formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, type that outlines to paths, symbols, blends, repeats and image trace. It saves its own `.fpth` projects, reads and writes SVG, writes PDF, PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 58 tools.
 
-**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 17,800 lines of TypeScript, 1,500 of CSS, 1,900 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
+**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 18,600 lines of TypeScript, 1,500 of CSS, 1,900 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
 
 ## Highlights
 
@@ -22,9 +22,9 @@ formpth is the vector member of the form family: an Illustrator alternative with
 - **Pathfinder on curves.** All ten Pathfinder operations through paper.js, Shape Builder, Live Paint Bucket, compound paths, Offset Path, Outline Stroke, Simplify, Average, Join, Divide Objects Below, Split into Grid.
 - **Paint.** Colour panel in Grayscale, RGB, HSB, CMYK and Web; swatches with global and spot colours; linear and radial gradients on fills and strokes with the Gradient tool; gradient mesh; patterns; Recolor Artwork; the Stroke panel with dashes, arrowheads and width profiles; the Width tool.
 - **Appearance and effects.** Multiple fills and strokes per object, Graphic Styles, and live effects: fifteen warps, Distort and Transform, Drop Shadow, glows, Feather, Round Corners, Scribble, Offset Path, Gaussian Blur. Envelopes, blends, repeats, symbols, four brush kinds and Image Trace.
-- **Type.** Point, area, vertical and on-path type typed on the canvas, Character and Paragraph panels, Glyphs, Change Case, Find and Replace, and Create Outlines through real glyph outlines.
+- **Type.** Point, area, vertical and on-path type typed on the canvas, area type inside any shape, threaded frames and text wrap, Character and Paragraph panels with OpenType features, Character and Paragraph Styles, Glyphs, Change Case, Find and Replace, Find Font, and Create Outlines through real glyph outlines.
 - **Files.** `.fpth` projects with a library, conflict copies and crash recovery; SVG in and out with exact round trips; PDF out with real vectors, shadings, transparency and CMYK, and back in; PNG, JPEG and WebP; Export for Screens; placed and linked images.
-- **Agents.** `./formpth mcp` gives Claude Code, Codex and Cursor 55 tools, from `get_image` to `pathfinder` to `run_command` over every menu command. The window asks the person once. The `formpth-harness` skill pack teaches agents to look, plan, build, check and deliver.
+- **Agents.** `./formpth mcp` gives Claude Code, Codex and Cursor 58 tools, from `get_image` to `pathfinder` to `run_command` over every menu command. The window asks the person once. The `formpth-harness` skill pack teaches agents to look, plan, build, check and deliver.
 - **The assistant and plugins.** Window > Assistant edits through the same tools on the language model you choose; sandboxed JavaScript plugins add commands.
 - **Zero-flash UI.** Keyed DOM patching, guarded writes, a pre-paint theme boot, reveal after fonts; every interface change is checked in a throttled browser.
 
@@ -115,7 +115,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity gaps.** 3D, the Effect Gallery, threading and text wrap are not built; fifteen more rows are partial. See `docs/PARITY.md`.
+- **Parity gaps.** 3D and the Effect Gallery are not built; fifteen more rows are partial. See `docs/PARITY.md`.
 - **PDF import.** Only PDFs and `.ai` files saved by formpth open; a general PDF reader is planned.
 
 ## Contributors

@@ -17,6 +17,10 @@
 
 `render.ts` draws with Canvas 2D and caches a `Path2D` per node in a `WeakMap`, so unchanged nodes cost nothing to redraw. Raster effects (shadows, glows, blur, feather) render through offscreen canvases.
 
+## Type layout and reflow
+
+`text.ts` lays type out per node and caches the layout by node identity. Area type places each line first and breaks into the free runs of its band, so it can flow inside a shape and on both sides of a wrap object. Anything that depends on other nodes, the outlines of wrap objects and each threaded frame's share of the story, is written into the text nodes by `flow.ts` (`reflow`), which every edit, drag, undo and open runs. OpenType features reach the layout through the `Shaping` interface that `io/fonts.ts` installs, so the engine stays free of opentype.js.
+
 ## Geometry
 
 `geometry.ts` carries Bezier math, bounds and affines. `kernel.ts` adapts paper.js for booleans, intersections, offset and simplify, so Pathfinder returns curves, not polygons. `ops/` holds object, path, expand and recolor operations.

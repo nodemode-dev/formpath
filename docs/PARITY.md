@@ -10,9 +10,9 @@ formpth is measured against Adobe Illustrator the way formvis is measured agains
 
 Platform rows are shown and not scored.
 
-## Score at v0.9.0
+## Score at v0.10.0
 
-**48 of 59 scored rows, 81 percent:** 40 Full, 16 Partial, 3 None. The tally is at the end.
+**49.5 of 59 scored rows, 84 percent:** 42 Full, 15 Partial, 2 None. The tally is at the end.
 
 ## Objects and layers · 7.5 of 8
 
@@ -90,16 +90,16 @@ Platform rows are shown and not scored.
 | 3D and Materials | None | Not built |
 | Effect Gallery raster filters | None | Gaussian Blur only; no Effect Gallery |
 
-## Type · 4 of 6
+## Type · 5.5 of 6
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
-| Point and area type | Full | Point, area and vertical type typed on the canvas with a caret, selection, IME and clipboard; area type rows, columns, gutter and inset |
+| Point and area type | Full | Point, area and vertical type typed on the canvas with a caret, selection, IME and clipboard; area type rows, columns, gutter and inset; area type in any closed shape flows inside the shape |
 | Type on a path | Full | Type on any path, including live shapes, with options |
-| Character and paragraph with styles | Partial | Character and Paragraph panels in full; character and paragraph styles are stored in the document but have no panels |
-| Threading and text wrap | None | Not built |
-| OpenType and glyphs | Partial | Glyphs panel inserts any glyph; no OpenType feature controls (ligatures, alternates, figures) |
-| Create Outlines | Full | Glyph outlines through opentype.js, per glyph, as compound paths in their colours |
+| Character and paragraph with styles | Full | Character and Paragraph panels in full; Character Styles and Paragraph Styles panels with new from selection, apply to a range or an object, redefine, delete, rename, override marks and the Normal styles |
+| Threading and text wrap | Full | Threaded Text Create, Release Selection and Remove Threading; in and out ports, overflow marks, thread lines, loaded text from the out port into a click, a drag or a closed path; Text Wrap Make, Release and Options with offset and invert, around any object above the type in its layer |
+| OpenType and glyphs | Partial | Ligatures, discretionary ligatures, swash, stylistic alternates and sets, titling, ordinals, fractions, slashed zero, case forms, four figure styles and four positions, shaped from the font and drawn as its glyphs on the canvas, in outlines and PDF; Find Font; the Glyphs panel inserts any glyph; no contextual alternates and no per-glyph alternates in the Glyphs panel |
+| Create Outlines | Full | Glyph outlines through opentype.js, per glyph (shaped glyphs included), as compound paths in their colours |
 
 ## Files and output · 6 of 7
 
@@ -119,7 +119,7 @@ Platform rows are shown and not scored.
 | --- | --- |
 | Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
 | Web app | The same app in a browser against the local engine |
-| Agents over MCP | 55 tools, `run_command` over every menu command, consent in the window, the `formpth-harness` skill pack |
+| Agents over MCP | 58 tools, `run_command` over every menu command, consent in the window, the `formpth-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |
 
 ## Tally
@@ -132,12 +132,12 @@ Platform rows are shown and not scored.
 | Paths and Pathfinder | 6.5 | 7 |
 | Paint and colour | 6 | 8 |
 | Effects and live objects | 6.5 | 10 |
-| Type | 4 | 6 |
+| Type | 5.5 | 6 |
 | Files and output | 6 | 7 |
-| **Total** | **48** | **59** |
+| **Total** | **49.5** | **59** |
 
-40 rows Full, 16 Partial, 3 None.
+42 rows Full, 15 Partial, 2 None.
 
 ## Next to close
 
-Ordered by how often the gap is hit in everyday work: live shape editing after drawing, character and paragraph style panels, Magic Wand tolerance, freeform gradient creation, threading and text wrap, New Brush from art, OpenType features, Ctrl-click select behind and spacing guides, the remaining symbolism tools, live tracing objects, pattern editing mode, a general PDF reader, Effect Gallery filters, 3D.
+Ordered by how often the gap is hit in everyday work: live shape editing after drawing, Magic Wand tolerance, freeform gradient creation and the Color Guide, Ctrl-click select behind and spacing guides, New Brush from art, the remaining symbolism tools, live tracing objects, pattern editing mode, a general PDF reader, Effect Gallery filters, 3D.

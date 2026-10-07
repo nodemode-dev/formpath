@@ -26,7 +26,14 @@ The engine owns the document and every change to it. It has no DOM, so the canva
 
 - `geometry.ts`: Bezier evaluation and splitting, bounds, affines (`rotateAbout`, `scaleAbout`, `reflectAbout`, `shearAbout`, `translate`, `mul`).
 - `kernel.ts` adapts paper.js: booleans, intersections, offset, simplify. Pathfinder must return curves, never polygons.
-- `ops/paths.ts` (`pathOperation`), `ops/objects.ts` (align, arrange, transform), `ops/expand.ts` (expand appearance and live objects), `ops/recolor.ts` (colour maps).
+- `ops/paths.ts` (`pathOperation`), `ops/objects.ts` (align, arrange, transform), `ops/expand.ts` (expand appearance and live objects), `ops/recolor.ts` (colour maps), `ops/text-styles.ts` (character and paragraph styles, fonts in use).
+
+## Type layout and reflow (`text.ts`, `flow.ts`)
+
+- Layout is cached per text node by identity and never reads the document. Anything that depends on other nodes is derived data written into the node by `reflow` in `flow.ts`: `wrapShape` (outlines of wrap objects above the type in its layer, plus its own `framePath`) and each threaded frame's `spans`.
+- `Engine.edit`, `dragTo`, `restore` and `addProject` run `reflow`; it returns the same doc when nothing changed. A new feature that makes type depend on other objects belongs in `reflow`, not in `layoutText`.
+- A story spans a thread (`next` links); deleting or releasing a frame goes through `detachFrames` so its text flows back.
+- OpenType features go through the `Shaping` interface (`setShaping`), installed by `io/fonts.ts`; the engine never imports opentype.js.
 
 ## Rendering (`render.ts`)
 

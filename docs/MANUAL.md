@@ -146,8 +146,24 @@ ask it questions.
 - Character panel: font family and style, size, leading, kerning, tracking, scale, baseline shift, case, and the fonts
   installed on your computer when the engine runs. Paragraph panel: alignment, indents, space before and after,
   and Area Type Options (rows, columns, gutter, inset). Glyphs shows a font's characters to insert.
+- OpenType, at the foot of the Character panel: figure style, position, stylistic set, and ligatures, swash,
+  alternates, titling, ordinals, fractions, slashed zero and case forms. Options the font does not have are dimmed;
+  the bundled Inter offers fractions and figure styles, installed fonts offer whatever they carry. Small Caps uses
+  the font's small capitals, or smaller capitals when it has none.
+- Character Styles and Paragraph Styles: select type set the way you want, click the plus to make a style from it,
+  then click the style to apply it to other type (to the selected characters while typing). A plus after the name
+  means the type differs from its style; click the style again to clear that. Change one example and click Redefine
+  to update every use. Double-click a style to rename it.
+- Threaded text: when area type has more text than fits, its out port (bottom right) shows a red plus. Click the out
+  port with the Selection tool, then click the canvas (a frame the same size), drag (a frame that size) or click a
+  closed path, and the story continues there. Or select the frames and choose Type > Threaded Text > Create. Release
+  Selection takes a frame out of the thread; Remove Threading breaks every link and leaves the text where it is.
+  View > Show Text Threads draws the links. Area type in a circle or any closed shape flows inside the shape.
+- Text wrap: select an object above area type in the same layer and choose Object > Text Wrap > Make; the paragraphs
+  run around it. Text Wrap Options sets the offset and Invert Wrap, which flows the type inside the object.
 - Type > Create Outlines turns type into paths, letter by letter, in a group. Change Case sets upper, lower, title or
-  sentence case. Find and Replace searches every text object.
+  sentence case. Find and Replace searches every text object. Find Font lists the fonts the document uses, selects
+  the type that uses one, and replaces a family and style everywhere.
 
 ## Layers and objects
 
