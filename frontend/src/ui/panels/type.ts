@@ -15,7 +15,7 @@ const FIGURES: ReadonlyArray<readonly [string, string]> = [['', 'Default Figure'
 const FIG_TAGS = new Set(['tnum', 'pnum', 'lnum', 'onum']);
 const OT_POS: ReadonlyArray<readonly [string, string]> = [['', 'Default Position'], ['sups', 'Superior'], ['subs', 'Inferior'], ['numr', 'Numerator'], ['dnom', 'Denominator']];
 const POS_TAGS = new Set(['sups', 'subs', 'numr', 'dnom']);
-const SETS: ReadonlyArray<readonly [string, string]> = [['', 'None'], ...Array.from({ length: 20 }, (_, i) => [`ss${String(i + 1).padStart(2, '0')}`, `Set ${i + 1}`] as const)];
+const SETS: ReadonlyArray<readonly [string, string]> = [['', 'No Stylistic Set'], ...Array.from({ length: 20 }, (_, i) => [`ss${String(i + 1).padStart(2, '0')}`, `Stylistic Set ${i + 1}`] as const)];
 
 function currentStyle(e: Engine): CharStyle | null {
   const ed = typing.editor, n = ed?.node();
@@ -59,7 +59,7 @@ export class CharacterPanel {
     this.ot = OT_TOGGLES.map(([tag, label]) => ({ tag, ctl: check(label, (on) => swap((f) => f === tag, on ? [tag] : [])) }));
     this.figures = selectCtl('Figures', FIGURES, (v) => swap((f) => FIG_TAGS.has(f), v ? v.split('+') : []));
     this.otPos = selectCtl('Position', OT_POS, (v) => swap((f) => POS_TAGS.has(f), v ? [v] : []));
-    this.sset = selectCtl('Stylistic Set', SETS, (v) => swap((f) => /^ss\d\d$/.test(f), v ? [v] : []));
+    this.sset = selectCtl('Sets', SETS, (v) => swap((f) => /^ss\d\d$/.test(f), v ? [v] : []));
     this.font = selectCtl('', [], (v) => set({ font: v, style: stylesOf(v).includes(currentStyle(engine)?.style ?? 'Regular') ? currentStyle(engine)?.style ?? 'Regular' : stylesOf(v)[0] ?? 'Regular' }));
     this.style = selectCtl('', [], (v) => set({ style: v }));
     this.size = numField('Size', 'pt', (v) => set({ size: v }), { min: 0.1, max: 1296 });
