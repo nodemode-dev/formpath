@@ -1,16 +1,16 @@
 import { allNodes } from '../../engine/doc';
-import { DEFAULT_CHAR, fontHasFeature, styleAt } from '../../engine/text';
+import { DEFAULT_CHAR, fontHasFeature, plainText, styleAt } from '../../engine/text';
 import type { CharStyle, Engine, ParaStyle, TextNode } from '../../engine';
-import { el, patchList, setClass, setText } from '../dom';
+import { el, patchList, q, setClass, setHidden, setText, setTitle } from '../dom';
 import { askForm } from '../form-dialog';
 import { typing } from '../text-editor';
-import { families, glyphList, stylesOf, ensureFace } from '../../io/fonts';
+import { families, glyphAlternates, glyphList, stylesOf, ensureFace } from '../../io/fonts';
 import { typeDefaults } from '../../tools/type';
 import { check, numField, row, section, seg, selectCtl } from './kit';
 
 function texts(e: Engine): TextNode[] { return e.selected().filter((n): n is TextNode => n.kind === 'text'); }
 
-const OT_TOGGLES: ReadonlyArray<readonly [string, string]> = [['liga', 'Ligatures'], ['dlig', 'Discretionary'], ['swsh', 'Swash'], ['salt', 'Alternates'], ['titl', 'Titling'], ['ordn', 'Ordinals'], ['frac', 'Fractions'], ['zero', 'Slashed Zero'], ['case', 'Case Forms']];
+const OT_TOGGLES: ReadonlyArray<readonly [string, string]> = [['liga', 'Ligatures'], ['calt', 'Contextual'], ['dlig', 'Discretionary'], ['swsh', 'Swash'], ['salt', 'Alternates'], ['titl', 'Titling'], ['ordn', 'Ordinals'], ['frac', 'Fractions'], ['zero', 'Slashed Zero'], ['case', 'Case Forms']];
 const FIGURES: ReadonlyArray<readonly [string, string]> = [['', 'Default Figure'], ['tnum+lnum', 'Tabular Lining'], ['pnum+onum', 'Proportional Oldstyle'], ['pnum+lnum', 'Proportional Lining'], ['tnum+onum', 'Tabular Oldstyle']];
 const FIG_TAGS = new Set(['tnum', 'pnum', 'lnum', 'onum']);
 const OT_POS: ReadonlyArray<readonly [string, string]> = [['', 'Default Position'], ['sups', 'Superior'], ['subs', 'Inferior'], ['numr', 'Numerator'], ['dnom', 'Denominator']];
@@ -157,13 +157,48 @@ export class ParagraphPanel {
 }
 
 export class GlyphsPanel {
-  readonly body = el('<div class="cv-kit-page cv-glyphp"><p class="cv-props-none">Choose a font to see its glyphs; double-click a glyph to insert it at the text cursor.</p><div class="cv-glyphp-grid" role="listbox" aria-label="Glyphs"></div></div>');
+  readonly body = el('<div class="cv-kit-page cv-glyphp"><p class="cv-props-none">Choose a font to see its glyphs; double-click a glyph to insert it at the text cursor. Select one character to see its alternates.</p><div class="cv-glyphp-alts" hidden><span class="cv-glyphp-alts-label"></span><div class="cv-glyphp-alts-row" role="listbox" aria-label="Alternates for the selected character"></div></div><div class="cv-glyphp-grid" role="listbox" aria-label="Glyphs"></div></div>');
   private readonly grid: HTMLElement;
+  private readonly alts: HTMLElement;
+  private readonly altRow: HTMLElement;
   private key = '';
+  private altKey = '';
+  private altFrame = 0;
   private frame = 0;
+
+  caretMoved(): void { if (!this.altFrame) this.altFrame = requestAnimationFrame(() => { this.altFrame = 0; void this.syncAlts(); }); }
+
+  private async syncAlts(): Promise<void> {
+    const ed = typing.editor, n = ed?.node(), r = ed?.range() ?? null;
+    const ch = n && r && r[1] - r[0] === 1 ? plainText(n).slice(r[0], r[1]) : '';
+    const st = n && ch && r ? styleAt(n.spans, r[0]) : null;
+    const key = st && r && n ? `${n.id}|${r[0]}|${ch}|${st.font}|${st.style}|${st.alt ?? ''}` : '';
+    if (key === this.altKey) return;
+    this.altKey = key;
+    if (!st || !n || !r || !/\S/.test(ch)) { setHidden(this.alts, true); return; }
+    const list = await glyphAlternates(st.font, st.style, ch);
+    if (this.altKey !== key) return;
+    if (list.length < 2) { setHidden(this.alts, true); return; }
+    setText(q(this.alts, '.cv-glyphp-alts-label'), `Alternates for ${ch}`);
+    const current = st.alt ?? list[0].gid, id = n.id, range: [number, number] = [r[0], r[1]];
+    patchList(this.altRow, list, {
+      key: (g) => `g${g.gid}`,
+      create: (g) => {
+        const b = el<HTMLButtonElement>(`<button class="cv-glyphp-alt" type="button" role="option"><svg viewBox="${-10} 0 ${Math.max(60, g.adv * 100 + 20)} 100" aria-hidden="true"><path fill="currentColor"/></svg></button>`);
+        q(b, 'path').setAttribute('d', g.d);
+        b.dataset.gid = String(g.gid);
+        b.addEventListener('click', () => { const gid = Number(b.dataset.gid), base = list[0].gid; this.engine.setCharStyle({ alt: gid === base ? undefined : gid }, [id], range); this.altKey = ''; this.caretMoved(); });
+        return b;
+      },
+      update: (b, g) => { setClass(b, 'is-on', g.gid === current); b.setAttribute('aria-selected', String(g.gid === current)); setTitle(b, g.gid === list[0].gid ? 'Default glyph' : `Alternate glyph ${g.gid}`); },
+    });
+    setHidden(this.alts, false);
+  }
 
   constructor(private readonly engine: Engine) {
     this.grid = this.body.querySelector('.cv-glyphp-grid') as HTMLElement;
+    this.alts = q(this.body, '.cv-glyphp-alts');
+    this.altRow = q(this.alts, '.cv-glyphp-alts-row');
     this.grid.addEventListener('dblclick', (e) => {
       const g = (e.target as HTMLElement).closest<HTMLElement>('.cv-glyphp-cell')?.dataset.ch;
       if (!g) return;

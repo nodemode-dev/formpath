@@ -159,6 +159,117 @@ function subsOf(font: Font, tag: string): Subs {
 
 interface G { gid: number; chars: number; ch: string }
 const isDigit = (ch: string): boolean => ch >= '0' && ch <= '9';
+
+type Cov = { format: number; glyphs?: number[]; ranges?: Array<{ start: number; end: number; index: number }> };
+type ClassDef = { format: number; startGlyph?: number; classes?: number[]; ranges?: Array<{ start: number; end: number; classId?: number; value?: number }> };
+type Rec = { sequenceIndex: number; lookupListIndex: number };
+type Rule = { backtrack?: number[]; input?: number[]; lookahead?: number[]; lookupRecords?: Rec[]; substLookupRecords?: Rec[] };
+type Sub = {
+  substFormat: number; coverage?: Cov; deltaGlyphId?: number; substitute?: number[]; alternateSets?: number[][]; ligatureSets?: Array<Array<{ ligGlyph: number; components: number[] }>>;
+  ruleSets?: Rule[][]; classSets?: Rule[][]; chainRuleSets?: Rule[][]; chainClassSet?: Rule[][]; classDef?: ClassDef; backtrackClassDef?: ClassDef; inputClassDef?: ClassDef; lookaheadClassDef?: ClassDef;
+  coverages?: Cov[]; backtrackCoverage?: Cov[]; inputCoverage?: Cov[]; lookaheadCoverage?: Cov[]; lookupRecords?: Rec[];
+};
+type Lookup = { lookupType: number; subtables: Sub[] };
+type Gsub = { features?: Array<{ tag: string; feature?: { lookupListIndexes?: number[] } }>; lookups?: Lookup[] };
+
+function covIndex(c: Cov | undefined, gid: number): number {
+  if (!c) return -1;
+  if (c.format === 1) return c.glyphs?.indexOf(gid) ?? -1;
+  for (const r of c.ranges ?? []) if (gid >= r.start && gid <= r.end) return r.index + gid - r.start;
+  return -1;
+}
+function classOf(cd: ClassDef | undefined, gid: number): number {
+  if (!cd) return 0;
+  if (cd.format === 1) { const i = gid - (cd.startGlyph ?? 0); return i >= 0 && i < (cd.classes?.length ?? 0) ? cd.classes?.[i] ?? 0 : 0; }
+  for (const r of cd.ranges ?? []) if (gid >= r.start && gid <= r.end) return r.classId ?? r.value ?? 0;
+  return 0;
+}
+
+function applyLookup(gsub: Gsub, li: number, gs: G[], i: number, depth = 0): number {
+  const lk = gsub.lookups?.[li];
+  if (!lk || depth > 6) return 0;
+  for (const st of lk.subtables) {
+    const g = gs[i];
+    if (!g) return 0;
+    if (lk.lookupType === 1) {
+      const k = covIndex(st.coverage, g.gid);
+      if (k < 0) continue;
+      gs[i] = { ...g, gid: st.substFormat === 1 ? (g.gid + (st.deltaGlyphId ?? 0)) & 0xffff : st.substitute?.[k] ?? g.gid };
+      return 1;
+    }
+    if (lk.lookupType === 3) {
+      const k = covIndex(st.coverage, g.gid), alt = k >= 0 ? st.alternateSets?.[k]?.[0] : undefined;
+      if (alt === undefined) continue;
+      gs[i] = { ...g, gid: alt };
+      return 1;
+    }
+    if (lk.lookupType === 4) {
+      const k = covIndex(st.coverage, g.gid);
+      if (k < 0) continue;
+      const lig = st.ligatureSets?.[k]?.find((l) => l.components.every((c, n) => gs[i + 1 + n]?.gid === c));
+      if (!lig) continue;
+      const parts = gs.slice(i, i + 1 + lig.components.length);
+      gs.splice(i, parts.length, { gid: lig.ligGlyph, chars: parts.reduce((a, p) => a + p.chars, 0), ch: parts.map((p) => p.ch).join('') });
+      return 1;
+    }
+    if (lk.lookupType === 5 || lk.lookupType === 6) {
+      const n = contextMatch(lk.lookupType === 6, st, gs, i);
+      if (n === null) continue;
+      const recs = n.recs;
+      let len = n.len;
+      for (const r of recs) { const before = gs.length; applyLookup(gsub, r.lookupListIndex, gs, i + r.sequenceIndex, depth + 1); len -= before - gs.length; }
+      return Math.max(1, len);
+    }
+  }
+  return 0;
+}
+
+function contextMatch(chain: boolean, st: Sub, gs: G[], i: number): { len: number; recs: Rec[] } | null {
+  const at = (k: number): number | undefined => gs[k]?.gid;
+  const seqOk = (seq: number[] | undefined, start: number, dir: 1 | -1, test: (gid: number, v: number) => boolean): boolean => (seq ?? []).every((v, n) => { const g = at(start + dir * n); return g !== undefined && test(g, v); });
+  if (st.substFormat === 3) {
+    const input = chain ? st.inputCoverage ?? [] : st.coverages ?? [];
+    if (!input.length || !input.every((c, n) => { const g = at(i + n); return g !== undefined && covIndex(c, g) >= 0; })) return null;
+    if (chain) {
+      if (!(st.backtrackCoverage ?? []).every((c, n) => { const g = at(i - 1 - n); return g !== undefined && covIndex(c, g) >= 0; })) return null;
+      if (!(st.lookaheadCoverage ?? []).every((c, n) => { const g = at(i + input.length + n); return g !== undefined && covIndex(c, g) >= 0; })) return null;
+    }
+    return { len: input.length, recs: st.lookupRecords ?? (st as { substLookupRecords?: Rec[] }).substLookupRecords ?? [] };
+  }
+  const first = at(i);
+  if (first === undefined) return null;
+  if (st.substFormat === 1) {
+    const k = covIndex(st.coverage, first);
+    if (k < 0) return null;
+    for (const r of (chain ? st.chainRuleSets?.[k] : st.ruleSets?.[k]) ?? []) {
+      const input = r.input ?? [];
+      if (!seqOk(input, i + 1, 1, (g, v) => g === v)) continue;
+      if (chain && (!seqOk(r.backtrack, i - 1, -1, (g, v) => g === v) || !seqOk(r.lookahead, i + 1 + input.length, 1, (g, v) => g === v))) continue;
+      return { len: input.length + 1, recs: r.lookupRecords ?? r.substLookupRecords ?? [] };
+    }
+    return null;
+  }
+  if (st.substFormat === 2) {
+    if (covIndex(st.coverage, first) < 0) return null;
+    const icd = chain ? st.inputClassDef : st.classDef;
+    for (const r of (chain ? st.chainClassSet?.[classOf(icd, first)] : st.classSets?.[classOf(icd, first)]) ?? []) {
+      const input = r.input ?? [];
+      if (!seqOk(input, i + 1, 1, (g, v) => classOf(icd, g) === v)) continue;
+      if (chain && (!seqOk(r.backtrack, i - 1, -1, (g, v) => classOf(st.backtrackClassDef, g) === v) || !seqOk(r.lookahead, i + 1 + input.length, 1, (g, v) => classOf(st.lookaheadClassDef, g) === v))) continue;
+      return { len: input.length + 1, recs: r.lookupRecords ?? r.substLookupRecords ?? [] };
+    }
+  }
+  return null;
+}
+
+function gsubFeature(font: Font, tag: string, gs: G[]): G[] {
+  const gsub = font.tables.gsub as Gsub | undefined;
+  const lookups = [...new Set((gsub?.features ?? []).filter((f) => f.tag === tag).flatMap((f) => f.feature?.lookupListIndexes ?? []))].sort((a, b) => a - b);
+  if (!gsub || !lookups.length) return gs;
+  const out = gs.slice();
+  for (const li of lookups) for (let i = 0; i < out.length;) { let n = 0; try { n = applyLookup(gsub, li, out, i); } catch { n = 0; } i += Math.max(1, n); }
+  return out;
+}
 function single(font: Font, tag: string, gs: G[], only?: (i: number) => boolean): G[] {
   const s = subsOf(font, tag).single;
   return s.size ? gs.map((g, i) => (s.has(g.gid) && (!only || only(i)) ? { ...g, gid: s.get(g.gid) as number } : g)) : gs;
@@ -189,7 +300,7 @@ function fractions(font: Font, gs: G[]): G[] {
   return out;
 }
 
-export const OT_ORDER = ['frac', 'ordn', 'ccmp', 'liga', 'dlig', 'smcp', 'c2sc', 'case', 'lnum', 'onum', 'pnum', 'tnum', 'zero', 'sups', 'subs', 'sinf', 'numr', 'dnom', 'titl', 'swsh', 'salt', ...Array.from({ length: 20 }, (_, i) => `ss${String(i + 1).padStart(2, '0')}`)];
+export const OT_ORDER = ['frac', 'ordn', 'ccmp', 'rlig', 'liga', 'clig', 'calt', 'dlig', 'smcp', 'c2sc', 'case', 'lnum', 'onum', 'pnum', 'tnum', 'zero', 'sups', 'subs', 'sinf', 'numr', 'dnom', 'titl', 'swsh', 'salt', ...Array.from({ length: 20 }, (_, i) => `ss${String(i + 1).padStart(2, '0')}`)];
 
 const outlines = new WeakMap<Font, Map<number, PathData>>();
 
@@ -203,9 +314,11 @@ export function installShaping(): void {
       for (const tag of [...OT_ORDER, ...features.filter((f) => !OT_ORDER.includes(f))]) {
         if (!want.has(tag)) continue;
         if (tag === 'frac') gs = fractions(font, gs);
+        else if (tag === 'calt' || tag === 'clig' || tag === 'rlig') gs = gsubFeature(font, tag, gs);
         else if (tag === 'ordn') gs = single(font, 'ordn', gs, (i) => { let k = i - 1; while (k >= 0 && /[a-z]/i.test(gs[k].ch)) k--; return k >= 0 && isDigit(gs[k].ch) && /[a-z]/i.test(gs[i].ch); });
         else gs = single(font, tag, ligate(font, tag, gs));
       }
+      if (st.alt !== undefined && gs.length === 1 && font.glyphs.get(st.alt)) gs = [{ ...gs[0], gid: st.alt }];
       const upm = font.unitsPerEm || 1000;
       return gs.map((g, i) => {
         let adv = (font.glyphs.get(g.gid)?.advanceWidth ?? 0) / upm;
@@ -225,6 +338,22 @@ export function installShaping(): void {
     },
     has: (st, feature) => !!fontNow(st)?.tables.gsub?.features?.some((f) => f.tag === feature),
   });
+}
+
+const ALT_TAGS = ['aalt', 'salt', 'swsh', 'calt', 'titl', 'case', 'ornm', 'hist', 'nalt', 'smcp', 'c2sc', ...Array.from({ length: 20 }, (_, i) => `ss${String(i + 1).padStart(2, '0')}`), ...Array.from({ length: 30 }, (_, i) => `cv${String(i + 1).padStart(2, '0')}`)];
+export async function glyphAlternates(family: string, style: string, ch: string): Promise<Array<{ gid: number; d: string; adv: number }>> {
+  const font = await fontFor(family, style);
+  if (!font || !ch) return [];
+  const base = font.charToGlyph(ch).index, seen = new Set<number>([base]), out: number[] = [];
+  const add = (g: number): void => { if (!seen.has(g) && font.glyphs.get(g)) { seen.add(g); out.push(g); } };
+  for (const tag of ALT_TAGS) for (const script of ['latn', 'DFLT']) {
+    try {
+      for (const r of font.substitution.getAlternates(tag, script)) if (r.sub === base) r.by.forEach(add);
+      for (const r of font.substitution.getSingle(tag, script)) if (r.sub === base) add(r.by);
+    } catch { continue; }
+  }
+  const upm = font.unitsPerEm || 1000;
+  return [base, ...out].map((gid) => { const g = font.glyphs.get(gid); return { gid, d: g ? g.getPath(0, 0.8 * 100, 100).toPathData(2) : '', adv: (g?.advanceWidth ?? upm) / upm }; });
 }
 
 export async function featuresOf(family: string, style: string): Promise<Set<string>> {

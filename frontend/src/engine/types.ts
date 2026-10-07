@@ -109,7 +109,7 @@ export interface CompoundNode extends NodeBase { kind: 'compound'; children: Pat
 export interface CharStyle {
   font: string; style: string; size: number; leading: number | null; tracking: number; kerning: 'auto' | 'optical' | 'none';
   baseline: number; hscale: number; vscale: number; fill: Paint; stroke: Paint; strokeWidth: number;
-  underline: boolean; strike: boolean; caps: 'none' | 'all' | 'small'; position: 'normal' | 'super' | 'sub'; features: string[]; cs?: string;
+  underline: boolean; strike: boolean; caps: 'none' | 'all' | 'small'; position: 'normal' | 'super' | 'sub'; features: string[]; cs?: string; alt?: number;
 }
 export type TextAlign = 'left' | 'center' | 'right' | 'justify' | 'justify_center' | 'justify_right' | 'justify_all';
 export interface ParaStyle { align: TextAlign; indentLeft: number; indentRight: number; indentFirst: number; spaceBefore: number; spaceAfter: number; hyphenate: boolean; name?: string; ps?: string }

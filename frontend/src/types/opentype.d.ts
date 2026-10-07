@@ -1,6 +1,6 @@
 declare module 'opentype.js' {
   export interface PathCommand { type: 'M' | 'L' | 'C' | 'Q' | 'Z'; x?: number; y?: number; x1?: number; y1?: number; x2?: number; y2?: number }
-  export interface Path { commands: PathCommand[] }
+  export interface Path { commands: PathCommand[]; toPathData(decimalPlaces?: number): string }
   export interface Glyph { name: string | null; unicode?: number; unicodes: number[]; advanceWidth?: number; index: number; getPath(x: number, y: number, fontSize: number): Path }
   export interface GlyphSet { length: number; get(index: number): Glyph }
   export interface Substitution {

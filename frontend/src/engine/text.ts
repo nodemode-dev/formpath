@@ -90,7 +90,7 @@ function items(spans: Span[]): Item[] {
     for (const piece of text.split(/(\r\n|\r|\n)/)) {
       if (!piece) continue;
       if (piece === '\n' || piece === '\r' || piece === '\r\n') { out.push({ ch: '\n', st, index: i }); i += piece.length; continue; }
-      const shaped = feats.length && shaping ? shaping.shape(st, piece, feats) : null;
+      const shaped = (feats.length || st.alt !== undefined) && shaping ? shaping.shape(st, piece, feats) : null;
       if (shaped) {
         let k = 0;
         for (const g of shaped) { const ch = piece.slice(k, k + g.chars); out.push({ ch, st, index: i, gid: g.gid, adv: g.adv }); i += ch.length; k += g.chars; }

@@ -665,7 +665,7 @@ Changes a type object: its words, and its font, style, size, colour, leading, tr
 - `start`: integer
 - `end`: integer
 - `caps`: string (none | all | small)
-- `features`: array; OpenType feature tags to turn on, replacing the current list: liga, dlig, frac, ordn, tnum, pnum, lnum, onum, zero, case, sups, subs, numr, dnom, swsh, salt, titl, smcp, ss01..ss20. Features the font lacks do nothing; find_font lists the fonts in use.
+- `features`: array; OpenType feature tags to turn on, replacing the current list: liga, calt, dlig, frac, ordn, tnum, pnum, lnum, onum, zero, case, sups, subs, numr, dnom, swsh, salt, titl, smcp, ss01..ss20. Features the font lacks do nothing; find_font lists the fonts in use.
 
 ## text_flow
 

@@ -179,6 +179,7 @@ export function startApp(): void {
   const propsP = new PropertiesPanel(engine, (c) => { commands.run(c); });
   const xformP = new TransformPanel(engine), alignP = new AlignPanel(engine), pfP = new PathfinderPanel(engine);
   const charP = new CharacterPanel(engine), paraP = new ParagraphPanel(engine), glyphsP = new GlyphsPanel(engine);
+  typing.redraw = () => { stage.ctx.redraw(); glyphsP.caretMoved(); };
   const charStylesP = new TextStylesPanel(engine, 'char'), paraStylesP = new TextStylesPanel(engine, 'para');
   void historyP; void navP;
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }], 'Color');
