@@ -160,8 +160,15 @@ ask it questions.
   appearance to apply in one click.
 - Effects (Effect menu) stay live and editable: Warp (15 styles), Distort & Transform (Free Distort, Pucker & Bloat,
   Roughen, Transform, Tweak, Twist, Zig Zag), Path (Offset Path, Outline Stroke), Stylize (Round Corners, Scribble,
-  Drop Shadow, Inner Glow, Outer Glow, Feather), Blur (Gaussian Blur) and Convert to Shape. Apply Last Effect repeats
-  the last one; Expand Appearance makes it permanent.
+  Drop Shadow, Inner Glow, Outer Glow, Feather), Rasterize and Convert to Shape. Apply Last Effect repeats the last
+  one; Expand Appearance makes it permanent.
+- Photoshop effects, in the lower half of the Effect menu: Effect Gallery opens every one of them as a thumbnail of
+  your selection, grouped as Artistic, Blur, Brush Strokes, Distort, Pixelate, Sketch, Stylize, Texture and Video;
+  click one to see it large and set its options, double-click or OK to apply. Each is also in its own submenu (Blur
+  holds Gaussian, Radial and Smart Blur). They stay live in the Appearance panel like any effect. Sizes are in points,
+  so a look holds at any zoom; the Sketch effects draw in a foreground and background colour you choose.
+- Rasterize (Effect > Rasterize) shows the object as pixels at a resolution you pick, optionally on white with a
+  margin. Effect > Document Raster Effects Settings sets the resolution raster effects are written at in PDF and SVG.
 - Brushes: calligraphic, scatter, art and pattern brushes apply to any stroke from the Brushes panel. New Brush
   makes a calligraphic brush, or a scatter, art or pattern brush from the selected art; double-click a brush for its
   options and colorization.

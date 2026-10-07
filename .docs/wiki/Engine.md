@@ -23,6 +23,8 @@
 
 Some live objects keep only their inputs in the document and derive the rest. A Live Paint group stores its paths and paint seeds; `livepaint.ts` finds the faces by walking the planar graph of the flattened paths and caches them per children array; painting an edge splits its path at the neighbouring crossings so only that stretch takes the stroke. A tracing object keeps its source image beside the traced paths. A stained symbol instance is drawn from its symbol's art with the paints mixed toward the tint (`symbolism.ts`). Pattern tiles come from one lattice (`pattern.ts`) shared by the renderer, the SVG writer and pattern editing mode, whose session lives on the project rather than in the document.
 
+Raster effects run on an offscreen layer per object. The Effect Gallery and Rasterize effects are pixel kernels in `filters.ts`, linear in the pixel count, with sizes in points times the current scale and noise and textures generated in the object's own space, so a look holds at any zoom and does not crawl while panning. A layer with one of them is rendered whole and cached per node, so panning reuses it; PDF and SVG export draw the same layer at the document's raster resolution.
+
 ## Geometry
 
 `geometry.ts` carries Bezier math, bounds and affines. `kernel.ts` adapts paper.js for booleans, intersections, offset and simplify, so Pathfinder returns curves, not polygons. `ops/` holds object, path, expand and recolor operations.
