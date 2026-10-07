@@ -6,7 +6,8 @@ export type RGB3 = [number, number, number];
 type V3 = [number, number, number];
 type Params = Effect['params'];
 export interface Solid { d: PathData; rule: FillRule; fill: RGB3 | null; stroke: RGB3 | null; strokeWidth: number }
-export interface Face { d: PathData; rule: FillRule; fill: RGB3 | null; stroke: RGB3 | null; strokeWidth: number; depth: number; solid: number; cap: boolean; t: number; s: number }
+export interface Face { d: PathData; rule: FillRule; fill: RGB3 | null; stroke: RGB3 | null; strokeWidth: number; depth: number; solid: number; cap: boolean; t: number; s: number; role?: 'front' | 'back'; facing?: boolean }
+export interface Scene { faces: Face[]; project: (x: number, y: number, z: number) => Pt; center: Pt }
 export interface Lighting { light: V3; intensity: number; ambient: number; highlight: number; shade: RGB3; material: string }
 
 export const VECTOR_3D = new Set(['3d.extrude', '3d.revolve', '3d.rotate']);
@@ -62,6 +63,10 @@ function rotation(rx: number, ry: number, rz: number): number[] {
   return m(X, m(Y, Z));
 }
 const rot = (m: number[], v: V3): V3 => [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
+export function rotator(rx: number, ry: number, rz: number): { fwd: (v: V3) => V3; inv: (v: V3) => V3 } {
+  const m = rotation(rx, ry, rz), t = [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+  return { fwd: (v) => rot(m, v), inv: (v) => rot(t, v) };
+}
 
 const area = (pts: Pt[]): number => { let s = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a.x * b.y - b.x * a.y; } return s / 2; };
 
@@ -78,11 +83,13 @@ function inset(pts: Pt[], d: number, sign: number): Pt[] {
 
 interface Raw { pts: V3[]; normal: V3; solid: Solid; cap: boolean; rings?: V3[][]; role?: 'front' | 'back' }
 
-export function scene3d(solids: Solid[], e: Effect): Face[] {
+export function scene3d(solids: Solid[], e: Effect): Face[] { return scene3dWith(solids, e).faces; }
+
+export function scene3dWith(solids: Solid[], e: Effect): Scene {
   const p = e.params, kind = e.id;
   let b = emptyRect();
   for (const s of solids) b = unionRect(b, pathBounds(s.d));
-  if (!Number.isFinite(b.x)) return [];
+  if (!Number.isFinite(b.x)) return { faces: [], project: (x, y) => ({ x, y }), center: { x: 0, y: 0 } };
   const size = Math.max(b.w, b.h, 1), tol = Math.max(0.2, size / 300), raws: Raw[] = [];
   const polys = (s: Solid): Array<{ pts: Pt[]; closed: boolean }> => s.d.map((sp) => ({ pts: flattenSub(sp, tol), closed: sp.closed })).filter((q) => q.pts.length > 1);
   let center: V3 = [b.x + b.w / 2, b.y + b.h / 2, 0];
@@ -155,7 +162,7 @@ export function scene3d(solids: Solid[], e: Effect): Face[] {
     const face: Face = { d, rule: raw.cap ? raw.solid.rule : 'nonzero', fill: wire ? null : col, stroke: wire ? base : raw.cap ? null : col, strokeWidth: wire ? Math.max(0.25, raw.solid.strokeWidth || 0.5) : raw.cap ? 0 : seam, depth: z / Math.max(1, count), solid: solids.indexOf(raw.solid), cap: raw.cap, t: lf.t, s: lf.s };
     let g = groups.get(raw.solid);
     if (!g) { g = { faces: [], front: null, back: null, facing: true }; groups.set(raw.solid, g); }
-    if (raw.role === 'front') { g.front = face; g.facing = n0[2] <= 0; } else if (raw.role === 'back') g.back = face; else g.faces.push(face);
+    if (raw.role === 'front') { face.role = 'front'; face.facing = n0[2] <= 0; g.front = face; g.facing = face.facing; } else if (raw.role === 'back') { face.role = 'back'; g.back = face; } else g.faces.push(face);
   }
   const ordered = [...groups.values()].map((g) => {
     g.faces.sort((a, c) => c.depth - a.depth);
@@ -163,7 +170,7 @@ export function scene3d(solids: Solid[], e: Effect): Face[] {
     return { list, depth: list.reduce((m, f) => m + f.depth, 0) / Math.max(1, list.length) };
   });
   ordered.sort((a, c) => c.depth - a.depth);
-  return ordered.flatMap((o) => o.list);
+  return { faces: ordered.flatMap((o) => o.list), project: (x, y, z) => { const q = project([x, y, z]); return { x: q.x, y: q.y }; }, center: { x: b.x + b.w / 2, y: b.y + b.h / 2 } };
 }
 
 export function outline3d(d: PathData, e: Effect): PathData {
