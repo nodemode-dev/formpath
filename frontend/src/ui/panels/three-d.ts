@@ -20,6 +20,7 @@ export class ThreeDPanel {
   private readonly kind;
   private readonly ctl: Record<string, Settable> = {};
   private readonly shade = el<HTMLInputElement>('<input class="cv-color" type="color" aria-label="Shading color">');
+  private readonly symbols: ReturnType<typeof selectCtl>;
   private frame = 0;
 
   constructor(private readonly engine: Engine, private readonly run: (cmd: string) => void) {
@@ -42,13 +43,20 @@ export class ThreeDPanel {
     const expand = el<HTMLButtonElement>('<button class="cv-btn" type="button">Expand</button>'), remove = el<HTMLButtonElement>('<button class="cv-btn" type="button">Remove 3D</button>');
     expand.addEventListener('click', () => this.run('expand-appearance'));
     remove.addEventListener('click', () => engine.set3d(null, {}));
+    this.symbols = selectCtl('Symbol', [['', 'None']], (v) => set({ map_symbol: v }));
+    this.ctl.map_symbol = this.symbols;
+    const shadeArt = check('Shade Artwork', (v) => set({ shade_art: v })), shadow = check('Shadow', (v) => set({ shadow: v }));
+    this.ctl.shade_art = shadeArt;
+    this.ctl.shadow = shadow;
     this.form.append(
       part('extrude', section('Extrude'), sl('depth', 'Depth', 0, 500, 'pt'), row(cap.el), pick('bevel', 'Bevel', [['none', 'None'], ['classic', 'Classic'], ['rounded', 'Rounded']]), sl('bevel_height', 'Bevel Height', 0, 50, 'pt')),
       part('revolve', section('Revolve'), sl('angle', 'Angle', 1, 360, '°'), sl('offset', 'Offset', 0, 500, 'pt'), pick('from', 'From', [['left', 'Left Edge'], ['right', 'Right Edge']])),
       part('inflate', section('Inflate'), inflate.el, sl('volume', 'Volume', 10, 100, '%')),
-      part('rotation', section('Rotation'), row(preset.el), sl('rx', 'X', -180, 180, '°'), sl('ry', 'Y', -180, 180, '°'), sl('rz', 'Z', -180, 180, '°'), sl('perspective', 'Perspective', 0, 160, '°')),
+      part('rotation', section('Rotation'), row(preset.el), sl('rx', 'X', -180, 180, '°'), sl('ry', 'Y', -180, 180, '°'), sl('rz', 'Z', -180, 180, '°'), part('perspective', sl('perspective', 'Perspective', 0, 160, '°'))),
       section('Material'), row(material.el),
+      part('map', section('Map Art'), row(this.symbols.el), sl('map_scale', 'Scale', 5, 400, '%'), sl('map_x', 'Offset X', -500, 500, 'pt'), sl('map_y', 'Offset Y', -500, 500, 'pt'), row(shadeArt.el)),
       section('Lighting'), pick('light', 'Light', LIGHTS), sl('intensity', 'Intensity', 0, 200, '%'), sl('ambient', 'Ambient', 0, 100, '%'), sl('highlight', 'Highlight', 0, 100, '%'), row(shadeRow),
+      part('shadow', section('Shadow'), row(shadow.el), pick('shadow_position', 'Position', [['behind', 'Behind Object'], ['below', 'Below Object']]), sl('shadow_distance', 'Distance', 0, 500, 'pt'), sl('shadow_softness', 'Softness', 0, 100, 'pt'), sl('shadow_opacity', 'Opacity', 0, 100, '%')),
       row(expand, remove),
     );
     this.body.append(row(this.kind.el), this.none, this.form);
@@ -74,9 +82,20 @@ export class ThreeDPanel {
     setHidden(this.parts.get('extrude') as HTMLElement, k !== '3d.extrude');
     setHidden(this.parts.get('revolve') as HTMLElement, k !== '3d.revolve');
     setHidden(this.parts.get('inflate') as HTMLElement, k !== '3d.inflate');
-    setHidden(this.parts.get('rotation') as HTMLElement, k === '3d.inflate');
-    const c = this.ctl;
-    for (const key of ['bevel_height', 'angle', 'offset', 'volume', 'rx', 'ry', 'rz', 'perspective', 'intensity', 'ambient', 'highlight']) c[key]?.set(num(p, key, 0));
+    setHidden(this.parts.get('perspective') as HTMLElement, k === '3d.inflate');
+    setHidden(this.parts.get('map') as HTMLElement, k !== '3d.extrude' && k !== '3d.rotate');
+    setHidden(this.parts.get('shadow') as HTMLElement, k === '3d.inflate');
+    const c = this.ctl, syms = this.engine.doc?.symbols ?? [], ms = str(p, 'map_symbol', '');
+    this.symbols.setChoices([['', 'None'], ...syms.map((s) => [s.id, s.name] as const)]);
+    c.map_symbol?.set(syms.find((s) => s.id === ms || s.name === ms)?.id ?? '');
+    c.map_scale?.set(num(p, 'map_scale', 100));
+    c.shade_art?.set(p.shade_art !== false);
+    c.shadow?.set(p.shadow === true);
+    c.shadow_position?.set(str(p, 'shadow_position', 'behind'));
+    c.shadow_distance?.set(num(p, 'shadow_distance', 20));
+    c.shadow_softness?.set(num(p, 'shadow_softness', 8));
+    c.shadow_opacity?.set(num(p, 'shadow_opacity', 40));
+    for (const key of ['bevel_height', 'angle', 'offset', 'volume', 'rx', 'ry', 'rz', 'perspective', 'intensity', 'ambient', 'highlight', 'map_x', 'map_y']) c[key]?.set(num(p, key, 0));
     c.depth?.set(num(p, 'depth', 50));
     c.inflate_depth?.set(num(p, 'depth', 20));
     c.cap?.set(p.cap !== false);
