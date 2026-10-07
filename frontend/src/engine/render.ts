@@ -8,7 +8,8 @@ import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './pai
 import { liveFaceNodes } from './livepaint';
 import { latticeCopies, patternLattice } from './pattern';
 import { instanceArt } from './symbolism';
-import { drawText } from './text';
+import { runFilter, type FilterFrame } from './filters';
+import { drawText, textEpoch } from './text';
 import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
 
 export interface RenderContext {
@@ -118,29 +119,49 @@ function deviceRect(ctx: CanvasRenderingContext2D, r: Rect): Rect | null {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
-export function withLayer(ctx: CanvasRenderingContext2D, bounds: Rect, opts: { opacity: number; blend: BlendMode; fx?: RasterFx[]; mask?: ((c: CanvasRenderingContext2D) => void) | null; maskInvert?: boolean }, draw: (c: CanvasRenderingContext2D) => void): void {
+let layerEpoch = 0;
+export function invalidateLayers(): void { layerEpoch++; }
+const layerCache = new WeakMap<object, { doc: object; skip: object | undefined; key: string; canvas: HTMLCanvasElement | OffscreenCanvas }>();
+
+function wholeRect(ctx: CanvasRenderingContext2D, m: Mat, r: Rect): Rect | null {
+  const d = transformRect(r, m), W = ctx.canvas.width, H = ctx.canvas.height;
+  const x0 = Math.floor(d.x), y0 = Math.floor(d.y), x1 = Math.ceil(d.x + d.w), y1 = Math.ceil(d.y + d.h);
+  if (x1 <= Math.max(0, x0) || y1 <= Math.max(0, y0) || x0 >= W || y0 >= H) return null;
+  if ((x1 - x0) * (y1 - y0) > 6e6) { const cx0 = Math.max(0, x0), cy0 = Math.max(0, y0), cx1 = Math.min(W, x1), cy1 = Math.min(H, y1); return cx1 > cx0 && cy1 > cy0 ? { x: cx0, y: cy0, w: cx1 - cx0, h: cy1 - cy0 } : null; }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+export function withLayer(ctx: CanvasRenderingContext2D, bounds: Rect, opts: { opacity: number; blend: BlendMode; fx?: RasterFx[]; mask?: ((c: CanvasRenderingContext2D) => void) | null; maskInvert?: boolean; cache?: { node: object; doc: object; skip?: object } }, draw: (c: CanvasRenderingContext2D) => void): void {
   const margin = (opts.fx ?? []).reduce((m, f) => Math.max(m, f.reach), 0);
-  const dev = deviceRect(ctx, inflate(bounds, margin));
+  const t = ctx.getTransform(), heavy = !!opts.cache && !!opts.fx?.some((f) => f.kind === 'filter');
+  const ex = heavy ? Math.round(t.e) : t.e, ey = heavy ? Math.round(t.f) : t.f;
+  const dev = heavy ? wholeRect(ctx, [t.a, t.b, t.c, t.d, ex, ey], inflate(bounds, margin)) : deviceRect(ctx, inflate(bounds, margin));
   if (!dev) return;
-  const t = ctx.getTransform();
-  const { canvas, ctx: off } = canvas2d(dev.w, dev.h);
-  off.setTransform(t.a, t.b, t.c, t.d, t.e - dev.x, t.f - dev.y);
-  draw(off);
-  if (opts.fx && opts.fx.length) applyFx(off, canvas, opts.fx, Math.hypot(t.a, t.b));
-  if (opts.mask) {
-    const { canvas: mc, ctx: m } = canvas2d(dev.w, dev.h);
-    m.setTransform(t.a, t.b, t.c, t.d, t.e - dev.x, t.f - dev.y);
-    opts.mask(m);
-    const img = m.getImageData(0, 0, dev.w, dev.h), px = img.data;
-    for (let i = 0; i < px.length; i += 4) {
-      const lum = (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255, a = (px[i + 3] / 255) * lum;
-      px[i] = px[i + 1] = px[i + 2] = 0;
-      px[i + 3] = Math.round((opts.maskInvert ? 1 - a : a) * 255);
+  const key = heavy ? `${layerEpoch},${textEpoch()},${t.a},${t.b},${t.c},${t.d},${ex - dev.x},${ey - dev.y},${dev.w},${dev.h}` : '';
+  const hit = heavy && opts.cache ? layerCache.get(opts.cache.node) : undefined;
+  let canvas = hit && opts.cache && hit.doc === opts.cache.doc && hit.skip === opts.cache.skip && hit.key === key ? hit.canvas : null;
+  if (!canvas) {
+    const made = canvas2d(dev.w, dev.h), off = made.ctx;
+    off.setTransform(t.a, t.b, t.c, t.d, ex - dev.x, ey - dev.y);
+    draw(off);
+    if (opts.fx && opts.fx.length) { const tb = transformRect(bounds, [t.a, t.b, t.c, t.d, ex - dev.x, ey - dev.y]); applyFx(off, made.canvas, opts.fx, Math.hypot(t.a, t.b), { scale: Math.hypot(t.a, t.b), x: tb.x, y: tb.y, w: tb.w, h: tb.h }); }
+    if (opts.mask) {
+      const { canvas: mc, ctx: m } = canvas2d(dev.w, dev.h);
+      m.setTransform(t.a, t.b, t.c, t.d, ex - dev.x, ey - dev.y);
+      opts.mask(m);
+      const img = m.getImageData(0, 0, dev.w, dev.h), px = img.data;
+      for (let i = 0; i < px.length; i += 4) {
+        const lum = (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255, a = (px[i + 3] / 255) * lum;
+        px[i] = px[i + 1] = px[i + 2] = 0;
+        px[i + 3] = Math.round((opts.maskInvert ? 1 - a : a) * 255);
+      }
+      m.putImageData(img, 0, 0);
+      off.setTransform(1, 0, 0, 1, 0, 0);
+      off.globalCompositeOperation = 'destination-in';
+      off.drawImage(mc as CanvasImageSource, 0, 0);
     }
-    m.putImageData(img, 0, 0);
-    off.setTransform(1, 0, 0, 1, 0, 0);
-    off.globalCompositeOperation = 'destination-in';
-    off.drawImage(mc as CanvasImageSource, 0, 0);
+    canvas = made.canvas;
+    if (heavy && opts.cache) layerCache.set(opts.cache.node, { doc: opts.cache.doc, skip: opts.cache.skip, key, canvas });
   }
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -210,7 +231,7 @@ function tintedSilhouette(src: HTMLCanvasElement | OffscreenCanvas, color: strin
   return canvas;
 }
 
-function applyFx(off: CanvasRenderingContext2D, canvas: HTMLCanvasElement | OffscreenCanvas, fx: RasterFx[], scale: number): void {
+function applyFx(off: CanvasRenderingContext2D, canvas: HTMLCanvasElement | OffscreenCanvas, fx: RasterFx[], scale: number, frame: FilterFrame): void {
   const art = makeCanvas(canvas.width, canvas.height);
   (art.getContext('2d') as unknown as CanvasRenderingContext2D).drawImage(canvas as CanvasImageSource, 0, 0);
   let result: HTMLCanvasElement | OffscreenCanvas = art;
@@ -247,6 +268,11 @@ function applyFx(off: CanvasRenderingContext2D, canvas: HTMLCanvasElement | Offs
       o.drawImage(result as CanvasImageSource, 0, 0);
       o.globalCompositeOperation = 'destination-in';
       o.drawImage(soft as CanvasImageSource, 0, 0);
+    } else if (f.kind === 'filter' && f.filter) {
+      o.drawImage(result as CanvasImageSource, 0, 0);
+      const img = o.getImageData(0, 0, out.width, out.height);
+      runFilter(f.filter.id, f.filter.params, img, frame);
+      o.putImageData(img, 0, 0);
     }
     result = out;
   }
@@ -376,7 +402,7 @@ export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderCo
     if (isEmptyRect(vb)) return;
     const mask = n.mask && !n.mask.disabled ? (c: CanvasRenderingContext2D) => renderNode(c, n.mask!.art, { ...rc, skip: undefined }) : null;
     const clipMask = n.mask && !n.mask.disabled && n.mask.clip;
-    withLayer(ctx, clipMask ? visualBounds(rc.doc, n.mask!.art) : vb, { opacity: n.opacity, blend: n.blend, fx, mask, maskInvert: !!n.mask?.invert }, (c) => drawBody(c, n, rc));
+    withLayer(ctx, clipMask ? visualBounds(rc.doc, n.mask!.art) : vb, { opacity: n.opacity, blend: n.blend, fx, mask, maskInvert: !!n.mask?.invert, cache: { node: n, doc: rc.doc, skip: rc.skip } }, (c) => drawBody(c, n, rc));
     return;
   }
   ctx.save();

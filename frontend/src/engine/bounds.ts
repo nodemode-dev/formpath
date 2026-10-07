@@ -1,4 +1,5 @@
 import { childrenOf } from './doc';
+import { filterReach } from './filters';
 import { emptyRect, inflate, isEmptyRect, pathBounds, transformRect, unionRect } from './geometry';
 import { liveChildren } from './live';
 import { textBounds } from './text';
@@ -63,6 +64,7 @@ export function effectReach(n: VNode): number {
     else if (e.id === 'blur.gaussian') m = Math.max(m, Number(p.radius ?? 5) * 3);
     else if (e.id === 'path.offset') m = Math.max(m, Math.abs(Number(p.offset ?? 10)));
     else if (e.id.startsWith('distort.') || e.id.startsWith('warp.')) m = Math.max(m, 40);
+    else m = Math.max(m, filterReach(e.id, p));
   }
   return m;
 }

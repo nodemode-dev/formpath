@@ -1,7 +1,7 @@
 import { geomBounds } from '../engine/bounds';
 import { findNode, layerOf, topObjects } from '../engine/doc';
 import { apply, flatIndex, hasIn, hasOut, tracePath, transformPath } from '../engine/geometry';
-import { cachedPath, renderDocument, renderNode, type RenderContext } from '../engine/render';
+import { cachedPath, invalidateLayers, renderDocument, renderNode, type RenderContext } from '../engine/render';
 import { collectTargets, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
 import { layoutText } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
@@ -211,7 +211,7 @@ export class Stage {
     const blob = p.assets.get(key);
     if (blob && !this.loading.has(key) && typeof createImageBitmap === 'function') {
       this.loading.add(key);
-      createImageBitmap(blob).then((bmp) => { p.bitmaps.set(key, bmp); this.queue(true, false); }).catch(() => undefined).finally(() => this.loading.delete(key));
+      createImageBitmap(blob).then((bmp) => { p.bitmaps.set(key, bmp); invalidateLayers(); this.queue(true, false); }).catch(() => undefined).finally(() => this.loading.delete(key));
     }
     return null;
   }

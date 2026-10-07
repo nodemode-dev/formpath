@@ -1,4 +1,5 @@
 import { brushOutline } from './brushes';
+import { FILTER_IDS, filterReach } from './filters';
 import { anchor, bezPoint, bezTangent, centerOf, dist, flattenSub, hasIn, hasOut, pathBounds, pathLength, pointAtLength, rectPath, ellipsePath, roundCorners, segments, transformPath, rotateAbout, scaleAbout, translate, mul } from './geometry';
 import { offsetPath, strokeToPath } from './kernel';
 import { mapPathNonlinear, warpPoint } from './live';
@@ -6,7 +7,7 @@ import { parseColor, cssColor, BLACK } from './paint';
 import type { Anchor, BlendMode, Doc, Effect, Mat, PathData, Pt, StrokeItem, VNode, WidthPoint } from './types';
 
 export interface EffectParam { key: string; label: string; kind: 'number' | 'boolean' | 'select' | 'color'; min?: number; max?: number; step?: number; unit?: string; choices?: string[]; def: number | boolean | string }
-export interface EffectDef { id: string; label: string; menu: string; raster?: boolean; params: EffectParam[] }
+export interface EffectDef { id: string; label: string; menu: string; raster?: boolean; family?: 'photoshop'; params: EffectParam[] }
 
 const num = (key: string, label: string, def: number, min: number, max: number, unit = '', step = 1): EffectParam => ({ key, label, kind: 'number', def, min, max, unit, step });
 const bool = (key: string, label: string, def: boolean): EffectParam => ({ key, label, kind: 'boolean', def });
@@ -16,6 +17,71 @@ const col = (key: string, label: string, def: string): EffectParam => ({ key, la
 export const WARP_STYLES = ['arc', 'arc_lower', 'arc_upper', 'arch', 'bulge', 'shell_lower', 'shell_upper', 'flag', 'wave', 'fish', 'rise', 'fisheye', 'inflate', 'squeeze', 'twist'];
 const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color_dodge', 'color_burn', 'hard_light', 'soft_light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'];
 const title = (s: string): string => s.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+const TEXTURES = ['canvas', 'brick', 'burlap', 'sandstone'];
+const LIGHTS = ['bottom', 'bottom_left', 'left', 'top_left', 'top', 'top_right', 'right', 'bottom_right'];
+const DIRECTIONS = ['right_diagonal', 'horizontal', 'left_diagonal', 'vertical'];
+const surface = (light: string, relief: number): EffectParam[] => [sel('texture', 'Texture', 'canvas', TEXTURES), num('scaling', 'Scaling', 100, 50, 200, '%'), num('relief', 'Relief', relief, 0, 50), sel('light', 'Light', light, LIGHTS)];
+const tones = (fg = '#000000'): EffectParam[] => [col('foreground', 'Foreground', fg), col('background', 'Background', '#ffffff')];
+const ps = (menu: string, id: string, label: string, params: EffectParam[]): EffectDef => ({ id, label, menu, raster: true, family: 'photoshop', params });
+
+const GALLERY: EffectDef[] = [
+  ps('Artistic', 'gallery.colored_pencil', 'Colored Pencil', [num('width', 'Pencil Width', 4, 1, 24), num('pressure', 'Stroke Pressure', 8, 0, 15), num('paper', 'Paper Brightness', 25, 0, 50)]),
+  ps('Artistic', 'gallery.cutout', 'Cutout', [num('levels', 'Number of Levels', 4, 2, 8), num('simplicity', 'Edge Simplicity', 4, 0, 10), num('fidelity', 'Edge Fidelity', 2, 1, 3)]),
+  ps('Artistic', 'gallery.dry_brush', 'Dry Brush', [num('size', 'Brush Size', 2, 0, 10), num('detail', 'Brush Detail', 8, 0, 10), num('texture', 'Texture', 1, 1, 3)]),
+  ps('Artistic', 'gallery.film_grain', 'Film Grain', [num('grain', 'Grain', 4, 0, 20), num('highlight', 'Highlight Area', 0, 0, 20), num('intensity', 'Intensity', 10, 0, 10)]),
+  ps('Artistic', 'gallery.fresco', 'Fresco', [num('size', 'Brush Size', 2, 0, 10), num('detail', 'Brush Detail', 8, 0, 10), num('texture', 'Texture', 1, 1, 3)]),
+  ps('Artistic', 'gallery.neon_glow', 'Neon Glow', [num('size', 'Glow Size', 5, -24, 24), num('brightness', 'Glow Brightness', 15, 0, 50), col('color', 'Glow Color', '#2b8cff')]),
+  ps('Artistic', 'gallery.paint_daubs', 'Paint Daubs', [num('size', 'Brush Size', 8, 1, 50), num('sharpness', 'Sharpness', 7, 0, 40), sel('type', 'Brush Type', 'simple', ['simple', 'light_rough', 'dark_rough', 'wide_sharp', 'wide_blurry', 'sparkle'])]),
+  ps('Artistic', 'gallery.palette_knife', 'Palette Knife', [num('size', 'Stroke Size', 25, 1, 50), num('detail', 'Stroke Detail', 3, 1, 3), num('softness', 'Softness', 0, 0, 10)]),
+  ps('Artistic', 'gallery.plastic_wrap', 'Plastic Wrap', [num('highlight', 'Highlight Strength', 15, 0, 20), num('detail', 'Detail', 9, 1, 15), num('smoothness', 'Smoothness', 7, 1, 15)]),
+  ps('Artistic', 'gallery.poster_edges', 'Poster Edges', [num('thickness', 'Edge Thickness', 2, 0, 10), num('intensity', 'Edge Intensity', 1, 0, 10), num('posterization', 'Posterization', 2, 0, 6)]),
+  ps('Artistic', 'gallery.rough_pastels', 'Rough Pastels', [num('stroke', 'Stroke Length', 6, 0, 40), num('detail', 'Stroke Detail', 4, 1, 20), ...surface('bottom', 20)]),
+  ps('Artistic', 'gallery.smudge_stick', 'Smudge Stick', [num('stroke', 'Stroke Length', 2, 0, 10), num('highlight', 'Highlight Area', 0, 0, 20), num('intensity', 'Intensity', 10, 0, 10)]),
+  ps('Artistic', 'gallery.sponge', 'Sponge', [num('size', 'Brush Size', 2, 0, 10), num('definition', 'Definition', 12, 0, 25), num('smoothness', 'Smoothness', 5, 1, 15)]),
+  ps('Artistic', 'gallery.underpainting', 'Underpainting', [num('size', 'Brush Size', 6, 0, 40), num('coverage', 'Texture Coverage', 16, 0, 40), ...surface('top', 4)]),
+  ps('Artistic', 'gallery.watercolor', 'Watercolor', [num('detail', 'Brush Detail', 9, 1, 14), num('shadow', 'Shadow Intensity', 1, 0, 10), num('texture', 'Texture', 1, 1, 3)]),
+  ps('Blur', 'blur.radial', 'Radial Blur', [num('amount', 'Amount', 10, 1, 100), sel('method', 'Blur Method', 'spin', ['spin', 'zoom']), sel('quality', 'Quality', 'good', ['draft', 'good', 'best']), num('center_x', 'Center X', 0, -50, 50, '%'), num('center_y', 'Center Y', 0, -50, 50, '%')]),
+  ps('Blur', 'blur.smart', 'Smart Blur', [num('radius', 'Radius', 3, 0.1, 100, 'pt', 0.1), num('threshold', 'Threshold', 25, 0.1, 100, '', 0.1), sel('mode', 'Mode', 'normal', ['normal', 'edge_only', 'overlay_edge'])]),
+  ps('Brush Strokes', 'gallery.accented_edges', 'Accented Edges', [num('width', 'Edge Width', 2, 1, 14), num('brightness', 'Edge Brightness', 38, 0, 50), num('smoothness', 'Smoothness', 5, 1, 15)]),
+  ps('Brush Strokes', 'gallery.angled_strokes', 'Angled Strokes', [num('balance', 'Direction Balance', 50, 0, 100), num('length', 'Stroke Length', 15, 3, 50), num('sharpness', 'Sharpness', 3, 0, 10)]),
+  ps('Brush Strokes', 'gallery.crosshatch', 'Crosshatch', [num('length', 'Stroke Length', 9, 3, 50), num('sharpness', 'Sharpness', 6, 0, 20), num('strength', 'Strength', 1, 1, 3)]),
+  ps('Brush Strokes', 'gallery.dark_strokes', 'Dark Strokes', [num('balance', 'Balance', 5, 0, 10), num('black', 'Black Intensity', 6, 0, 10), num('white', 'White Intensity', 2, 0, 10)]),
+  ps('Brush Strokes', 'gallery.ink_outlines', 'Ink Outlines', [num('length', 'Stroke Length', 4, 1, 50), num('dark', 'Dark Intensity', 20, 0, 50), num('light', 'Light Intensity', 10, 0, 50)]),
+  ps('Brush Strokes', 'gallery.spatter', 'Spatter', [num('radius', 'Spray Radius', 10, 0, 25, 'pt'), num('smoothness', 'Smoothness', 5, 1, 15)]),
+  ps('Brush Strokes', 'gallery.sprayed_strokes', 'Sprayed Strokes', [num('length', 'Stroke Length', 12, 0, 20), num('radius', 'Spray Radius', 7, 0, 25, 'pt'), sel('direction', 'Stroke Direction', 'right_diagonal', DIRECTIONS)]),
+  ps('Brush Strokes', 'gallery.sumi_e', 'Sumi-e', [num('width', 'Stroke Width', 10, 3, 15), num('pressure', 'Stroke Pressure', 2, 0, 15), num('contrast', 'Contrast', 16, 0, 40)]),
+  ps('Distort', 'gallery.diffuse_glow', 'Diffuse Glow', [num('graininess', 'Graininess', 6, 0, 10), num('glow', 'Glow Amount', 10, 0, 20), num('clear', 'Clear Amount', 15, 0, 20), col('color', 'Glow Color', '#ffffff')]),
+  ps('Distort', 'gallery.glass', 'Glass', [num('distortion', 'Distortion', 5, 0, 20), num('smoothness', 'Smoothness', 3, 1, 15), sel('texture', 'Texture', 'frosted', ['frosted', 'blocks', 'canvas', 'tiny_lens']), num('scaling', 'Scaling', 100, 50, 200, '%'), bool('invert', 'Invert', false)]),
+  ps('Distort', 'gallery.ocean_ripple', 'Ocean Ripple', [num('size', 'Ripple Size', 9, 1, 15), num('magnitude', 'Ripple Magnitude', 9, 0, 20)]),
+  ps('Pixelate', 'gallery.color_halftone', 'Color Halftone', [num('radius', 'Max Radius', 8, 4, 127, 'pt'), num('c', 'Channel 1 (C)', 108, -360, 360, 'deg'), num('m', 'Channel 2 (M)', 162, -360, 360, 'deg'), num('y', 'Channel 3 (Y)', 90, -360, 360, 'deg'), num('k', 'Channel 4 (K)', 45, -360, 360, 'deg')]),
+  ps('Pixelate', 'gallery.crystallize', 'Crystallize', [num('cell', 'Cell Size', 10, 3, 300, 'pt')]),
+  ps('Pixelate', 'gallery.mezzotint', 'Mezzotint', [sel('type', 'Type', 'medium_dots', ['fine_dots', 'medium_dots', 'grainy_dots', 'coarse_dots', 'short_lines', 'medium_lines', 'long_lines', 'short_strokes', 'medium_strokes', 'long_strokes'])]),
+  ps('Pixelate', 'gallery.pointillize', 'Pointillize', [num('cell', 'Cell Size', 5, 3, 300, 'pt'), col('background', 'Background', '#ffffff')]),
+  ps('Sketch', 'gallery.bas_relief', 'Bas Relief', [num('detail', 'Detail', 13, 1, 15), num('smoothness', 'Smoothness', 3, 1, 15), sel('light', 'Light', 'bottom', LIGHTS), ...tones()]),
+  ps('Sketch', 'gallery.chalk_charcoal', 'Chalk & Charcoal', [num('charcoal', 'Charcoal Area', 6, 0, 20), num('chalk', 'Chalk Area', 6, 0, 20), num('pressure', 'Stroke Pressure', 1, 0, 5), ...tones()]),
+  ps('Sketch', 'gallery.charcoal', 'Charcoal', [num('thickness', 'Charcoal Thickness', 1, 1, 7), num('detail', 'Detail', 5, 0, 5), num('balance', 'Light/Dark Balance', 50, 0, 100), ...tones()]),
+  ps('Sketch', 'gallery.chrome', 'Chrome', [num('detail', 'Detail', 4, 0, 10), num('smoothness', 'Smoothness', 7, 0, 10)]),
+  ps('Sketch', 'gallery.conte_crayon', 'Conté Crayon', [num('fg_level', 'Foreground Level', 11, 1, 15), num('bg_level', 'Background Level', 7, 1, 15), ...surface('top', 4), ...tones('#3b2417')]),
+  ps('Sketch', 'gallery.graphic_pen', 'Graphic Pen', [num('length', 'Stroke Length', 15, 1, 15), num('balance', 'Light/Dark Balance', 50, 0, 100), sel('direction', 'Stroke Direction', 'right_diagonal', DIRECTIONS), ...tones()]),
+  ps('Sketch', 'gallery.halftone_pattern', 'Halftone Pattern', [num('size', 'Size', 1, 1, 12), num('contrast', 'Contrast', 5, 0, 50), sel('type', 'Pattern Type', 'dot', ['circle', 'dot', 'line']), ...tones()]),
+  ps('Sketch', 'gallery.note_paper', 'Note Paper', [num('balance', 'Image Balance', 25, 0, 50), num('graininess', 'Graininess', 10, 0, 20), num('relief', 'Relief', 11, 0, 25), ...tones()]),
+  ps('Sketch', 'gallery.photocopy', 'Photocopy', [num('detail', 'Detail', 7, 1, 24), num('darkness', 'Darkness', 8, 1, 50), ...tones()]),
+  ps('Sketch', 'gallery.plaster', 'Plaster', [num('balance', 'Image Balance', 20, 0, 50), num('smoothness', 'Smoothness', 2, 1, 15), sel('light', 'Light', 'top', LIGHTS), ...tones()]),
+  ps('Sketch', 'gallery.reticulation', 'Reticulation', [num('density', 'Density', 12, 0, 50), num('fg_level', 'Foreground Level', 40, 0, 50), num('bg_level', 'Background Level', 5, 0, 50), ...tones()]),
+  ps('Sketch', 'gallery.stamp', 'Stamp', [num('balance', 'Light/Dark Balance', 25, 0, 50), num('smoothness', 'Smoothness', 5, 1, 50), ...tones()]),
+  ps('Sketch', 'gallery.torn_edges', 'Torn Edges', [num('balance', 'Image Balance', 25, 0, 50), num('smoothness', 'Smoothness', 11, 1, 15), num('contrast', 'Contrast', 17, 1, 25), ...tones()]),
+  ps('Sketch', 'gallery.water_paper', 'Water Paper', [num('fiber', 'Fiber Length', 15, 3, 50), num('brightness', 'Brightness', 60, 0, 100), num('contrast', 'Contrast', 80, 0, 100)]),
+  ps('Stylize', 'gallery.glowing_edges', 'Glowing Edges', [num('width', 'Edge Width', 2, 1, 14), num('brightness', 'Edge Brightness', 6, 0, 20), num('smoothness', 'Smoothness', 5, 1, 15)]),
+  ps('Texture', 'gallery.craquelure', 'Craquelure', [num('spacing', 'Crack Spacing', 15, 2, 100, 'pt'), num('depth', 'Crack Depth', 6, 0, 10), num('brightness', 'Crack Brightness', 9, 0, 10)]),
+  ps('Texture', 'gallery.grain', 'Grain', [num('intensity', 'Intensity', 40, 0, 100), num('contrast', 'Contrast', 50, 0, 100), sel('type', 'Grain Type', 'regular', ['regular', 'soft', 'sprinkles', 'clumped', 'contrasty', 'enlarged', 'stippled', 'horizontal', 'vertical', 'speckle'])]),
+  ps('Texture', 'gallery.mosaic_tiles', 'Mosaic Tiles', [num('size', 'Tile Size', 12, 2, 100, 'pt'), num('grout', 'Grout Width', 3, 1, 15), num('lighten', 'Lighten Grout', 9, 0, 10)]),
+  ps('Texture', 'gallery.patchwork', 'Patchwork', [num('size', 'Square Size', 4, 0, 10), num('relief', 'Relief', 8, 0, 25)]),
+  ps('Texture', 'gallery.stained_glass', 'Stained Glass', [num('cell', 'Cell Size', 10, 2, 50, 'pt'), num('border', 'Border Thickness', 4, 1, 20), num('light', 'Light Intensity', 3, 0, 10), col('foreground', 'Border Color', '#000000')]),
+  ps('Texture', 'gallery.texturizer', 'Texturizer', [...surface('top', 4), bool('invert', 'Invert', false)]),
+  ps('Video', 'gallery.de_interlace', 'De-Interlace', [sel('eliminate', 'Eliminate', 'odd', ['odd', 'even']), sel('create', 'Create New Fields by', 'interpolation', ['duplication', 'interpolation'])]),
+  ps('Video', 'gallery.ntsc_colors', 'NTSC Colors', []),
+];
 
 export const EFFECTS: EffectDef[] = [
   ...WARP_STYLES.map((s) => ({ id: `warp.${s}`, label: title(s), menu: 'Warp', params: [num('bend', 'Bend', 50, -100, 100, '%'), num('horizontal', 'Horizontal Distortion', 0, -100, 100, '%'), num('vertical', 'Vertical Distortion', 0, -100, 100, '%'), bool('vertical_orientation', 'Vertical', false)] })),
@@ -34,7 +100,8 @@ export const EFFECTS: EffectDef[] = [
   { id: 'stylize.inner_glow', label: 'Inner Glow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'screen', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#ffffff')] },
   { id: 'stylize.outer_glow', label: 'Outer Glow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'screen', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#ffd400')] },
   { id: 'stylize.feather', label: 'Feather', menu: 'Stylize', raster: true, params: [num('radius', 'Feather Radius', 5, 0, 1000, 'pt')] },
-  { id: 'blur.gaussian', label: 'Gaussian Blur', menu: 'Blur', raster: true, params: [num('radius', 'Radius', 5, 0, 250, 'pt')] },
+  { id: 'blur.gaussian', label: 'Gaussian Blur', menu: 'Blur', raster: true, family: 'photoshop', params: [num('radius', 'Radius', 5, 0, 250, 'pt')] },
+  ...GALLERY,
   { id: 'convert.rectangle', label: 'Rectangle', menu: 'Convert to Shape', params: [num('extra_w', 'Extra Width', 0, -1000, 1000, 'pt'), num('extra_h', 'Extra Height', 0, -1000, 1000, 'pt')] },
   { id: 'convert.rounded_rectangle', label: 'Rounded Rectangle', menu: 'Convert to Shape', params: [num('extra_w', 'Extra Width', 0, -1000, 1000, 'pt'), num('extra_h', 'Extra Height', 0, -1000, 1000, 'pt'), num('radius', 'Corner Radius', 9, 0, 1000, 'pt')] },
   { id: 'convert.ellipse', label: 'Ellipse', menu: 'Convert to Shape', params: [num('extra_w', 'Extra Width', 0, -1000, 1000, 'pt'), num('extra_h', 'Extra Height', 0, -1000, 1000, 'pt')] },
@@ -208,7 +275,7 @@ export function effectPath(d: PathData, effects: Effect[]): PathData {
   return out;
 }
 
-export interface RasterFx { kind: 'drop_shadow' | 'outer_glow' | 'inner_glow' | 'feather' | 'blur'; dx: number; dy: number; blur: number; color: string; opacity: number; blend: BlendMode; reach: number }
+export interface RasterFx { kind: 'drop_shadow' | 'outer_glow' | 'inner_glow' | 'feather' | 'blur' | 'filter'; dx: number; dy: number; blur: number; color: string; opacity: number; blend: BlendMode; reach: number; filter?: { id: string; params: Effect['params'] } }
 export function rasterEffects(n: VNode): RasterFx[] {
   const out: RasterFx[] = [];
   for (const e of n.ap.effects) {
@@ -220,6 +287,7 @@ export function rasterEffects(n: VNode): RasterFx[] {
     else if (e.id === 'stylize.inner_glow') { const bl = P(e, 'blur', 5); out.push({ kind: 'inner_glow', dx: 0, dy: 0, blur: bl, color: colr('color', '#fff'), opacity: P(e, 'opacity', 75) / 100, blend: mode, reach: 0 }); }
     else if (e.id === 'stylize.feather') { const bl = P(e, 'radius', 5); out.push({ kind: 'feather', dx: 0, dy: 0, blur: bl, color: '#000', opacity: 1, blend: 'normal', reach: 0 }); }
     else if (e.id === 'blur.gaussian') { const bl = P(e, 'radius', 5); out.push({ kind: 'blur', dx: 0, dy: 0, blur: bl, color: '#000', opacity: 1, blend: 'normal', reach: bl * 3 }); }
+    else if (FILTER_IDS.has(e.id)) out.push({ kind: 'filter', dx: 0, dy: 0, blur: 0, color: '#000', opacity: 1, blend: 'normal', reach: filterReach(e.id, e.params), filter: { id: e.id, params: e.params } });
   }
   return out;
 }

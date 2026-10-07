@@ -36,6 +36,7 @@ export function cssFont(st: CharStyle, size = st.size): string {
 const widthCache = new Map<string, Map<string, number>>();
 let fontEpoch = 0;
 export function fontsChanged(): void { widthCache.clear(); fontEpoch++; layoutCache = new WeakMap(); }
+export const textEpoch = (): number => fontEpoch;
 function charWidth(font: string, ch: string): number {
   let m = widthCache.get(font);
   if (!m) { m = new Map(); widthCache.set(font, m); }

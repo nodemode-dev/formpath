@@ -104,6 +104,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/live.ts
 - src/engine/snap.ts
 - src/engine/render.ts
+- src/engine/filters.ts
 - src/engine/geometry.ts
 - src/engine/kernel.ts
 - src/engine/ops/recolor.ts
@@ -148,6 +149,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/image-trace.ts
 - src/ui/panels/pattern-options.ts
 - src/ui/panels/preview-edit.ts
+- src/ui/panels/effect-gallery.ts
 - src/ui/form-dialog.ts
 - src/ui/palette.ts
 - src/styles/tokens.css
@@ -319,6 +321,29 @@ Built once per drag. Every visible object adds its box as three columns and thre
 - logged: v0.9.0 · 2026-10-07
 
 Keyed by node identity. Never mutate a node in place: the cache would keep drawing the old geometry.
+
+### src/engine/render.ts · filtered layer cache
+- refers-to: src/engine/render.ts :: withLayer, layerCache, invalidateLayers
+- kind: warning-context
+- logged: v0.14.0 · 2026-10-07
+
+A layer with an Effect Gallery filter is rendered whole, not clipped to the canvas (up to six million pixels), with its translation rounded to whole device pixels, and kept per node. Panning then redraws the cached canvas instead of running the filter again; it is rebuilt when the node, the document, the skip set, the zoom, the font epoch or the layer epoch changes. The stage bumps the layer epoch when a placed image finishes decoding, since the node and the document stay the same while its pixels arrive. Other raster effects stay clipped and uncached because they are cheap.
+
+## src/engine/filters.ts
+
+### src/engine/filters.ts · model
+- refers-to: src/engine/filters.ts :: runFilter, FilterFrame, RUNS
+- kind: explainer
+- logged: v0.14.0 · 2026-10-07
+
+Each Effect Gallery effect is a function from unpremultiplied float planes to planes, run on the object's layer after it is drawn. Sizes in the parameters are points multiplied by the frame's scale, and noise, textures and cells are generated in the object's own space from the frame origin, so the look does not change with zoom or move while panning. Output alpha is the object's alpha except for the effects that move pixels (Radial Blur, Spatter, Sprayed Strokes, Glass, Ocean Ripple, Crystallize). Partly transparent edge pixels take the colour of their most opaque neighbour first, and fully transparent pixels stay black, which is why edge-finding effects outline the object's silhouette. The Sketch effects map tones between a foreground and a background colour, black and white by default, where Photoshop uses its current colours.
+
+### src/engine/filters.ts · speed
+- refers-to: src/engine/filters.ts :: boxPass, boxRows, streak, kuwahara
+- kind: rationale
+- logged: v0.14.0 · 2026-10-07
+
+Every kernel is linear in the pixel count whatever its size. Blurs are three box passes, the vertical ones accumulated row by row for cache locality. Directional strokes are sliding windows along lines at 0, 45, 90 and 135 degrees rather than per-pixel sampling, which took seconds on a million pixels. The Kuwahara filter (Dry Brush, Fresco, Paint Daubs, Palette Knife, Sponge, Watercolor, Cutout) uses summed-area tables weighted by alpha, so quadrants outside the object never win. Cutout reduces colours with a few rounds of k-means on a sample instead of per-channel posterisation, which gave false colours on hue gradients.
 
 ## src/engine/geometry.ts
 
@@ -597,6 +622,13 @@ Follows `href` and `xlink:href` from gradient to gradient, guarding against cycl
 - logged: v0.9.0 · 2026-10-07
 
 With `preserve`, the base64 manifest goes in a metadata element with id `formpth-data` and images carry `data-formpth-src`; `importSvg` returns `native: true` and the exact document.
+
+### src/io/svg.ts · baked gallery effects
+- refers-to: src/io/svg.ts :: Writer.baked
+- kind: rationale
+- logged: v0.14.0 · 2026-10-07
+
+SVG filter primitives cannot express the Effect Gallery effects, so an object carrying one is drawn whole (with its other effects) at the document's raster resolution, capped at sixteen million pixels, and written as an image at its visual bounds with its opacity and blend mode. With `preserve` the editing data still holds the live effect, so formpth reopens it editable.
 
 ## src/io/pdf.ts
 
@@ -963,6 +995,15 @@ Both states of the panel (the hint with Make Pattern, and the options form) are 
 - logged: v0.9.0 · 2026-10-07
 
 Dialog previews run through the engine's drag preview (`beginDrag`, `dragTo`), so Cancel restores the document exactly and OK commits one history step.
+
+## src/ui/panels/effect-gallery.ts
+
+### src/ui/panels/effect-gallery.ts · EffectGallery
+- refers-to: src/ui/panels/effect-gallery.ts :: EffectGallery
+- kind: explainer
+- logged: v0.14.0 · 2026-10-07
+
+The dialog is built once on first use. Thumbnails and the preview have fixed canvas sizes and are drawn from the selected objects with each effect appended, the thumbnails a few at a time per frame (about ten milliseconds) so opening never stalls, the preview on the next frame after any change. Each effect's options page is created the first time it is picked and then only hidden and shown, so switching effects never rebuilds a page. The preview stays in the dialog and the document is untouched until OK, which adds the effect as one history step through `addEffect`; a double-click on a thumbnail picks it and applies it.
 
 ## src/ui/form-dialog.ts
 
