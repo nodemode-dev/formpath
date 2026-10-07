@@ -14,7 +14,7 @@ import { expandAppearance } from './ops/expand';
 import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
-import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, WHITE, withFirstFill, withFirstStroke } from './paint';
+import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, toRgb, WHITE, withFirstFill, withFirstStroke } from './paint';
 import { Project } from './project';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
@@ -256,7 +256,39 @@ export class Engine extends Emitter<EngineEvents> {
     visit(base);
     this.select(ids, mode);
   }
-  hit(pt: Pt, tolPx = 4): Hit | null { const p = this.current; if (!p) return null; return hitTest(p.doc, pt, { tol: tolPx / p.viewport.zoom, outline: this.view.outline }); }
+  hit(pt: Pt, tolPx = 4, exclude?: Set<string>): Hit | null { const p = this.current; if (!p) return null; return hitTest(p.doc, pt, { tol: tolPx / p.viewport.zoom, outline: this.view.outline, exclude }); }
+  selectBehind(pt: Pt, skip: Set<string>): string | null {
+    const p = this.current; if (!p) return null;
+    for (const id of p.selection) skip.add(this.selectableFor(id));
+    let h = this.hit(pt, 4, skip);
+    if (!h) { skip.clear(); h = this.hit(pt, 4); }
+    if (!h) return null;
+    const id = this.selectableFor(h.id);
+    this.select([id]);
+    return id;
+  }
+  selectSimilar(refId: string, c: { fill?: number | null; stroke?: number | null; weight?: number | null; opacity?: number | null; blend?: boolean }, mode: SelectMode = 'replace'): number {
+    const p = this.current; if (!p) return 0;
+    const ref = findNode(p.doc, refId);
+    if (!ref) return 0;
+    const paintKey = (n: VNode, kind: 'fill' | 'stroke'): Paint | null => { if (n.kind === 'text') { const st = n.spans[0]?.style; return st ? (kind === 'fill' ? st.fill : st.stroke) : null; } const i = kind === 'fill' ? firstFill(n.ap) : firstStroke(n.ap); return i ? resolvePaint(p.doc, i.paint) : { type: 'none' }; };
+    const near = (a: Paint | null, b: Paint | null, tol: number): boolean => {
+      if (!a || !b) return a === b;
+      const cols = (x: Paint): Color[] | null => (x.type === 'none' ? [] : x.type === 'color' ? [x.color] : x.type === 'gradient' ? (x.gradient.points?.length ? x.gradient.points.map((q) => q.color) : x.gradient.stops.map((s) => s.color)) : null);
+      const ca = cols(a), cb = cols(b);
+      if (!ca || !cb) return JSON.stringify(a) === JSON.stringify(b);
+      if (a.type !== b.type || ca.length !== cb.length) return false;
+      return ca.every((x, i) => { const u = toRgb(x), v = toRgb(cb[i]); return Math.max(Math.abs(u.r - v.r), Math.abs(u.g - v.g), Math.abs(u.b - v.b)) <= tol; });
+    };
+    const weight = (n: VNode): number => (n.kind === 'text' ? n.spans[0]?.style.strokeWidth ?? 0 : firstStroke(n.ap)?.width ?? 0);
+    const rf = paintKey(ref, 'fill'), rs = paintKey(ref, 'stroke');
+    const ok = (n: VNode): boolean =>
+      (c.fill == null || near(paintKey(n, 'fill'), rf, c.fill)) && (c.stroke == null || near(paintKey(n, 'stroke'), rs, c.stroke)) &&
+      (c.weight == null || Math.abs(weight(n) - weight(ref)) <= c.weight) && (c.opacity == null || Math.abs(n.opacity - ref.opacity) * 100 <= c.opacity) && (!c.blend || n.blend === ref.blend);
+    const ids = allNodes(p.doc).filter((n) => n.kind !== 'layer' && !n.locked && !n.hidden && ancestors(p.doc, n.id).every((a) => a.kind === 'layer') && ok(n)).map((n) => n.id);
+    this.select(ids, mode);
+    return ids.length;
+  }
   selectableFor(hitId: string): string { const p = this.current; return p ? topSelectable(p.doc, hitId, p.isolation) : hitId; }
   setAnchors(id: string, set: Set<number> | null): void { const p = this.current; if (!p) return; if (set && set.size) p.anchors.set(id, set); else p.anchors.delete(id); this.emit('overlay', null); this.emit('selection', null); }
   clearAnchors(): void { const p = this.current; if (!p || !p.anchors.size) return; p.anchors.clear(); this.emit('overlay', null); }

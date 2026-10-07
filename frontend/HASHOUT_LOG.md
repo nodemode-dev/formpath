@@ -361,11 +361,25 @@ Handles 0 to 7 scale (Alt from centre, Shift proportional); 100 plus a corner in
 Dragging a segment reshapes the curve by the minimum-norm change to both handles that moves the grabbed point to the cursor, so the curve bends where it was grabbed, as Illustrator does.
 
 ### src/tools/select.ts · Magic Wand
-- refers-to: src/tools/select.ts :: magicWand
-- kind: todo
-- logged: v0.9.0 · 2026-10-07
+- refers-to: src/tools/select.ts :: magicWand, wand; src/engine/index.ts :: Engine.selectSimilar
+- kind: rationale
+- logged: v0.11.0 · 2026-10-07 (was a todo at v0.9.0: exact match only)
 
-Matches the chosen attribute exactly. Illustrator's tolerance setting is the parity gap for this row.
+The options bar carries Illustrator's Magic Wand panel: Fill Color, Stroke Color, Stroke Weight, Opacity and Blending Mode, each checked or not, the first four with a tolerance (0 to 255 per RGB channel for colours, points for weight, percent for opacity). Every checked attribute must be within tolerance. Gradients match when their kinds and stop (or freeform point) counts agree and every colour is within tolerance; patterns match exactly. Shift adds and Alt subtracts. Unchecking everything falls back to fill colour, so a click always selects something.
+
+### src/tools/select.ts · select behind
+- refers-to: src/tools/select.ts :: BH; src/engine/index.ts :: Engine.selectBehind, hit; src/engine/hit.ts :: HitOpts.exclude
+- kind: explainer
+- logged: v0.11.0 · 2026-10-07
+
+Ctrl-click (Cmd-click on macOS) hits again with the current selection excluded, so each click at the same spot steps one object further back; past the bottom it starts over from the top. Clicks more than 4 screen pixels apart start a new cycle. The newly selected object can be dragged straight away.
+
+### src/engine/snap.ts · equal spacing
+- refers-to: src/engine/snap.ts :: spacing, snapRect, SnapTargets.frames
+- kind: rationale
+- logged: v0.11.0 · 2026-10-07
+
+Smart guides now also snap a moved object to equal gaps along each axis, among top-level objects that overlap it across that axis: centred between its two neighbours, or one gap past a neighbour that matches the gap between that neighbour and the next one. The nearer of the alignment snap and the spacing snap wins; when both land on the same spot both are drawn. Each matched gap is drawn as a measuring line with end ticks at the middle of the shared band.
 
 ### src/tools/select.ts · loaded text
 - refers-to: src/tools/select.ts :: L, outPortAt, placeLoaded

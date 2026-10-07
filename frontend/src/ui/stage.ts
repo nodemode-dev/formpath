@@ -139,7 +139,7 @@ export class Stage {
     const base = this.engine.dragOrigin ?? pr.doc, key = [...exclude].sort().join(',');
     if (!this.targets || this.targets.doc !== base || this.targets.key !== key) this.targets = { doc: base, key, t: collectTargets(base, exclude) };
     const s = snapRect(r, this.targets.t, { tol: Stage.prefs.snapTol / pr.viewport.zoom, smart: v.smartGuides, point: false, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
-    if (s.lines.length) this.engine.setOverlay({ lines: s.lines, label: null, at: null });
+    if (s.lines.length || this.engine.overlay.lines.length) this.engine.setOverlay({ lines: s.lines, label: null, at: null });
     return { dx: s.dx, dy: s.dy };
   }
 

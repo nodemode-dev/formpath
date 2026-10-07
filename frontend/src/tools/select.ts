@@ -9,6 +9,7 @@ import { updateNodes } from '../engine/doc';
 import type { Anchor, Doc, Engine, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
+import { isMac } from '../ui/dom';
 import { fmt, hud, layerColor, marquee, outlineNode, stroke2, tolDoc, unitLabel } from './util';
 
 const xf = (e: Engine) => ({ strokes: e.view.scaleStrokes, patterns: e.view.transformPatterns, gradients: true });
@@ -115,6 +116,7 @@ function placeLoaded(ctx: ToolContext, p: ToolPointer): void {
   e.endGesture();
 }
 
+const BH = { at: null as Pt | null, skip: new Set<string>() };
 interface Widget { id: string; at: Pt; corner: number; dir: Pt; origin: Pt; xf: Mat; k: number; max: number }
 const CW = { on: false, w: null as Widget | null, moved: false };
 
@@ -157,7 +159,7 @@ function dragWidget(ctx: ToolContext, p: ToolPointer): void {
 registerTool({
   id: 'selection', label: 'Selection Tool', group: 'select', order: 10, shortcut: 'V',
   icon: () => 'vSelect',
-  hint: () => 'Click or drag a marquee to select. Drag to move, Alt-drag to copy, Shift to constrain. Drag a handle to scale, just outside a corner to rotate. Double-click a group to isolate it.',
+  hint: () => `Click or drag a marquee to select; ${isMac ? 'Cmd' : 'Ctrl'}-click again to select the object behind. Drag to move, Alt-drag to copy, Shift to constrain. Drag a handle to scale, just outside a corner to rotate, a corner widget to round corners. Double-click a group to isolate it.`,
   cursor: (ctx, p) => {
     if (L.id) return CURSORS.loadedText;
     if (!p) return CURSORS.select;
@@ -176,6 +178,12 @@ registerTool({
     if (wdg) { CW.on = true; CW.w = wdg; CW.moved = false; e.beginDrag('Corner Radius'); return; }
     const h = handleAt(ctx, p);
     if (h >= 0) { beginTransform(ctx, S, p, h >= 100 ? 'rotate' : 'scale', h % 100); return; }
+    if (p.mod && !p.shift) {
+      if (!BH.at || Math.hypot(BH.at.x - p.doc.x, BH.at.y - p.doc.y) * ctx.view().zoom > 4) BH.skip = new Set();
+      BH.at = p.doc;
+      if (e.selectBehind(p.doc, BH.skip)) beginTransform(ctx, S, p, 'move');
+      return;
+    }
     const hit = e.hit(p.doc);
     if (hit) {
       const id = e.selectableFor(hit.id);
@@ -521,22 +529,33 @@ registerTool({
   overlay: (ctx, g) => { directOverlay(ctx, g); if (G.mode && G.moved) hud(ctx, g, ctx.view().toScreen(G.cur), G.info); },
 });
 
-let wandAttr = 'fill_color';
+export const wand = { fill: true, fillTol: 32, stroke: false, strokeTol: 32, weight: false, weightTol: 5, opacity: false, opacityTol: 5, blend: false };
 registerTool({
   id: 'magicWand', label: 'Magic Wand Tool', group: 'wand', order: 14, shortcut: 'Y',
   icon: () => 'vMagicWand',
-  hint: () => 'Click an object to select every object that shares the chosen attribute.',
+  hint: () => 'Click an object to select every object whose checked attributes are within tolerance of it. Shift adds, Alt subtracts.',
   cursor: () => CURSORS.select,
-  options: (e) => [
-    { kind: 'title', text: 'Magic Wand' },
-    { kind: 'select', label: 'Match', choices: [{ id: 'fill_color', label: 'Fill Color' }, { id: 'stroke_color', label: 'Stroke Color' }, { id: 'stroke_weight', label: 'Stroke Weight' }, { id: 'opacity', label: 'Opacity' }, { id: 'blending_mode', label: 'Blending Mode' }, { id: 'appearance', label: 'Appearance' }], get: () => wandAttr, set: (v) => { wandAttr = v; e.emit('options', null); } },
-  ],
+  options: (e) => {
+    const set = (patch: Partial<typeof wand>): void => { Object.assign(wand, patch); e.emit('options', null); };
+    return [
+      { kind: 'title', text: 'Magic Wand' },
+      { kind: 'toggle', label: 'Fill Color', get: () => wand.fill, set: (v) => set({ fill: v }) },
+      { kind: 'number', label: 'Tolerance', min: 0, max: 255, step: 1, get: () => wand.fillTol, set: (v) => set({ fillTol: v }), when: () => wand.fill },
+      { kind: 'toggle', label: 'Stroke Color', get: () => wand.stroke, set: (v) => set({ stroke: v }) },
+      { kind: 'number', label: 'Tolerance', min: 0, max: 255, step: 1, get: () => wand.strokeTol, set: (v) => set({ strokeTol: v }), when: () => wand.stroke },
+      { kind: 'toggle', label: 'Stroke Weight', get: () => wand.weight, set: (v) => set({ weight: v }) },
+      { kind: 'number', label: 'Tolerance', min: 0, max: 1000, step: 0.5, unit: 'pt', get: () => wand.weightTol, set: (v) => set({ weightTol: v }), when: () => wand.weight },
+      { kind: 'toggle', label: 'Opacity', get: () => wand.opacity, set: (v) => set({ opacity: v }) },
+      { kind: 'number', label: 'Tolerance', min: 0, max: 100, step: 1, unit: '%', get: () => wand.opacityTol, set: (v) => set({ opacityTol: v }), when: () => wand.opacity },
+      { kind: 'toggle', label: 'Blending Mode', get: () => wand.blend, set: (v) => set({ blend: v }) },
+    ];
+  },
   down: (ctx, p) => {
     const e = ctx.engine, h = e.hit(p.doc);
-    if (!h) { if (!p.shift) e.deselect(); return; }
-    const before = e.selectedIds();
-    e.selectSame(wandAttr, e.selectableFor(h.id));
-    if (p.shift) e.select(before, 'add');
+    if (!h) { if (!p.shift && !p.alt) e.deselect(); return; }
+    const c = { fill: wand.fill ? wand.fillTol : null, stroke: wand.stroke ? wand.strokeTol : null, weight: wand.weight ? wand.weightTol : null, opacity: wand.opacity ? wand.opacityTol : null, blend: wand.blend };
+    if (c.fill === null && c.stroke === null && c.weight === null && c.opacity === null && !c.blend) c.fill = wand.fillTol;
+    e.selectSimilar(e.selectableFor(h.id), c, p.alt ? 'subtract' : p.shift ? 'add' : 'replace');
   },
 });
 

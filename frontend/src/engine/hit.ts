@@ -13,7 +13,7 @@ function ctx(): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D {
 }
 
 export interface Hit { id: string; chain: string[]; part: 'fill' | 'stroke' | 'edge' | 'text' | 'image' }
-export interface HitOpts { tol: number; outline: boolean; skipLocked?: boolean }
+export interface HitOpts { tol: number; outline: boolean; skipLocked?: boolean; exclude?: Set<string> }
 
 function shapeHit(n: VNode, d: PathData, rule: CanvasFillRule, p: Pt, o: HitOpts): 'fill' | 'stroke' | 'edge' | null {
   const c = ctx(), path = cachedPath(d);
@@ -54,7 +54,7 @@ function leafHit(doc: Doc, n: VNode, p: Pt, o: HitOpts): Hit['part'] | null {
 function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): Hit | null {
   for (let i = nodes.length - 1; i >= 0; i--) {
     const n = nodes[i];
-    if (n.hidden || (o.skipLocked !== false && n.locked)) continue;
+    if (n.hidden || (o.skipLocked !== false && n.locked) || o.exclude?.has(n.id)) continue;
     if (n.kind === 'layer' && n.template) continue;
     const b = geomBounds(doc, n);
     if (Number.isFinite(b.x) && !rectContains(inflate(b, o.tol + 40), p) && n.kind !== 'layer') continue;

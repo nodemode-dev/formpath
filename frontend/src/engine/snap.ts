@@ -6,14 +6,14 @@ export interface SnapLine { x1: number; y1: number; x2: number; y2: number }
 export type SnapKind = 'guide' | 'side' | 'anchor' | 'artboard' | 'center';
 interface Rule { at: number; lo: number; hi: number; kind: SnapKind }
 interface Spot { x: number; y: number; kind: SnapKind }
-export interface SnapTargets { cell: number; spots: Map<number, Spot[]>; cols: Rule[]; rows: Rule[] }
+export interface SnapTargets { cell: number; spots: Map<number, Spot[]>; cols: Rule[]; rows: Rule[]; frames: Rect[] }
 export interface SnapResult { p: Pt; lines: SnapLine[]; label: string | null; hit: 'spot' | 'axis' | 'grid' | null }
 
 const RANK: Record<SnapKind, number> = { anchor: 0, artboard: 1, center: 2, side: 3, guide: 3 };
 const cellKey = (i: number, j: number): number => (i + 32768) * 65536 + (j + 32768);
 
 export function collectTargets(doc: Doc, exclude: Set<string>, anchorObjects = 6000): SnapTargets {
-  const t: SnapTargets = { cell: 64, spots: new Map(), cols: [], rows: [] };
+  const t: SnapTargets = { cell: 64, spots: new Map(), cols: [], rows: [], frames: [] };
   const spot = (x: number, y: number, kind: SnapKind): void => {
     const k = cellKey(Math.floor(x / t.cell), Math.floor(y / t.cell)), list = t.spots.get(k);
     if (list) list.push({ x, y, kind }); else t.spots.set(k, [{ x, y, kind }]);
@@ -25,11 +25,14 @@ export function collectTargets(doc: Doc, exclude: Set<string>, anchorObjects = 6
     spot(mx, my, 'center');
   };
   let objects = 0;
-  walk(doc.layers, (n) => {
+  walk(doc.layers, (n, parents) => {
     if (n.hidden || exclude.has(n.id)) return false;
     if (n.kind === 'layer') return;
     const b = geomBounds(doc, n);
-    if (Number.isFinite(b.x)) frame(b, 'side');
+    if (Number.isFinite(b.x)) {
+      frame(b, 'side');
+      if (t.frames.length < 1500 && parents.every((p) => p.kind === 'layer')) t.frames.push(b);
+    }
     if (++objects <= anchorObjects) {
       const subs = n.kind === 'path' ? n.d : n.kind === 'compound' ? n.children.flatMap((c) => c.d) : [];
       for (const sp of subs) for (const a of sp.pts) spot(a.x, a.y, 'anchor');
@@ -101,6 +104,28 @@ function fitAxis(list: Rule[], feats: number[], tol: number): { d: number; rule:
   return best;
 }
 
+interface Span { a: number; b: number; c0: number; c1: number }
+function spacing(r: Rect, boxes: Rect[], vertical: boolean, tol: number): { d: number; lines: SnapLine[] } | null {
+  const S = (x: Rect): Span => (vertical ? { a: x.y, b: x.y + x.h, c0: x.x, c1: x.x + x.w } : { a: x.x, b: x.x + x.w, c0: x.y, c1: x.y + x.h });
+  const me = S(r), size = me.b - me.a, others = boxes.map(S).filter((s) => s.c0 < me.c1 && s.c1 > me.c0);
+  const leftOf = (x: Span, list: Span[]): Span | null => list.filter((s) => s.b <= x.a + tol && s !== x).reduce<Span | null>((m, s) => (!m || s.b > m.b ? s : m), null);
+  const rightOf = (x: Span, list: Span[]): Span | null => list.filter((s) => s.a >= x.b - tol && s !== x).reduce<Span | null>((m, s) => (!m || s.a < m.a ? s : m), null);
+  const A = leftOf(me, others), B = rightOf(me, others);
+  const opts: Array<{ d: number; gaps: Array<[number, number]> }> = [];
+  if (A && B && B.a - A.b > size) { const p = (A.b + B.a - size) / 2; opts.push({ d: p - me.a, gaps: [[A.b, p], [p + size, B.a]] }); }
+  if (A) { const A2 = leftOf(A, boxes.map(S).filter((s) => s.c0 < A.c1 && s.c1 > A.c0)); if (A2 && A.a - A2.b > 0) { const g = A.a - A2.b, p = A.b + g; opts.push({ d: p - me.a, gaps: [[A2.b, A.a], [A.b, p]] }); } }
+  if (B) { const B2 = rightOf(B, boxes.map(S).filter((s) => s.c0 < B.c1 && s.c1 > B.c0)); if (B2 && B2.a - B.b > 0) { const g = B2.a - B.b, p = B.a - g - size; opts.push({ d: p - me.a, gaps: [[p + size, B.a], [B.b, B2.a]] }); } }
+  const best = opts.filter((x) => Math.abs(x.d) <= tol).sort((x, y) => Math.abs(x.d) - Math.abs(y.d))[0];
+  if (!best) return null;
+  const c = (Math.max(me.c0, ...others.map((s) => s.c0)) + Math.min(me.c1, ...others.map((s) => s.c1))) / 2, mid = Number.isFinite(c) ? c : (me.c0 + me.c1) / 2, k = tol * 0.6;
+  const lines: SnapLine[] = [];
+  for (const [g0, g1] of best.gaps) {
+    if (vertical) lines.push({ x1: mid, y1: g0, x2: mid, y2: g1 }, { x1: mid - k, y1: g0, x2: mid + k, y2: g0 }, { x1: mid - k, y1: g1, x2: mid + k, y2: g1 });
+    else lines.push({ x1: g0, y1: mid, x2: g1, y2: mid }, { x1: g0, y1: mid - k, x2: g0, y2: mid + k }, { x1: g1, y1: mid - k, x2: g1, y2: mid + k });
+  }
+  return { d: best.d, lines };
+}
+
 export function snapRect(r: Rect, t: SnapTargets, o: SnapOpts): { dx: number; dy: number; lines: SnapLine[] } {
   if (o.grid.on && !o.smart) {
     const step = o.grid.spacing / Math.max(1, o.grid.sub);
@@ -108,9 +133,13 @@ export function snapRect(r: Rect, t: SnapTargets, o: SnapOpts): { dx: number; dy
   }
   if (!o.smart) return { dx: 0, dy: 0, lines: [] };
   const ax = fitAxis(t.cols, [r.x, r.x + r.w / 2, r.x + r.w], o.tol), ay = fitAxis(t.rows, [r.y, r.y + r.h / 2, r.y + r.h], o.tol);
-  const dx = ax ? ax.d : 0, dy = ay ? ay.d : 0, lines: SnapLine[] = [];
-  if (ax) lines.push({ x1: ax.rule.at, y1: Math.min(ax.rule.lo, r.y + dy), x2: ax.rule.at, y2: Math.max(ax.rule.hi, r.y + r.h + dy) });
-  if (ay) lines.push({ x1: Math.min(ay.rule.lo, r.x + dx), y1: ay.rule.at, x2: Math.max(ay.rule.hi, r.x + r.w + dx), y2: ay.rule.at });
+  const sx = t.frames.length ? spacing(r, t.frames, false, o.tol) : null, sy = t.frames.length ? spacing(r, t.frames, true, o.tol) : null;
+  const useSx = !!sx && (!ax || Math.abs(sx.d) <= Math.abs(ax.d) + 1e-9), useSy = !!sy && (!ay || Math.abs(sy.d) <= Math.abs(ay.d) + 1e-9);
+  const dx = useSx && sx ? sx.d : ax ? ax.d : 0, dy = useSy && sy ? sy.d : ay ? ay.d : 0, lines: SnapLine[] = [];
+  if (ax && Math.abs(ax.d - dx) < 1e-6) lines.push({ x1: ax.rule.at, y1: Math.min(ax.rule.lo, r.y + dy), x2: ax.rule.at, y2: Math.max(ax.rule.hi, r.y + r.h + dy) });
+  if (ay && Math.abs(ay.d - dy) < 1e-6) lines.push({ x1: Math.min(ay.rule.lo, r.x + dx), y1: ay.rule.at, x2: Math.max(ay.rule.hi, r.x + r.w + dx), y2: ay.rule.at });
+  if (useSx && sx) lines.push(...sx.lines);
+  if (useSy && sy) lines.push(...sy.lines);
   return { dx, dy, lines };
 }
 
