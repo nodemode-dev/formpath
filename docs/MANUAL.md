@@ -50,14 +50,16 @@ ask it questions.
 
 - Selection tool (V): click to select an object, Shift-click to add or remove, drag a marquee. The bounding box
   scales (Shift keeps proportions, Alt scales from the centre) and rotates from just outside a corner. Dragging
-  moves; Alt-drag copies; arrow keys nudge by the keyboard increment (Shift ten times as far).
+  moves; Alt-drag copies; arrow keys nudge by the keyboard increment (Shift ten times as far). Ctrl-click (Cmd-click
+  on macOS) again on the same spot to select the object behind, and again to go further back.
 - Double-click a group to isolate it: everything else dims and new art goes inside the group. Escape or the Exit
   Isolation Mode button leaves.
 - Direct Selection (A): selects anchors, handles and segments. Drag an anchor or handle to move it, drag a segment
   to reshape the curve, marquee or Shift-click to collect anchors.
-- Group Selection selects a group within a group with each click. Magic Wand (Y) selects every object with the same
-  fill, stroke, weight, opacity or blend mode as the one clicked (its options set which). Lasso (Q) selects anchors
-  inside a freehand loop.
+- Group Selection selects a group within a group with each click. Magic Wand (Y) selects every object close to the
+  one clicked: check Fill Color, Stroke Color, Stroke Weight, Opacity or Blending Mode in its options and set each
+  tolerance (0 to 255 per colour channel, points, percent). Shift-click adds, Alt-click subtracts. Lasso (Q)
+  selects anchors inside a freehand loop.
 - Select > Same selects by fill colour, stroke colour, stroke weight, fill and stroke, opacity, blending mode,
   appearance, graphic style, shape, font family, font size or symbol instance. Select > Object selects all of a kind
   (paths, text, images, clipping masks, stray points, brush strokes, symbol instances).
@@ -67,8 +69,11 @@ ask it questions.
 - Shapes: Rectangle (M), Rounded Rectangle, Ellipse (L), Polygon, Star, Flare, Line Segment (\\), Arc, Spiral,
   Rectangular Grid and Polar Grid. Drag to draw (Shift constrains, Alt draws from the centre); click without
   dragging for a dialog with exact sizes. While dragging, the arrow keys change sides, points, radius or grid lines.
-  Rectangles, rounded rectangles, ellipses, polygons and stars stay live: their corners, radii and sides can change
-  later in Properties. Object > Shape > Expand Shape turns them into ordinary paths.
+  Rectangles, rounded rectangles, ellipses, polygons and stars stay live. The Shape section of Properties changes
+  their size, each corner's radius and its type (round, inverted, chamfer), an ellipse's pie angles, a polygon's sides
+  and a star's points and radii; with the Selection tool, drag a rectangle's or polygon's corner widget (the small
+  circles inside the corners) to round its corners, Alt to round just one. Object > Shape > Expand Shape turns them
+  into ordinary paths.
 - Pen (P): click for corner points, drag for smooth points, click the first point to close, Enter or Escape to end.
   Over a selected path the Pen adds points on segments and deletes them on anchors; Alt over the last point converts
   it; clicking an open end continues that path. Add Anchor Point (=), Delete Anchor Point (-) and Anchor Point
@@ -79,8 +84,9 @@ ask it questions.
 - Paintbrush (B) draws strokes with the current brush. Blob Brush (Shift+B) draws filled shapes that merge with
   overlapping shapes of the same fill. Eraser (Shift+E) cuts shapes away; Scissors (C) splits a path at a point; Knife
   cuts shapes along a freehand line.
-- Smart guides (Ctrl+U) show alignment to other objects' edges and centres, and angles of 0, 45, 90 and 135 degrees;
-  snapping to the grid and to points is in the View menu.
+- Smart guides (Ctrl+U) show alignment to other objects' edges and centres, equal spacing between neighbours (the
+  matched gaps are marked), and angles of 0, 45, 90 and 135 degrees; snapping to the grid, to points and to whole
+  pixels is in the View menu.
 
 ## Transforming
 
@@ -119,6 +125,13 @@ ask it questions.
 - Gradient panel and Gradient tool (G): linear and radial gradients with any number of stops and midpoints; drag a
   stop off the bar to remove it, click under the bar to add one. The Gradient tool drags the direction on the art
   and shows its annotator. Strokes take gradients within, along or across.
+- Freeform gradients: choose Freeform in the Gradient panel; colour points appear over the selected object. With the
+  Gradient tool, click inside the object to add a point, drag a point to move it, drag the square on its dashed ring
+  to spread it, and press Delete to remove it; the panel sets the selected point's colour and spread. Lines mode joins
+  the points so colour flows along the line.
+- Color Guide: harmonies of the current colour. Choose a rule (complementary, analogous, triad and nine more), click
+  any swatch to use it, and pick tints and shades, warm and cool, or vivid and muted variations below. The plus saves
+  the five harmony colours as a swatch group.
 - Mesh (U): click into a shape to make a gradient mesh, then colour its points.
 - Eyedropper (I) picks up the fill, stroke and type attributes of what you click and applies them to the selection.
 - Patterns: Object > Pattern > Make turns the selection into a pattern swatch; patterns fill and stroke like colours.

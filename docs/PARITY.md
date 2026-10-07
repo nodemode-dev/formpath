@@ -10,11 +10,11 @@ formpth is measured against Adobe Illustrator the way formvis is measured agains
 
 Platform rows are shown and not scored.
 
-## Score at v0.10.0
+## Score at v0.11.0
 
-**49.5 of 59 scored rows, 84 percent:** 42 Full, 15 Partial, 2 None. The tally is at the end.
+**52.5 of 59 scored rows, 89 percent:** 48 Full, 9 Partial, 2 None. The tally is at the end.
 
-## Objects and layers · 7.5 of 8
+## Objects and layers · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -23,29 +23,29 @@ Platform rows are shown and not scored.
 | Arrange | Full | Bring to Front, Forward, Backward, to Back, Send to Current Layer |
 | Align and distribute | Full | Align to selection, key object or artboard; distribute objects; distribute spacing with an exact gap |
 | Artboards | Full | Artboard tool (draw, move with art, duplicate, resize, delete), Artboards panel, options, fit to art or selection, from selection, rearrange |
-| Lock, hide, select behind | Partial | Lock, Unlock All, Hide, Show All, Select Next Object Above and Below; no Ctrl-click to select behind |
+| Lock, hide, select behind | Full | Lock, Unlock All, Hide, Show All, Select Next Object Above and Below, Ctrl-click (Cmd-click) to step through the objects behind |
 | Clipping masks | Full | Make and Release, layer clipping masks, isolation of clip groups |
 | Transparency, blend modes, opacity masks | Full | 16 blend modes, opacity, opacity masks with Clip and Invert, Isolate Blending, Knockout Group |
 
-## Selection and transform · 6 of 7
+## Selection and transform · 7 of 7
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Selection, Direct and Group Selection | Full | Bounding box, anchors, handles and segment reshaping, marquee and Shift selection, group-level clicks |
-| Lasso and Magic Wand | Partial | Lasso selects anchors; Magic Wand matches fill, stroke, weight, opacity or blend exactly; no tolerance setting |
+| Lasso and Magic Wand | Full | Lasso selects anchors; Magic Wand with fill colour, stroke colour, stroke weight, opacity and blending mode, each with its tolerance, Shift to add and Alt to subtract |
 | Select Same and Select Object | Full | Twelve Same attributes; Select Object by kind, stray points, brush strokes, clipping masks |
 | Bounding box and Free Transform | Full | Scale from centre or proportionally, rotate zones, Free Transform with free distort |
 | Rotate, Reflect, Scale, Shear, Transform Each and Again | Full | Origin click, Alt copy, exact dialogs, Transform Each with random, Transform Again |
-| Smart Guides and snapping | Partial | Alignment to edges and centres, angle construction, labels, snap to point and grid; no equal-spacing guides, no snap to pixel |
+| Smart Guides and snapping | Full | Alignment to edges and centres, equal-spacing guides with gap marks, angle construction, labels, snap to point, grid and pixel |
 | Rulers, guides and grids | Full | Rulers from the active artboard, guides dragged from rulers, lock, make, release, clear, grid with subdivisions and snapping |
 
-## Drawing · 5.5 of 6
+## Drawing · 6 of 6
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Pen, Curvature and anchor tools | Full | Pen with close, continue, add and delete on paths, convert; Add, Delete and Anchor Point tools; Curvature |
 | Pencil, Smooth, Path Eraser, Join | Full | Fitted Pencil that extends and closes paths; Smooth, Path Eraser and Join tools |
-| Rectangle to Star with live corners | Partial | Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; no on-canvas corner widgets and no editing of live parameters after drawing |
+| Rectangle to Star with live corners | Full | Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; Shape fields in Properties after drawing (size, every corner radius and corner type, pie angles, sides, points, radii, line length and angle); corner widgets on the canvas for rectangles and polygons |
 | Line, Arc, Spiral and grids | Full | Line Segment, Arc, Spiral, Rectangular Grid, Polar Grid, Flare |
 | Paintbrush and Blob Brush | Full | Paintbrush with the current brush; Blob Brush merging same-fill shapes |
 | Eraser, Scissors and Knife | Full | All three cut real geometry |
@@ -62,16 +62,16 @@ Platform rows are shown and not scored.
 | Simplify, Average, Join, anchors | Full | Simplify with preview, Smooth, Average, Join, Add and Remove Anchors, Reverse, Divide Objects Below, Split into Grid, Clean Up |
 | Width tool and profiles | Full | Width points dragged on strokes; eight width profiles |
 
-## Paint and colour · 6 of 8
+## Paint and colour · 7 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Colour panel and modes | Full | Grayscale, RGB, HSB, CMYK, Web Safe, hex, spectrum, global tints |
 | Swatches, global and spot | Full | Colours, gradients and patterns, global and spot swatches, groups for agents |
-| Gradients on fill and stroke, gradient tool | Partial | Linear and radial with stops, midpoints, opacity and aspect; within, along and across strokes; the Gradient tool and annotator; freeform gradients render but cannot be created yet |
+| Gradients on fill and stroke, gradient tool | Full | Linear and radial with stops, midpoints, opacity and aspect; within, along and across strokes; the Gradient tool and annotator; freeform gradients in points and lines modes, made in the Gradient panel, edited with the Gradient tool (add, move, spread, recolour, delete points) and exported to SVG and PDF |
 | Gradient mesh | Partial | Create Gradient Mesh and the Mesh tool with coloured points; no mesh patch reshaping by handles |
 | Patterns | Partial | Make Pattern with grid, brick and hex tiles; no pattern editing mode |
-| Recolor and harmony | Partial | Recolor Artwork maps and palettes, invert, grayscale, CMYK, RGB, saturate; no Color Guide or harmony rules |
+| Recolor and harmony | Full | Recolor Artwork maps and palettes, invert, grayscale, CMYK, RGB, saturate; the Color Guide with twelve harmony rules, tints and shades, warm and cool and vivid and muted variations, saved as swatch groups |
 | Stroke panel | Full | Weight, caps, joins, miter, alignment, dashes, arrowheads with scale, profiles |
 | Appearance and Graphic Styles | Full | Multiple fills and strokes, effects per item, visibility, Clear and Reduce to Basic, Graphic Styles |
 
@@ -119,25 +119,25 @@ Platform rows are shown and not scored.
 | --- | --- |
 | Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
 | Web app | The same app in a browser against the local engine |
-| Agents over MCP | 58 tools, `run_command` over every menu command, consent in the window, the `formpth-harness` skill pack |
+| Agents over MCP | 61 tools, one undo step per call, `run_command` over every menu command, consent in the window, the `formpth-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |
 
 ## Tally
 
 | Category | Score | Rows |
 | --- | --- | --- |
-| Objects and layers | 7.5 | 8 |
-| Selection and transform | 6 | 7 |
-| Drawing | 5.5 | 6 |
+| Objects and layers | 8 | 8 |
+| Selection and transform | 7 | 7 |
+| Drawing | 6 | 6 |
 | Paths and Pathfinder | 6.5 | 7 |
-| Paint and colour | 6 | 8 |
+| Paint and colour | 7 | 8 |
 | Effects and live objects | 6.5 | 10 |
 | Type | 5.5 | 6 |
 | Files and output | 6 | 7 |
-| **Total** | **49.5** | **59** |
+| **Total** | **52.5** | **59** |
 
-42 rows Full, 15 Partial, 2 None.
+48 rows Full, 9 Partial, 2 None.
 
 ## Next to close
 
-Ordered by how often the gap is hit in everyday work: live shape editing after drawing, Magic Wand tolerance, freeform gradient creation and the Color Guide, Ctrl-click select behind and spacing guides, New Brush from art, the remaining symbolism tools, live tracing objects, pattern editing mode, a general PDF reader, Effect Gallery filters, 3D.
+Ordered by how often the gap is hit in everyday work: New Brush from art, live paint groups, pattern editing mode, live tracing objects, the remaining symbolism tools, mesh patch handles, contextual alternates, a general PDF reader, the Asset Export panel, Effect Gallery filters, 3D.
