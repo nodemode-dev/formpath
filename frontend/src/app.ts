@@ -50,6 +50,7 @@ import { ActionsPanel, HistoryPanel, InfoPanel, NavigatorPanel } from './ui/pane
 import { PluginsDialog } from './ui/panels/plugins-dialog';
 import { effectDialog, previewEdit } from './ui/panels/preview-edit';
 import { EffectGallery } from './ui/panels/effect-gallery';
+import { ThreeDPanel } from './ui/panels/three-d';
 import { BrushesPanel, StrokePanel, TransparencyPanel } from './ui/panels/stroke';
 import { ArtboardsPanel, LinksPanel, SymbolsPanel } from './ui/panels/symbols';
 import { CharacterPanel, findReplaceDialog, GlyphsPanel, ParagraphPanel } from './ui/panels/type';
@@ -120,7 +121,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -186,7 +187,7 @@ export function startApp(): void {
   void historyP; void navP;
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }], 'Color');
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }], 'Stroke');
-  new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }], 'Appearance');
+  new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
   new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
@@ -875,6 +876,7 @@ export function startApp(): void {
     { id: 'panel-character', label: 'Character', keys: ['Mod+T'], run: () => showPanel('character') },
     { id: 'panel-paragraph', label: 'Paragraph', keys: ['Alt+Mod+T'], run: () => showPanel('paragraph') },
     { id: 'panel-glyphs', label: 'Glyphs', run: () => showPanel('glyphs') },
+    { id: 'panel-three-d', label: '3D and Materials', run: () => showPanel('three-d') },
 
     { id: 'select-all', label: 'All', keys: ['Mod+A'], enabled: has, run: () => engine.selectAll() },
     { id: 'select-artboard', label: 'All on Active Artboard', keys: ['Alt+Mod+A'], enabled: has, run: () => engine.selectAll(true) },
@@ -925,7 +927,7 @@ export function startApp(): void {
 
     { id: 'assistant', label: 'Assistant', keys: ['Alt+Mod+I'], run: () => assistant.toggle() },
     { id: 'manage-plugins', label: 'Manage Plugins...', run: () => void pluginsDialog.show() },
-    ...Object.keys(TAB_HOMES).map((tab) => ({ id: `panel-${tab}`, label: tab.replace(/-/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase()), run: () => showPanel(tab) })).filter((c) => !['panel-character', 'panel-paragraph', 'panel-glyphs'].includes(c.id)),
+    ...Object.keys(TAB_HOMES).map((tab) => ({ id: `panel-${tab}`, label: tab.replace(/-/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase()), run: () => showPanel(tab) })).filter((c) => !['panel-character', 'panel-paragraph', 'panel-glyphs', 'panel-three-d'].includes(c.id)),
     { id: 'panel-properties-col', label: 'Properties Column', checked: () => propsShown(), run: () => { store('formpth.propsCol', propsShown() ? 'hidden' : 'shown'); syncPropsCol(); } },
     { id: 'reset-panels', label: 'Reset Essentials', run: () => { dock.reset(); PanelGroup.resetStates(); PanelGroup.resetHomes(TAB_HOMES); store('formpth.propsCol', 'shown'); syncPropsCol(); } },
     { id: 'help', label: 'formpth Help', keys: ['F1'], run: () => help.show() },
