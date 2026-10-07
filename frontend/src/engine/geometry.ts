@@ -621,9 +621,9 @@ export function simplifyPolyline(pts: Pt[], tol: number): Pt[] {
   while (stack.length) {
     const [a, b] = stack.pop() as [number, number];
     let maxD = 0, idx = -1;
-    const A = pts[a], B = pts[b], dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy) || 1;
+    const A = pts[a], B = pts[b], dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy);
     for (let i = a + 1; i < b; i++) {
-      const d = Math.abs(dy * pts[i].x - dx * pts[i].y + B.x * A.y - B.y * A.x) / len;
+      const d = len < 1e-9 ? Math.hypot(pts[i].x - A.x, pts[i].y - A.y) : Math.abs(dy * pts[i].x - dx * pts[i].y + B.x * A.y - B.y * A.x) / len;
       if (d > maxD) { maxD = d; idx = i; }
     }
     if (maxD > tol && idx > 0) { keep[idx] = 1; stack.push([a, idx], [idx, b]); }
