@@ -352,7 +352,14 @@ Every kernel is linear in the pixel count whatever its size. Blurs are three box
 - kind: explainer
 - logged: v0.15.0 · 2026-10-07
 
-Inflate takes a chamfer distance transform of the object's silhouette, turns it into a quarter-circle height profile that reaches full height at the depth in from the edge (scaled by volume), smooths it in proportion to the depth so the ridges of the medial axis round off, and shades each pixel's own colour with the same lighting as the vector 3D effects. It is drawn face-on: the rotation of Extrude and Revolve does not apply.
+Inflate takes a chamfer distance transform of the object's silhouette, turns it into a quarter-circle height profile that reaches full height at the depth in from the edge (scaled by volume), smooths it in proportion to the depth so the ridges of the medial axis round off, and shades each pixel's own colour with the same lighting as the vector 3D effects. Face-on it is a per-pixel shade of the height field.
+
+### src/engine/filters.ts · Inflate tilt
+- refers-to: src/engine/filters.ts :: RUNS 3d.inflate; src/engine/threed.ts :: rotator
+- kind: rationale
+- logged: v0.16.0 · 2026-10-07
+
+A tilted Inflate is ray-cast: each output pixel sends a ray through the inverse rotation into object space, where the solid is the silhouette between the flat base and the height field. The ray is clipped to the silhouette's bounding box (a first version marched a fixed span around the dome and cut off whatever the rotation moved further than the dome height), stepped at three quarters of a pixel (scaled with zoom so 4x stays under a second), and refined by bisection. A hit on the dome takes its normal from the height gradient, a hit on the wall from the alpha gradient, a hit on the base faces straight back; a ray that lands between pixel heights away from the edge counts as the dome, which removed a row of dark speckles along grazing ridges. Pixels whose neighbours disagree on hit or miss are re-cast four times for a soft edge. The output moves alpha, so `3d.inflate` is in `MOVES_ALPHA`; face-on keeps the original alpha unchanged.
 
 ### src/engine/filters.ts · Rasterize
 - refers-to: src/engine/filters.ts :: RUNS rasterize.raster
@@ -444,6 +451,20 @@ Extrude & Bevel, Revolve and Rotate turn the object into solids (each path, comp
 - logged: v0.15.0 · 2026-10-07
 
 Sorting all faces by mean depth let side quads near the front edge of a wide cap (type, especially) paint over the cap, whose mean depth is its centre. Each solid is now drawn as a block: the cap facing away, its sides from far to near, then the cap facing the viewer; blocks are ordered by mean depth. Shading is two-sided (a normal is flipped to face the viewer) so face winding never matters. Sides take a flat shaded colour; a cap keeps the object's own paint (gradients and patterns included) with the shading laid over it as a shading-colour fill at one minus the light factor and a white fill at the highlight, which reproduces the flat shading exactly for plastic and matte. Thin strokes of each side's own colour hide antialiasing seams between neighbouring faces.
+
+### src/engine/threed.ts · Map Art
+- refers-to: src/engine/effects.ts :: threeDFaces, mapped, artBounds, reid; src/engine/threed.ts :: scene3dWith, Scene
+- kind: explainer
+- logged: v0.16.0 · 2026-10-07
+
+`scene3dWith` returns the faces with the projection and the solids' centre, and marks each solid's front cap and whether it faces the viewer. Map Art places the symbol's art centred on the object (scaled and offset in points), carries it onto the front plane by the affine map estimated from projecting the centre and two points 50 pt along x and y, and clips it to the front cap. The cap is drawn as base paint, then the clipped art, then the shading overlay, so the art darkens and catches highlights with the surface; with Shade Artwork off the shading goes under the art. The art is re-identified per face so ids never collide with the document. An affine map is exact without perspective and close with it; Revolve has no flat front face, so Map Art is offered on Extrude and Plane only. The faces cache also keys on the document's symbols and swatches, since editing a symbol must redraw every face it is mapped onto.
+
+### src/engine/threed.ts · shadows
+- refers-to: src/engine/effects.ts :: threeDFaces
+- kind: rationale
+- logged: v0.16.0 · 2026-10-07
+
+The shadow is the projected faces filled black in a group at the shadow opacity with Multiply and a Gaussian Blur effect at the softness, placed first so it sits under the object. Behind shifts it along the light direction by the distance. Below flattens it to 28 percent height against the lowest projected point and shears it away from the light, so taller parts fall further from the light as a ground shadow does (the first version sheared toward the light). Building it from the same faces keeps the canvas, SVG, PDF and Expand in step, and bounds come from the faces and the blur reach without a special case.
 
 ## src/engine/livepaint.ts
 
@@ -1043,6 +1064,13 @@ Dialog previews run through the engine's drag preview (`beginDrag`, `dragTo`), s
 - logged: v0.15.0 · 2026-10-07
 
 The panel edits the first 3D effect on the selection through `set3d`: a kind button adds one or switches it while keeping the parameters the new kind shares (rotation, material, lighting), a select value the new kind does not offer falls back to its default, and sliders run inside a gesture so a drag is one history step. All controls are built once; the parts for each kind are only hidden and shown.
+
+### src/ui/panels/three-d.ts · Map Art and Shadow
+- refers-to: src/ui/panels/three-d.ts :: ThreeDPanel
+- kind: explainer
+- logged: v0.16.0 · 2026-10-07
+
+Map Art shows for Extrude and Plane, Shadow for every kind but Inflate, and Inflate now shares the Rotation part with Perspective hidden. The symbol select lists the document's symbols by id with None first; its options are rebuilt only when that list changes, because it syncs on every document change. The panel stores the symbol id and the agent tool resolves a name to the id, so renaming a symbol keeps the mapping.
 
 ## src/ui/panels/effect-gallery.ts
 

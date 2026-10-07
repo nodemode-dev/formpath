@@ -124,6 +124,13 @@ States that type is black unless `color` is given, matching the bridge's default
 
 3D could be reached through `apply_effect` alone, but an agent then has to know four effect ids, rotate in raw degrees and resend every parameter to change one. `three_d` takes a plain kind, named positions and only the parameters to change, keeps the rest (as the panel does through `Engine.set3d`), and answers with the full parameter set so the next call can adjust from it. The catalogue is at 66 tools.
 
+### app/routers/mcp.py · three_d Map Art and shadows
+- refers-to: app/routers/mcp.py :: TOOLS three_d; frontend/src/automation/agent-bridge.ts :: three_d
+- kind: explainer
+- logged: v0.16.0 · 2026-10-07
+
+`map_symbol` takes a symbol name (or id) and fails with the list of the document's symbols when it matches none, or says to make one first when there are none, because a silent miss would leave a plain face the agent cannot tell from a wrong scale. It is stored as the id so a rename keeps the mapping, and the answer names the symbol rather than the id. The shadow parameters and `shade_art` pass straight through; Inflate takes rx, ry and rz to tilt and ignores Map Art and shadows, which are vector-face features. The tool count is unchanged.
+
 ## app/routers/projects.py
 
 ### app/routers/projects.py · save conflicts
