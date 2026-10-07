@@ -1,7 +1,8 @@
 import { findNode, newId } from '../engine/doc';
 import { cachedPath } from '../engine/render';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
-import { computeFaces, faceAt, liveFaces } from '../engine/livepaint';
+import { computeFaces, faceAt, faceContains, liveFaces } from '../engine/livepaint';
+import { nearestOnPath } from '../engine/geometry';
 import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, toRgb, withFirstFill } from '../engine/paint';
 import type { Doc, Engine, FreeformPoint, Gradient, GroupNode, MeshNode, MeshPoint, PathData, Pt, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
@@ -300,7 +301,7 @@ registerTool({
   down: (ctx, p) => {
     const e = ctx.engine, black = solid({ kind: 'rgb', r: 0, g: 0, b: 0 });
     const paint = p.shift ? (e.strokePaint.type === 'none' ? black : e.strokePaint) : e.fillPaint.type === 'none' ? black : e.fillPaint;
-    const paintAt = (id: string): boolean => (p.shift ? e.livePaintEdge(id, p.doc, paint, tolDoc(ctx, 5)) : e.livePaintFill(id, p.doc, paint));
+    const paintAt = (id: string): boolean => (p.shift ? e.livePaintEdge(id, p.doc, { paint, width: e.strokeWidth || 1 }, tolDoc(ctx, 5)) : e.livePaintFill(id, p.doc, paint));
     const g = livePaintAt(ctx, p.doc);
     if (g) { paintAt(g.id); cache = null; return; }
     if (!e.hasSelection) { const h = e.hit(p.doc); if (h) e.select([e.selectableFor(h.id)]); return; }
@@ -311,6 +312,60 @@ registerTool({
     cache = null;
   },
   overlay: (ctx, g) => { if (lpHover) { const d = lpHover; inView(ctx, g, () => { g.fillStyle = 'rgba(255, 64, 64, 0.25)'; g.fill(cachedPath(d)); g.strokeStyle = '#ff4040'; g.lineWidth = 2 / ctx.view().zoom; g.stroke(cachedPath(d)); }); } },
+});
+
+const LS = { hover: null as PathData | null, pieces: new Map<string, PathData>() };
+const lsKey = (q: Pt): string => `${Math.round(q.x * 100)}:${Math.round(q.y * 100)}`;
+registerTool({
+  id: 'livePaintSelect', label: 'Live Paint Selection Tool', group: 'shapeBuilder', order: 74.5, shortcut: 'Shift+L',
+  icon: () => 'vLivePaintSelect',
+  hint: () => 'Click faces and edges of a Live Paint group to select them, Shift-click to add or remove; the Fill and Stroke colours, the Stroke panel and Delete then change only those.',
+  cursor: () => CURSORS.direct,
+  activate: (ctx) => { ctx.engine.livePaintSelection = null; LS.pieces.clear(); },
+  deactivate: (ctx) => { ctx.engine.livePaintSelection = null; LS.pieces.clear(); LS.hover = null; ctx.redraw(); },
+  hover: (ctx, p) => {
+    LS.hover = null;
+    const g = p ? livePaintAt(ctx, p.doc) : null;
+    if (g && p) {
+      const edge = ctx.engine.livePaintEdgePiece(g.id, p.doc, tolDoc(ctx, 5));
+      if (edge) LS.hover = [edge];
+      else { const i = faceAt(g, p.doc); if (i >= 0) LS.hover = liveFaces(g)[i].d; }
+    }
+    ctx.redraw();
+  },
+  down: (ctx, p) => {
+    const e = ctx.engine, g = livePaintAt(ctx, p.doc);
+    if (!g) { if (!p.shift) { e.livePaintSelection = null; LS.pieces.clear(); } ctx.redraw(); return; }
+    e.select([g.id]);
+    const cur = e.livePaintSelection;
+    const s = cur && cur.group === g.id && p.shift ? { group: g.id, faces: [...cur.faces], edges: [...cur.edges] } : { group: g.id, faces: [] as Pt[], edges: [] as Pt[] };
+    if (!(cur && cur.group === g.id && p.shift)) LS.pieces.clear();
+    const tol = tolDoc(ctx, 5), edge = e.livePaintEdgePiece(g.id, p.doc, tol);
+    if (edge) {
+      const on = nearestOnPath([edge], p.doc)?.pt ?? p.doc, i = s.edges.findIndex((q) => (nearestOnPath([edge], q)?.d ?? Infinity) < 0.5);
+      if (i >= 0) { LS.pieces.delete(lsKey(s.edges[i])); s.edges.splice(i, 1); } else { s.edges.push(on); LS.pieces.set(lsKey(on), [edge]); }
+    } else {
+      const f = liveFaces(g).find((x) => faceContains(x, p.doc));
+      if (!f) { ctx.redraw(); return; }
+      const i = s.faces.findIndex((q) => faceContains(f, q));
+      if (i >= 0) s.faces.splice(i, 1); else s.faces.push(p.doc);
+    }
+    e.livePaintSelection = s;
+    e.emit('options', null);
+    ctx.redraw();
+  },
+  overlay: (ctx, g) => {
+    const e = ctx.engine, doc = e.doc, s = e.livePaintSelection, n = s && doc ? findNode(doc, s.group) : null;
+    inView(ctx, g, () => {
+      const z = ctx.view().zoom, accent = ctx.paint().accent;
+      if (LS.hover) { g.strokeStyle = accent; g.lineWidth = 2 / z; g.stroke(cachedPath(LS.hover)); }
+      if (!s || n?.kind !== 'group' || !n.livePaint) return;
+      g.fillStyle = 'rgba(80, 140, 255, 0.28)'; g.strokeStyle = accent; g.lineWidth = 1.5 / z;
+      for (const q of s.faces) { const f = liveFaces(n).find((x) => faceContains(x, q)); if (f) { g.fill(cachedPath(f.d), 'evenodd'); g.setLineDash([4 / z, 3 / z]); g.stroke(cachedPath(f.d)); g.setLineDash([]); } }
+      g.lineWidth = 4 / z;
+      for (const q of s.edges) { const d = LS.pieces.get(lsKey(q)); if (d) g.stroke(cachedPath(d)); }
+    });
+  },
 });
 
 let cache: { key: string; doc: unknown; regions: Array<{ d: PathData }> } | null = null;

@@ -479,7 +479,7 @@ export class AgentBridge {
             if (!has('x') || !has('y')) return fail('Give x and y in document points.');
             const paint = has('color') ? this.paint(a.color, 'color') : act === 'fill' ? e.fillPaint : e.strokePaint;
             const at = { x: num('x', 0), y: num('y', 0) };
-            const ok = act === 'fill' ? e.livePaintFill(g.id, at, paint) : e.livePaintEdge(g.id, at, paint, 6);
+            const ok = act === 'fill' ? e.livePaintFill(g.id, at, paint) : e.livePaintEdge(g.id, at, { paint, ...(has('width') ? { width: Math.max(0, num('width', 1)) } : {}) }, 6);
             return ok ? text(act === 'fill' ? `Filled the face at ${at.x}, ${at.y}; ${this.livePaintSummary(g.id)}.` : 'Painted the edge.', { id: g.id }) : fail(act === 'fill' ? 'No closed face there: pick a point inside an area the paths close, or set a gap.' : 'No edge within 6 points of that point.');
           }
           if (act === 'gap') return e.setLivePaintGap(num('gap', 0), [g.id]) ? text(`Gap detection ${num('gap', 0) > 0 ? `closes gaps up to ${num('gap', 0)} pt` : 'is off'}; ${this.livePaintSummary(g.id)}.`, { id: g.id }) : fail('Nothing changed.');
