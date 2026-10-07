@@ -2,6 +2,17 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.9.0 · 2026-10-07
+
+The application and the harness.
+
+### Added
+
+- The application controller: native and in-window menus, the command palette, keyboard shortcuts, workspaces (Essentials, Essentials Classic, Painting, Typography, Layout, Web) and document tabs wiring every subsystem together.
+- The `formpth-harness` skill pack for agents drawing through MCP, and `formpth-skillset` for agents changing formpth's code; `.mcp.json`, Codex and Cursor configs, `CLAUDE.md` and `AGENTS.md`.
+- CI: typecheck and build, the engine self-check and boot probe, the skill sync check, and desktop builds for macOS (Apple silicon and Intel), Windows and Linux.
+- README, the parity scorecard in `docs/PARITY.md`, the wiki under `.docs/wiki`, and the living HASHOUT logs.
+
 ## 0.8.0 · 2026-10-07
 
 Agents.
