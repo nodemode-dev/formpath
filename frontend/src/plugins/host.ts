@@ -4,9 +4,11 @@ import type { AgentBridge } from '../automation/agent-bridge';
 import type { Commands } from '../ui/commands';
 
 const OFF = 'formpth.plugins.off';
+const CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; object-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'";
 
 const RUNTIME = `<script>
 (() => {
+  for (const k of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCRtpSender', 'RTCRtpReceiver', 'RTCRtpTransceiver', 'RTCIceTransport', 'RTCDtlsTransport', 'RTCSctpTransport']) { try { Object.defineProperty(window, k, { value: undefined, writable: false, configurable: false }); } catch (e) { } }
   const pending = new Map(), commands = {}; let n = 0, name = '';
   const send = (m) => parent.postMessage(Object.assign({ formpthPlugin: true }, m), '*');
   const rpc = (op, args) => new Promise((ok, no) => { const id = ++n; pending.set(id, { ok, no }); send({ id, op, args }); });
@@ -68,7 +70,8 @@ export class PluginHost {
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.hidden = true;
     frame.title = `Plugin ${name}`;
-    frame.srcdoc = `<!doctype html><meta charset="utf-8">${RUNTIME}<script>\n${code.replace(/<\/script/gi, '<\\/script')}\n<\/script>`;
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.srcdoc = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"><meta http-equiv="x-dns-prefetch-control" content="off">${RUNTIME}<script>\n${code.replace(/<\/script/gi, '<\\/script')}\n<\/script>`;
     this.loaded.set(name, { name, frame, label: name.replace(/\.js$/, ''), commands: [] });
     document.body.appendChild(frame);
   }
