@@ -5,6 +5,8 @@ export interface LibraryFolder { folder: string; default: string; custom: boolea
 export interface FilePart { name: string; blob: Blob }
 export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string }
 export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file' }
+export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown> }
+const BRIDGE_HEADER = 'X-Formpth-Bridge';
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -77,12 +79,14 @@ export const api = {
     return json(await request('/nodemode/send', { method: 'POST', body: form({ target, title, items: JSON.stringify(items) }, parts) }));
   },
 
-  async mcpNext(allowed: boolean, signal: AbortSignal): Promise<{ id: string; name: string; arguments: Record<string, unknown> } | null> {
-    const res = await fetch(`/api/mcp/bridge/next?allowed=${allowed ? 1 : 0}`, { signal });
-    if (res.status === 204 || !res.ok) return null;
-    return (await res.json()) as { id: string; name: string; arguments: Record<string, unknown> };
+  async mcpSession(): Promise<string | null> {
+    try { const res = await fetch('/api/mcp/bridge/session', { method: 'POST', cache: 'no-store' }); return res.ok ? ((await res.json()) as { secret?: string }).secret ?? null : null; } catch { return null; }
   },
-  async mcpResult(id: string, result: unknown): Promise<void> { await fetch('/api/mcp/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, result }) }); },
-  async mcpStop(): Promise<void> { try { await fetch('/api/mcp/bridge/stop', { method: 'POST' }); } catch { } },
+  async mcpNext(secret: string, allowed: boolean): Promise<{ status: number; item: BridgeItem | null }> {
+    const res = await fetch('/api/mcp/bridge/next', { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json', [BRIDGE_HEADER]: secret }, body: JSON.stringify({ allowed }) });
+    return { status: res.status, item: res.status === 200 ? ((await res.json()) as BridgeItem) : null };
+  },
+  async mcpResult(secret: string, id: string, result: unknown): Promise<void> { await fetch('/api/mcp/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json', [BRIDGE_HEADER]: secret }, body: JSON.stringify({ id, result }) }); },
+  async mcpStop(secret: string): Promise<void> { try { await fetch('/api/mcp/bridge/stop', { method: 'POST', headers: { [BRIDGE_HEADER]: secret } }); } catch { } },
   async mcpStatus(): Promise<{ live: boolean; allowed: boolean; endpoint: string; tools: number } | null> { try { return await json(await request('/mcp/status')); } catch { return null; } },
 };

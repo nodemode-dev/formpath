@@ -4,6 +4,7 @@ import collections
 import itertools
 import json
 import os
+import secrets
 import time
 import urllib.parse
 from pathlib import Path
@@ -92,18 +93,23 @@ TOOLS = [
           "align": {"type": "string", "enum": ["center", "inside", "outside"]}, "dash": {"type": "array", "items": {"type": "number", "minimum": 0}, "maxItems": 6, "description": "Dash and gap lengths; empty for a solid stroke."}, "dash_offset": _NUM, "dash_align_corners": {"type": "boolean"},
           "start_arrow": {"type": "string", "description": "none, triangle, triangle_open, arrow, arrow_open, circle, circle_open, square, square_open, diamond, bar, barbed, half_arrow, feather, tail."}, "end_arrow": {"type": "string"}, "arrow_scale": {"type": "number", "minimum": 0.1, "maximum": 10},
           "profile": {"type": "string", "enum": ["uniform", "lens", "taper_start", "taper_end", "taper_both", "pinch", "teardrop", "wave"]}}),
-    _tool("set_appearance", "Edits the appearance stack: object opacity and blend mode, an added fill or stroke on top, every item replaced, cleared, or reduced to one fill and one stroke.", {"ids": _IDS, "opacity": {"type": "number", "minimum": 0, "maximum": 1}, "blend_mode": _BLEND, "add_fill": _COLOR,
+    _tool("set_appearance", "Edits the appearance stack: object opacity and blend mode, an added fill or stroke on top, every item replaced, cleared, or reduced to one fill and one stroke. Groups and layers (pass a layer id) have their own stack: their fills and strokes draw over their contents.",{"ids": _IDS, "opacity": {"type": "number", "minimum": 0, "maximum": 1}, "blend_mode": _BLEND, "add_fill": _COLOR,
           "add_stroke": {"type": "object", "properties": {"color": _COLOR, "width": {"type": "number", "minimum": 0}}}, "items": {"type": "array", "items": {"type": "object"}, "description": "The whole stack bottom to top: {kind: fill|stroke, color, width, opacity, blend_mode, visible, dash, cap, join, align}."},
           "clear": {"type": "boolean"}, "reduce_to_basic": {"type": "boolean"}}),
     _tool("add_swatch", "Adds a swatch to the document: a colour or gradient, optionally global (editing it recolours every use) or spot.", {"name": {"type": "string", "maxLength": 120}, "color": _COLOR, "global": {"type": "boolean", "default": False}, "spot": {"type": "boolean", "default": False}, "group": {"type": "string"}}, ["name", "color"]),
     _tool("color_harmony", "The Color Guide: five colours in a harmony rule around a base colour, with tints and shades, warm and cool, or vivid and muted variations of each; optionally saved to the swatches as a group.", {"color": {"type": "string", "description": "The base colour, #rrggbb; the current fill colour when left out."},
           "rule": {"type": "string", "enum": ["complementary", "split_complementary", "left_complement", "right_complement", "analogous", "monochromatic", "shades", "triad", "tetrad", "compound", "high_contrast", "pentagram"], "default": "complementary"},
           "variation": {"type": "string", "enum": ["none", "tints_shades", "warm_cool", "vivid_muted"], "default": "none"}, "save_group": {"type": "string", "maxLength": 120, "description": "Save the five colours as a swatch group with this name."}}),
-    _tool("graphic_style", "Graphic styles: create one from an object's appearance, apply one to objects, or list them.", {"action": {"type": "string", "enum": ["create", "apply", "list", "delete"]}, "name": {"type": "string"}, "id": _ID, "ids": _IDS}, ["action"]),
+    _tool("graphic_style", "Graphic styles: create one from an object's appearance (the object stays linked to it), apply one to objects, list them, delete one, redefine one from an object's appearance (every object still linked to it follows), break the link between objects and their style, list the built-in style libraries, or load a library into the document. apply with library adds that library style to the document and applies it.",
+          {"action": {"type": "string", "enum": ["create", "apply", "list", "delete", "redefine", "break_link", "libraries", "load_library"]}, "name": {"type": "string", "description": "A style name (create, apply, delete, redefine)."}, "id": _ID, "ids": _IDS,
+           "library": {"type": "string", "description": "A style library: shadows, buttons, outlines, textures or scribbles (or its full name)."}}, ["action"]),
     _tool("set_object", "Changes objects' names, visibility, lock, opacity or blend mode.", {"ids": _IDS, "name": {"type": "string", "maxLength": 200}, "visible": {"type": "boolean"}, "locked": {"type": "boolean"}, "opacity": {"type": "number", "minimum": 0, "maximum": 1}, "blend_mode": _BLEND}),
     _tool("arrange", "Changes the stacking order of the objects within their layer or group.", {"ids": _IDS, "order": {"type": "string", "enum": ["bring_to_front", "bring_forward", "send_backward", "send_to_back"]}}, ["order"]),
     _tool("group", "Groups the objects, or ungroups the groups among them.", {"ids": _IDS, "action": {"type": "string", "enum": ["group", "ungroup"], "default": "group"}}),
     _tool("compound_path", "Makes the paths one compound path (overlaps become holes by the fill rule), or releases compound paths.", {"ids": _IDS, "action": {"type": "string", "enum": ["make", "release"], "default": "make"}, "rule": {"type": "string", "enum": ["nonzero", "evenodd"]}}),
+    _tool("attributes", "The Attributes panel: sets the fill rule of paths and compound paths, reverses their path direction, or sets the note kept with objects. nonzero (the default) fills every enclosed area except where a subpath runs the opposite way; evenodd makes every other nested or overlapping area a hole, whatever the direction. Groups pass the fill rule to the paths inside. Answers with each object's fill rule and note.",
+          {"ids": _IDS, "fill_rule": {"type": "string", "enum": ["nonzero", "evenodd"]}, "reverse": {"type": "boolean", "description": "Reverse the direction of every subpath of the objects; under nonzero this turns a hole into a filled area or back. Pass the id of one path inside a compound path to reverse only that one."},
+           "note": {"type": "string", "maxLength": 4000, "description": "Replaces the objects' note; an empty string removes it."}}),
     _tool("clipping_mask", "Clips the objects with the topmost one among them, or releases clipping groups.", {"ids": _IDS, "action": {"type": "string", "enum": ["make", "release"], "default": "make"}}),
     _tool("delete_objects", "Deletes the objects.", {"ids": _IDS}, destructive=True),
     _tool("duplicate_objects", "Duplicates the objects, offset by dx, dy; the copies become the selection.", {"ids": _IDS, "dx": {"type": "number", "default": 0}, "dy": {"type": "number", "default": 0}}),
@@ -122,7 +128,8 @@ TOOLS = [
           "rows": {"type": "integer", "minimum": 1, "maximum": 100}, "columns": {"type": "integer", "minimum": 1, "maximum": 100}, "gutter": {"type": "number", "minimum": 0}}, ["operation"]),
     _tool("shape_builder", "Shape Builder: merges the regions of the selected shapes under the given points into one shape, or deletes them.", {"ids": _IDS, "points": {"type": "array", "items": {"type": "array", "items": _NUM, "minItems": 2, "maxItems": 2}, "minItems": 1}, "delete": {"type": "boolean", "default": False}}, ["points"]),
     _tool("apply_effect", "Adds a live effect to the objects (it stays editable in the Appearance panel), or lists the effects and their parameters with list true. Ids include warp.arc, warp.flag, warp.bulge (15 warps), distort.roughen, distort.zig_zag, distort.pucker_bloat, distort.twist, distort.transform, distort.tweak, stylize.drop_shadow, stylize.outer_glow, stylize.inner_glow, stylize.feather, stylize.round_corners, stylize.scribble, path.offset, path.outline_stroke, convert.rectangle, convert.rounded_rectangle, convert.ellipse, rasterize.raster (resolution, background, around), and the Effect Gallery's raster effects: blur.gaussian, blur.radial, blur.smart and gallery.* (Artistic: gallery.watercolor, gallery.cutout, gallery.colored_pencil; Brush Strokes: gallery.crosshatch, gallery.spatter; Distort: gallery.glass, gallery.ocean_ripple; Pixelate: gallery.crystallize, gallery.color_halftone, gallery.pointillize; Sketch: gallery.charcoal, gallery.stamp, gallery.halftone_pattern; Stylize: gallery.glowing_edges; Texture: gallery.stained_glass, gallery.mosaic_tiles, gallery.texturizer; Video: gallery.ntsc_colors; 56 with Gaussian Blur). Raster effects export to SVG as images at the document's raster resolution.",
-          {"ids": _IDS, "effect": {"type": "string"}, "params": {"type": "object"}, "list": {"type": "boolean", "default": False}}),
+          {"ids": _IDS, "effect": {"type": "string"}, "params": {"type": "object"}, "list": {"type": "boolean", "default": False},
+           "item": {"type": "integer", "minimum": 0, "description": "Apply the effect to one fill or stroke only: its index in the object's appearance items as get_object lists ap.items (0 is the bottom item). Without it the effect applies to the whole object. 3D effects always apply to the whole object."}}),
     _tool("three_d", "3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed surface: depth, volume, and rx, ry, rz to tilt it) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, wireframe or flat (plane); light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. map_symbol wraps a symbol (by name; make one with the symbol tool) onto the front face of an extrude or plane, sized by map_scale percent and moved by map_x, map_y points, shaded with the surface unless shade_art is false; an empty map_symbol clears it. shadow true casts a soft shadow (not for inflate): shadow_position behind or below, shadow_distance and shadow_softness in points, shadow_opacity in percent. Leave kind out to change only the parameters you pass; remove true takes 3D off. Type and groups extrude as one object; expand turns the result into plain shaded paths.",
           {"ids": _IDS, "kind": {"type": "string", "enum": ["extrude", "revolve", "inflate", "plane"]}, "remove": {"type": "boolean"}, "position": {"type": "string"}, "rx": _NUM, "ry": _NUM, "rz": _NUM, "perspective": {"type": "number", "minimum": 0, "maximum": 160}, "depth": {"type": "number", "minimum": 0, "maximum": 2000}, "cap": {"type": "boolean"},
            "bevel": {"type": "string", "enum": ["none", "classic", "rounded"]}, "bevel_height": {"type": "number", "minimum": 0, "maximum": 100}, "angle": {"type": "number", "minimum": 1, "maximum": 360}, "offset": {"type": "number", "minimum": 0}, "from": {"type": "string", "enum": ["left", "right"]}, "volume": {"type": "number", "minimum": 10, "maximum": 100},
@@ -180,6 +187,10 @@ LIVE = 30.0
 _allowed = False
 _declined_until = 0.0
 _opened_at = 0.0
+_secret: str | None = None
+_superseded: collections.deque = collections.deque(maxlen=64)
+_delivered: dict[str, str] = {}
+BRIDGE_HEADER = "x-formpth-bridge"
 
 
 def _event() -> asyncio.Event:
@@ -199,6 +210,40 @@ def _local_origin(origin: str | None) -> bool:
         return True
     host = urllib.parse.urlparse(origin).hostname or ""
     return host in ("localhost", "127.0.0.1", "::1", "tauri.localhost") or origin.startswith("tauri://")
+
+
+def _app_origin(request: Request) -> bool:
+    origin = request.headers.get("origin") or ""
+    if not origin:
+        return False
+    if origin in config.cors_origins():
+        return True
+    url = urllib.parse.urlparse(origin)
+    if url.scheme != "http" or (url.hostname or "") not in ("localhost", "127.0.0.1", "::1") or url.path not in ("", "/"):
+        return False
+    ports = {config.FRONTEND_PORT, config.FRONTEND_PORT + 1}
+    server = request.scope.get("server")
+    if server and server[1]:
+        ports.add(int(server[1]))
+    try:
+        return url.port in ports
+    except ValueError:
+        return False
+
+
+def _refuse(status: int, text: str) -> Response:
+    return Response(status_code=status, content=json.dumps({"detail": text}), media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+def _bridge_refusal(request: Request, current: bool = True) -> Response | None:
+    if not _app_origin(request):
+        return _refuse(403, "Only the formpth window can use the agent bridge.")
+    held = request.headers.get(BRIDGE_HEADER) or ""
+    if not held or not _secret:
+        return _refuse(403, "The agent bridge needs the window's session: reload the formpth window.")
+    if current and not secrets.compare_digest(held, _secret):
+        return _refuse(409 if held in _superseded else 403, "Another formpth window took over the agent bridge.")
+    return None
 
 
 def _ok(req_id, result: dict, modern: bool) -> dict:
@@ -241,6 +286,7 @@ async def _ask(name: str, args: dict, timeout: float) -> dict | None:
         return None
     finally:
         _waiting.pop(rid, None)
+        _delivered.pop(rid, None)
 
 
 _OPENABLE = {".fpth", ".svg", ".svgz", ".pdf", ".ai", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
@@ -361,16 +407,48 @@ async def mcp(request: Request) -> Response:
     return Response(content=json.dumps(out), media_type="application/json")
 
 
+@router.post("/api/mcp/bridge/session")
+async def bridge_session(request: Request) -> Response:
+    global _secret
+    if not _app_origin(request):
+        return _refuse(403, "Only the formpth window can open the agent bridge.")
+    if _secret:
+        _superseded.append(_secret)
+    _secret = secrets.token_urlsafe(32)
+    return Response(content=json.dumps({"secret": _secret}), media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
 @router.get("/api/mcp/bridge/next")
+async def bridge_next_get() -> Response:
+    return _refuse(405, "The agent bridge takes POST requests from the formpth window only.")
+
+
+async def _body(request: Request) -> dict:
+    try:
+        body = json.loads(await request.body() or b"{}")
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+@router.post("/api/mcp/bridge/next")
 async def bridge_next(request: Request) -> Response:
     global _seen, _allowed, _declined_until
-    allowed = request.query_params.get("allowed", "1") != "0"
+    held = request.headers.get(BRIDGE_HEADER) or ""
+    if _app_origin(request) and held and held in _superseded:
+        return Response(status_code=205)
+    refused = _bridge_refusal(request)
+    if refused:
+        return refused
+    allowed = (await _body(request)).get("allowed") is True
     if allowed and not _allowed:
         _declined_until = 0.0
     _allowed = allowed
     deadline = time.monotonic() + 20
     eligible = lambda it: allowed or it.get("name") == "__consent__"
     while time.monotonic() < deadline:
+        if _secret != held:
+            return Response(status_code=205)
         _seen = time.monotonic()
         if await request.is_disconnected():
             return Response(status_code=204)
@@ -381,27 +459,44 @@ async def bridge_next(request: Request) -> Response:
             except asyncio.TimeoutError:
                 continue
         found = next((it for it in _pending if eligible(it)), None)
-        if found is None:
+        if found is None or _secret != held:
             continue
         _pending.remove(found)
         if await request.is_disconnected():
             _put(found, front=True)
             return Response(status_code=204)
-        return Response(content=json.dumps(found), media_type="application/json")
+        _delivered[str(found["id"])] = held
+        return Response(content=json.dumps(found), media_type="application/json", headers={"Cache-Control": "no-store"})
     return Response(status_code=204)
 
 
 @router.post("/api/mcp/bridge/result")
-async def bridge_result(request: Request) -> dict:
-    body = await request.json()
-    fut = _waiting.get(str(body.get("id")))
+async def bridge_result(request: Request) -> Response:
+    refused = _bridge_refusal(request, current=False)
+    if refused:
+        return refused
+    body = await _body(request)
+    rid, held = str(body.get("id")), request.headers.get(BRIDGE_HEADER) or ""
+    owner = _delivered.get(rid)
+    if not owner or not secrets.compare_digest(owner, held):
+        return _refuse(403, "That request was not handed to this window.")
+    _delivered.pop(rid, None)
+    fut = _waiting.get(rid)
     if fut and not fut.done():
         fut.set_result(body.get("result") or {"content": [{"type": "text", "text": "formpth gave no result."}], "isError": True})
-    return {"ok": True}
+    return Response(content=json.dumps({"ok": True}), media_type="application/json")
 
 
 @router.post("/api/mcp/bridge/stop")
-async def bridge_stop() -> dict:
+async def bridge_stop(request: Request) -> Response:
+    refused = _bridge_refusal(request)
+    if refused:
+        return refused
+    _stop()
+    return Response(content=json.dumps({"ok": True}), media_type="application/json")
+
+
+def _stop() -> None:
     global _allowed, _declined_until
     _allowed = False
     _declined_until = time.monotonic() + 600
@@ -410,7 +505,6 @@ async def bridge_stop() -> dict:
         fut = _waiting.get(item["id"])
         if fut and not fut.done():
             fut.set_result(_fail("Outside agents were turned off in formpth. Ask the person to turn on Allow outside agents (Preferences > Plugins), then retry."))
-    return {"ok": True}
 
 
 @router.get("/api/mcp/status")

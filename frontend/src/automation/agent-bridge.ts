@@ -1,6 +1,7 @@
 import { geomBounds, selectionBounds, visualBounds } from '../engine/bounds';
 import { findNode, nodeLabel, updateNodes } from '../engine/doc';
-import { EFFECTS, effectDef, WIDTH_PROFILES } from '../engine/effects';
+import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES } from '../engine/effects';
+import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
 import { ROTATION_PRESETS } from '../engine/threed';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, mapFn, nearestFn, RECOLOR, recolorDoc } from '../engine/ops/recolor';
@@ -13,6 +14,7 @@ import { interiorOf, liveFaceNodes, liveFaces } from '../engine/livepaint';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
 import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
+import { api } from '../io/api';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
 export interface AgentDeps {
@@ -50,27 +52,40 @@ export class AgentBridge {
     const was = this.on;
     this.on = on;
     if (!this.looping) void this.loop();
-    if (was && !on) void fetch('/api/mcp/bridge/stop', { method: 'POST' }).catch(() => undefined);
+    if (was && !on && this.secret) void api.mcpStop(this.secret);
   }
 
   get enabled(): boolean { return this.on; }
+
+  private secret: string | null = null;
+
+  private refocused(): Promise<void> {
+    return new Promise((ok) => {
+      const done = (): void => { window.removeEventListener('focus', done); document.removeEventListener('visibilitychange', seen); ok(); };
+      const seen = (): void => { if (document.visibilityState === 'visible' && document.hasFocus()) done(); };
+      window.addEventListener('focus', done);
+      document.addEventListener('visibilitychange', seen);
+    });
+  }
 
   private async loop(): Promise<void> {
     this.looping = true;
     for (;;) {
       try {
-        const res = await fetch(`/api/mcp/bridge/next?allowed=${this.on ? 1 : 0}`);
-        if (res.status === 200) {
-          const item = await res.json() as { id: string; name: string; arguments: Record<string, unknown> };
+        if (!this.secret) { this.secret = await api.mcpSession(); if (!this.secret) { await sleep(3000); continue; } }
+        const secret = this.secret, { status, item } = await api.mcpNext(secret, this.on);
+        if (status === 205) { this.secret = null; await this.refocused(); continue; }
+        if (status === 403) { this.secret = null; await sleep(1000); continue; }
+        if (status === 200 && item) {
           if (item.name === '__consent__') {
             const yes = this.on || await this.deps.ask('Allow an outside agent to edit?', 'An AI agent connected to formpth (such as Claude Code, Codex or Cursor) asks to draw in and edit your documents. Each change is one undoable step. You can turn this off in Preferences > Plugins.');
             if (yes && !this.on) { this.on = true; this.deps.allow(); }
-            await fetch('/api/mcp/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, result: { allowed: yes } }) });
+            await api.mcpResult(secret, item.id, { allowed: yes });
             continue;
           }
           const result = this.on ? await this.run(item.name, item.arguments ?? {}) : fail('formpth stopped taking requests.');
-          await fetch('/api/mcp/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, result }) });
-        } else if (res.status !== 204) await sleep(2000);
+          await api.mcpResult(secret, item.id, result);
+        } else if (status !== 204) await sleep(2000);
       } catch { await sleep(2000); }
     }
   }
@@ -340,9 +355,26 @@ export class AgentBridge {
           const act = str('action');
           if (act === 'list') { const list = p.doc.styles.map((s) => ({ id: s.id, name: s.name })); return text(list.map((s) => `${s.id}: ${s.name}`).join('\n'), { styles: list }); }
           if (act === 'create') { const src = Array.isArray(a.ids) && a.ids.length ? String(a.ids[0]) : undefined; const id = e.addGraphicStyle(str('name') || 'Graphic Style', src); return id ? text(`Made the graphic style ${str('name')} (id ${id}).`, { id }) : fail('Select or pass the object whose look to keep.'); }
+          if (act === 'apply' && has('library')) {
+            const lib = styleLibrary(str('library')), want = str('name') || str('id'), s = lib?.styles.find((x) => x.name.toLowerCase() === want.toLowerCase());
+            if (!lib) return fail(`library is one of ${STYLE_LIBRARIES.map((l) => l.id).join(', ')}.`);
+            if (!s) return fail(`${lib.name} has ${lib.styles.map((x) => x.name).join(', ')}.`);
+            const id = e.useLibraryStyle(lib.id, s.name, this.ids(a));
+            return text(`Applied ${s.name} from ${lib.name} (graphic style ${id}).`, { id });
+          }
           if (act === 'apply') { const st = p.doc.styles.find((s) => s.id === str('id') || s.name === str('name') || s.name === str('id')); if (!st) return fail('No graphic style matches: call graphic_style with action list.'); e.applyGraphicStyle(st.id, this.ids(a)); return text(`Applied ${st.name}.`); }
           if (act === 'delete') { const st = p.doc.styles.find((s) => s.id === str('id') || s.name === str('name')); if (!st) return fail('No graphic style matches.'); e.edit('Delete Graphic Style', (d) => ({ ...d, styles: d.styles.filter((s) => s.id !== st.id) })); return text(`Deleted ${st.name}.`); }
-          return fail('action must be create, apply, list or delete.');
+          if (act === 'redefine') {
+            const st = p.doc.styles.find((s) => s.id === str('id') || s.name === str('name') || s.name === str('id'));
+            if (!st) return fail('No graphic style matches: call graphic_style with action list.');
+            const src = Array.isArray(a.ids) && a.ids.length ? String(this.node(a.ids[0]).id) : e.selectedIds()[0];
+            if (!src) return fail('Pass ids (the object whose look the style should take) or select it first.');
+            return e.redefineGraphicStyle(st.id, src) ? text(`Redefined ${st.name}; objects linked to it follow.`) : fail('Nothing changed.');
+          }
+          if (act === 'break_link') { const ok = e.breakGraphicStyleLink(this.ids(a)); return ok ? text('The objects are no longer linked to a graphic style.') : fail('Nothing changed.'); }
+          if (act === 'libraries') { const list = STYLE_LIBRARIES.map((l) => ({ id: l.id, name: l.name, styles: l.styles.map((s) => s.name) })); return text(list.map((l) => `${l.id} (${l.name}): ${l.styles.join(', ')}`).join('\n'), { libraries: list }); }
+          if (act === 'load_library') { const lib = styleLibrary(str('library')); if (!lib) return fail(`library is one of ${STYLE_LIBRARIES.map((l) => l.id).join(', ')}.`); const ids = e.loadStyleLibrary(lib.id); return text(`Loaded ${lib.name}: ${ids.length} graphic styles are in the document.`, { styles: (e.doc?.styles ?? []).filter((s) => ids.includes(s.id)).map((s) => ({ id: s.id, name: s.name })) }); }
+          return fail('action must be create, apply, list, delete, redefine, break_link, libraries or load_library.');
         }
         case 'set_object': {
           const ids = this.ids(a);
@@ -352,6 +384,14 @@ export class AgentBridge {
         case 'arrange': { e.arrange(str('order') as 'bring_to_front', this.ids(a)); return text('Rearranged.'); }
         case 'group': { const ok = str('action', 'group') === 'ungroup' ? e.ungroup(this.ids(a)) : e.group(this.ids(a)); return ok ? text(str('action', 'group') === 'ungroup' ? 'Ungrouped.' : `Grouped (id ${e.selectedIds()[0]}).`, { selection: e.selectedIds(), ...(str('action', 'group') === 'ungroup' ? {} : { id: e.selectedIds()[0] }) }) : fail('Nothing changed: check the ids.'); }
         case 'compound_path': { const ok = str('action', 'make') === 'release' ? e.releaseCompound(this.ids(a)) : e.makeCompound(this.ids(a), has('rule') ? (str('rule') as 'nonzero') : undefined); return ok ? text('Done.', { selection: e.selectedIds() }) : fail('Nothing changed: compound paths need paths.'); }
+        case 'attributes': {
+          const ids = this.ids(a);
+          if (has('fill_rule')) { const r = str('fill_rule'); if (r !== 'nonzero' && r !== 'evenodd') return fail('fill_rule is nonzero or evenodd.'); if (!e.fillRuleOf(ids)) return fail('Fill rules belong to paths and compound paths: none of these objects is one.'); e.setFillRule(r, ids); }
+          if (a.reverse === true && !e.pathOp('reverse', {}, ids)) return fail('Nothing to reverse: reverse works on paths and compound paths.');
+          if (has('note')) e.setObjectProps({ note: str('note').trim() || undefined }, ids);
+          const list = (ids ?? e.targetIds()).map((id) => { const n = this.node(id); return { id, kind: n.kind, fill_rule: e.fillRuleOf([id]), note: n.note ?? '' }; });
+          return text(list.map((x) => `${x.id} (${x.kind}): fill rule ${x.fill_rule ?? 'none'}${x.note ? `, note "${x.note}"` : ''}`).join('\n'), { objects: list });
+        }
         case 'clipping_mask': { const ok = str('action', 'make') === 'release' ? e.releaseClip(this.ids(a)) : e.makeClip(this.ids(a)); return ok ? text('Done: the topmost object clips the others.', { selection: e.selectedIds() }) : fail('Nothing changed: select two or more objects, the clipping shape on top.'); }
         case 'delete_objects': { const ids = this.ids(a); e.deleteSelection(ids ?? e.targetIds()); return text('Deleted.'); }
         case 'duplicate_objects': { e.duplicate(num('dx', 0), num('dy', 0), this.ids(a)); return text(`Duplicated: ${e.selectedIds().join(', ')}.`, { ids: e.selectedIds() }); }
@@ -409,8 +449,14 @@ export class AgentBridge {
           if (a.list === true || !has('effect')) { const list = EFFECTS.map((x) => ({ id: x.id, label: x.label, menu: x.menu, params: x.params.map((q) => ({ key: q.key, kind: q.kind, default: q.def, ...(q.min !== undefined ? { min: q.min, max: q.max } : {}), ...(q.choices ? { choices: q.choices } : {}) })) })); return text(list.map((x) => `${x.id} (${x.menu} > ${x.label}): ${x.params.map((q) => q.key).join(', ')}`).join('\n'), { effects: list }); }
           const id = str('effect');
           if (!effectDef(id)) return fail(`There is no effect ${id}: call apply_effect with list true.`);
-          const ok = e.addEffect(id, (a.params && typeof a.params === 'object' ? a.params : {}) as Record<string, number | string | boolean>, this.ids(a));
-          return ok ? text(`Applied ${effectDef(id)?.label}; it stays editable until expanded.`) : fail('Nothing changed.');
+          const ids = this.ids(a), item = has('item') ? Math.round(num('item', -1)) : undefined;
+          if (item !== undefined) {
+            if (!isItemEffect(id)) return fail(`${effectDef(id)?.label} applies to the whole object: call again without item.`);
+            const short = (ids ?? e.targetIds()).map((x) => this.node(x)).filter((n) => !n.ap.items[item]);
+            if (short.length) return fail(`${short.map((n) => `${n.id} has ${n.ap.items.length} appearance item(s)`).join('; ')}: item is an index into get_object's ap.items, from 0.`);
+          }
+          const ok = e.addEffect(id, (a.params && typeof a.params === 'object' ? a.params : {}) as Record<string, number | string | boolean>, ids, item);
+          return ok ? text(`Applied ${effectDef(id)?.label}${item !== undefined ? ` to appearance item ${item}` : ''}; it stays editable until expanded.`) : fail('Nothing changed.');
         }
         case 'three_d': {
           const ids = this.ids(a);
