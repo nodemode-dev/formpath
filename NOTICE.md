@@ -10,6 +10,7 @@ formpth is licensed under the Apache License 2.0 (see `LICENSE`). It includes or
 | NodeMode stylized design system: tokens, theme profiles, theme boot, dom-stable helpers, icon subset | MIT | `frontend/src/styles/tokens.css`, `frontend/src/ui/themes.ts`, `frontend/src/ui/dom.ts`, `frontend/src/ui/icons.ts`, `frontend/index.html` |
 | `paintbrush` and `hand` icons from Remix Icon | Apache-2.0 | `frontend/src/ui/icons.ts` |
 | Quick Selection, Paint Bucket, Dodge, Burn and Sponge icons from Phosphor Icons, Copyright (c) 2023 Phosphor Icons | MIT | `frontend/src/ui/icons.ts` |
+| `link`, `unlink`, `pilcrow`, `moveSel`, `maximize` and `smartObject` icons from Lucide (its `link`, `pilcrow`, `move`, `maximize-2` and `square-square`; `unlink` is `link` with a slash added), Copyright (c) Lucide Contributors 2022, portions Copyright (c) Cole Bemis 2013-2022 as part of Feather (MIT) | ISC, text below | `frontend/src/ui/icons.ts` |
 | Tauri sidecar shell template (tauri-compiler-skill) | MIT | `src-tauri/src/main.rs` |
 
 The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app icon (`assets/formpth_icon.svg`) and the brand mark are drawn for this project.
@@ -29,6 +30,28 @@ The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app ic
 ## Build tools, not distributed
 
 Vite (MIT), TypeScript (Apache-2.0), @tauri-apps/cli (Apache-2.0 or MIT), PyInstaller (GPL-2.0-or-later with the bootloader exception, which permits distributing the frozen engine under this project's license).
+
+## Lucide license
+
+The Lucide icons listed above are used under this license.
+
+```text
+ISC License
+
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT). All other copyright (c) for Lucide are held by Lucide Contributors 2022.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
 
 ## Trademarks
 
