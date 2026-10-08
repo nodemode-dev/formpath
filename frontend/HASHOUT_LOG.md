@@ -154,6 +154,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/three-d.ts
 - src/ui/form-dialog.ts
 - src/ui/palette.ts
+- src/ui/icons.ts
 - src/styles/tokens.css
 - src/styles/formpth.css
 - Inherited from formvis
@@ -1098,6 +1099,15 @@ One reusable dialog for every exact-values dialog: number, select, check, text, 
 - logged: v0.9.0 · 2026-10-07
 
 Reads the stage colours from CSS custom properties once and caches them; `invalidatePaint` on theme change. The fallbacks only apply if a token is missing from `tokens.css`.
+
+## src/ui/icons.ts
+
+### src/ui/icons.ts · third-party icons
+- refers-to: src/ui/icons.ts :: link, unlink, pilcrow, moveSel, maximize, smartObject (Lucide); paintbrush, hand (Remix Icon); quickSelect, bucket, dodge, burn, sponge (Phosphor)
+- kind: warning-context
+- logged: v0.16.1 · 2026-10-08
+
+Most of this file is the NodeMode icon subset and icons drawn for formvis and formpth, but some entries come from outside sets and carry a license obligation recorded in `NOTICE.md`: six from Lucide (ISC, with its license text in NOTICE), two from Remix Icon (Apache-2.0) and five from Phosphor (MIT). Replacing one of these with an icon drawn here is fine; when the last icon from a set is gone, remove that set's row (and for Lucide the license section) from NOTICE. Adding an icon from any outside set needs its row in NOTICE in the same commit.
 
 ## src/styles/tokens.css
 
