@@ -63,9 +63,12 @@ export class EffectGallery extends Dialog {
     };
   }
 
-  run(id?: string): Promise<boolean> {
+  private item: number | undefined;
+
+  run(id?: string, slot?: { node: string; item?: number }): Promise<boolean> {
     if (!this.settled) return Promise.resolve(false);
-    this.nodes = this.engine.targetIds().map((x) => this.engine.nodeById(x)).filter((n): n is VNode => !!n);
+    this.nodes = (slot ? [slot.node] : this.engine.targetIds()).map((x) => this.engine.nodeById(x)).filter((n): n is VNode => !!n);
+    this.item = slot?.item;
     if (!this.nodes.length) { this.engine.notice('Select an object to open the Effect Gallery.'); return Promise.resolve(false); }
     const last = this.engine.lastEffect, start = id && this.tiles.has(id) ? id : last && this.tiles.has(last.id) ? last.id : 'gallery.colored_pencil';
     this.settled = false;
@@ -163,7 +166,8 @@ export class EffectGallery extends Dialog {
     const pad = c.width * 0.04, s = Math.min((c.width - pad * 2) / box.w, (c.height - pad * 2) / box.h);
     g.setTransform(s, 0, 0, s, (c.width - box.w * s) / 2 - box.x * s, (c.height - box.h * s) / 2 - box.y * s);
     const rc: RenderContext = { doc: p.doc, scale: s, outline: false, assets: (k) => p.bitmaps.get(k) ?? null };
-    for (const n of this.nodes) { try { renderNode(g, { ...n, ap: { ...n.ap, effects: [...n.ap.effects, fx] } } as VNode, rc); } catch { continue; } }
+    const k = this.item;
+    for (const n of this.nodes) { try { renderNode(g, { ...n, ap: k !== undefined && n.ap.items[k] ? { ...n.ap, items: n.ap.items.map((it, i) => (i === k ? { ...it, effects: [...it.effects, fx] } : it)) } : { ...n.ap, effects: [...n.ap.effects, fx] } } as VNode, rc); } catch { continue; } }
   }
 
   private finish(): void {
@@ -172,7 +176,7 @@ export class EffectGallery extends Dialog {
     const ids = this.nodes.map((n) => n.id), id = this.current, params = { ...this.values }, r = this.resolve;
     this.resolve = null;
     this.close();
-    const ok = this.engine.addEffect(id, params, ids);
+    const ok = this.engine.addEffect(id, params, ids, this.item);
     r?.(ok);
   }
 }

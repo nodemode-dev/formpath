@@ -104,10 +104,10 @@ export function q<T extends Element = HTMLElement>(root: ParentNode, sel: string
 }
 
 export function setHidden(node: HTMLElement, hidden: boolean): void { if (node.hidden !== hidden) node.hidden = hidden; }
-export function setDisabled(node: HTMLButtonElement | HTMLInputElement | HTMLSelectElement, disabled: boolean): void { if (node.disabled !== disabled) node.disabled = disabled; }
+export function setDisabled(node: HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, disabled: boolean): void { if (node.disabled !== disabled) node.disabled = disabled; }
 export function setTitle(node: HTMLElement, title: string): void { if (node.title !== title) node.title = title; }
 export function setStyleVar(node: HTMLElement, name: string, value: string): void { if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value); }
-export function setValue(node: HTMLInputElement | HTMLSelectElement, value: string): void { if (node.value !== value && document.activeElement !== node) node.value = value; }
+export function setValue(node: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, value: string): void { if (node.value !== value && document.activeElement !== node) node.value = value; }
 export function setChecked(node: HTMLInputElement, on: boolean): void { if (node.checked !== on) node.checked = on; }
 export function setHtml(node: Element, html: string, key: string): void {
   const n = node as HTMLElement;

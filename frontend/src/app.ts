@@ -41,6 +41,8 @@ import { OptionsBar } from './ui/options';
 import { invalidatePaint } from './ui/palette';
 import { PanelGroup } from './ui/panel-group';
 import { AppearancePanel, GraphicStylesPanel } from './ui/panels/appearance';
+import { AttributesPanel } from './ui/panels/attributes';
+import { STYLE_LIBRARIES } from './engine/style-libraries';
 import { AgentConfirmDialog } from './ui/panels/agent-confirm';
 import { AssistantPanel } from './ui/panels/assistant';
 import { ColorPanel, GradientPanel, SwatchesPanel } from './ui/panels/color';
@@ -121,7 +123,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group',appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -186,7 +188,7 @@ export function startApp(): void {
   const charStylesP = new TextStylesPanel(engine, 'char'), paraStylesP = new TextStylesPanel(engine, 'para');
   void historyP; void navP;
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }], 'Color');
-  new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }], 'Stroke');
+  new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
   new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
@@ -889,8 +891,8 @@ export function startApp(): void {
 
     { id: 'apply-last-effect', label: () => `Apply Last Effect${engine.lastEffect ? `: ${EFFECTS.find((x) => x.id === engine.lastEffect?.id)?.label ?? ''}` : ''}`, keys: ['Shift+Mod+E'], enabled: () => sel() && !!engine.lastEffect, run: () => engine.applyLastEffect() },
     { id: 'last-effect', label: 'Last Effect...', keys: ['Alt+Shift+Mod+E'], enabled: () => sel() && !!engine.lastEffect, run: () => { if (engine.lastEffect) void effectDialog(engine, engine.lastEffect.id); } },
-    ...EFFECTS.map((fx) => ({ id: `fx-${fx.id}`, label: `${fx.label}...`, enabled: sel, run: () => void effectDialog(engine, fx.id) })),
-    { id: 'effect-gallery', label: 'Effect Gallery...', enabled: sel, run: () => void (gallery ??= new EffectGallery(engine)).run() },
+    ...EFFECTS.map((fx) => ({ id: `fx-${fx.id}`, label: `${fx.label}...`, enabled: () => sel() || !!appearanceP.effectSlot(), run: () => void effectDialog(engine, fx.id, appearanceP.effectSlot()) })),
+    { id: 'effect-gallery', label: 'Effect Gallery...', enabled: () => sel() || !!appearanceP.effectSlot(), run: () => void (gallery ??= new EffectGallery(engine)).run(undefined, appearanceP.effectSlot()) },
     { id: 'raster-settings', label: 'Document Raster Effects Settings...', enabled: has, run: async () => { const p = engine.current; if (!p) return; const v = await askForm('Document Raster Effects Settings', [{ kind: 'number', key: 'ppi', label: 'Resolution', value: p.doc.rasterPpi || 300, min: 72, max: 2400, unit: 'ppi' }, { kind: 'note', text: 'Screen is 72 ppi, Medium 150, High 300. Raster effects and the Effect Gallery render at this resolution in PDF and SVG exports, and Object > Rasterize uses it.' }], { ok: 'OK' }); if (v) engine.documentSetup({ rasterPpi: Number(v.ppi) }); } },
 
     { id: 'outline', label: () => (engine.view.outline ? 'Preview' : 'Outline'), keys: ['Mod+Y'], enabled: has, checked: () => engine.view.outline, run: () => engine.setView({ outline: !engine.view.outline }) },
@@ -929,6 +931,7 @@ export function startApp(): void {
     { id: 'manage-plugins', label: 'Manage Plugins...', run: () => void pluginsDialog.show() },
     ...Object.keys(TAB_HOMES).map((tab) => ({ id: `panel-${tab}`, label: tab.replace(/-/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase()), run: () => showPanel(tab) })).filter((c) => !['panel-character', 'panel-paragraph', 'panel-glyphs', 'panel-three-d'].includes(c.id)),
     { id: 'panel-properties-col', label: 'Properties Column', checked: () => propsShown(), run: () => { store('formpth.propsCol', propsShown() ? 'hidden' : 'shown'); syncPropsCol(); } },
+    ...STYLE_LIBRARIES.map((l) => ({ id: `gs-lib-${l.id}`, label: l.name, run: () => { showPanel('graphic-styles'); stylesP.showLibrary(l.id); } })),
     { id: 'reset-panels', label: 'Reset Essentials', run: () => { dock.reset(); PanelGroup.resetStates(); PanelGroup.resetHomes(TAB_HOMES); store('formpth.propsCol', 'shown'); syncPropsCol(); } },
     { id: 'help', label: 'formpth Help', keys: ['F1'], run: () => help.show() },
     { id: 'copy-error-log', label: 'Copy Error Log', run: () => { void navigator.clipboard?.writeText(errorLog.text()); toast('Copied the error log.'); } },
@@ -996,7 +999,7 @@ export function startApp(): void {
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);

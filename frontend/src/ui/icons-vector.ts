@@ -138,4 +138,9 @@ export const VECTOR_ICONS: Record<string, string> = {
   expand: S('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="8" y="8" width="8" height="8"/>', 1.4),
   effects: S('<path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3zM18 15l.9 2.1 2.1.9-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15z"/>', 1.3),
   arrowRight: S('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+  fillNonZero: F('<path fill-rule="nonzero" d="M2.5 12a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0zM8.5 12a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0z"/>'),
+  fillEvenOdd: F('<path fill-rule="evenodd" d="M2.5 12a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0zM8.5 12a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0z"/>'),
+  reversePath: S('<path d="M4.5 10c2.6-4 12.4-4 15 0"/><path d="M19.5 10l.3-3.4M19.5 10l-3.3-.9"/><path d="M19.5 14c-2.6 4-12.4 4-15 0"/><path d="M4.5 14l-.3 3.4M4.5 14l3.3.9"/>'),
+  contents: S('<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="2.2 2"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/>', 1.3),
+  library: S('<path d="M4 4.5h4v15H4zM10 4.5h4v15h-4z"/><path d="M15.6 5.2l3.8-1 3.1 14.6-3.8 1z"/>', 1.4),
 };

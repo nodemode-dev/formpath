@@ -97,7 +97,10 @@ export class LayersPanel {
     setClass(n, 'has-selected', anc.has(node.id));
     setClass(n, 'is-active', isLayer && p?.activeLayer === node.id);
     setClass(n, 'is-template', isLayer && !!(node as LayerNode).template);
-    setClass(n, 'has-appearance', !isLayer && (node.ap.effects.length > 0 || node.ap.items.length > 2 || node.opacity < 1 || node.blend !== 'normal'));
+    setClass(n, 'has-appearance', isLayer ? node.ap.effects.length > 0 || node.ap.items.length > 0 || node.blend !== 'normal' : node.ap.effects.length > 0 || node.ap.items.length > 2 || node.opacity < 1 || node.blend !== 'normal');
+    setClass(n, 'is-targeted', isLayer && p?.layerTarget === node.id);
+    const tb = q(n, '.cv-lrow-target'), tl = isLayer ? 'Target the layer for its appearance' : 'Select';
+    if (tb.getAttribute('aria-label') !== tl) { tb.setAttribute('aria-label', tl); setTitle(tb, tl); }
     setClass(n, 'is-clip', (node.kind === 'group' || node.kind === 'layer') && !!(node as { clip?: boolean }).clip);
     n.setAttribute('aria-level', String(r.depth + 1));
     n.setAttribute('aria-selected', String(sel.has(node.id)));
@@ -119,6 +122,7 @@ export class LayersPanel {
       if (t.closest('.cv-lrow-eye')) { if (ev.altKey) this.solo(n); else if (n.kind === 'layer') e.setLayer(n.id, { hidden: !n.hidden }); else e.setObjectProps({ hidden: !n.hidden }, [n.id]); return; }
       if (t.closest('.cv-lrow-lock')) { if (n.kind === 'layer') e.setLayer(n.id, { locked: !n.locked }); else e.setObjectProps({ locked: !n.locked }, [n.id]); return; }
       if (t.closest('.cv-lrow-disc')) { this.toggleOpen(n, ev.altKey); return; }
+      if (t.closest('.cv-lrow-target') && n.kind === 'layer' && !(ev.shiftKey || ev.metaKey || ev.ctrlKey)) { e.targetLayer(n.id); return; }
       if (t.closest('.cv-lrow-target') || t.closest('.cv-lrow-sel')) { this.selectNode(n, ev.shiftKey || ev.metaKey || ev.ctrlKey); return; }
       if (n.kind === 'layer') { e.setActiveLayer(n.id); this.sync(); if (ev.shiftKey || ev.metaKey || ev.ctrlKey) this.selectNode(n, true); return; }
       this.selectNode(n, ev.shiftKey || ev.metaKey || ev.ctrlKey);
