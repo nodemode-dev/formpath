@@ -9,7 +9,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Selecting: `select`, `select_same`, `select_similar`
 - Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`
 - Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `color_harmony`, `graphic_style`
-- Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `clipping_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
+- Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
@@ -266,7 +266,7 @@ Sets stroke attributes of the objects' first stroke: weight, caps, joins, miter 
 
 ## set_appearance
 
-Edits the appearance stack: object opacity and blend mode, an added fill or stroke on top, every item replaced, cleared, or reduced to one fill and one stroke.
+Edits the appearance stack: object opacity and blend mode, an added fill or stroke on top, every item replaced, cleared, or reduced to one fill and one stroke. Groups and layers (pass a layer id) have their own stack: their fills and strokes draw over their contents.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `opacity`: number
@@ -298,12 +298,13 @@ The Color Guide: five colours in a harmony rule around a base colour, with tints
 
 ## graphic_style
 
-Graphic styles: create one from an object's appearance, apply one to objects, or list them.
+Graphic styles: create one from an object's appearance (the object stays linked to it), apply one to objects, list them, delete one, redefine one from an object's appearance (every object still linked to it follows), break the link between objects and their style, list the built-in style libraries, or load a library into the document. apply with library adds that library style to the document and applies it.
 
-- `action`: string (create | apply | list | delete); required
-- `name`: string
+- `action`: string (create | apply | list | delete | redefine | break_link | libraries | load_library); required
+- `name`: string; A style name (create, apply, delete, redefine).
 - `id`: string; An object id from get_document.
 - `ids`: array; Object ids from get_document; the selection when left out.
+- `library`: string; A style library: shadows, buttons, outlines, textures or scribbles (or its full name).
 
 ## set_object
 
@@ -337,6 +338,15 @@ Makes the paths one compound path (overlaps become holes by the fill rule), or r
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `action`: string (make | release); default "make"
 - `rule`: string (nonzero | evenodd)
+
+## attributes
+
+The Attributes panel: sets the fill rule of paths and compound paths, reverses their path direction, or sets the note kept with objects. nonzero (the default) fills every enclosed area except where a subpath runs the opposite way; evenodd makes every other nested or overlapping area a hole, whatever the direction. Groups pass the fill rule to the paths inside. Answers with each object's fill rule and note.
+
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `fill_rule`: string (nonzero | evenodd)
+- `reverse`: boolean; Reverse the direction of every subpath of the objects; under nonzero this turns a hole into a filled area or back. Pass the id of one path inside a compound path to reverse only that one.
+- `note`: string; Replaces the objects' note; an empty string removes it.
 
 ## clipping_mask
 
@@ -467,6 +477,7 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 - `effect`: string
 - `params`: object
 - `list`: boolean; default false
+- `item`: integer; Apply the effect to one fill or stroke only: its index in the object's appearance items as get_object lists ap.items (0 is the bottom item). Without it the effect applies to the whole object. 3D effects always apply to the whole object.
 
 ## three_d
 

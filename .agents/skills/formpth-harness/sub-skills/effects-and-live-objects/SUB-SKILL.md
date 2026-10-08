@@ -15,7 +15,7 @@ The base shapes exist and are painted.
 
 ## Procedure
 
-1. **Discover parameters.** `apply_effect` with list true returns every effect id with its parameters and defaults; pass only the parameters to change in `params`.
+1. **Discover parameters.** `apply_effect` with list true returns every effect id with its parameters and defaults; pass only the parameters to change in `params`. Pass `item` to put the effect on one fill or stroke instead of the whole object (any effect but 3D).
 2. **Depth.** stylize.drop_shadow (opacity 30 to 50, blur 6 to 12, offsets 4 to 8 points) and stylize.outer_glow; stylize.inner_glow for embossed looks; blur.gaussian for soft backgrounds.
 3. **Character.** distort.roughen for hand-made edges, distort.zig_zag for waves, distort.pucker_bloat for flowers, stylize.round_corners to soften polygons, warp.arc, warp.flag and the other warps for banners and type.
    - **Painterly and print looks** come from the Effect Gallery's raster effects, applied with the same `apply_effect`: gallery.watercolor, gallery.dry_brush or gallery.colored_pencil for illustration, gallery.halftone_pattern, gallery.color_halftone or gallery.mezzotint for print texture, gallery.stained_glass, gallery.crystallize or gallery.mosaic_tiles for cells, gallery.charcoal, gallery.stamp or gallery.photocopy for two-tone (set foreground and background colours), gallery.texturizer for canvas or brick, blur.radial spin or zoom for motion. Sizes are in points and look the same at any zoom. They export to PDF and SVG as images at the document's raster resolution, so put them on the parts that should be pixels and keep type and logos clean. rasterize.raster pixelates on purpose (resolution 10 to 30 ppi).

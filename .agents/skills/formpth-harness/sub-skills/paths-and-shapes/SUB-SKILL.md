@@ -19,7 +19,7 @@ The plan gives positions and sizes in points.
 2. **Curves.** `draw_path` with an SVG `d` string when the curve is known exactly (C for cubic Beziers, A for arcs); with `points` and `smooth` true for a hand-drawn feel. Set `closed` for shapes.
 3. **Reshape.** `get_object` returns the anchors with their handles; `edit_anchors` moves, inserts (segment and t), deletes, or converts to smooth or corner. Indices count across subpaths.
 4. **Combine.** Select the shapes, then `pathfinder`: unite (merge), minus_front (cut the top shapes out of the bottom one), intersect, exclude (overlaps become holes), divide (every region its own piece), trim, merge, crop, outline, minus_back. The results are new curved paths with new ids: re-read `get_document`.
-5. **Holes without merging.** `compound_path` make with rule evenodd.
+5. **Holes without merging.** `compound_path` make: it keeps the bottom path's fill rule (nonzero by default) and turns the paths above it the other way, so they cut holes where they overlap it. `attributes` fill_rule evenodd makes every other nested area a hole whatever the direction (also for one self-intersecting path, such as a star drawn in one stroke); under nonzero, `attributes` reverse with the id of one path inside the compound turns its hole into a fill or back.
 6. **Masks.** Put the clipping shape on top, select it with the art, `clipping_mask` make.
 7. **Path commands.** `path_operation`: offset (outline at a distance, joins), outline_stroke (a stroke becomes a filled shape), simplify (precision), smooth, join (two open ends), average, reverse, add_anchors, remove_anchors, divide_objects_below, split_into_grid, clean_up.
 8. **Shape Builder.** `shape_builder` with points inside the regions to merge, or delete true to remove them.

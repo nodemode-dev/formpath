@@ -1,6 +1,6 @@
 ---
 name: formpth-harness
-description: Draws and edits vector artwork in formpth, the Illustrator-style editor, through its MCP server. Use whenever someone asks to make a poster, flyer, logo, icon, badge, sticker, diagram, infographic, pattern or illustration; to combine, recolour, outline type or apply effects to vector shapes; or to open, save or export SVG, PDF, PNG or .fpth files in formpth, even when they never name formpth or MCP. Covers get_document, get_image, draw_shape, draw_path, add_text, set_paint, pathfinder, apply_effect, export_file and 56 more tools.
+description: Draws and edits vector artwork in formpth, the Illustrator-style editor, through its MCP server. Use whenever someone asks to make a poster, flyer, logo, icon, badge, sticker, diagram, infographic, pattern or illustration; to combine, recolour, outline type or apply effects to vector shapes; or to open, save or export SVG, PDF, PNG or .fpth files in formpth, even when they never name formpth or MCP. Covers get_document, get_image, draw_shape, draw_path, add_text, set_paint, pathfinder, apply_effect, export_file and 57 more tools.
 ---
 
 # formpth-harness
