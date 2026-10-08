@@ -1,6 +1,6 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf } from '../engine/doc';
-import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, strokeOutline, threeDFaces } from '../engine/effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, threeDFaces } from '../engine/effects';
 import { inflate, isEmptyRect, isLineSeg, segments } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
@@ -119,7 +119,7 @@ class Painter {
   needsRaster(n: VNode): boolean {
     if (rasterEffects(n).length || (n.mask && !n.mask.disabled) || n.kind === 'mesh') return true;
     if (n.kind === 'text' && !this.outlines.has(n.id)) return true;
-    return n.ap.items.some((i) => i.visible && (i.paint.type === 'pattern' || (i.paint.type === 'gradient' && i.paint.gradient.kind === 'freeform')));
+    return n.ap.items.some((i) => i.visible && (i.paint.type === 'pattern' || (i.paint.type === 'gradient' && i.paint.gradient.kind === 'freeform') || rasterEffectsOf(i.effects).length > 0));
   }
 
   shape(n: VNode, d: PathData, rule: string, page: Mat): string {
@@ -224,7 +224,11 @@ class Painter {
           return `q\n${geo ? `${this.path(geo.d)}\n${geo.rule === 'evenodd' ? 'W*' : 'W'} n\n` : ''}${inner}\nQ\n${strokes}`;
         }
         if (n.kind === 'group' && n.livePaint) return this.children([...liveFaceNodes(n), ...n.children], page);
-        return this.children(n.children, page);
+        const inner = await this.children(n.children, page);
+        if (!n.ap.items.length) return inner;
+        const geo: PathData = [], collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); };
+        collect(n);
+        return geo.length ? [inner, this.shape(n, geo, 'nonzero', page)].filter(Boolean).join('\n') : inner;
       }
       case 'blend': case 'envelope': case 'repeat': return this.children(liveChildren(this.doc, n), page);
       case 'path': return n.guide ? '' : this.shape(n, effectPath(n.d, n.ap.effects), n.rule, page);

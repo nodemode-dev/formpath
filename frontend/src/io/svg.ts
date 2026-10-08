@@ -1,6 +1,6 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf, findNode, newDoc, newId } from '../engine/doc';
-import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, strokeOutline, threeDFaces, type RasterFx } from '../engine/effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, threeDFaces, type RasterFx } from '../engine/effects';
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
@@ -10,7 +10,7 @@ import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
 import { clipGeometry, docArtBounds, gradientGeom, renderNode } from '../engine/render';
 import { layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
-import { BLEND_MODES, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
+import { BLEND_MODES, type AppearanceItem, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
 import { outlineText } from './fonts';
 import { docFromManifest, serialize } from './project-io';
 
@@ -129,36 +129,43 @@ class Writer {
     const b = selectionBounds(this.doc, [n]), out: string[] = [];
     for (const it of n.ap.items) {
       if (!it.visible) continue;
-      const id = it.effects.some((e) => e.visible) ? effectPath(d, it.effects) : d;
-      const blend = it.blend !== 'normal' ? ` style="mix-blend-mode:${BLEND_CSS.get(it.blend)}"` : '';
-      if (it.kind === 'fill') {
-        const rp = resolvePaint(this.doc, it.paint);
-        if (rp.type === 'gradient' && rp.gradient.kind === 'freeform') { out.push(this.freeform(rp.gradient, b, id, rule, it.opacity, blend)); continue; }
-        const pt = this.paint(it.paint, b);
-        if (pt.v === 'none') continue;
-        out.push(`<path d="${this.d(id)}" fill="${pt.v}"${rule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${it.opacity < 1 ? ` fill-opacity="${num(it.opacity)}"` : ''}${blend}/>`);
-        continue;
-      }
-      if (it.width <= 0 || it.paint.type === 'none') continue;
-      const pt = this.paint(it.paint, b);
-      if (it.brush) {
-        const parts = brushGeometry(this.doc, id, it);
-        if (parts) { for (const part of parts) out.push(`<path d="${this.d(part.d)}" fill="${part.paint ? this.paint(part.paint, b).v : pt.v}"${blend}/>`); continue; }
-      }
-      const closed = id.every((sp) => sp.closed);
-      if ((it.profile && it.profile.length) || (it.align !== 'center' && closed)) {
-        const outline = it.profile && it.profile.length ? strokeOutline(id, it) : null;
-        if (outline) out.push(`<path d="${this.d(outline)}" fill="${pt.v}"${it.opacity < 1 ? ` fill-opacity="${num(it.opacity)}"` : ''}${blend}/>`);
-        else {
-          const cid = this.id('clip');
-          if (it.align === 'inside') { this.defs.push(`<clipPath id="${cid}"><path d="${this.d(id)}"${rule === 'evenodd' ? ' clip-rule="evenodd"' : ''}/></clipPath>`); out.push(`<path d="${this.d(id)}" ${this.strokeAttrs({ ...it, width: it.width * 2 }, b)} clip-path="url(#${cid})"${blend}/>`); }
-          else { const mid = this.id('mask'); this.defs.push(`<mask id="${mid}" maskUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000"><rect x="-100000" y="-100000" width="200000" height="200000" fill="#fff"/><path d="${this.d(id)}" fill="#000"/></mask>`); out.push(`<path d="${this.d(id)}" ${this.strokeAttrs({ ...it, width: it.width * 2 }, b)} mask="url(#${mid})"${blend}/>`); }
-        }
-      } else out.push(`<path d="${this.d(id)}" ${this.strokeAttrs(it, b)}${blend}/>`);
-      const arrows = arrowGeometry(id, it);
-      if (arrows) out.push(`<path d="${this.d(arrows)}" fill="${pt.v}"/>`);
+      const at = out.length;
+      this.item(it, d, rule, b, out);
+      const fx = rasterEffectsOf(it.effects).filter((f) => f.kind !== 'filter');
+      if (fx.length && out.length > at) out.splice(at, out.length - at, `<g filter="url(#${this.filter(fx)})">${out.slice(at).join('')}</g>`);
     }
     return out.join('');
+  }
+
+  item(it: AppearanceItem, d: PathData, rule: string, b: Rect, out: string[]): void {
+    const id = it.effects.some((e) => e.visible) ? effectPath(d, it.effects) : d;
+    const blend = it.blend !== 'normal' ? ` style="mix-blend-mode:${BLEND_CSS.get(it.blend)}"` : '';
+    if (it.kind === 'fill') {
+      const rp = resolvePaint(this.doc, it.paint);
+      if (rp.type === 'gradient' && rp.gradient.kind === 'freeform') { out.push(this.freeform(rp.gradient, b, id, rule, it.opacity, blend)); return; }
+      const pt = this.paint(it.paint, b);
+      if (pt.v === 'none') return;
+      out.push(`<path d="${this.d(id)}" fill="${pt.v}"${rule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${it.opacity < 1 ? ` fill-opacity="${num(it.opacity)}"` : ''}${blend}/>`);
+      return;
+    }
+    if (it.width <= 0 || it.paint.type === 'none') return;
+    const pt = this.paint(it.paint, b);
+    if (it.brush) {
+      const parts = brushGeometry(this.doc, id, it);
+      if (parts) { for (const part of parts) out.push(`<path d="${this.d(part.d)}" fill="${part.paint ? this.paint(part.paint, b).v : pt.v}"${blend}/>`); return; }
+    }
+    const closed = id.every((sp) => sp.closed);
+    if ((it.profile && it.profile.length) || (it.align !== 'center' && closed)) {
+      const outline = it.profile && it.profile.length ? strokeOutline(id, it) : null;
+      if (outline) out.push(`<path d="${this.d(outline)}" fill="${pt.v}"${it.opacity < 1 ? ` fill-opacity="${num(it.opacity)}"` : ''}${blend}/>`);
+      else {
+        const cid = this.id('clip');
+        if (it.align === 'inside') { this.defs.push(`<clipPath id="${cid}"><path d="${this.d(id)}"${rule === 'evenodd' ? ' clip-rule="evenodd"' : ''}/></clipPath>`); out.push(`<path d="${this.d(id)}" ${this.strokeAttrs({ ...it, width: it.width * 2 }, b)} clip-path="url(#${cid})"${blend}/>`); }
+        else { const mid = this.id('mask'); this.defs.push(`<mask id="${mid}" maskUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000"><rect x="-100000" y="-100000" width="200000" height="200000" fill="#fff"/><path d="${this.d(id)}" fill="#000"${rule === 'evenodd' ? ' fill-rule="evenodd"' : ''}/></mask>`); out.push(`<path d="${this.d(id)}" ${this.strokeAttrs({ ...it, width: it.width * 2 }, b)} mask="url(#${mid})"${blend}/>`); }
+      }
+    } else out.push(`<path d="${this.d(id)}" ${this.strokeAttrs(it, b)}${blend}/>`);
+    const arrows = arrowGeometry(id, it);
+    if (arrows) out.push(`<path d="${this.d(arrows)}" fill="${pt.v}"/>`);
   }
 
   text(n: TextNode): string {
@@ -198,7 +205,8 @@ class Writer {
   }
 
   baked(n: VNode): string | null {
-    if (n.kind === 'layer' || typeof document === 'undefined' || !rasterEffects(n).some((f) => f.kind === 'filter')) return null;
+    const gallery = (fx: RasterFx[]): boolean => fx.some((f) => f.kind === 'filter');
+    if (typeof document === 'undefined' || !(gallery(rasterEffects(n)) || n.ap.items.some((i) => i.visible && gallery(rasterEffectsOf(i.effects))))) return null;
     const b = visualBounds(this.doc, n);
     if (isEmptyRect(b)) return '';
     const k = Math.min(Math.max(1, (this.doc.rasterPpi || 150) / 72), Math.sqrt(16e6 / Math.max(1, b.w * b.h))), W = Math.max(1, Math.ceil(b.w * k)), H = Math.max(1, Math.ceil(b.h * k));
@@ -215,7 +223,7 @@ class Writer {
   node(n: VNode): string {
     if (n.hidden) return '';
     const baked = this.baked(n);
-    if (baked !== null) return baked;
+    if (baked !== null) return n.kind === 'layer' ? `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}">${baked}</g>` : baked;
     const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(this.doc, n) : null;
     if (faces) return this.wrap(n, `<g>${faces.map((f) => this.node(f)).join('')}</g>`);
     switch (n.kind) {
@@ -229,9 +237,9 @@ class Writer {
           return n.kind === 'layer' ? `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}">${inner}</g>` : this.wrap(n, inner);
         }
         const body = (n.kind === 'group' && n.livePaint ? liveFaceNodes(n).map((f) => this.node(f)).join('') : '') + n.children.map((c) => this.node(c)).join('');
-        if (n.kind === 'layer') return `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}"${n.opacity < 1 ? ` opacity="${num(n.opacity)}"` : ''}>${body}</g>`;
         let extra = '';
         if (n.ap.items.length) { const geo: PathData = []; const collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); }; collect(n); if (geo.length) extra = this.shape(n, geo, 'nonzero'); }
+        if (n.kind === 'layer') { const fx = rasterEffects(n); return `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}"${n.opacity < 1 ? ` opacity="${num(n.opacity)}"` : ''}${n.blend !== 'normal' ? ` style="mix-blend-mode:${BLEND_CSS.get(n.blend) ?? 'normal'}"` : ''}${fx.length ? ` filter="url(#${this.filter(fx)})"` : ''}>${body}${extra}</g>`; }
         return this.wrap(n, `<g>${body}${extra}</g>`);
       }
       case 'blend': case 'envelope': case 'repeat': return this.wrap(n, `<g>${liveChildren(this.doc, n).map((c) => this.node(c)).join('')}</g>`);
