@@ -2,6 +2,14 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.16.1 · 2026-10-08
+
+Third-party credits.
+
+### Changed
+
+- `NOTICE.md` credits the six Lucide icons in the shell's icon set (link, unlink, pilcrow, move, maximize and smart object) and carries Lucide's ISC license text.
+
 ## 0.16.0 · 2026-10-07
 
 Map Art, 3D shadows and a tilting Inflate. Every parity row is Full.
