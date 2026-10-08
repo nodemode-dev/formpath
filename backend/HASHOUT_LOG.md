@@ -131,6 +131,27 @@ States that type is black unless `color` is given, matching the bridge's default
 
 `map_symbol` takes a symbol name (or id) and fails with the list of the document's symbols when it matches none, or says to make one first when there are none, because a silent miss would leave a plain face the agent cannot tell from a wrong scale. It is stored as the id so a rename keeps the mapping, and the answer names the symbol rather than the id. The shadow parameters and `shade_art` pass straight through; Inflate takes rx, ry and rz to tilt and ignores Map Art and shadows, which are vector-face features. The tool count is unchanged.
 
+### app/routers/mcp.py · window bridge session
+- refers-to: app/routers/mcp.py :: _app_origin, _bridge_refusal, bridge_session, bridge_next, bridge_next_get, bridge_result, bridge_stop, _secret, _superseded, _delivered
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+An audit found that `GET /api/mcp/bridge/next?allowed=1` set the consent flag for any caller (a missing `allowed` counted as yes, and a cross-site image could fire it), and that any local client could pose as the window: take queued calls (including the file bytes `open_file` reads here), answer `__consent__` itself, drain the queue, or post results through `/api/mcp/bridge/result`. The window now opens a session with `POST /api/mcp/bridge/session`, which issues a fresh `secrets.token_urlsafe(32)` only when the request's Origin is formpth's own page: the CORS origins (the Vite dev server on 5230), the Vite preview on 5231, and `http://localhost`, `127.0.0.1` or `[::1]` on the port this server is actually listening on (`request.scope["server"]`, so the desktop sidecar's random port works). It is a POST because browsers send Origin on every POST, while a same-origin GET carries none. Every bridge call is a POST from that Origin with the secret in `X-Formpth-Bridge`; anything else gets 403 and changes nothing, and `GET /api/mcp/bridge/next` answers 405 without touching state. `allowed` now comes from the JSON body and only `true` allows; a missing value means not allowed. A new session supersedes the last: only the newest secret receives queued calls, a window still polling with an older one gets 205 (a success status, so the browser logs no error) and waits for focus before taking the bridge back. Each delivered call remembers which secret took it (`_delivered`), and its result is accepted only from that secret, so a window that is superseded mid-call can still finish it while nobody else can answer for it. `POST /mcp` is unchanged (agents' clients send no Origin, and a foreign Origin is still refused there); the stdio bridge in `setup/mcp_stdio.py` only talks to it. Origin is a browser guarantee: a local program can forge it, but a local program already has the person's files, and the point is that no web page can drive or read the bridge.
+
+### app/routers/mcp.py · tauri origins left out of the bridge
+- refers-to: app/routers/mcp.py :: _app_origin; src-tauri/src/main.rs :: WebviewUrl::External; src-tauri/tauri.conf.json :: app.security.csp
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+The desktop shell loads the main window from the sidecar as an external URL (`http://127.0.0.1:[port]`), so its Origin is the engine's own and is already accepted. `tauri://localhost` and `http://tauri.localhost` serve only the splash, and every Tauri app on the machine shares them, so they are not bridge origins (`_local_origin` for `POST /mcp` keeps accepting them as before). For the same reason the Tauri CSP stays `null`: it applies only to pages Tauri serves itself (the splash, which loads nothing remote) and would never reach the main window, and setting it cannot be checked without a desktop build. The app's own policy is the `frame-src 'none'; object-src 'none'` meta in `frontend/index.html`, which holds in the browser and the desktop alike.
+
+### app/routers/mcp.py · attributes, apply_effect item and graphic_style actions
+- refers-to: app/routers/mcp.py :: TOOLS attributes, apply_effect, graphic_style, set_appearance
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`attributes` mirrors the Attributes panel: `fill_rule` sets nonzero or evenodd on paths and compound paths (groups pass it down), `reverse` reverses path direction (one compound subpath when its own id is passed), and `note` sets the object note; it answers with each object's rule and note. `apply_effect` gained `item`, an index into `ap.items` as `get_object` lists it, for effects on one fill or stroke; 3D effects are refused there because they turn the whole object. `graphic_style` gained `redefine`, `break_link`, `libraries` and `load_library`, and `apply` with `library` adds one library style to the document and applies it. `set_appearance` says that groups and layers have their own stack. The catalogue is at 67 tools.
+
 ## app/routers/projects.py
 
 ### app/routers/projects.py · save conflicts

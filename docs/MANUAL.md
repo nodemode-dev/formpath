@@ -30,7 +30,7 @@ ask it questions.
 - Each tool's options are in the bar along the top.
 - Properties (the column beside the stage) shows what matters for the selection: transform, fill, stroke, opacity
   and quick actions; with nothing selected it shows the document's units, artboards, rulers and grids.
-- Panels dock on the right in groups: Color, Swatches, Gradient; Stroke, Transparency, Brushes; Appearance, Graphic
+- Panels dock on the right in groups: Color, Swatches, Gradient; Stroke, Transparency, Brushes, Attributes; Appearance, Graphic
   Styles; Symbols, Artboards, Links, Image Trace; Navigator, Info, History, Actions; Layers; Properties, Transform,
   Align, Pathfinder, Pattern Options; Character, Paragraph, Glyphs. Drag a tab into another group or between groups; Window lists every
   panel and Window > Reset Panels puts them back. Workspaces in the title bar arrange the panels for a kind of work.
@@ -120,6 +120,15 @@ ask it questions.
   group and choosing a fill paints every face. Gap Options closes small openings so an area that is not quite closed still fills; Merge adds more paths; Expand
   makes ordinary filled shapes and strokes; Release gives the paths back.
 - Compound paths (Ctrl+8) cut holes by the fill rule; clipping masks (Ctrl+7) clip objects with the topmost path.
+  Make Compound Path keeps the bottom object's fill rule (Non-Zero Winding unless it was set otherwise) and turns
+  the paths above it the other way round, so where they overlap the bottom path you get holes; Release gives the
+  paths back with their paint.
+- Attributes panel (Window > Attributes): the two Fill Rule buttons set Non-Zero Winding or Even-Odd on the
+  selected compound paths and paths (a self-intersecting path such as a five-pointed star drawn in one stroke gets
+  a hole in its middle under Even-Odd). Under Non-Zero Winding a subpath running the opposite way to the one around
+  it is a hole: select one subpath of a compound path with the Direct Selection tool and click Reverse Path Direction
+  (also Object > Path) to turn a hole into a fill or back. Even-Odd makes every other nested area a hole whatever the
+  direction. The Note field keeps a note with the object; it is saved in the file and agents can read it.
 
 ## Colour and paint
 
@@ -156,8 +165,22 @@ ask it questions.
 - Transparency panel: blend mode (all 16), opacity, opacity masks (Make Mask uses the topmost selected object;
   Clip and Invert Mask), isolate blending and knockout group.
 - Appearance panel: every fill, stroke and effect on an object, top to bottom. Add another fill or stroke, hide
-  items, click an effect's name to edit it, Clear Appearance, Reduce to Basic Appearance. Graphic Styles save an
-  appearance to apply in one click.
+  items, click an effect's name to edit it (the dialog previews as you change it), Clear Appearance, Reduce to Basic
+  Appearance. Click a fill or stroke row to target it: Add New Effect, and any effect chosen from the Effect menu
+  while it is targeted, then applies to that fill or stroke only (a roughened fill under a clean stroke, a blurred
+  glow stroke under a sharp one). Its effects list under it with their own visibility, edit and delete; Duplicate
+  Selected Item copies the targeted fill, stroke or effect, and the arrows move it. 3D effects always apply to the
+  whole object.
+- Groups and layers have their own appearance. Select a group to add fills, strokes and effects to it: they draw
+  over its contents (the Contents row shows where). Click a layer's target circle in the Layers panel to target the
+  layer itself; the Appearance panel then shows Layer, and fills, strokes, effects and graphic styles apply to the
+  whole layer.
+- Graphic Styles panel: New Graphic Style keeps the targeted object's appearance and links the object to it; click a
+  style to apply it (the linked style is outlined). Redefine Graphic Style gives the picked style the selection's
+  appearance and every object still linked to it follows; editing an object's appearance by hand ends its link, and
+  Break Link to Graphic Style ends it on purpose. The Library menu at the top of the panel, or Window > Graphic Style
+  Libraries, shows the built-in libraries (Shadows and Glows, Buttons, Outlines, Textures, Scribbles); clicking a
+  library style adds it to the document's styles and applies it.
 - Effects (Effect menu) stay live and editable: Warp (15 styles), Distort & Transform (Free Distort, Pucker & Bloat,
   Roughen, Transform, Tweak, Twist, Zig Zag), Path (Offset Path, Outline Stroke), Stylize (Round Corners, Scribble,
   Drop Shadow, Inner Glow, Outer Glow, Feather), Rasterize and Convert to Shape. Apply Last Effect repeats the last
@@ -268,9 +291,14 @@ ask it questions.
 - formpth runs an MCP server so agents (Claude Code, Claude Desktop, Codex, Cursor and others) can draw in the open
   window. Turn it on in Preferences > Plugins (Allow agents); the first call asks your permission. Connect with
   `./formpth mcp` (a stdio bridge) or the HTTP endpoint the engine prints at boot.
+- Only the formpth window hands agent requests to your document. When it opens it gets a private session from the
+  engine, which gives one only to formpth's own page, and every exchange between the window and the engine carries
+  it; a web page or another program cannot pose as the window, answer the permission question or read the requests.
+  If you open formpth in a second window or tab, the newest one takes the agents' requests; click back into an
+  earlier one to hand them back to it.
 - The tools cover everything here: reading the document (get_document, get_image, get_svg, get_object), drawing
   (draw_shape, draw_path, add_text, edit_anchors), paint (set_paint, set_stroke, set_appearance, add_swatch,
-  graphic_style), structure (group, arrange, compound_path, clipping_mask, layers), transforms and align, Pathfinder
+  graphic_style), structure (group, arrange, compound_path, attributes, clipping_mask, layers), transforms and align, Pathfinder
   and path operations, live effects, blends, envelopes, repeats, symbols, brushes, image trace, opening, saving and
   exporting, and run_command for any menu command. Every change is one undo step.
 - The assistant (Window > Assistant) uses a language model you set in Preferences > Plugins (a local Ollama model or
@@ -280,7 +308,9 @@ ask it questions.
 
 - Plugins add commands to the Plugins menu and can read the document, place SVG and call the same tools agents use.
   Plugins > Manage Plugins adds a plugin script (.js) and turns plugins on and off. A plugin runs in a sandbox and
-  cannot open, save or export files on its own.
+  cannot open, save or export files on its own. It cannot reach the network either: requests, remote scripts,
+  images and frames, peer connections and navigating away are all blocked, so it can read your document through the
+  tools but has no way to send it anywhere.
 
 ## Keyboard
 
