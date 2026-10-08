@@ -9,7 +9,7 @@ import { apply, arcPath, ellipsePath, emptyRect, fitCurve, flarePath, insideFill
 import { hitTest, nodeTouchesRect, type Hit } from './hit';
 import { liveChildren } from './live';
 import { buildMesh } from './mesh';
-import { align, arrange, duplicateNodes, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
+import { align, arrange, duplicateNodes, fillRuleTargets, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setFillRule, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
 import { expandAppearance } from './ops/expand';
 import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
@@ -22,8 +22,12 @@ import { Project } from './project';
 import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
+import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
 import { Viewport } from './viewport';
+import { styleLibrary } from './style-libraries';
+
+const styleLinked = (n: VNode, st: GraphicStyle): boolean => JSON.stringify(n.ap) === JSON.stringify(st.ap) && (n.kind === 'text' || (n.opacity === st.opacity && n.blend === st.blend));
+const withStyle = (n: VNode, st: GraphicStyle): VNode => (n.kind === 'text' ? { ...n, ap: st.ap, style: st.id } : { ...n, ap: st.ap, opacity: st.opacity, blend: st.blend, style: st.id });
 
 export * from './types';
 export { Project } from './project';
@@ -225,6 +229,7 @@ export class Engine extends Emitter<EngineEvents> {
   }
   select(ids: string[], mode: SelectMode = 'replace'): void {
     const p = this.current; if (!p) return;
+    p.layerTarget = null;
     const valid = ids.filter((id) => { const n = findNode(p.doc, id); return !!n && n.kind !== 'layer' && !isLocked(p.doc, id) && isVisible(p.doc, id); });
     const s = mode === 'replace' ? new Set<string>() : new Set(p.selection);
     for (const id of valid) {
@@ -240,6 +245,19 @@ export class Engine extends Emitter<EngineEvents> {
     this.emit('selection', null); this.emit('render', null); this.emit('overlay', null); this.emit('options', null);
   }
   deselect(): void { this.select([], 'replace'); }
+  targetLayer(id: string): void {
+    const p = this.current, l = p ? findNode(p.doc, id) : null;
+    if (!p || !l || l.kind !== 'layer') return;
+    this.select(l.children.filter((c) => !c.locked && !c.hidden).map((c) => c.id));
+    p.layerTarget = id;
+    p.activeLayer = id;
+    this.emit('selection', null);
+  }
+  appearanceTarget(): VNode | null {
+    const p = this.current; if (!p) return null;
+    const l = p.layerTarget ? findNode(p.doc, p.layerTarget) : null;
+    return l && l.kind === 'layer' ? l : this.selected()[0] ?? null;
+  }
   selectAll(onArtboard = false): void {
     const p = this.current; if (!p) return;
     const ab = p.doc.artboards[p.activeArtboard];
@@ -519,10 +537,11 @@ export class Engine extends Emitter<EngineEvents> {
     return this.applyToSelection('Opacity Mask Options', (n) => (n.mask ? { ...n, mask: { ...n.mask, ...patch } } : n), ids);
   }
 
-  addEffect(id: string, params?: Record<string, number | string | boolean>, ids?: string[]): boolean {
+  addEffect(id: string, params?: Record<string, number | string | boolean>, ids?: string[], item?: number): boolean {
     if (!EFFECT_IDS.has(id)) { this.notice(`There is no effect called ${id}.`, 'error'); return false; }
     const prm = { ...effectDefaults(id), ...(params ?? {}) };
     this.lastEffect = { id, params: prm };
+    if (item !== undefined) return this.applyToSelection('Effect', (n) => (n.ap.items[item] ? { ...n, ap: { ...n.ap, items: n.ap.items.map((it, i) => (i === item ? { ...it, effects: [...it.effects, effect(id, prm)] } : it)) } } : n), ids);
     return this.applyToSelection('Effect', (n) => ({ ...n, ap: { ...n.ap, effects: [...n.ap.effects, effect(id, prm)] } }), ids);
   }
   applyLastEffect(): void { if (this.lastEffect) this.addEffect(this.lastEffect.id, this.lastEffect.params); }
@@ -569,6 +588,17 @@ export class Engine extends Emitter<EngineEvents> {
   duplicate(dx = 0, dy = 0, ids?: string[]): boolean { return this.run('Duplicate', (d, t) => duplicateNodes(d, t, dx, dy), ids); }
   makeCompound(ids?: string[], rule?: 'nonzero' | 'evenodd'): boolean { return this.run('Make Compound Path', (d, t) => makeCompound(d, t, rule), ids); }
   releaseCompound(ids?: string[]): boolean { return this.run('Release Compound Path', releaseCompound, ids); }
+  fillRuleOf(ids?: string[]): FillRule | 'mixed' | null {
+    const p = this.current; if (!p) return null;
+    const rules = new Set(fillRuleTargets(p.doc, this.targetIds(ids)).map((id) => { const n = findNode(p.doc, id); return n && (n.kind === 'path' || n.kind === 'compound') ? n.rule : 'nonzero'; }));
+    return rules.size > 1 ? 'mixed' : ([...rules][0] ?? null);
+  }
+  setFillRule(rule: FillRule, ids?: string[]): boolean {
+    const p = this.current; if (!p) return false;
+    const t = fillRuleTargets(p.doc, this.targetIds(ids));
+    if (!t.some((id) => { const n = findNode(p.doc, id); return !!n && (n.kind === 'path' || n.kind === 'compound') && n.rule !== rule; })) return false;
+    return this.edit(rule === 'evenodd' ? 'Use Even-Odd Fill Rule' : 'Use Non-Zero Winding Fill Rule', (d) => setFillRule(d, t, rule).doc);
+  }
   makeClip(ids?: string[]): boolean { return this.run('Make Clipping Mask', makeClip, ids); }
   releaseClip(ids?: string[]): boolean { return this.run('Release Clipping Mask', releaseClip, ids); }
   pathfinder(op: PathfinderOp, ids?: string[]): boolean { return this.run(`Pathfinder ${op.replace(/_/g, ' ')}`, (d, t) => pathfinder(d, t, op), ids); }
@@ -816,17 +846,48 @@ export class Engine extends Emitter<EngineEvents> {
 
   addGraphicStyle(name: string, fromId?: string): string {
     const p = this.current; if (!p) return '';
-    const n = fromId ? findNode(p.doc, fromId) : this.selected()[0];
+    const n = fromId ? findNode(p.doc, fromId) : this.appearanceTarget();
     if (!n) return '';
     const id = newId('g');
-    this.edit('New Graphic Style', (d) => ({ ...d, styles: [...d.styles, { id, name, ap: n.ap, opacity: n.opacity, blend: n.blend }] }));
+    this.edit('New Graphic Style', (d) => updateNodes({ ...d, styles: [...d.styles, { id, name, ap: n.ap, opacity: n.opacity, blend: n.blend }] }, [n.id], (x) => ({ ...x, style: id })));
     return id;
+  }
+  graphicStyleOf(n: VNode | null): string | null {
+    const st = n?.style ? this.doc?.styles.find((s) => s.id === n.style) : null;
+    return n && st && styleLinked(n, st) ? st.id : null;
+  }
+  redefineGraphicStyle(id: string, fromId?: string): boolean {
+    const p = this.current; if (!p) return false;
+    const st = p.doc.styles.find((s) => s.id === id || s.name === id), src = fromId ? findNode(p.doc, fromId) : this.appearanceTarget();
+    if (!st || !src) return false;
+    const next = { ...st, ap: src.ap, opacity: src.opacity, blend: src.blend };
+    return this.edit('Redefine Graphic Style', (d) => {
+      const linked = allNodes(d).filter((n) => n.style === st.id || n.id === src.id).map((n) => n.id);
+      const out = updateNodes(d, linked, (n) => (n.id === src.id || styleLinked(n, st) ? (n.kind === 'text' ? { ...n, ap: next.ap, style: st.id } : { ...n, ap: next.ap, opacity: next.opacity, blend: next.blend, style: st.id }) : { ...n, style: undefined }));
+      return { ...out, styles: out.styles.map((s) => (s.id === st.id ? next : s)) };
+    });
+  }
+  breakGraphicStyleLink(ids?: string[]): boolean { return this.applyToSelection('Break Link to Graphic Style', (n) => (n.style ? { ...n, style: undefined } : n), ids); }
+  loadStyleLibrary(key: string): string[] {
+    const p = this.current, lib = styleLibrary(key);
+    if (!p || !lib) return [];
+    const have = new Map(p.doc.styles.map((s) => [s.name, s.id])), add = lib.styles.filter((s) => !have.has(s.name)).map((s) => ({ ...s, id: newId('g') }));
+    if (add.length) this.edit(`Load ${lib.name}`, (d) => ({ ...d, styles: [...d.styles, ...add] }));
+    return lib.styles.map((s) => have.get(s.name) ?? add.find((x) => x.name === s.name)?.id ?? '').filter(Boolean);
   }
   applyGraphicStyle(id: string, ids?: string[]): void {
     const st = this.doc?.styles.find((s) => s.id === id || s.name === id);
     if (!st) return;
     this.currentStyle = st.id;
-    this.applyToSelection('Graphic Style', (n) => (n.kind === 'text' ? { ...n, ap: st.ap, style: st.id } : { ...n, ap: st.ap, opacity: st.opacity, blend: st.blend, style: st.id }), ids);
+    this.applyToSelection('Graphic Style', (n) => withStyle(n, st), ids);
+  }
+  useLibraryStyle(key: string, name: string, ids?: string[]): string {
+    const p = this.current, lib = styleLibrary(key), src = lib?.styles.find((s) => s.name === name);
+    if (!p || !lib || !src) return '';
+    const have = p.doc.styles.find((s) => s.name === src.name), st: GraphicStyle = have ?? { ...src, id: newId('g') }, t = this.targetIds(ids);
+    this.currentStyle = st.id;
+    this.edit(`Graphic Style ${st.name}`, (d) => updateNodes(have ? d : { ...d, styles: [...d.styles, st] }, t, (n) => withStyle(n, st)));
+    return st.id;
   }
 
   makeSymbol(name: string, ids?: string[]): string {

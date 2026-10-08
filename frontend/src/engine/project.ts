@@ -13,6 +13,7 @@ export class Project {
   anchors = new Map<string, Set<number>>();
   activeLayer: string;
   isolation: string | null = null;
+  layerTarget: string | null = null;
   patternEdit: PatternSession | null = null;
   activeArtboard = 0;
   readonly history: History;

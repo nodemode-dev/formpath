@@ -74,9 +74,10 @@ export function expandAppearance(doc: Doc, n: VNode): VNode[] {
   const parts: VNode[] = [];
   for (const it of n.ap.items) {
     if (!it.visible || it.paint.type === 'none') continue;
-    const d = effectPath(base, it.effects);
-    if (it.kind === 'fill') parts.push(shape(d, g.rule, [{ ...it, effects: [] }]));
-    else parts.push(...strokeParts(doc, d, g.rule, it));
+    const d = effectPath(base, it.effects), own = it.effects.filter((e) => e.visible && effectDef(e.id)?.raster);
+    const made = it.kind === 'fill' ? [shape(d, g.rule, [{ ...it, effects: [] }])] : strokeParts(doc, d, g.rule, it);
+    if (!own.length || !made.length) parts.push(...made);
+    else parts.push(made.length === 1 ? { ...made[0], ap: { ...made[0].ap, effects: [...made[0].ap.effects, ...own] } } : { id: newId('g'), kind: 'group', clip: false, children: made, opacity: 1, blend: 'normal', ap: { items: [], effects: own } });
   }
   if (!parts.length) return [];
   if (parts.length === 1 && !rasterFx.length && n.opacity === 1 && n.blend === 'normal') return [{ ...parts[0], name: n.name }];

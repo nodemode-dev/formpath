@@ -4,7 +4,7 @@ import { filterReach } from './filters';
 import { emptyRect, inflate, isEmptyRect, pathBounds, transformRect, unionRect } from './geometry';
 import { liveChildren } from './live';
 import { textBounds } from './text';
-import type { Doc, PathData, Rect, StrokeItem, VNode } from './types';
+import type { Doc, Effect, PathData, Rect, StrokeItem, VNode } from './types';
 
 const geomCache = new WeakMap<VNode, Rect>();
 const visCache = new WeakMap<VNode, Rect>();
@@ -55,9 +55,13 @@ export function strokeReach(s: StrokeItem): number {
   return Math.max(base * miter * prof, arrows);
 }
 
-export function effectReach(n: VNode): number {
+export function effectReach(n: VNode): number { return effectsReach(n.ap.effects); }
+function itemsReach(n: VNode): number {
+  return n.ap.items.reduce((m, it) => (it.visible ? Math.max(m, (it.kind === 'stroke' && it.paint.type !== 'none' ? strokeReach(it) : 0) + effectsReach(it.effects)) : m), 0);
+}
+export function effectsReach(effects: Effect[]): number {
   let m = 0;
-  for (const e of n.ap.effects) {
+  for (const e of effects) {
     if (!e.visible) continue;
     const p = e.params;
     if (e.id === 'stylize.drop_shadow') m = Math.max(m, Math.abs(Number(p.x ?? 7)) + Math.abs(Number(p.y ?? 7)) + Number(p.blur ?? 5) * 2);
@@ -79,11 +83,12 @@ export function visualBounds(doc: Doc, n: VNode): Rect {
   const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(doc, n) : null;
   if (faces) r = faces.reduce((acc, f) => unionRect(acc, inflate(visualBounds(doc, f), 1)), emptyRect());
   else if (n.kind === 'group' && n.clip && n.children.length) r = geomBounds(doc, n.children[n.children.length - 1]);
-  else if (ch && n.kind !== 'compound') r = ch.reduce((acc, c) => (c.hidden ? acc : unionRect(acc, visualBounds(doc, c))), emptyRect());
-  else {
+  else if (ch && n.kind !== 'compound') {
+    r = ch.reduce((acc, c) => (c.hidden ? acc : unionRect(acc, visualBounds(doc, c))), emptyRect());
+    if (n.ap.items.length && !isEmptyRect(r)) r = inflate(r, itemsReach(n));
+  } else {
     r = geomBounds(doc, n);
-    const reach = n.ap.items.reduce((m, it) => (it.kind === 'stroke' && it.visible && it.paint.type !== 'none' ? Math.max(m, strokeReach(it)) : m), 0);
-    if (!isEmptyRect(r)) r = inflate(r, reach);
+    if (!isEmptyRect(r)) r = inflate(r, itemsReach(n));
   }
   const fx = effectReach(n);
   if (fx && !isEmptyRect(r)) r = inflate(r, fx);

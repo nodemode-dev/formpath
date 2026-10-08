@@ -379,9 +379,11 @@ function mapped(doc: Doc, art: VNode, scene: Scene, scale: number, dx: number, d
 }
 
 export interface RasterFx { kind: 'drop_shadow' | 'outer_glow' | 'inner_glow' | 'feather' | 'blur' | 'filter'; dx: number; dy: number; blur: number; color: string; opacity: number; blend: BlendMode; reach: number; filter?: { id: string; params: Effect['params'] } }
-export function rasterEffects(n: VNode): RasterFx[] {
+export function rasterEffects(n: VNode): RasterFx[] { return rasterEffectsOf(n.ap.effects); }
+export const isItemEffect = (id: string): boolean => EFFECT_IDS.has(id) && !id.startsWith('3d.');
+export function rasterEffectsOf(effects: Effect[]): RasterFx[] {
   const out: RasterFx[] = [];
-  for (const e of n.ap.effects) {
+  for (const e of effects) {
     if (!e.visible) continue;
     const colr = (k: string, d: string): string => cssColor(parseColor(String(e.params[k] ?? d)) ?? BLACK);
     const mode = (String(e.params.mode ?? 'normal') as BlendMode);

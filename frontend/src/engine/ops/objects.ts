@@ -1,9 +1,9 @@
 import { geomBounds, selectionBounds, visualBounds } from '../bounds';
-import { childrenOf, cloneNode, comparePaths, findNode, indexOf, inDocOrder, insertInto, newId, nodeAt, pathOf, removeNodes, topObjects, updateAt, updateNodes, withChildren, type IndexPath } from '../doc';
-import { mul, translate } from '../geometry';
+import { childrenOf, cloneNode, comparePaths, findNode, indexOf, inDocOrder, insertInto, newId, nodeAt, parentOf, pathOf, removeNodes, topObjects, updateAt, updateNodes, withChildren, type IndexPath } from '../doc';
+import { flattenSub, mul, reversePath, signedArea, translate } from '../geometry';
 import { emptyAppearance, NONE } from '../paint';
 import { transformNode, type XfOpts } from '../transform';
-import type { CompoundNode, Doc, FillRule, GroupNode, Mat, PathNode, Rect, VNode } from '../types';
+import type { CompoundNode, Doc, FillRule, GroupNode, Mat, PathData, PathNode, Rect, SubPath, VNode } from '../types';
 
 export interface OpResult { doc: Doc; ids: string[] }
 
@@ -87,17 +87,40 @@ function flattenPaths(n: VNode): PathNode[] {
   return (childrenOf(n) ?? []).flatMap(flattenPaths);
 }
 
+const subArea = (sp: SubPath): number => (sp.closed && sp.pts.length > 2 ? signedArea(flattenSub(sp, 1)) : 0);
+
 export function makeCompound(doc: Doc, ids: string[], rule?: FillRule): OpResult {
   const tops = topObjects(doc, ids);
   const nodes = tops.map((id) => findNode(doc, id) as VNode).filter((n) => n && (n.kind === 'path' || n.kind === 'compound' || n.kind === 'group'));
   const paths = nodes.flatMap(flattenPaths);
   if (paths.length < 1) return { doc, ids: [] };
   const bottom = nodes[0];
-  const comp: CompoundNode = { id: newId('c'), kind: 'compound', children: paths.map((p) => ({ ...p, ap: emptyAppearance(), live: undefined })), rule: rule ?? (bottom.kind === 'compound' ? bottom.rule : 'evenodd'), opacity: bottom.opacity, blend: bottom.blend, ap: bottom.ap };
+  const keep = new Set(bottom.kind === 'compound' ? bottom.children.map((c) => c.id) : [paths[0].id]);
+  const ref = paths.filter((p) => keep.has(p.id)).flatMap((p) => p.d).map(subArea).find((a) => Math.abs(a) > 1e-9) ?? 0;
+  const orient = (p: PathNode): PathData => (keep.has(p.id) || !ref ? p.d : p.d.map((sp) => (Math.sign(subArea(sp)) === Math.sign(ref) ? reversePath([sp])[0] : sp)));
+  const own = bottom.kind === 'compound' || bottom.kind === 'path' ? bottom.rule : undefined;
+  const comp: CompoundNode = { id: newId('c'), kind: 'compound', children: paths.map((p) => ({ ...p, d: orient(p), ap: emptyAppearance(), live: undefined })), rule: rule ?? own ?? 'nonzero', opacity: bottom.opacity, blend: bottom.blend, ap: bottom.ap };
   const lastId = tops[tops.length - 1];
   let out = removeNodes(doc, tops.filter((id) => id !== lastId));
   out = updateAt(out, pathOf(out, lastId) as IndexPath, () => comp);
   return { doc: out, ids: [comp.id] };
+}
+
+export function fillRuleTargets(doc: Doc, ids: string[]): string[] {
+  const out = new Set<string>();
+  const visit = (n: VNode): void => { if (n.kind === 'path' || n.kind === 'compound') out.add(n.id); else childrenOf(n)?.forEach(visit); };
+  for (const id of ids) {
+    const n = findNode(doc, id);
+    if (!n) continue;
+    const up = n.kind === 'path' ? parentOf(doc, id) : null;
+    if (up?.kind === 'compound') out.add(up.id); else visit(n);
+  }
+  return [...out];
+}
+
+export function setFillRule(doc: Doc, ids: string[], rule: FillRule): OpResult {
+  const t = fillRuleTargets(doc, ids);
+  return { doc: updateNodes(doc, t, (n) => ((n.kind === 'path' || n.kind === 'compound') && n.rule !== rule ? { ...n, rule } : n)), ids: t };
 }
 
 export function releaseCompound(doc: Doc, ids: string[]): OpResult {

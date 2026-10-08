@@ -1,7 +1,7 @@
-import { selectionBounds, visualBounds } from './bounds';
+import { selectionBounds, strokeReach, visualBounds } from './bounds';
 import { childrenOf } from './doc';
-import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, strokeOutline, threeDFaces, type RasterFx } from './effects';
-import { emptyRect, inflate, isEmptyRect, toPath2D, tracePath, transformRect } from './geometry';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, threeDFaces, type RasterFx } from './effects';
+import { emptyRect, inflate, isEmptyRect, pathBounds, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
 import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './paint';
@@ -10,7 +10,7 @@ import { latticeCopies, patternLattice } from './pattern';
 import { instanceArt } from './symbolism';
 import { runFilter, type FilterFrame } from './filters';
 import { drawText, textEpoch } from './text';
-import { BLEND_MODES, type BlendMode, type Doc, type Gradient, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
+import { BLEND_MODES, type AppearanceItem, type BlendMode, type Doc, type Gradient, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
 
 export interface RenderContext {
   doc: Doc;
@@ -283,12 +283,11 @@ function applyFx(off: CanvasRenderingContext2D, canvas: HTMLCanvasElement | Offs
   off.restore();
 }
 
-function strokeWith(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Path2D, d: PathData, s: StrokeItem, b: Rect, rule: CanvasFillRule): void {
+function strokeWith(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Path2D, d: PathData, s: StrokeItem, b: Rect, rule: CanvasFillRule, solo = false): void {
   const style = paintStyle(ctx, rc, s.paint, b);
   if (!style || s.width <= 0) return;
   ctx.save();
-  ctx.globalAlpha *= s.opacity;
-  ctx.globalCompositeOperation = blendCss(s.blend);
+  if (!solo) { ctx.globalAlpha *= s.opacity; ctx.globalCompositeOperation = blendCss(s.blend); }
   if (s.brush) {
     const g = brushGeometry(rc.doc, d, s);
     if (g) {
@@ -332,19 +331,36 @@ function drawShapeItems(ctx: CanvasRenderingContext2D, rc: RenderContext, n: VNo
     if (!it.visible) continue;
     const id = itemGeometry(d, it.effects);
     const ip = id === d ? path : cachedPath(id);
-    if (it.kind === 'fill') {
-      const p = rc.doc ? resolvePaint(rc.doc, it.paint) : it.paint;
-      if (p.type === 'gradient' && p.gradient.kind === 'freeform') { drawFreeform(ctx, rc, ip, rule, p.gradient, b, it.opacity, it.blend); continue; }
-      const style = paintStyle(ctx, rc, it.paint, b);
-      if (!style) continue;
-      ctx.save();
-      ctx.globalAlpha *= it.opacity;
-      ctx.globalCompositeOperation = blendCss(it.blend);
-      ctx.fillStyle = style;
-      ctx.fill(ip, rule);
-      ctx.restore();
-    } else strokeWith(ctx, rc, ip, id, it, b, rule);
+    const fx = it.effects.length ? rasterEffectsOf(it.effects) : [];
+    if (fx.length) {
+      const box = inflate(pathBounds(id), it.kind === 'stroke' ? strokeReach(it) : 0);
+      if (!isEmptyRect(box)) withLayer(ctx, box, { opacity: it.opacity, blend: it.blend, fx, cache: fx.some((f) => f.kind === 'filter') ? { node: itemKey(id, it), doc: rc.doc, skip: rc.skip } : undefined }, (c) => drawItem(c, rc, it, id, ip, b, rule, true));
+      continue;
+    }
+    drawItem(ctx, rc, it, id, ip, b, rule, false);
   }
+}
+
+const itemKeys = new WeakMap<PathData, WeakMap<AppearanceItem, object>>();
+function itemKey(d: PathData, it: AppearanceItem): object {
+  let m = itemKeys.get(d);
+  if (!m) { m = new WeakMap(); itemKeys.set(d, m); }
+  let k = m.get(it);
+  if (!k) { k = {}; m.set(it, k); }
+  return k;
+}
+
+function drawItem(ctx: CanvasRenderingContext2D, rc: RenderContext, it: AppearanceItem, id: PathData, ip: Path2D, b: Rect, rule: CanvasFillRule, solo: boolean): void {
+  if (it.kind === 'stroke') { strokeWith(ctx, rc, ip, id, it, b, rule, solo); return; }
+  const p = rc.doc ? resolvePaint(rc.doc, it.paint) : it.paint;
+  if (p.type === 'gradient' && p.gradient.kind === 'freeform') { drawFreeform(ctx, rc, ip, rule, p.gradient, b, solo ? 1 : it.opacity, solo ? 'normal' : it.blend); return; }
+  const style = paintStyle(ctx, rc, it.paint, b);
+  if (!style) return;
+  ctx.save();
+  if (!solo) { ctx.globalAlpha *= it.opacity; ctx.globalCompositeOperation = blendCss(it.blend); }
+  ctx.fillStyle = style;
+  ctx.fill(ip, rule);
+  ctx.restore();
 }
 
 function itemGeometry(d: PathData, effects: StrokeItem['effects']): PathData {
@@ -421,6 +437,7 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
       if (n.template && !rc.printing) { ctx.save(); ctx.globalAlpha *= 0.5; for (const c of n.children) renderNode(ctx, c, rc); ctx.restore(); return; }
       if (n.clip && n.children.length > 1) { drawClipped(ctx, n.children, rc); return; }
       for (const c of n.children) renderNode(ctx, c, rc);
+      if (n.ap.items.length && !rc.outline) drawGroupItems(ctx, n, rc);
       return;
     }
     case 'group':
