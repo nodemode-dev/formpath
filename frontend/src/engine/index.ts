@@ -30,6 +30,9 @@ import { envelopeFrame, envelopeMapper, envelopeOutline } from './live';
 import { quadDistort } from './ops/distort';
 import { puppetApply, puppetMesh, PuppetSolver } from './puppet';
 import { dimensionNode, dimensionSpec } from './dimension';
+import { expandedIntertwine, inArea, intertwineFlip as flipIntertwine, intertwineLasso, intertwineNode, intertwineOverlapping } from './intertwine';
+import { expandedShaper, recognizeShape, samplePolyline, shaperFill, shaperNode, shaperRegionAt, shaperRegions, shaperScribble, type ShapeKind } from './shaper';
+import type { IntertwineSpec } from './types';
 import { rectCorners } from './geometry';
 import type { DimensionSpec, EnvelopeNode, EnvelopeOptions, EnvelopeSpec } from './types';
 
@@ -472,6 +475,8 @@ export class Engine extends Emitter<EngineEvents> {
     this.emit('colors', null);
     const lps = ids ? null : this.livePaintSelected();
     if (lps) { if (lps.faces.length) this.livePaintFill(lps.group, lps.faces, paint); return; }
+    const sf = ids ? null : this.shaperFaceSelected();
+    if (sf) { this.shaperFill(sf.group, sf.at, paint); return; }
     if (!this.applyToSelection('Fill', (n) => (n.kind === 'group' && n.livePaint ? { ...n, livePaint: { ...n.livePaint, fills: liveFaces(n).map((f) => ({ at: interiorOf(f), paint })) } } : this.paintDeep(n, (ap) => withFirstFill(ap, paint))), ids)) this.emit('options', null);
   }
   editLiveShape(patch: LivePatch, ids?: string[], name = 'Shape'): boolean {
@@ -1073,6 +1078,95 @@ export class Engine extends Emitter<EngineEvents> {
     const t = this.livePaintTargets(ids);
     return t.length > 0 && this.applyToSelection('Release Live Paint', (n) => (n.kind === 'group' && n.livePaint ? { ...n, livePaint: undefined, name: undefined } : n), t);
   }
+  intertwineTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return n?.kind === 'group' && !!n.intertwine; }) : []; }
+  makeIntertwine(ids?: string[]): string | null {
+    const p = this.current; if (!p) return null;
+    const nodes = topObjects(p.doc, this.targetIds(ids)).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && n.kind !== 'layer');
+    if (nodes.some((n) => n.kind === 'repeat' || (n.kind === 'group' && (n.livePaint || n.intertwine || n.shaper || n.dim)))) { this.notice('Intertwine does not work with Live Paint, Repeat, Shaper, dimension or other Intertwine objects.'); return null; }
+    if (nodes.length < 2 || !intertwineOverlapping(p.doc, nodes)) { this.notice('Select two or more overlapping objects to intertwine.'); return null; }
+    const order = inDocOrder(p.doc, nodes.map((n) => n.id)), last = order[order.length - 1];
+    const g = intertwineNode(order.map((id) => findNode(p.doc, id) as VNode));
+    this.edit('Make Intertwine', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => g), select: [g.id] }));
+    return g.id;
+  }
+  private setIntertwine(name: string, groupId: string, make: (doc: Doc, g: GroupNode) => IntertwineSpec | null): boolean {
+    const doc = this.doc, g = doc ? findNode(doc, groupId) : null;
+    if (!doc || g?.kind !== 'group' || !g.intertwine) return false;
+    let s: IntertwineSpec | null = null;
+    try { s = make(doc, g); } catch (err) { this.notice(`${name}: ${message(err)}`, 'error'); return false; }
+    if (!s) return false;
+    const spec = s;
+    return this.edit(name, (d) => updateNodes(d, [groupId], (x) => (x.kind === 'group' && x.intertwine ? { ...x, intertwine: spec } : x)));
+  }
+  intertwineFlip(groupId: string, at: Pt): boolean { return this.setIntertwine('Intertwine', groupId, (d, g) => flipIntertwine(d, g, at)); }
+  intertwineZone(groupId: string, loop: Pt[]): boolean { return this.setIntertwine('Intertwine Area', groupId, (d, g) => intertwineLasso(d, g, loop)); }
+  releaseIntertwine(ids?: string[]): boolean {
+    const t = this.intertwineTargets(ids);
+    if (!t.length) return false;
+    return this.edit('Release Intertwine', (d) => {
+      let out = d;
+      const sel: string[] = [];
+      for (const id of t) { const n = findNode(out, id); if (n?.kind !== 'group') continue; sel.push(...n.children.map((c) => c.id)); out = updateNodes(out, [id], () => n.children); }
+      return { doc: out, select: sel };
+    });
+  }
+  shaperTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return n?.kind === 'group' && !!n.shaper; }) : []; }
+  shaperSelection: { group: string; at: Pt } | null = null;
+  private shaperFaceSelected(): { group: string; at: Pt } | null {
+    const s = this.shaperSelection, n = s && this.doc ? findNode(this.doc, s.group) : null;
+    return s && this.tool === 'shaper' && n?.kind === 'group' && n.shaper && shaperRegionAt(n, s.at) ? s : null;
+  }
+  addShaperShape(points: Pt[]): { id: string; kind: ShapeKind } | null {
+    const r = recognizeShape(points);
+    if (!r) return null;
+    const line = r.live.kind === 'line';
+    const node = this.makePath(r.d, { live: r.live, ...(line ? { ap: { items: [stroke(this.strokePaint.type === 'none' ? solid(BLACK) : this.strokePaint, this.strokeWidth)], effects: [] } } : {}) });
+    const [id] = this.addNodes(`Shaper ${r.kind[0].toUpperCase()}${r.kind.slice(1)}`, [node]);
+    return id ? { id, kind: r.kind } : null;
+  }
+  shaperScribble(points: Pt[]): { action: 'cut' | 'merge' | 'remove'; id: string | null } | null {
+    const p = this.current; if (!p || points.length < 2) return null;
+    const doc = p.doc, probe = samplePolyline(points, 3);
+    const usable = (n: VNode): boolean => !isLocked(doc, n.id) && isVisible(doc, n.id);
+    let host: GroupNode | null = null;
+    walk(doc.layers, (n) => { if (n.kind === 'group' && n.shaper) { if (usable(n) && probe.some((q) => shaperRegionAt(n, q))) host = n; return false; } if (n.kind === 'group' && (n.intertwine || n.livePaint || n.dim || n.trace)) return false; });
+    const apply = (g: GroupNode, fresh: string[] | null): { action: 'cut' | 'merge' | 'remove'; id: string | null } | null => {
+      const res = shaperScribble(g, points);
+      if (!res) return null;
+      const made: VNode[] = res.kind === 'remove' ? (() => { const kids = g.children.filter((_, i) => i !== res.index); return kids.length >= 2 ? [{ ...g, children: kids }] : kids; })() : [{ ...g, shaper: res.spec }];
+      const keepId = made.length === 1 ? made[0].id : null;
+      const name = res.kind === 'cut' ? 'Shaper Punch' : res.kind === 'merge' ? 'Shaper Merge' : 'Shaper Delete';
+      this.edit(name, (d) => {
+        if (!fresh) return { doc: updateNodes(d, [g.id], () => made), select: made.map((m) => m.id) };
+        const last = fresh[fresh.length - 1];
+        return { doc: updateNodes(removeNodes(d, fresh.filter((id) => id !== last)), [last], () => made), select: made.map((m) => m.id) };
+      });
+      return { action: res.kind, id: keepId };
+    };
+    const found = host as GroupNode | null;
+    if (found) return apply(found, null);
+    const cands: VNode[] = [];
+    walk(doc.layers, (n) => {
+      if (n.kind === 'layer') return;
+      if (n.kind === 'group') return n.clip || n.shaper || n.intertwine || n.livePaint || n.dim || n.trace ? false : undefined;
+      if ((n.kind === 'path' && !n.guide) || n.kind === 'compound') { const g = geometryOf(n); if (g && usable(n) && g.d.some((sp) => sp.pts.length > 2) && probe.some((q) => inArea(g.d.map((sp) => ({ ...sp, closed: true })), q))) cands.push(n); }
+      return n.kind === 'compound' ? false : undefined;
+    });
+    if (!cands.length) return null;
+    if (cands.length === 1) { this.edit('Shaper Delete', (d) => ({ doc: removeNodes(d, [cands[0].id]), select: [] })); return { action: 'remove', id: null }; }
+    const order = inDocOrder(doc, cands.map((n) => n.id));
+    return apply(shaperNode(order.map((id) => findNode(doc, id) as VNode)), order);
+  }
+  shaperFill(groupId: string, at: Pt, paint: Paint): boolean {
+    const g = this.doc ? findNode(this.doc, groupId) : null;
+    if (g?.kind !== 'group' || !g.shaper) return false;
+    const s = shaperFill(g, at, paint);
+    return !!s && this.edit('Shaper Face Fill', (d) => updateNodes(d, [groupId], (x) => (x.kind === 'group' && x.shaper ? { ...x, shaper: s } : x)));
+  }
+  expandShaper(ids?: string[]): boolean {
+    const t = this.shaperTargets(ids);
+    return t.length > 0 && this.applyToSelection('Expand Shaper Group', (n) => (n.kind === 'group' && n.shaper ? expandedShaper(n) : n), t);
+  }
   breakSymbolLink(ids?: string[]): void {
     const p = this.current; if (!p) return;
     this.run('Break Link to Symbol', (d, t) => {
@@ -1141,6 +1235,8 @@ export class Engine extends Emitter<EngineEvents> {
     if (obj && n.kind === 'group' && n.trace) return this.expandNode(doc, { ...n, trace: undefined }, what);
     if (obj && n.kind === 'group' && n.livePaint) return this.expandNode(doc, this.expandedLivePaint(n), what);
     if (obj && n.kind === 'group' && n.dim) return this.expandNode(doc, { ...n, dim: undefined }, what);
+    if (obj && n.kind === 'group' && n.intertwine) return this.expandNode(doc, expandedIntertwine(n), what);
+    if (obj && n.kind === 'group' && n.shaper) return this.expandNode(doc, expandedShaper(n), what);
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
     if (app && n.kind !== 'layer' && has3d(n)) return expandAppearance(doc, n);
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
@@ -1542,6 +1638,8 @@ export class Engine extends Emitter<EngineEvents> {
       if (n.ap.items.length > 2) out.appearance_items = n.ap.items.length;
       if (n.kind === 'group' && n.clip) out.clipping = true;
       if (n.kind === 'group' && n.livePaint) out.live_paint = { faces: liveFaces(n).length, painted: liveFaceNodes(n).length, gap: n.livePaint.gap };
+      if (n.kind === 'group' && n.intertwine) out.intertwine = { zones: n.intertwine.zones.map((z) => ({ top: z.top, bounds: (({ x, y, w, h }) => [r(x), r(y), r(w), r(h)])(pathBounds(z.d)) })) };
+      if (n.kind === 'group' && n.shaper) out.shaper = { faces: shaperRegions(n).length, removed: n.shaper.cuts.length, merges: n.shaper.merges.length };
       if (n.kind === 'group' && n.trace) out.tracing = { view: n.trace.view, mode: n.trace.opts.mode, colors: n.trace.opts.colors, threshold: n.trace.opts.threshold };
       if (n.kind === 'symbol' && n.tint) out.tint = { color: hex(n.tint.color), amount: r(n.tint.amount) };
       const ch = childrenOf(n);

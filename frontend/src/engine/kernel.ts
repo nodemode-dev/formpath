@@ -272,3 +272,19 @@ export function polyKnife(d: PathData, stroke: Pt[], rule: FillRule): PathData[]
   }
   return out.length ? out : [d];
 }
+
+export function interiorPoint(d: PathData): Pt | null {
+  if (!d.length) return null;
+  const q = (toPaper(d, 'nonzero') as paper.PathItem & { interiorPoint: paper.Point | null }).interiorPoint;
+  return q ? { x: q.x, y: q.y } : null;
+}
+
+export function regionParts(d: PathData): PathData[] {
+  if (d.length <= 1) return d.length ? [d] : [];
+  const s = ps(), item = toPaper(d, 'nonzero');
+  const pieces = item instanceof s.CompoundPath ? (item.children as paper.Path[]) : [item as paper.Path];
+  const outers = pieces.filter((p) => p.clockwise === (pieces[0]?.clockwise ?? true));
+  if (outers.length <= 1) return [d];
+  const holes = pieces.filter((p) => !outers.includes(p));
+  return outers.map((o) => [fromPaperPath(o), ...holes.filter((h) => o.contains(h.interiorPoint)).map(fromPaperPath)]);
+}

@@ -114,7 +114,10 @@ export interface DimensionSpec {
   arrow: DimArrow; arrowSize: number; font: string; style: string; size: number; textPos: DimTextPos;
   color: Color; weight: number;
 }
-export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint; dim?: DimensionSpec }
+export interface IntertwineZone { d: PathData; top: string }
+export interface IntertwineSpec { zones: IntertwineZone[] }
+export interface ShaperSpec { cuts: Pt[]; merges: Array<{ pts: Pt[]; src: string }>; fills: Array<{ at: Pt; paint: Paint }> }
+export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint; dim?: DimensionSpec; intertwine?: IntertwineSpec; shaper?: ShaperSpec }
 export interface PathNode extends NodeBase { kind: 'path'; d: PathData; rule: FillRule; live?: LiveShape; guide?: boolean }
 export interface CompoundNode extends NodeBase { kind: 'compound'; children: PathNode[]; rule: FillRule }
 

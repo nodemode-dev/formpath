@@ -3,6 +3,7 @@ import { applyH, homography, isAffineH, mapMeshSpec, mapPathAdaptive, meshFromMa
 import { isEmptyRect } from '../geometry';
 import { envelopeFrame, envelopeMapper } from '../live';
 import { emptyAppearance } from '../paint';
+import { mapShaper } from '../shaper';
 import type { Appearance, Doc, EnvelopeNode, Pt, VNode } from '../types';
 
 export interface DistortOpts { affine: boolean; tol: number; envId: (id: string) => string; bend?: boolean; grid?: number }
@@ -20,7 +21,7 @@ export function distortNode(doc: Doc, n: VNode, f: Mapper, o: DistortOpts): VNod
   switch (n.kind) {
     case 'path': return { ...n, d: mapPathAdaptive(n.d, f, o.tol, !o.bend), live: undefined, bbox: undefined, ap: mapGradients(n.ap, f) };
     case 'compound': return { ...n, bbox: undefined, ap: mapGradients(n.ap, f), children: n.children.map((c) => ({ ...c, d: mapPathAdaptive(c.d, f, o.tol, !o.bend), live: undefined })) };
-    case 'group': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)), ...(n.livePaint ? { livePaint: { ...n.livePaint, fills: n.livePaint.fills.map((x) => ({ ...x, at: f(x.at) })) } } : {}), ...(n.dim ? { dim: { ...n.dim, pts: n.dim.pts.map(f) } } : {}) };
+    case 'group': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)), ...(n.livePaint ? { livePaint: { ...n.livePaint, fills: n.livePaint.fills.map((x) => ({ ...x, at: f(x.at) })) } } : {}), ...(n.dim ? { dim: { ...n.dim, pts: n.dim.pts.map(f) } } : {}), ...(n.intertwine ? { intertwine: { zones: n.intertwine.zones.map((z) => ({ ...z, d: mapPathAdaptive(z.d, f, o.tol, true) })) } } : {}), ...(n.shaper ? { shaper: mapShaper(n.shaper, f) } : {}) };
     case 'blend': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)), spec: { ...n.spec, spine: n.spec.spine ? mapPathAdaptive(n.spec.spine, f, o.tol, true) : null } };
     case 'repeat': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)) };
     case 'mesh': {

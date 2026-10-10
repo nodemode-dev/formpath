@@ -6,6 +6,7 @@ import { liveChildren } from './live';
 import { meshQuads } from './mesh';
 import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './paint';
 import { liveFaceNodes } from './livepaint';
+import { derivedArt } from './shaper';
 import { latticeCopies, patternLattice } from './pattern';
 import { instanceArt } from './symbolism';
 import { runFilter, type FilterFrame } from './filters';
@@ -509,6 +510,7 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
     case 'group':
       if (n.trace && !rc.outline && !rc.printing && n.trace.view !== 'result') { drawTraceView(ctx, n, n.trace.view, rc); return; }
       if (n.livePaint) { if (!rc.outline) for (const f of liveFaceNodes(n)) renderNode(ctx, f, rc); for (const c of n.children) renderNode(ctx, c, rc); return; }
+      if (n.shaper || n.intertwine) { for (const c of derivedArt(n, rc.outline) ?? []) renderNode(ctx, c, rc); return; }
       if (n.clip && n.children.length > 1) { drawClipped(ctx, n, n.children, rc); return; }
       drawKids(ctx, n, n.children, rc);
       if (n.ap.items.length && !rc.outline) drawGroupItems(ctx, n, rc);

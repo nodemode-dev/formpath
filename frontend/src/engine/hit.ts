@@ -3,6 +3,8 @@ import { childrenOf } from './doc';
 import { apply, flatIndex, hasIn, hasOut, inflate, invert, nearestOnPath, pointInPolygon, rectContains, rectsTouch, segments, segBounds, flattenSub } from './geometry';
 import { liveChildren } from './live';
 import { liveFaceNodes } from './livepaint';
+import { intertwineHit } from './intertwine';
+import { shaperRegionAt } from './shaper';
 import { cachedPath, clipGeometry } from './render';
 import { glyphCenter, layoutText, lineRect } from './text';
 import type { Doc, PathData, Pt, Rect, VNode } from './types';
@@ -77,6 +79,15 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
           if (c.isPointInStroke(cachedPath(g.d), p.x, p.y)) return { id: ch[ch.length - 1].id, chain: [...chain, n.id, ch[ch.length - 1].id], part: 'edge' };
           continue;
         }
+      }
+      if (n.kind === 'group' && n.intertwine && !o.outline) {
+        const m = intertwineHit(doc, n, p);
+        const zh = m ? deepHit(doc, [m], p, o, [...chain, n.id]) : null;
+        if (zh) return zh;
+      }
+      if (n.kind === 'group' && n.shaper && !o.outline) {
+        if (!shaperRegionAt(n, p)) continue;
+        return deepHit(doc, ch, p, o, [...chain, n.id]) ?? { id: n.id, chain: [...chain, n.id], part: 'fill' };
       }
       const h = deepHit(doc, ch, p, o, [...chain, n.id]);
       if (h) return h;
