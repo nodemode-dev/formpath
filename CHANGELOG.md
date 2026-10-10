@@ -2,6 +2,25 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.18.0 · 2026-10-10
+
+Type depth. Every type row is Full; parity is 58.5 of 76.
+
+### Added
+
+- Variable fonts: the font menu marks variable faces and filters to them, named instances appear as styles, and the Character panel has a slider for each axis the font declares. Glyphs are drawn at the chosen axes on the canvas, in Create Outlines and in PDF; SVG keeps `font-variation-settings`.
+- Touch Type tool (Shift+T): move, scale and rotate single characters with a box and handles or the arrow keys, with values in the options bar. The text stays live.
+- Hyphenation in line breaking with words longer than, after first, before last, hyphen limit, zone and capitalized words, from a rule-based English syllable splitter.
+- Justification settings: word spacing, letter spacing and glyph scaling as minimum, desired and maximum, and single word justification.
+- Window > Type > Tabs: a ruler with left, centre, right and decimal stops, leaders and Align On.
+- Character rotation, optical kerning measured from glyph outlines, and Bullets and Numbering in the Paragraph panel.
+- `set_text` takes `axes`, `touch`, `rotation`, `kerning`, `hyphenation`, `justification`, `tabs` and `list`.
+
+### Changed
+
+- A tab with no stops advances to a 36 pt grid, so documents with tabs lay out again.
+- The fonts service reports variable faces, and an unknown italic style now finds an italic face of the family.
+
 ## 0.17.0 · 2026-10-10
 
 Honest parity and the first gap release. Parity is now graded on the full 76-row Illustrator 30 baseline: 56 of 76.
