@@ -6,14 +6,16 @@ import { ROTATION_PRESETS } from '../engine/threed';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, mapFn, nearestFn, RECOLOR, recolorDoc } from '../engine/ops/recolor';
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
-import { DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
+import { charStyleAt, DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
+import { DEFAULT_HYPH, DEFAULT_JUST } from '../engine/hyphen';
+import { variationOf } from '../io/fonts';
 import { harmonyColors, variations, type HarmonyRule, type Variation } from '../engine/harmony';
 import { liveParams, type LivePatch } from '../engine/ops/live-shapes';
 import { transformNode } from '../engine/transform';
 import { interiorOf, liveFaceNodes, liveFaces } from '../engine/livepaint';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
 import { envelopeOptions, meshHandles } from '../engine/envelope';
-import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type Units, type VNode } from '../engine';
+import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type ParaStyle, type Justification, type TabStop, type ListStyle, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
 import { api } from '../io/api';
 
@@ -738,12 +740,58 @@ export class AgentBridge {
           const bad = ([['orientation', ['horizontal', 'vertical']], ['path_effect', ['rainbow', 'skew', 'ribbon', 'stair', 'gravity']], ['path_align', ['baseline', 'ascender', 'descender', 'center']], ['first_baseline', ['ascent', 'cap', 'leading', 'x', 'em', 'fixed', 'legacy']], ['area_flow', ['rows', 'columns']]] as const).find(([k, ok]) => has(k) && !(ok as readonly string[]).includes(str(k)));
           if (bad) return fail(`${bad[0]} is one of ${bad[1].join(', ')}.`);
           if (has('text')) e.setTextSpans(n.id, [{ text: str('text'), style: n.spans[0]?.style ?? DEFAULT_CHAR }], 'Edit Text');
-          const patch: Partial<typeof DEFAULT_CHAR> = { ...(has('font') ? { font: str('font') } : {}), ...(has('style') ? { style: str('style') } : {}), ...(has('size') ? { size: Math.max(0.1, num('size', 12)) } : {}), ...(has('color') ? { fill: this.paint(a.color, 'color') } : {}), ...(has('leading') ? { leading: num('leading', 14) } : {}), ...(has('tracking') ? { tracking: num('tracking', 0) } : {}), ...(Array.isArray(a.features) ? { features: a.features.filter((f): f is string => typeof f === 'string' && /^[a-z0-9]{4}$/.test(f)) } : {}), ...(has('caps') ? { caps: str('caps') as 'none' } : {}) };
+          if (has('kerning') && !['auto', 'optical', 'none'].includes(str('kerning'))) return fail('kerning is auto, optical or none.');
+          const notes: string[] = [];
+          let axes: Record<string, number> | undefined | null = null;
+          if (a.axes && typeof a.axes === 'object' && !Array.isArray(a.axes)) {
+            const st0 = n.spans[0]?.style ?? DEFAULT_CHAR, fam = has('font') ? str('font') : st0.font, sty = has('style') ? str('style') : st0.style;
+            const info = await variationOf(fam, sty), raw = Object.entries(a.axes as Record<string, unknown>).filter(([k, v]) => /^[A-Za-z0-9 ]{1,4}$/.test(k) && typeof v === 'number' && Number.isFinite(v)) as Array<[string, number]>;
+            if (!info) notes.push(`${fam} ${sty} is not a variable font, so the axes do nothing until a variable font is set.`);
+            const kept = raw.map(([k, v]) => { const ax = info?.axes.find((x) => x.tag === k); if (info && !ax) notes.push(`${fam} has no ${k} axis (it has ${info.axes.map((x) => x.tag).join(', ')}).`); return ax ? [k, Math.max(ax.min, Math.min(ax.max, v))] as const : info ? null : [k, v] as const; }).filter((x): x is readonly [string, number] => !!x);
+            axes = kept.length ? Object.fromEntries(kept) : undefined;
+          }
+          const patch: Partial<typeof DEFAULT_CHAR> = { ...(has('font') ? { font: str('font') } : {}), ...(has('style') ? { style: str('style') } : {}), ...(has('size') ? { size: Math.max(0.1, num('size', 12)) } : {}), ...(has('color') ? { fill: this.paint(a.color, 'color') } : {}), ...(has('leading') ? { leading: num('leading', 14) } : {}), ...(has('tracking') ? { tracking: num('tracking', 0) } : {}), ...(Array.isArray(a.features) ? { features: a.features.filter((f): f is string => typeof f === 'string' && /^[a-z0-9]{4}$/.test(f)) } : {}), ...(has('caps') ? { caps: str('caps') as 'none' } : {}), ...(has('kerning') ? { kerning: str('kerning') as 'auto' } : {}), ...(axes !== null ? { axes } : {}), ...(has('rotation') ? { rotate: num('rotation', 0) || undefined } : {}) };
           if (Object.keys(patch).length) {
             const cur = e.nodeById(n.id) as TextNode, range: [number, number] | undefined = has('start') || has('end') ? [Math.max(0, Math.round(num('start', 0))), Math.round(num('end', plainText(cur).length))] : undefined;
             e.edit('Character', (d) => updateNodes(d, [n.id], (x) => (x.kind === 'text' ? { ...x, spans: range ? styleSpans(x.spans, range[0], range[1], patch) : x.spans.map((s) => ({ ...s, style: { ...s.style, ...patch } })) } : x)));
           }
-          if (has('align')) e.setParaStyle({ align: str('align') as 'left' }, [n.id]);
+          const pp: Partial<ParaStyle> = {}, para0 = (e.nodeById(n.id) as TextNode).para;
+          if (has('align')) pp.align = str('align') as ParaStyle['align'];
+          if (a.hyphenation && typeof a.hyphenation === 'object') {
+            const h = a.hyphenation as Record<string, unknown>, cur = { ...DEFAULT_HYPH, ...(para0.hyph ?? {}) }, iv = (k: string, d: number): number => (typeof h[k] === 'number' && Number.isFinite(h[k]) ? Math.round(h[k] as number) : d);
+            pp.hyph = { minWord: iv('min_word', cur.minWord), after: iv('after_first', cur.after), before: iv('before_last', cur.before), limit: iv('limit', cur.limit), zone: typeof h.zone === 'number' ? Math.max(0, h.zone) : cur.zone, caps: typeof h.capitalized === 'boolean' ? h.capitalized : cur.caps };
+            pp.hyphenate = true;
+          }
+          if (typeof a.hyphenate === 'boolean') pp.hyphenate = a.hyphenate;
+          if (a.justification && typeof a.justification === 'object') {
+            const jv = a.justification as Record<string, unknown>, cur = { ...DEFAULT_JUST, ...(para0.just ?? {}) };
+            const trio = (k: string, d: [number, number, number]): [number, number, number] => { const v = jv[k]; if (!Array.isArray(v) || v.length !== 3 || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) return d; const [lo, de, hi] = v as number[]; const m = Math.max(lo, Math.min(hi, de)); return [Math.min(lo, m), m, Math.max(hi, m)]; };
+            const [wordMin, wordDes, wordMax] = trio('word_spacing', [cur.wordMin, cur.wordDes, cur.wordMax]), [letterMin, letterDes, letterMax] = trio('letter_spacing', [cur.letterMin, cur.letterDes, cur.letterMax]), [glyphMin, glyphDes, glyphMax] = trio('glyph_scaling', [cur.glyphMin, cur.glyphDes, cur.glyphMax]);
+            const single = typeof jv.single_word === 'string' && ['justify', 'left', 'center', 'right'].includes(jv.single_word) ? jv.single_word as Justification['single'] : cur.single;
+            pp.just = { wordMin, wordDes, wordMax, letterMin, letterDes, letterMax, glyphMin, glyphDes, glyphMax: Math.max(glyphMax, 1), single };
+          }
+          if (Array.isArray(a.tabs)) {
+            const tabs: TabStop[] = [];
+            for (const t of a.tabs as Array<Record<string, unknown>>) {
+              if (!t || typeof t.position !== 'number' || !Number.isFinite(t.position)) return fail('Each tab needs a position in points.');
+              const al = typeof t.align === 'string' ? t.align : 'left';
+              if (!['left', 'center', 'right', 'decimal'].includes(al)) return fail('A tab aligns left, center, right or decimal.');
+              tabs.push({ pos: Math.max(0, t.position), align: al as TabStop['align'], ...(typeof t.leader === 'string' && t.leader ? { leader: t.leader.slice(0, 4) } : {}), ...(typeof t.align_on === 'string' && t.align_on ? { char: t.align_on.slice(0, 1) } : {}) });
+            }
+            pp.tabs = tabs.length ? tabs : undefined;
+          }
+          if (a.list && typeof a.list === 'object') {
+            const l = a.list as Record<string, unknown>, kind = l.type === 'bullet' || l.type === 'number' ? l.type : l.type === 'none' ? null : para0.list?.kind ?? 'bullet';
+            const fmt = typeof l.format === 'string' && ['1', '01', 'a', 'A', 'i', 'I'].includes(l.format) ? l.format as ListStyle['format'] : para0.list?.format ?? '1';
+            pp.list = kind ? { kind, bullet: typeof l.bullet === 'string' && l.bullet ? l.bullet : para0.list?.bullet ?? '•', format: fmt, start: typeof l.start === 'number' ? Math.max(0, Math.round(l.start)) : para0.list?.start ?? 1, sep: typeof l.separator === 'string' ? l.separator : para0.list?.sep ?? '.' } : undefined;
+          }
+          if (Object.keys(pp).length) e.setParaStyle(pp, [n.id]);
+          if (a.touch && typeof a.touch === 'object') {
+            const t = a.touch as Record<string, unknown>, cur = e.nodeById(n.id) as TextNode, len = plainText(cur).length, idx = typeof t.index === 'number' ? Math.round(t.index) : -1;
+            if (idx < 0 || idx >= len) return fail(`touch.index must be 0..${len - 1}, a character's position in the text.`);
+            const was = { x: 0, y: 0, sx: 100, sy: 100, r: 0, ...(charStyleAt(cur.spans, idx).touch ?? {}) }, nv = (k: string, d: number): number => (typeof t[k] === 'number' && Number.isFinite(t[k]) ? t[k] as number : d);
+            e.setCharTouch(n.id, idx, t.reset === true ? null : { x: nv('x', was.x), y: nv('y', was.y), sx: nv('h_scale', was.sx), sy: nv('v_scale', was.sy), r: nv('rotate', was.r) });
+          }
           if (typeof a.upright_latin === 'boolean') {
             const cur = e.nodeById(n.id) as TextNode, range: [number, number] | undefined = has('start') || has('end') ? [Math.max(0, Math.round(num('start', 0))), Math.round(num('end', plainText(cur).length))] : undefined, up = { upright: a.upright_latin ? true : undefined };
             e.edit('Character', (d) => updateNodes(d, [n.id], (x) => (x.kind === 'text' ? { ...x, spans: range ? styleSpans(x.spans, range[0], range[1], up) : x.spans.map((s) => ({ ...s, style: { ...s.style, ...up } })) } : x)));
@@ -769,7 +817,7 @@ export class AgentBridge {
             node.area = area;
           }
           if (Object.keys(node).length) e.setTextNode(n.id, node, has('orientation') && Object.keys(node).length === 1 ? 'Type Orientation' : cur.mode === 'path' ? 'Type on a Path Options' : cur.mode === 'area' ? 'Area Type Options' : 'Type Options');
-          return text('Changed the type.', this.describe(this.node(n.id)));
+          return text(['Changed the type.', ...notes].join(' '), this.describe(this.node(n.id)));
         }
         case 'select_similar': {
           const ref = has('id') ? this.node(a.id).id : e.selectedIds()[0];

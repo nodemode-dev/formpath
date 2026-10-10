@@ -734,7 +734,7 @@ Artboards: add one, change one (name, x, y, width, height), delete one, fit one 
 
 ## set_text
 
-Changes a type object: its words, and its font, style, size, colour, leading, tracking, alignment, case and OpenType features, for all of it or the characters from start to end; its orientation (horizontal or vertical); type on a path's effect, flip, alignment, spacing and start and end; and area type's rows, columns, gutters, inset and first baseline.
+Changes a type object: its words, and its font, style, size, colour, leading, tracking, kerning, alignment, case, OpenType features, variable font axes and character rotation, for all of it or the characters from start to end; one character's Touch Type transform; paragraph hyphenation, justification, tab stops and bullets or numbering; its orientation (horizontal or vertical); type on a path's effect, flip, alignment, spacing and start and end; and area type's rows, columns, gutters, inset and first baseline.
 
 - `id`: string; required; An object id from get_document.
 - `text`: string
@@ -744,7 +744,7 @@ Changes a type object: its words, and its font, style, size, colour, leading, tr
 - `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
 - `leading`: number
 - `tracking`: number
-- `align`: string (left | center | right | justify)
+- `align`: string (left | center | right | justify | justify_center | justify_right | justify_all)
 - `start`: integer
 - `end`: integer
 - `caps`: string (none | all | small)
@@ -765,6 +765,15 @@ Changes a type object: its words, and its font, style, size, colour, leading, tr
 - `first_baseline`: string (ascent | cap | leading | x | em | fixed | legacy); Area type: what sets the first baseline's distance from the top: ascent, cap height, leading, x height, em box height, fixed (the min value), or legacy (the font's ascender).
 - `first_baseline_min`: number; Area type: the least distance in points from the top to the first baseline (the distance itself for fixed).
 - `area_flow`: string (rows | columns); Area type: fill row by row or column by column.
+- `kerning`: string (auto | optical | none); Kerning: auto uses the font's kerning pairs, optical spaces each pair from the glyph outlines, none turns kerning off.
+- `axes`: object; Variable font axis values by tag for the characters from start to end, for example {"wght": 650, "wdth": 85, "slnt": -8}. Values clamp to the font's ranges; axes the font lacks do nothing; {} returns to the font's default instance. find_font lists the fonts in use.
+- `rotation`: number; Character rotation in degrees counter-clockwise, each character turned about its own centre (for the characters from start to end, or all).
+- `touch`: object; Touch Type: transform one character on its own while the type stays editable. index is the character's position in the text; x and y move it in points (y down); h_scale and v_scale are percent; rotate is degrees counter-clockwise about its centre; reset true clears it.
+- `hyphenate`: boolean; Hyphenate words at line ends in area type (English rules).
+- `hyphenation`: object; Hyphenation settings: min_word (words longer than, letters, default 6), after_first and before_last (letters, default 2), limit (hyphens in a row, 0 for no limit, default 2), zone (points, unjustified type only, default 0), capitalized (hyphenate capitalized words, default true). Setting this turns hyphenation on unless hyphenate is false.
+- `justification`: object; Justification settings used by justified alignments: word_spacing, letter_spacing and glyph_scaling as [min, desired, max] percentages (defaults [80, 100, 133], [0, 0, 0], [100, 100, 100]; desired values apply to every alignment), and single_word for a line holding one word.
+- `tabs`: array; Tab stops, replacing the current ones ([] clears them; without stops tabs advance to every 36 points). position is points from the left of the text frame (from the type's origin for point type); align is left, center, right or decimal; leader is up to four characters repeated across the gap; align_on is a decimal tab's character (default '.').
+- `list`: object; Bullets and numbering for every paragraph: type none, bullet or number; bullet is the character (default •); format is 1, 01, a, A, i or I; start is the first number; separator follows the number (default '.'). Pair with a negative first-line indent for a hanging list.
 
 ## text_flow
 
