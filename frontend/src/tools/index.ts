@@ -8,6 +8,7 @@ import './dimension';
 import './paint';
 import './shaper';
 import './symbolism';
+import './graph';
 import './type';
 import './view';
 

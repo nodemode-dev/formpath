@@ -38,6 +38,7 @@ export const CURSORS = {
   shaper: svg('<path d="M3 21 L4.5 16 L14 6.5 L17.5 10 L8 19.5 Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/><rect x="15" y="1.5" width="5" height="5" fill="#fff" stroke="#000" stroke-width="1.1"/><circle cx="20" cy="15" r="2.6" fill="#fff" stroke="#000" stroke-width="1.1"/>', 3, 21, 'crosshair'),
   intertwine: svg(`<path d="${ARROW}" fill="#000" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><circle cx="16" cy="17" r="3" fill="none" stroke="#000" stroke-width="2.6"/><circle cx="20" cy="17" r="3" fill="none" stroke="#000" stroke-width="2.6"/><circle cx="16" cy="17" r="3" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M17 14.2 A3 3 0 1 1 17 19.8" fill="none" stroke="#fff" stroke-width="1.1"/>`, 4, 2),
   cross: 'crosshair',
+  graph: svg('<path d="M7 1 v12 M1 7 h12" stroke="#000" stroke-width="3"/><path d="M7 1 v12 M1 7 h12" stroke="#fff" stroke-width="1.2"/><path d="M13.5 22.5 h9 M14.5 22.5 v-5 h2 v5 M18 22.5 v-8 h2 v8" fill="#fff" stroke="#000" stroke-width="1.1" stroke-linejoin="round"/>', 7, 7, 'crosshair'),
   loadedText: svg('<rect x="4" y="5" width="13" height="15" fill="#fff" stroke="#000" stroke-width="1.2"/><path d="M6.5 9 h8 M6.5 12 h8 M6.5 15 h5" stroke="#000" stroke-width="1.4"/><path d="M1 1 v6 M1 1 h6" stroke="#000" stroke-width="1.6"/>', 1, 1, 'crosshair'),
   type: 'text',
   typeVertical: 'vertical-text',

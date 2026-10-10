@@ -63,6 +63,7 @@ export function dragTransform(ctx: ToolContext, S: Drag, p: ToolPointer): void {
     const r = transformNodes(origin, S.ids, translate(dx, dy), p.alt, xf(e));
     S.copyIds = p.alt ? r.ids : null;
     e.dragTo(r.doc);
+    e.noteDragTransform(translate(dx, dy), p.alt);
     S.info = [`dX: ${unitLabel(e, dx)}`, `dY: ${unitLabel(e, dy)}`];
   } else if (S.mode === 'scale') {
     const a = S.frame?.angle ?? 0, r = S.frame?.local ?? b, toLocal = rotateAbout(-a, 0, 0), toDoc = rotateAbout(a, 0, 0);
@@ -77,13 +78,16 @@ export function dragTransform(ctx: ToolContext, S: Drag, p: ToolPointer): void {
     }
     const lim = (s: number): number => (Math.abs(s) < 1e-3 ? (s < 0 ? -1e-3 : 1e-3) : s);
     sx = lim(sx); sy = lim(sy);
-    e.dragTo(transformNodes(origin, S.ids, mul(toDoc, mul(scaleAbout(sx, sy, o.x, o.y), toLocal)), false, xf(e)).doc);
+    const sm = mul(toDoc, mul(scaleAbout(sx, sy, o.x, o.y), toLocal));
+    e.dragTo(transformNodes(origin, S.ids, sm, false, xf(e)).doc);
+    e.noteDragTransform(sm, false);
     S.info = [`W: ${unitLabel(e, r.w * Math.abs(sx))}`, `H: ${unitLabel(e, r.h * Math.abs(sy))}`];
   } else if (S.mode === 'rotate') {
     const fc = S.frame?.corners, c = fc ? { x: (fc[0].x + fc[2].x) / 2, y: (fc[0].y + fc[2].y) / 2 } : { x: b.x + b.w / 2, y: b.y + b.h / 2 };
     let deg = ((Math.atan2(p.doc.y - c.y, p.doc.x - c.x) - Math.atan2(S.start.y - c.y, S.start.x - c.x)) * 180) / Math.PI;
     if (p.shift) deg = Math.round(deg / 45) * 45;
     e.dragTo(transformNodes(origin, S.ids, rotateAbout(deg, c.x, c.y), p.alt, xf(e)).doc);
+    e.noteDragTransform(rotateAbout(deg, c.x, c.y), p.alt);
     S.info = [`${fmt((((-deg % 360) + 540) % 360) - 180)}°`];
   }
 }

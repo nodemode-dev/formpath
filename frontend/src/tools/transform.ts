@@ -69,6 +69,7 @@ function xformTool(id: string, label: string, iconName: string, group: string, o
       T.info = [r.info];
       e.dragTo(res.doc);
       e.lastTransform = { m: r.m, copy: p.alt };
+      e.noteDragTransform(r.m, p.alt);
     },
     up: (ctx, p) => {
       const e = ctx.engine;
