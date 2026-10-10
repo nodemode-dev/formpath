@@ -480,18 +480,50 @@ ask it questions.
   Pattern Fills and Anti-Alias for images. Release gives back the art and the envelope shape; Expand makes plain
   paths (type becomes outlines, images keep their distortion). SVG and PDF export draw distorted images as pixels
   at the document's raster resolution.
-- Symbols: Object > Symbol > New Symbol stores art in the Symbols panel; instances update when the symbol changes;
-  Break Link makes an instance ordinary art. The Symbol Sprayer (Shift+S) sprays instances into a symbol set, and
+- Symbols: Object > Symbol > New Symbol (F8) stores art in the Symbols panel; instances update when the symbol changes;
+  Break Link makes an instance ordinary art. The New Symbol dialog sets the type (Dynamic or Static), the
+  registration point (one of nine points of the art's bounds; instances are placed and transformed about it) and
+  9-slice scaling guides. Double-click an instance with the Selection tool, or a symbol in the panel, for symbol
+  editing mode: the symbol's art is shown unscaled at the instance with a crosshair at the registration point, every
+  other instance follows each change as you make it, and Exit (or Escape, or a double-click outside) saves it as one
+  undo step; Cancel throws the changes away. With 9-slice on, drag the dashed guides in editing mode: a scaled
+  instance keeps the corners outside the guides at their own size and stretches only the middle. On a dynamic
+  symbol, click a part of an instance with the Direct Selection tool and change its fill, stroke or opacity: only
+  that instance changes (Reset Symbol Overrides clears it). The panel menu also has Duplicate Symbol, Redefine
+  Symbol (the selection becomes the symbol's art), Replace Symbol (the selected instances use the picked symbol) and
+  Symbol Options. Window > Symbol Libraries opens Arrows, Web Icons, Nature, Shapes and Flowchart (click a symbol to
+  add it, double-click to place it), Save Symbols writes the document's symbols as a library (it also appears under
+  User Defined) and Open Symbol Library reads one from a .fpth. The Symbol Sprayer (Shift+S) sprays instances into a symbol set, and
   the symbolism tools in its flyout change the instances under the brush: Shifter pushes them (Shift-click and
   Shift-Alt-click restack), Scruncher pulls them together, Sizer grows them, Spinner turns them toward the drag,
   Stainer tints them with the fill colour, Screener fades them and Styler applies the graphic style chosen in the
   options bar. Alt reverses each one. Diameter, intensity and the method (user defined, average, random) are in the
   options bar; [ and ] change the diameter.
 - Image Trace: Object > Image Trace > Make traces a placed image into a tracing object that keeps the image, so the
-  Image Trace panel can change the preset, mode, colours or threshold, paths, ignore white and smoothing and trace
-  it again (with Preview on, as you change them). View switches between the result, the result with outlines,
-  outlines, outlines over the image and the image. Expand makes ordinary paths; Release brings the image back.
-  Embed turns a linked image into one stored in the document.
+  Image Trace panel can change the preset, mode, palette and colours or threshold and trace it again (with Preview on,
+  as you change them). The image is traced at its own resolution up to 2000 pixels on its longest side, in the
+  background, so the window stays responsive. Palette: Automatic picks the number of colours from the image,
+  Limited uses the Colors slider, Full Tone keeps many tones for photos, Document Library uses the document's colour
+  swatches. Advanced: Paths (how closely the outline follows the pixels), Corners (more keeps sharper corners),
+  Noise (areas smaller than this many pixels merge into their neighbours), Method (Abutting cuts each colour out of
+  the others; Overlapping stacks them so there are no gaps), Create Fills and Strokes (black and white mode: lines
+  up to the Stroke width are traced along their centre as stroked paths, wider areas stay fills), Ignore White,
+  Smooth Curves and Snap Curves to Lines (nearly straight curves become lines, lines near 0 or 90 degrees snap
+  straight). The Line Art, Technical Drawing and Outline presets trace strokes. View switches between the result,
+  the result with outlines, outlines, outlines over the image and the image. Expand makes ordinary paths; Release
+  brings the image back.
+- Links: File > Place Linked keeps a placed image linked to its file instead of copying it in. With the engine
+  service (the desktop app or ./formpth boot) you choose the file by its path, and formpth stores the path, size and
+  time; in a browser without the engine, Chromium browsers link through a file you pick (the browser asks once for
+  permission), and other browsers can only embed, which the Links panel says. The Links panel lists every placed
+  image as Linked, Modified (the file changed on disk: checked when the window regains focus and every few seconds)
+  or Missing, or Embedded. Update Link reads the file again, Relink points the image at another file, Relink All
+  Instances changes every image sharing the link, Relink Missing Links from Folder finds missing files by name in a
+  folder, Go To Link selects and shows it, Embed copies it into the document, Unembed writes an embedded image to a
+  file in a "Links" folder next to the project and links it, and Link Info shows the path, size, date, pixels and
+  effective resolution. Each is one undo step. A .fpth keeps the links with a small cached preview, so a missing
+  file still shows (turn Save Previews of Linked Images off in the panel menu to keep only the link); opening the
+  project reads each unchanged linked file again. Exports always embed the current pixels.
 
 ## Variables and data merge
 
@@ -536,13 +568,14 @@ ask it questions.
 ## Saving and exporting
 
 - .fpth projects keep everything editable: artboards, layers, live shapes, effects, symbols, swatches, styles,
-  brushes and the images inside.
+  brushes and the images inside (linked images keep their link and a cached preview).
 - File > Export > Export As writes SVG, PDF, PNG, JPEG or WebP of the active artboard, every artboard, or the
   selection. Export for Screens writes chosen artboards at several scales and formats in one ZIP.
 - Asset Export: File > Export > Collect for Export as Single Asset adds the selection as one asset, as Multiple
   Assets adds each selected object. The Asset Export panel (Window) shows them; double-click to rename, set scales,
   suffixes and formats (PNG, JPEG, WebP, SVG, PDF), and Export writes each asset cropped to its art in one ZIP.
-- SVG export keeps gradients, patterns, clipping, masks, symbols (as use) and type (as text or outlined), and can embed
+- SVG export keeps gradients, patterns, clipping, masks, symbols (as symbol and use; an instance with overrides or
+  9-slice scaling gets its own symbol) and type (as text or outlined), and can embed
   formpth's editing data so formpth reopens it fully editable. SVG import reads paths, shapes, transforms, CSS
   classes, gradients, clip paths, use and symbol, text and embedded images, with top-level groups becoming layers.
 - PDF export writes every artboard as a page with real vector paths, gradients as smooth shadings, transparency and

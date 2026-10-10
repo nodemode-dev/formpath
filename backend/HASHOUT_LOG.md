@@ -177,6 +177,13 @@ One tool covers the perspective grid with an action: get, grid (preset or type p
 
 Action sets are .fpaction JSON files in the data folder's Actions directory, one per set named after it (no slashes or control characters, 16 MiB cap). Batch and data merge need to list a folder, read the files in it and write results to another; those endpoints read and write any absolute path, so every one is a POST that refuses requests without formpth's own Origin (mcp._app_origin, the same check that guards the agent bridge): a web page cannot call them, and a page that sends no Origin is refused too. Reads are limited to the formats formpth opens plus CSV, TSV, text, JSON, XML and .fpaction; writes to the formats it exports plus text, CSV, JSON, .fpaction and zip, with the file name reduced to a plain name and the destination folder created when missing. 512 MiB caps both directions.
 
+### app/routers/batch.py · stat, read headers and folders for linked images
+- refers-to: app/routers/batch.py :: files_stat, files_read, files_list; app/services/project_format.py :: _walk; app/routers/mcp.py :: place_image, links, _run
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+Linked images need the size and modified time of their files: files_stat answers up to 2000 paths in one POST (missing or non-file paths answer exists false, never an error) so the window can poll every few seconds cheaply, and files_read now sends X-Formpth-Size, X-Formpth-Mtime and X-Formpth-Path with the bytes so the values match the pixels read. The name and path headers are percent-encoded because response headers are Latin-1 and a file name may not be. files_list takes dirs true to also return the subfolder names and the parent folder, for the window's file chooser; without it the answer is as before. The same Origin rule guards all three. The project validator accepts an image node whose asset is absent when it carries linked (the person chose not to keep previews of linked images). place_image with link true hands the window the path instead of the bytes, and the links tool runs in the window, which reads files through these endpoints.
+
 ## app/routers/projects.py
 
 ### app/routers/projects.py · save conflicts

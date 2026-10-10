@@ -44,6 +44,8 @@ frontend/
     │   ├── hyphen.ts           English hyphenation points, hyphenation and justification defaults
     │   ├── harmony.ts          colour harmony rules and variations
     │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
+    │   ├── symbols.ts          dynamic parts, 9-slice warp, registration, symbol editing session
+    │   ├── symbol-libraries.ts built-in symbol libraries, library from a document
     │   ├── pattern.ts          tile lattices and the pattern editing session
     │   ├── style-libraries.ts  built-in graphic style libraries
     │   ├── swatch-libraries.ts built-in swatch libraries, library from a document
@@ -95,7 +97,10 @@ frontend/
     │   ├── svg.ts              SVG export and import
     │   ├── pdf.ts              PDF writer and native reader
     │   ├── raster.ts           region rendering, PNG, JPEG, WebP, screens zip
-    │   ├── trace.ts            image trace
+    │   ├── trace.ts            image trace: options, presets, worker run, nodes
+    │   ├── trace-core.ts       image trace pixels to paths, centreline strokes (no DOM)
+    │   ├── trace.worker.ts     runs trace-core off the main thread
+    │   ├── links.ts            linked image states, file handles, re-reading files
     │   ├── fonts.ts            bundled and installed fonts, outlines
     │   ├── recovery.ts         crash recovery store
     │   └── zip.ts              zip read and write
@@ -135,6 +140,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/hyphen.ts
 - src/engine/flow.ts
 - src/engine/symbolism.ts
+- src/engine/symbols.ts
+- src/engine/symbol-libraries.ts
 - src/engine/livepaint.ts
 - src/engine/threed.ts
 - src/engine/pattern.ts
@@ -179,6 +186,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/raster.ts
 - src/io/fonts.ts
 - src/io/trace.ts
+- src/io/trace-core.ts
+- src/io/links.ts
 - src/plugins/host.ts
 - src/ui/stage.ts
 - src/ui/text-editor.ts
@@ -204,6 +213,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/text-styles.ts
 - src/ui/panels/asset-export.ts
 - src/ui/panels/image-trace.ts
+- src/ui/file-dialog.ts
 - src/ui/panels/pattern-options.ts
 - src/ui/panels/preview-edit.ts
 - src/ui/panels/effect-gallery.ts
@@ -824,6 +834,38 @@ reflow runs perspSync after the dimension and graph refresh, so every edit, drag
 
 A stained instance carries `tint` (a colour and an amount) and every reader draws `instanceArt`, the symbol's art with each paint mixed toward the tint by the amount, cached per art object and tint so a set of a hundred stained instances builds a handful of recoloured copies. Mixing the paints instead of compositing a coloured layer over the instance keeps the result identical in the canvas, SVG (one def per distinct tint) and PDF, and Break Link and Expand bake it with `bakedInstance`, which also carries the instance's opacity, blend and effects onto the art so screened and styled instances look the same after breaking. Every operation weights an instance by where its centre sits in the brush, one minus the square of the distance over the radius, so the edge of the brush barely moves anything; with no point (the agent tool) every instance in the set gets full weight. Intensity scales each step. Average pulls a value toward the mean of the instances under the brush, Random perturbs it, User Defined pushes it one way. The Styler copies a graphic style's effects, opacity and blend onto instances because fills and strokes have no geometry of their own on an instance to paint; Alt clears them.
 
+### src/engine/symbolism.ts · instance art in three cached stages
+- refers-to: src/engine/symbolism.ts :: partArt, instanceArt, withPartEdit; src/engine/symbols.ts :: partsApplied, slicedArt; src/engine/bounds.ts :: computeGeom; src/engine/hit.ts :: symbolPartHit
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+`instanceArt` is the one function every reader (canvas, hit testing, bounds, SVG, PDF, live envelopes, Break Link) calls, so dynamic overrides and 9-slice scaling went into it rather than into each writer. It builds the art in three stages, each cached on the object it starts from: the dynamic parts (cached per instance `parts` object and checked against the symbol's art so a redefined symbol rebuilds), the tint (per art object and tint), then the 9-slice warp (per art, guides and the instance's two axis scales to four places). An unscaled instance or one with no guides skips the warp, so an ordinary symbol costs what it did. The 9-slice warp is applied in the symbol's own space and divided by the instance scale, so the renderers still apply `xf` unchanged and the corners come out at their own size. Bounds now measure `instanceArt` (not the symbol's art) so a stretched 9-slice instance has the right box.
+
+## src/engine/symbols.ts
+
+### src/engine/symbols.ts · symbol editing mode as a squashed session
+- refers-to: src/engine/symbols.ts :: SymbolSession, sessionStart, sessionArt; src/engine/index.ts :: enterSymbolEdit, exitSymbolEdit, syncSymbolEdit, pruneSelection, isolate; src/engine/project.ts :: Project.symbolEdit; src/ui/stage.ts :: drawScene isolation block
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+Editing a symbol follows pattern editing: the art goes into the document as an isolated group (at the instance's registration point, unscaled, as Illustrator shows it), the instance it came from is hidden, and Exit squashes every step since the history mark into one "Edit Symbol" step. Cancel rewinds to the mark. Every edit and drag preview inside the session runs `syncSymbolEdit`, which writes the group's art back into the symbol definition in the same document state, so all other instances follow live and undo inside the session stays consistent. The copies in the group get fresh ids (`sessionStart` keeps a map) because the project validator rejects an id that appears both in a layer and in a symbol's art; `sessionArt` maps them back so a dynamic instance's per-part overrides, keyed by art ids, survive editing. A plain wrapper group is unwrapped on entry and restored on exit so the Layers panel shows the parts. Undoing past the entry removes the group and `pruneSelection` ends the session. The registration point is the origin of the symbol's art space: New Symbol chooses one of nine points of the art's bounds, and the crosshair drawn in editing mode is that origin.
+
+### src/engine/symbols.ts · 9-slice warp
+- refers-to: src/engine/symbols.ts :: slicedArt, axis, warp, defaultSlice
+- kind: explainer
+- logged: v0.22.0 · 2026-10-10
+
+Each axis maps piecewise linearly: outside the guides a point keeps its distance from the art's edge, between them it stretches to fill the scaled width; when the instance is smaller than the two corners together, the corners shrink in proportion and the middle collapses. Paths are mapped through `mapPathAdaptive`, which subdivides a curve that crosses a guide; type, images and nested instances move with their origin and keep their size. Strokes still scale with the instance transform, as on any instance.
+
+## src/engine/symbol-libraries.ts
+
+### src/engine/symbol-libraries.ts · SYMBOL_LIBRARIES
+- refers-to: src/engine/symbol-libraries.ts :: SYMBOL_LIBRARIES, symbolLibrary, symbolLibraryFromDoc; src/engine/index.ts :: addLibrarySymbols; src/ui/panels/symbols.ts :: SymbolLibraryPanel; src/ui/panels/libraries.ts :: userSymbolLibraries
+- kind: explainer
+- logged: v0.22.0 · 2026-10-10
+
+Five libraries drawn in code (Arrows, Web Icons, Nature, Shapes, Flowchart), every symbol centred on its registration point and dynamic. Web Icons' Button, Shapes' Rounded Square and Flowchart's Process and Terminator carry 9-slice guides so they stretch without distorting their corners. `addLibrarySymbols` clones the art (fresh ids) and reuses a symbol of the same name. Saved libraries are .fpth projects holding only symbols, and are kept under User Defined in local storage like the brush and swatch libraries.
+
 ## src/engine/threed.ts
 
 ### src/engine/threed.ts · scene
@@ -1131,6 +1173,13 @@ Overlapping pieces would double a translucent stop where they overlap. When any 
 Moving a selection snaps its box (edges and centre) to other objects and the grid, returning the correction; the stage draws the smart guide lines it found.
 
 ## src/tools/select.ts
+
+### src/tools/select.ts · symbols: editing mode, 9-slice guides, dynamic parts
+- refers-to: src/tools/select.ts :: SG, sliceGuideAt, dragSlice, selection dblclick, directDown, directOverlay; src/engine/index.ts :: pickSymbolPart, activeSymbolPart, applyToSelection
+- kind: explainer
+- logged: v0.22.0 · 2026-10-10
+
+Double-clicking an instance with the Selection tool enters symbol editing mode for it. In that mode the Selection tool grabs a 9-slice guide within 4 screen pixels before anything else and drags it as a drag preview, committed as one step. The Direct Selection tool, clicking an instance of a dynamic symbol, records the part under the pointer (`symbolPart`); while that instance alone is selected, `applyToSelection` sends every appearance change (fill, stroke, opacity, effects from the panels) to that part through `withPartEdit`, which stores the result as the instance's override for the part. Any new selection clears it. The part is outlined in the accent colour.
 
 ### src/tools/select.ts · path type brackets
 - refers-to: src/tools/select.ts :: bracketAt, bracketDown, bracketMove, bracketUp; src/ui/stage.ts :: drawPathBrackets
@@ -1449,7 +1498,21 @@ Artboards carry `rect: [x, y, w, h]` beside `x, y, w, h` so other tools can read
 
 Show, Lock, Snap to Grid and the active plane are view state, not document edits: they live on the Project so toggling them is never an undo step and an undo never hides the grid. serialize writes them into the document as perspView and the Project constructor reads them back, so a saved file reopens with the grid as it was without the opening code (which does not read the manifest's view block) changing. The grid itself is doc.persp and round trips with the rest of the document; attachments are node fields. Both are optional, so older files open unchanged.
 
+### src/io/project-io.ts · linked images and cached previews
+- refers-to: src/io/project-io.ts :: serialize; src/engine/project.ts :: Project.previews; backend/app/services/project_format.py :: _walk
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+A key used only by linked images is written as its cached preview (at most 1024 px, made by `LinkManager.preview` when the image is linked or read), not the full file, so a .fpth stays small and a missing file still shows something. With `linkPreviews` false (the Links panel menu) nothing is written for it and the backend validator accepts the missing asset because the node carries `linked`. Exports read `Project.assets`, which always holds the full pixels once the file has been read.
+
 ## src/io/svg.ts
+
+### src/io/svg.ts · symbols as symbol and use
+- refers-to: src/io/svg.ts :: Writer.node case symbol, symbolArts
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+Symbol definitions are written as `<symbol overflow="visible">` (visible because a symbol without a viewBox would clip art left of or above its registration point) and each instance as `<use>` with its matrix. Definitions are keyed by the art object `instanceArt` returns, so plain instances share one symbol while a tinted, overridden or 9-slice-stretched instance gets its own; the importer already reads `use` of `symbol`.
 
 ### src/io/svg.ts · per-glyph type
 - refers-to: src/io/svg.ts :: Writer.text
@@ -1674,6 +1737,52 @@ Every trace since 0.7.0 came out as slivers: RDP was handed each closed outline 
 - logged: v0.12.0 · 2026-10-07
 
 A tracing object is a group carrying `trace`: the source image node, the options it was traced with, and the view. Its children are the result, so bounds, hit testing, selection, export and every path operation see ordinary paths, and transforming the group transforms the source image with it so tracing again lands in the same place. Views other than Tracing Result are drawn on screen only; exports and raster renders (`printing`) always show the result. Tracing again replaces the children and keeps the group's id, name, opacity and appearance; option changes from the panel merge into one undo step, and a run that finishes after a newer one started is dropped. Expand removes `trace`; Release puts the source image back (with a fresh id if a pasted copy already released the same image). `traceOptions` is shared by the panel, the menu commands and the agent tool so a preset name, explicit numbers and a mode combine the same way everywhere.
+
+### src/io/trace.ts · full resolution in a worker
+- refers-to: src/io/trace.ts :: traceImage, inWorker, TRACE_CAP, traceOptions; src/io/trace.worker.ts; src/io/trace-core.ts :: traceCore; src/app.ts :: trace, traceRuns
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+Images were downsampled to 420 px (600 for two presets) before tracing so the window would not freeze. Tracing now runs at the image's own size up to 2000 px on the longest side (the cap keeps a 4000 px photo to four million pixels of work, about a second) in a module worker: the decoded `ImageBitmap` is transferred, drawn into an `OffscreenCanvas` there, and only path data comes back. A newer run for the same object aborts the older one (`AbortController` terminates its worker), so dragging a slider never queues traces. Where workers or OffscreenCanvas are missing it runs on the main thread. Older tracing objects stored `maxSide: 420` in their options; `traceOptions` always replaces it with the cap. Noise and stroke width are given in pixels of the source image and scaled to the traced size.
+
+### src/app.ts · trace placeholder keeps the panels still
+- refers-to: src/app.ts :: trace
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+A first trace used to swap the image for the tracing group only when the worker finished, seconds after the click, so the Appearance panel (a group gains its Contents row) and the Properties quick actions reflowed with no recent input: a 0.0042 layout shift under throttling. The image is now replaced at once by the tracing group holding a copy of the image as its only child (it looks the same while tracing), and the result later replaces only the children, merged into the same "Image Trace" step. A trace that finds nothing or fails puts the image back in that step; a run superseded by a newer one leaves the group to the newer run.
+
+### src/io/trace.ts · removed quantize, loops and smoothLoop
+- refers-to: src/io/trace.ts :: quantize, loops, smoothLoop (removed)
+- kind: removed-code
+- logged: v0.22.0 · 2026-10-10
+
+The k-means, the run-linking loop builder and the per-vertex handle smoothing moved into `trace-core.ts` (the loop builder unchanged, now over a mask so overlapping layers can use it). The per-vertex smoothing was replaced by the corner split and least-squares fit described there, because it could not keep a long arc smooth across many RDP vertices.
+
+## src/io/trace-core.ts
+
+### src/io/trace-core.ts · palette, noise, method and curve fitting
+- refers-to: src/io/trace-core.ts :: classify, kmeans, autoCount, despeckle, fillPaths, fitRun, relax, snapLines
+- kind: explainer
+- logged: v0.22.0 · 2026-10-10
+
+Automatic counts the 12-bit colour bins holding at least 0.4 percent of a pixel sample (2 to 30 colours); Limited uses the slider; Full Tone uses 48 colours (32 grays); Document Library maps every pixel to the nearest document swatch. Pixels are assigned through a 15-bit lookup table so a large image costs one palette search per distinct colour. Noise relabels every 4-connected region smaller than the threshold to the colour it shares the most edge with, so small specks disappear without leaving holes. Abutting traces each colour's own pixels; Overlapping stacks the colours by area, each mask holding its colour and every smaller one above it, so neighbouring shapes overlap instead of meeting at a seam. Outlines are the pixel-edge loops, densified to edge midpoints and relaxed once or twice, simplified with RDP to find corners (the Corners control sets the turning angle, 135 down to 15 degrees), then each run between corners is fitted with Schneider's least-squares cubic fit at the Paths tolerance. Snap Curves to Lines straightens segments whose handles lie within the tolerance of their chord and levels lines within 3 degrees of horizontal or vertical.
+
+### src/io/trace-core.ts · centreline strokes
+- refers-to: src/io/trace-core.ts :: chamfer, thin, skeletonLines, traceCore
+- kind: explainer
+- logged: v0.22.0 · 2026-10-10
+
+Create Strokes (black and white mode) measures each 8-connected black region with a 3-4 chamfer distance transform; a region no thicker than the Stroke width (or every region when Fills is off) is thinned to a one-pixel skeleton with Zhang and Suen's two-pass algorithm. The skeleton is walked as a graph whose neighbours are the four edge neighbours plus a diagonal only when neither adjacent edge pixel is set (so staircase pixels do not read as junctions): every walk starts at an end or junction and stops at the next one, leftover pixels are closed loops. Each polyline gets the mean thickness along it as its stroke width and goes through the same corner split and curve fit as outlines. Thicker regions stay fills with the stroked pixels cut out of them.
+
+## src/io/links.ts
+
+### src/io/links.ts · real links
+- refers-to: src/io/links.ts :: LinkManager, linkKey, pickLinkedFile, pickLinkFolder, saveLinkedFile, typed; src/engine/types.ts :: ImageLink, ImageNode.linked, Doc.linkPreviews; src/engine/index.ts :: setImageSource, addImage; src/app.ts :: chooseLinkFile, linkFileTo, placeLinked, relinkFolder, updateLinks, embedLinks, unembed, linkInfo, linkTool
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+`ImageNode.link` stays the plain file name (older files carry it); a real link is `linked`: the absolute path when the engine service is there (desktop or `./formpth boot`), or the id of a File System Access handle kept in IndexedDB in a Chromium browser without the engine, plus the size and modified time read with the pixels. The state is never stored: `LinkManager` stats every linked path in one `/api/files/stat` call (or asks each handle for its file) when the window regains focus, when it becomes visible, every four seconds and shortly after a document change, and compares size and time with what was read (Modified) or finds nothing (Missing). A handle whose permission lapsed after a reload reads as Linked until Update asks the browser again. Opening a project re-reads every unchanged linked file into the asset map and leaves a changed one on its cached preview until Update; a Missing file that comes back is re-read the same way. Relink, Update, Relink Missing and Unembed give the image a new asset key and go through `setImageSource`, which keeps the placed size when the pixel size changes, so each is one undo step (several files are squashed with `beginStep`). Without either path or handle, Place Linked and Relink fall back to embedding and say so.
 
 ## src/plugins/host.ts
 
@@ -2052,6 +2161,22 @@ Lists every family and style the document's type uses with the number of objects
 Assets are stored in the document as names and object ids, not copies, so an asset always exports the art as it is now, and an asset whose art was deleted shows dimmed and is skipped. `exportAssets` is optional on `Doc` so older files need no migration. Each asset exports cropped to its visible bounds: raster formats render only its objects (`only`), SVG uses the writer's `ids`, and PDF writes a one-page document through a view of the project whose `doc` has a single artboard over the asset and a single layer holding its objects (`Object.create(p)` keeps the project's images). Names that repeat in one export get a number. Thumbnails redraw only when one of the asset's node objects changes identity. The format rows are built once and added or removed one at a time.
 
 ## src/ui/panels/image-trace.ts
+
+### src/ui/panels/image-trace.ts · advanced controls and overlapping runs
+- refers-to: src/ui/panels/image-trace.ts :: ImageTracePanel.run, args, sync
+- kind: explainer
+- logged: v0.22.0 · 2026-10-10
+
+Palette, Corners, Noise, Method, Create Fills and Strokes, Stroke width and Snap Curves to Lines all go through `args` to `traceOptions`. The panel no longer ignores changes while a trace runs: each change starts a run and `app.ts` aborts the previous worker, and a counter keeps the busy state until the last run settles. Palette hides in black and white mode, Colors is enabled only for Limited, and Strokes and Stroke only in black and white mode, as in Illustrator.
+
+## src/ui/file-dialog.ts
+
+### src/ui/file-dialog.ts · choosing a path through the engine
+- refers-to: src/ui/file-dialog.ts :: FilePathDialog; src/io/api.ts :: listFolder, readFileInfo, statFiles; backend/app/routers/batch.py :: files_list, files_stat, files_read
+- kind: rationale
+- logged: v0.22.0 · 2026-10-10
+
+A browser file input never reveals a path, and the desktop shell has no dialog plugin, so linking needs its own chooser: a folder field, a list of subfolders and images from `/api/files/list` (with `dirs`), and the chosen path. It remembers the last folder in local storage. Rows are keyed by full path so moving between folders replaces rows rather than rebuilding them.
 
 ### src/ui/panels/image-trace.ts · Image Trace
 - refers-to: src/ui/panels/image-trace.ts :: ImageTracePanel
