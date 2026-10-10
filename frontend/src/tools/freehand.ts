@@ -4,22 +4,30 @@ import { strokeToPath, uniteAll } from '../engine/kernel';
 import { eraseRegion, eraseSegments, geometryOf, joinPaths, knifeCut, scissorsCut, smoothRegion } from '../engine/ops/paths';
 import { fill, NONE, stroke } from '../engine/paint';
 import type { Doc, Engine, PathData, PathNode, Pt, VNode } from '../engine';
+import type { WidthPoint } from '../engine/types';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { replaceNode } from './select';
 import { layerColor, stroke2, tolDoc } from './util';
 
-interface F { on: boolean; pts: Pt[]; last: Pt; ids: string[]; changed: boolean }
-const F: F = { on: false, pts: [], last: { x: 0, y: 0 }, ids: [], changed: false };
+interface F { on: boolean; pts: Pt[]; pr: number[]; last: Pt; ids: string[]; changed: boolean }
+const F: F = { on: false, pts: [], pr: [], last: { x: 0, y: 0 }, ids: [], changed: false };
 
 function collect(ctx: ToolContext, p: ToolPointer): void {
   const z = ctx.view().zoom;
   if (Math.hypot(p.doc.x - F.last.x, p.doc.y - F.last.y) * z < 1.5) return;
-  F.pts.push(p.doc); F.last = p.doc;
+  F.pts.push(p.doc); F.pr.push(p.pressure); F.last = p.doc;
   ctx.redraw();
 }
 
-function begin(p: ToolPointer): void { F.on = true; F.pts = [p.doc]; F.last = p.doc; F.ids = []; F.changed = false; }
+function begin(p: ToolPointer): void { F.on = true; F.pts = [p.doc]; F.pr = [p.pressure]; F.last = p.doc; F.ids = []; F.changed = false; }
+
+function pressureProfile(pr: number[]): WidthPoint[] | null {
+  if (pr.length < 3 || pr.every((v) => v >= 0.99)) return null;
+  const n = Math.min(16, pr.length), out: WidthPoint[] = [];
+  for (let i = 0; i < n; i++) { const t = i / (n - 1), v = Math.max(0.1, pr[Math.round(t * (pr.length - 1))] * 1.4); out.push({ t, l: v, r: v }); }
+  return out;
+}
 
 function trail(ctx: ToolContext, g: CanvasRenderingContext2D, color?: string): void {
   if (!F.on) return;
@@ -171,7 +179,8 @@ registerTool({
     const d = e.pathFromPoints(F.pts, true, p.alt, (0.6 + e.options.pencilFidelity * 9) / z);
     const node = e.makePath(d);
     const paint = e.strokePaint.type === 'none' ? e.fillPaint : e.strokePaint;
-    node.ap = { items: [fill(NONE), { ...stroke(paint, Math.max(0.25, e.strokeWidth)), brush: e.currentBrush, cap: 'round', join: 'round' }], effects: [] };
+    const def = e.doc?.brushes.find((b) => b.id === e.currentBrush), prof = def && (def.brush.type === 'bristle' || def.brush.type === 'calligraphic') ? pressureProfile(F.pr) : null;
+    node.ap = { items: [fill(NONE), { ...stroke(paint, Math.max(0.25, e.strokeWidth)), brush: e.currentBrush, cap: 'round', join: 'round', ...(prof ? { profile: prof } : {}) }], effects: [] };
     e.addNodes('Paintbrush', [node], { select: e.options.keepSelected });
     ctx.redraw();
   },
