@@ -12,9 +12,9 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list.
 
-## Score at v0.21.0
+## Score at v0.22.0
 
-**66 of 76 scored rows, 86.8 percent:** 60 Full, 12 Partial, 4 None. The tally is at the end.
+**69 of 76 scored rows, 90.8 percent:** 66 Full, 6 Partial, 4 None. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -70,20 +70,20 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Width tool and profiles | Full | Width points dragged on strokes; eight width profiles |
 | Intertwine | Full | Make, Release and Edit Intertwine; the Intertwine tool (Shift+J) highlights overlaps, flips or cycles which object is on top with a click, and draws free zones with a drag; zones stay put when members move; Expand; drawn and exported with real clip paths |
 
-## Paint and colour · 7 of 8
+## Paint and colour · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Colour panel and modes | Full | Grayscale, RGB, HSB, CMYK, Web Safe, hex, spectrum, global tints |
-| Swatches, global and spot | Partial | Colours, gradients and patterns, global and spot swatches. Missing: swatch libraries, swatch groups shown in the panel, and spot colours as PDF Separation spaces (they export as process) |
+| Swatches, global and spot | Full | Colour, gradient and pattern swatches; process, global, spot, tint, none and registration; colour groups as folders with drag and drop; 15 swatch libraries and User Defined; ASE read and write; spot colours and tints written to PDF as Separation colour spaces. Gradients with spot stops export as process |
 | Gradients on fill and stroke, gradient tool | Full | Linear and radial with stops, midpoints, opacity and aspect; within, along and across strokes, each drawn and exported; the Gradient tool and annotator; freeform gradients in points and lines modes, made in the Gradient panel, edited with the Gradient tool (add, move, spread, recolour, delete points) and exported to SVG and PDF |
 | Gradient mesh | Full | Create Gradient Mesh and the Mesh tool: add lines in a colour, move points, drag each point's handles to reshape patches, point colour and opacity, Alt-click to remove lines |
 | Patterns | Full | Pattern editing mode from Make or a swatch double-click: Pattern Options with grid, brick (with offset) and hex tiles, size to art or exact size, spacing, overlap order, copies, dimming and the tile edge; Done, Save a Copy, Cancel |
-| Recolor and harmony | Partial | Missing: Recolor Artwork's colour wheel, Reduce Colors and applying a colour group. Built: Recolor Artwork maps and palettes, invert, grayscale, CMYK, RGB, saturate; the Color Guide with twelve harmony rules, tints and shades, warm and cool and vivid and muted variations, saved as swatch groups |
+| Recolor and harmony | Full | Recolor Artwork with a smooth or segmented colour wheel (linked or free markers, brightness), reduce to a colour count in OKLab with tints kept, the current-to-new colour list with merge and separate, recolor from a document group or a library, the Color Theme Picker, shuffles and colour job presets, live preview and one undo step; Edit > Edit Colors invert, grayscale, CMYK, RGB, saturate; the Color Guide with twelve harmony rules, tints and shades, warm and cool and vivid and muted variations, saved as swatch groups |
 | Stroke panel | Full | Weight, caps, joins, miter, alignment, dashes, arrowheads with scale, profiles |
 | Appearance and Graphic Styles | Full | Multiple fills and strokes, effects on the object or on one fill or stroke from the panel and MCP, visibility, Clear and Reduce to Basic; Graphic Styles with new, redefine, libraries and apply |
 
-## Effects and live objects · 8 of 10
+## Effects and live objects · 9.5 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -91,10 +91,10 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Warp and Envelope Distort | Full | Fifteen warp styles as effects and envelopes; mesh and top-object envelopes; mesh points and handles edited with Direct Selection and the Mesh tool (add and remove lines); Envelope Options (fidelity, distort appearance, linear gradients and pattern fills, anti-alias); Edit Contents and Edit Envelope; Reset with Mesh or Warp; type and images distorted inside |
 | Stylize effects | Full | Drop Shadow, Inner Glow, Outer Glow, Feather, Round Corners, Scribble |
 | Blends | Full | Smooth colour, steps, distance, Replace Spine, Release, Expand |
-| Symbols and symbolism | Partial | Missing: symbol editing mode to redefine a symbol's art, and symbol libraries. Built: Symbols panel, instances, Break Link, the Symbol Sprayer, Shifter, Scruncher, Sizer, Spinner, Stainer, Screener and Styler with diameter, intensity and the user defined, average and random methods |
+| Symbols and symbolism | Full | Symbol editing mode with live instances, Redefine, Duplicate, Replace, Reset Overrides and Symbol Options; static and dynamic symbols with per-instance part overrides; 9-slice scaling and the registration point; five symbol libraries, User Defined and Save Symbols; the Symbols panel, instances, Break Link, the Symbol Sprayer, Shifter, Scruncher, Sizer, Spinner, Stainer, Screener and Styler with diameter, intensity and the user defined, average and random methods |
 | Repeat | Full | Radial, grid and mirror, with options, release and expand |
-| Brushes | Partial | Missing: the Bristle brush, brush libraries and the art brush Stretch option. Built: Calligraphic, scatter, art and pattern brushes; New Brush from art for all four kinds, Brush Options, colorization, Delete Brush, previews drawn from the brush |
-| Image Trace | Partial | Missing: tracing at full image resolution (images are reduced to about 420 px first), centreline tracing, and the corner, noise and method controls. Built: live tracing objects with eleven presets, colour, grayscale and black and white modes, paths, ignore white and smoothing; five views; the Image Trace panel with preview; Make, Make and Expand, Expand, Release |
+| Brushes | Full | Calligraphic, scatter, art, pattern and Bristle brushes; pen pressure recorded by the Paintbrush; five-tile pattern brushes with stretch, add space and approximate fit; art brushes that scale, stretch or stretch between guides and flip; five brush libraries, User Defined and Save Brushes; Outline Stroke and Expand Appearance follow brushes; New Brush from art for all four kinds, Brush Options, colorization, Delete Brush, previews drawn from the brush |
+| Image Trace | Full | Traces at the image's own resolution (up to 2000 px on the long side) in a worker; Paths, Corners, Noise, abutting or overlapping Method, Automatic, Limited, Full Tone and Document Library palettes, fills and centreline strokes, Snap Curves to Lines; live tracing objects with eleven presets, colour, grayscale and black and white modes, paths, ignore white and smoothing; five views; the Image Trace panel with preview; Make, Make and Expand, Expand, Release |
 | 3D and Materials | Partial | Extrude & Bevel (depth, cap, classic and rounded bevels), Revolve (angle, offset, either edge), Inflate and Plane as live effects on paths, compound paths, type and groups; position presets, X, Y and Z rotation and perspective, Inflate included; plastic, matte, metal, wireframe and flat materials; light direction, intensity, ambient, highlight and shading colour; Map Art (a symbol on the front face of an Extrude or Plane, scaled, offset and shaded with the surface); shadows behind or below with distance, softness and opacity; the 3D and Materials panel; vector faces in SVG and PDF; Expand Appearance to shaded paths. Not built: ray-traced rendering, more than one light, and Substance materials |
 | Effect Gallery raster filters | Full | The Effect Gallery with live thumbnails, options and preview; 55 Photoshop effects (Artistic 15, Blur 2 beside Gaussian Blur, Brush Strokes 8, Distort 3, Pixelate 4, Sketch 14, Stylize 1, Texture 6, Video 2) as live effects in the Appearance panel; the Rasterize effect and Document Raster Effects Settings; PDF and SVG export them at the document's raster resolution |
 
@@ -123,7 +123,7 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | Text to Pattern | None | No prompt-to-pattern feature |
 | Retype | None | No font recognition from images or outlines |
 
-## Files, colour and output · 8 of 11
+## Files, colour and output · 8.5 of 11
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -134,7 +134,7 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | EPS, DXF and DWG | None | No EPS, DXF or DWG reader or writer |
 | Raster export | Full | PNG, JPEG, WebP of an artboard, all artboards or the selection, at any scale, with transparency |
 | Export for Screens and asset export | Full | Export for Screens with artboards, scales, suffixes and formats in a zip; the Asset Export panel with Collect for Export as single or multiple assets, renaming, and each asset cropped to its art in PNG, JPEG, WebP, SVG or PDF |
-| Placed images and links | Partial | Place, a Links panel, Relink and Embed, but every placed image is copied into the document: a linked image does not follow its file |
+| Placed images and links | Full | Place Linked keeps a path or file handle; the Links panel shows Linked, Modified and Missing and checks on focus; Relink, Relink All Instances, Relink Missing from Folder, Update, Update All, Go To Link, Embed, Unembed and Link Info; `.fpth` keeps links with a cached preview; exports use the full pixels |
 | History and Actions | Full | History panel with every step, New Document from State and History Options; Actions record menu commands, dialog values, transforms (tool drags included), drawn shapes, fills, strokes, opacity and styles, with per-step toggles, modal dialogs, stops, editing and reordering; action sets saved as `.fpaction` files with a Default Actions set; Batch over a folder or over data sets with a log. Dialogs outside the common form (Export, Effect Gallery) open during playback instead of replaying |
 | Colour management and print | Partial | CMYK document mode and CMYK PDF. Missing: ICC profiles (CMYK converts by formula), proof colours, separations and overprint preview, and a print dialog with marks and bleed |
 | Variables and data merge | Full | Variables panel with text, image, visibility and graph variables bound to objects; data sets captured, updated, deleted and stepped through live; CSV and JSON import; Export Variations as PNG, SVG, PDF or `.fpth` per data set to a folder or a zip |
@@ -145,7 +145,7 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | --- | --- |
 | Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
 | Web app | The same app in a browser against the local engine |
-| Agents over MCP | 76 tools, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
+| Agents over MCP | 81 tools, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |
 
 ## Tally
@@ -156,18 +156,17 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | Selection and transform | 8 | 8 |
 | Drawing | 10 | 10 |
 | Paths and Pathfinder | 8 | 8 |
-| Paint and colour | 7 | 8 |
-| Effects and live objects | 8 | 10 |
+| Paint and colour | 8 | 8 |
+| Effects and live objects | 9.5 | 10 |
 | Type | 8 | 8 |
 | Generative AI | 1 | 5 |
-| Files, colour and output | 8 | 11 |
-| **Total** | **66** | **76** |
+| Files, colour and output | 8.5 | 11 |
+| **Total** | **69** | **76** |
 
-60 rows Full, 12 Partial, 4 None: 86.8 percent.
+66 rows Full, 6 Partial, 4 None: 90.8 percent.
 
 ## Next to close
 
 In release order:
 
-1. v0.22.0: swatch libraries and Separation spaces, the Recolor colour wheel, the Bristle brush and brush libraries, symbol editing and libraries, full-resolution Image Trace, and linked images.
-2. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
+1. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
