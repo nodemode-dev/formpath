@@ -48,6 +48,8 @@ frontend/
     │   ├── style-libraries.ts  built-in graphic style libraries
     │   ├── stroke-gradient.ts  gradients along and across strokes as clipped pieces, stroke regions
     │   ├── livepaint.ts        Live Paint faces, gap closing and face paint
+    │   ├── puppet.ts           Puppet Warp mesh and as-rigid-as-possible solve
+    │   ├── dimension.ts        live dimension groups and their labels
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -70,6 +72,8 @@ frontend/
     │   ├── freehand.ts         Pencil, Smooth, Path Eraser, Join, brushes, Eraser, Scissors, Knife
     │   ├── transform.ts        Rotate, Reflect, Scale, Shear, Free Transform, Reshape, Width, liquify
     │   ├── paint.ts            Eyedropper, Gradient, Mesh, Live Paint, Shape Builder, Blend, Sprayer, Measure
+    │   ├── puppet.ts           Puppet Warp
+    │   ├── dimension.ts        Dimension
     │   ├── symbolism.ts        Symbol Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler
     │   ├── type.ts             type tools and their options
     │   └── view.ts             Hand, Rotate View, Zoom, Artboard
@@ -126,6 +130,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/ops/objects.ts
 - src/engine/ops/expand.ts
 - src/engine/ops/distort.ts
+- src/engine/puppet.ts
+- src/engine/dimension.ts
 - src/engine/style-libraries.ts
 - src/engine/stroke-gradient.ts
 - src/extensions/registry.ts
@@ -135,6 +141,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/tools/freehand.ts
 - src/tools/transform.ts
 - src/tools/paint.ts
+- src/tools/puppet.ts
+- src/tools/dimension.ts
 - src/tools/symbolism.ts
 - src/tools/type.ts
 - src/tools/view.ts
@@ -328,6 +336,13 @@ New optional parameters only: `set_stroke` `gradient_mode` (within, along, acros
 - logged: v0.17.0 · 2026-10-08
 
 New optional parameters and enum values only. `envelope` gains info (points row-major with their handle ends, kind, options, editing mode), move_point (point or row and column; x, y or dx, dy; handle right, left, down or up moves that handle's end; mirror), add_mesh_line, delete_mesh_point, reset_mesh (maintain_shape), reset_warp, options (fidelity, distort_appearance, distort_gradients, distort_patterns, anti_alias), edit_contents and edit_envelope; the envelope is found from ids or the selection, including a child selected in Edit Contents. For a warp or top-object envelope, info shows the 4 by 4 mesh it turns into, so point indices from info stay valid for move_point. `transform` gains corners (Free Distort onto four points), perspective (pull the top corners in by that many points) and reset_bounding_box; when combined with another transform the reset is squashed into the same step.
+
+### src/automation/agent-bridge.ts · puppet_warp and add_dimension
+- refers-to: src/automation/agent-bridge.ts :: puppet_warp case, add_dimension case; backend/app/routers/mcp.py :: puppet_warp, add_dimension; src/engine/index.ts :: Engine.puppetWarp, Engine.addDimension, Engine.setDimension
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+Two new tools. puppet_warp takes pins as x, y with optional to_x, to_y (a pin left out holds its place) and rotate in degrees counter-clockwise, the harness convention, which Engine.puppetWarp negates because the solver works in the y-down page; the warp is one Engine.edit, so one undo step. A pin given rotate turns its neighbourhood by that much from rest. add_dimension builds a spec from the parameters and adds it in one edit; radial takes circle (the id of a live ellipse or a single closed circular path, with the first point if any giving the rim direction) or three_points (circumcentre), and with ids and no points it patches existing dimensions instead, so agents can restyle without a separate tool.
 
 ## src/engine/index.ts
 
@@ -825,6 +840,35 @@ if (s.align !== 'center' && g.d.every((sp) => sp.closed)) d = s.align === 'insid
 Both distortions are the homography from the bounding box's four corners (turned with the box) to the dragged quadrilateral. Paths, compound paths, blend keys and spines map through mapPathAdaptive with straight lines kept straight (exact under a projective map) and curves split until they follow it within about 2e-4 of the box size; gradient end points that are set map too. Gradient meshes map their points and handles. An envelope maps its mesh (a warp or top-object envelope becomes a 6 by 6 mesh first). Type, images and symbols cannot carry a projective map in an affine xf, so each goes into a new envelope whose mesh samples the homography: 1 by 1 when the map is affine (exact), 4 by 4 otherwise (within a fraction of a point at ordinary sizes). The envelope ids for a drag are made once and reused on every move, so the preview does not churn ids and the selection follows the new envelopes on commit.
 - Free Transform's distortions used to be bilinear on anchors only, with type and images fitted by an affine; see the removed-code entry under src/tools/transform.ts.
 
+### src/engine/ops/distort.ts · bend and grid for non-projective maps
+- refers-to: src/engine/ops/distort.ts :: DistortOpts.bend, DistortOpts.grid, distortNode
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+distortNode takes any Mapper, so Puppet Warp reuses it. bend true stops mapPathAdaptive from keeping straight segments straight (only a projective map keeps lines straight; a puppet mesh bends them), and grid sets the envelope mesh that type, images and symbols are poured into (8 by 8 for Puppet Warp, 4 by 4 for Free Distort as before). A group carrying a dimension maps its measured points too, so a distorted dimension keeps measuring the distorted art.
+
+## src/engine/puppet.ts
+
+### src/engine/puppet.ts · mesh, solver and mapping
+- refers-to: src/engine/puppet.ts :: puppetMesh, PuppetSolver, Band, locate, puppetMapper, unmapPoint, localAngle, defaultPins, puppetApply; src/engine/index.ts :: Engine.puppetWarp
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+The mesh is a grid of square cells over the art's bounds, about 32 across the longer side and never more than about 2400 cells. A cell is in the mesh when its centre is inside a filled area (a scanline crossing count with the path's fill rule), or within the stroke's half width plus three quarters of a cell of any flattened outline, so open and stroke-only paths get a band along them; type, images, symbols, meshes and envelopes count as their bounding box. Expand dilates that set by whole cells (round kernel) and the grid is padded by it. Each cell splits into two triangles with the diagonal alternating like a checkerboard so the mesh has no preferred direction. Vertices are numbered along the grid's shorter side first, which keeps the half bandwidth near the short side's vertex count. Every grid cell also stores its nearest mesh cell (a breadth-first fill), so locate is constant time and a point off the mesh (a handle sticking out) maps through the nearest triangle's affine extension.
+
+The deformation is the two-step as-rigid-as-possible solve of Igarashi, Moscovich and Hughes (2005). Step one minimises, for each triangle and each of its three vertices, the error of that vertex expressed in the frame of the opposite edge (the similarity energy): rotations are free, so the mesh turns around pins instead of shearing. Step two fits a rotation to each triangle from step one's result (2D Procrustes: atan2 of the summed cross and dot products of rest and current edges) and solves the edge Laplacian with those rotated rest edges as targets, separately in x and y, four times local then global, which removes the scaling step one allows. Pins are soft constraints with weight 1e4 on the barycentric combination of the triangle they fall in, so a pin can sit anywhere, not only on a vertex. A weight 1e-6 pull toward rest keeps the system positive definite when a piece has one pin or none, which also makes a single pin translate its piece rigidly. A pin that has been twisted gets two satellite constraints two cells away along x and y, aimed by the pin's angle, so twisting is a rotation of the neighbourhood rather than of a single point. Both matrices depend only on the mesh and the pin set, so they are Cholesky-factored once (banded, in place) when pins are added, removed or start twisting, and each drag move is two back substitutions plus four times two smaller ones.
+
+The art maps through the deformed triangles with barycentric coordinates, and distortNode subdivides curves until they follow the piecewise affine map within a hundredth of a cell, so the result is ordinary path geometry with more anchors where it bends. puppetApply always maps from the rest art of the session, never from the previous result, so repeated drags do not accumulate resampling.
+
+## src/engine/dimension.ts
+
+### src/engine/dimension.ts · live dimension groups
+- refers-to: src/engine/dimension.ts :: dimensionChildren, refreshDimensions, dimensionNode, dimValue, dimLabel, dimOffsetFor, dimHandles, circleFrom, circumcentre; src/engine/types.ts :: DimensionSpec, GroupNode.dim; src/engine/flow.ts :: reflow; src/engine/transform.ts :: xfDim
+- kind: rationale
+- logged: v0.19.0 · 2026-10-10
+
+A dimension is a group with dim set: the spec stores the measured points (linear a and b; angular vertex and two arm points; radial centre and rim point), the offset and the style. The children are derived, like Live Paint faces: refreshDimensions, run first in reflow, regenerates them whenever the spec object, the group id or the document's units change, from a cache keyed by the spec's identity, so an unchanged dimension costs one walk and an edit, drag, undo or file open always shows children that match the spec. Because the children are ordinary paths and point type, render, hit testing, SVG and PDF need nothing new, and expand only drops dim. Children ids are the group id plus -dl (lines), -dh (filled arrowheads and dots) and -dt (label), so regenerating keeps them stable. transformNode maps the points and re-derives the offset from where the dimension line's handle lands, which keeps the line on the correct side under reflection; distortNode maps the points. Linear offsets are measured from the measured point farthest along the normal (the nearer one when negative), so a horizontal dimension of points at different heights clears both. The label turns with the line but never reads upside down (its direction is flipped into the right half plane), and above or below stay on the side of the line away from or toward the art after that flip. Centre text cuts a gap in the dimension line the width of the laid out label plus padding. Editing a child directly (Direct Selection, a paint swatch) is overwritten on the next reflow; the dimension's colour, weight and type come from its settings.
+
 ## src/engine/style-libraries.ts
 
 ### src/engine/style-libraries.ts · STYLE_LIBRARIES
@@ -1013,6 +1057,31 @@ Mesh handles are offsets from their point, so moving a point leaves them as they
 - logged: v0.17.0 · 2026-10-08
 
 On a selected envelope the Mesh tool drags its points and handles like Direct Selection, a click anywhere inside the envelope's outline (not only on art) adds a row and column through that place without moving the art, and Alt-click on a point removes its lines. A click on an unselected envelope selects it first, so a stray click does not add lines.
+
+### src/tools/paint.ts · Measure area and perimeter
+- refers-to: src/tools/paint.ts :: measure, areaLines, closedShapes
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+A click without a drag reports the area (kernel area, so compound holes subtract) and perimeter of the closed subpaths of the object under the pointer, or of the selection when the click misses; a drag adds the same lines for the selection to its distance readout. Open subpaths are ignored and dimension groups are skipped. The readout is drawn by the tool's overlay because the stage clears engine.overlay after every pointer up, which is also why the old setOverlay label on up never showed.
+
+## src/tools/puppet.ts
+
+### src/tools/puppet.ts · pins and the session
+- refers-to: src/tools/puppet.ts :: Session, session, build, rebase, solve, preview, puppetWarp tool; src/engine/index.ts :: ToolOptions.puppetExpand, ToolOptions.puppetMesh
+- kind: rationale
+- logged: v0.19.0 · 2026-10-10
+
+Pins live in the tool, not the document, as in Illustrator, where they disappear when the tool is left. A session holds the rest art (the selected nodes when it began), the mesh, the pins (rest position, current target, optional angle) and the last solution, and stays valid while the document is the one the session last committed and the selection is the rest art or what it became (type turns into an envelope whose id is remembered in envIds). Anything else, an undo, another edit or a new selection, starts a new session without pins, so the art a session maps from is always what is on the page. The first click of a session places three pins by farthest point sampling over mesh vertices that sit inside the art, nudged a little toward its centre. A click elsewhere on the mesh adds a pin at the rest point that maps to the click (found by searching the deformed triangles) and can be dragged at once. Delete and a new Expand value rebase: the current art becomes the rest art and the pins stay where they are, so neither changes the art or adds a history step. Alt-drag picks the selected pin nearest the pointer within the dotted ring (or the only selected pin); the first twist starts from the local rotation the mesh already has there so the art does not jump. Every drag previews with dragTo from the drag origin and commits once.
+
+## src/tools/dimension.ts
+
+### src/tools/dimension.ts · creating and editing dimensions
+- refers-to: src/tools/dimension.ts :: dimension tool, previewSpec, handleAt, setOpt, options; src/engine/index.ts :: Engine.addDimension, Engine.setDimension, Engine.dimensionIds, ToolOptions.dim, ToolOptions.dimPick
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+Points are taken by drag or by clicks (a press that does not move waits for the next click), snapped through ctx.snap so anchors, centres and smart guides catch them, with Shift holding 45 degree steps from the previous point. Once the type has its points the pointer sets the offset and the next click (or Enter) adds the dimension as one history step. Radial in Centre mode first tries the object under the pointer as a circle (a live ellipse, or a single closed path whose anchors are all on one circle) and takes its centre and radius, placing the rim point toward the click. The preview draws the generated children in the accent colour, so it matches the result. The options bar shows the first selected dimension's settings, or the defaults when none is selected; changing one sets the default and patches every selected dimension in one edit. Type changes only the default, because the points of one type do not fit another. Square handles on a selected dimension move its measured points (snapping, excluding the dimension itself) and the round handle its offset; each drag is one Edit Dimension step.
 
 ## src/tools/symbolism.ts
 

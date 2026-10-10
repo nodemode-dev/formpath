@@ -111,6 +111,34 @@ ask it questions.
   Bloat reshape art under the brush.
 - Align: to the selection, a key object (the last one selected) or the artboard; Distribute Objects and Distribute
   Spacing with an exact gap.
+- Puppet Warp (J, with Free Transform on the rail) bends art like a jointed puppet. Select paths, groups or compound
+  paths (type, images and symbols go into an envelope mesh, as Free Distort does), then click the art: the first
+  click places three pins at its extremes, each later click adds a pin. Drag a pin and the art bends while the other
+  pins hold; the shape between them stays as rigid as it can, so a bar curves instead of shearing or collapsing.
+  Shift-click selects several pins (they move together), Alt-drag near a selected pin twists the art around it (the
+  dotted ring shows where), Delete removes the selected pins and leaves the art as it is. In the options bar, Expand
+  grows the area the mesh covers past the art's edges, Show Mesh draws the triangle mesh, and Select All Pins selects
+  every pin. Each drag is one undo step and the result is ordinary paths. Undo, or changing the selection, starts a
+  new set of pins.
+
+## Measuring and dimensions
+
+- Measure (with the Eyedropper on the rail) drags a distance and angle; click a closed shape, or measure with closed
+  shapes selected, for their area and perimeter in the document's units.
+- Dimension (Shift+I) adds dimension objects that keep measuring. Pick the type in the options bar. Linear: drag
+  (or click twice) between two points, then click where the dimension line goes; Measure picks Horizontal, Vertical
+  or Aligned. Angular: click the vertex, a point on one arm and a point on the other, then click to set the arc's
+  radius. Radial: click a circle or ellipse (or drag from a centre to the rim, or choose From Three Points and click
+  three points on an arc), then click to place the label; Measure picks Radius or Diameter. Points snap to anchors,
+  centres and smart guides.
+- A dimension is a group that stores what it measures and its settings, and redraws its dimension line, extension
+  lines, arrowheads and label whenever they change. With dimensions selected and the Dimension tool active, the
+  options bar edits Units (the document's or a fixed unit), Precision, Scale (1:100 shows a 1 cm line as 100 cm),
+  Unit Label, Arrows (filled, open, tick, dot or none) and their size, Font, Style and Size, Text (above, centred in a
+  break in the line, or below), Colour, Weight and Offset. Drag a selected dimension's square handles to re-measure
+  and its round handle to move the dimension line. Moving, scaling or rotating a dimension keeps it live; changing
+  the document's units relabels it. Object > Expand turns it into plain paths and type. Dimensions export to SVG and
+  PDF and are saved in .fpth files.
 
 ## Paths and Pathfinder
 
