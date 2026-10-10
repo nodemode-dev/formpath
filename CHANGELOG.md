@@ -2,6 +2,34 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.17.0 · 2026-10-10
+
+Honest parity and the first gap release. Parity is now graded on the full 76-row Illustrator 30 baseline: 56 of 76.
+
+### Added
+
+- Attributes panel: non-zero or even-odd fill rule and Reverse Path Direction, for compound paths and single paths.
+- Effects on a single fill or stroke from the Appearance panel and `apply_effect` with `item`; appearance on groups and layers; Graphic Style Libraries, Redefine Graphic Style and styles that stay linked.
+- Gradients along and across strokes, drawn and exported.
+- Knockout Group in three states, drawn on the canvas and written to SVG and PDF; opacity mask Disable and Link and the new-mask defaults.
+- Vertical Type, Vertical Area Type and Vertical Type on a Path, set in columns with upright and rotated glyphs, a vertical caret and Type Orientation, in outlines, SVG and PDF.
+- Area Type Options with rows, columns, gutter, inset and first baseline; Type on a Path Options with Rainbow, Skew, 3D Ribbon, Stair Step, Gravity, alignment, spacing and Flip; start, end and centre brackets on the canvas.
+- Free Transform widget and modes: Constrain, Free Transform, Perspective Distort and Free Distort, with the modifier keys. Distortions are projective; type, images and symbols are carried in an envelope and type stays editable. Ctrl on a side handle shears.
+- The bounding box turns with the object, and Object > Transform > Reset Bounding Box.
+- Editable envelope meshes (Direct Selection and the Mesh tool add, move and remove points and lines), Envelope Options, Edit Contents and Edit Envelope, Reset with Mesh and Reset with Warp. Type and images inside an envelope are distorted.
+- MCP: the `attributes` and `opacity_mask` tools, knockout on `set_object`, `gradient_mode` on `set_stroke`, orientation and path and area type options on `add_text` and `set_text`, envelope mesh actions, and `corners`, `perspective` and `reset_bounding_box` on `transform`. 68 tools.
+
+### Changed
+
+- `docs/PARITY.md` grades the 76-row baseline (49 Full, 14 Partial, 13 None) instead of the narrower 59-row list, and no longer counts controls that only stored a value.
+- Outline Stroke follows dashes and width profiles.
+
+### Fixed
+
+- The agent bridge accepts calls only from the formpth window that holds its session secret, on the app's own origin; a missing consent answer counts as not allowed.
+- Plugin frames have no network access, and the app embeds no other frames.
+- Knockout Group, the Within, Along and Across stroke gradient buttons, Vertical Type and Type on a Path Flip no longer only store a value.
+
 ## 0.16.1 · 2026-10-08
 
 Third-party credits.
