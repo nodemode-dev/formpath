@@ -714,6 +714,52 @@ export class AgentBridge {
           if (act === 'release') return e.releaseLivePaint([g.id]) ? text(`Released to a plain group of the paths (${g.id}).`, { id: g.id }) : fail('Nothing changed.');
           return fail('action must be make, fill, edge, gap, expand or release.');
         }
+        case 'intertwine': {
+          const act = str('action');
+          if (act === 'make') { const id = e.makeIntertwine(this.ids(a)); return id ? text(`Intertwine ${id} made from ${(() => { const n = this.node(id); return n && n.kind === 'group' ? n.children.length : 0; })()} objects; flip the stacking at a point where they overlap.`, { id }) : fail('Select or pass two or more overlapping objects (not Live Paint, Repeat or Shaper groups).'); }
+          const id = has('id') ? String(a.id) : e.intertwineTargets()[0];
+          const g = id ? this.node(id) : null;
+          if (!g || g.kind !== 'group' || !g.intertwine) return fail('Pass the id of an intertwine object (intertwine with action make returns one).');
+          const zones = (): number => { const n = this.node(g.id); return n?.kind === 'group' && n.intertwine ? n.intertwine.zones.length : 0; };
+          if (act === 'flip') {
+            if (!has('x') || !has('y')) return fail('Give x and y in document points inside an overlap.');
+            return e.intertwineFlip(g.id, { x: num('x', 0), y: num('y', 0) }) ? text(`Flipped the stacking in the overlap at ${num('x', 0)}, ${num('y', 0)}; ${zones()} area(s) override the base order.`, { id: g.id }) : fail('No overlap of two or more of its objects at that point.');
+          }
+          if (act === 'area') {
+            const pts = (Array.isArray(a.points) ? a.points : []).map((q) => (Array.isArray(q) ? { x: Number(q[0]), y: Number(q[1]) } : { x: NaN, y: NaN }));
+            if (pts.length < 3 || pts.some((q) => !Number.isFinite(q.x) || !Number.isFinite(q.y))) return fail('points must be three or more [x, y] pairs encircling part of an overlap.');
+            return e.intertwineZone(g.id, pts) ? text(`Defined the encircled area; ${zones()} area(s) override the base order.`, { id: g.id }) : fail('The loop does not enclose an overlap of two or more of its objects.');
+          }
+          if (act === 'release') return e.releaseIntertwine([g.id]) ? text(`Released into ${g.children.length} plain objects in their base order.`, { selection: e.selectedIds() }) : fail('Nothing changed.');
+          if (act === 'expand') return e.expand('object', [g.id]) ? text('Expanded into plain objects with clipped copies for each area.', { selection: e.selectedIds() }) : fail('Nothing changed.');
+          return fail('action must be make, flip, area, release or expand.');
+        }
+        case 'shaper': {
+          const act = str('action');
+          const pts = (Array.isArray(a.points) ? a.points : []).map((q) => (Array.isArray(q) ? { x: Number(q[0]), y: Number(q[1]) } : { x: NaN, y: NaN }));
+          if ((act === 'draw' || act === 'scribble') && (pts.length < 2 || pts.some((q) => !Number.isFinite(q.x) || !Number.isFinite(q.y)))) return fail('points must be two or more [x, y] pairs in document points.');
+          if (act === 'draw') {
+            const r = e.addShaperShape(pts);
+            if (!r) return fail('Not recognised: give a closed rough outline (rectangle, circle, ellipse, triangle, polygon) or a near-straight line, with a few dozen points.');
+            const n = this.node(r.id);
+            return text(`Recognised a ${r.kind}; drew live shape ${r.id}${n && n.kind === 'path' && n.live ? ` (${n.live.kind})` : ''}.`, { id: r.id, shape: r.kind });
+          }
+          if (act === 'scribble') {
+            const r = e.shaperScribble(pts);
+            if (!r) return fail('The scribble touched no shape: zigzag over the shapes or their overlap.');
+            return text(r.action === 'cut' ? `Punched out the region in Shaper Group ${r.id}.` : r.action === 'merge' ? `Merged the regions in Shaper Group ${r.id}.` : 'Deleted the shape.', { id: r.id, action: r.action });
+          }
+          const id = has('id') ? String(a.id) : e.shaperTargets()[0];
+          const g = id ? this.node(id) : null;
+          if (!g || g.kind !== 'group' || !g.shaper) return fail('Pass the id of a Shaper Group (a scribble over overlapping shapes makes one).');
+          if (act === 'fill') {
+            if (!has('x') || !has('y')) return fail('Give x and y inside a face.');
+            const paint = has('color') ? this.paint(a.color, 'color') : e.fillPaint;
+            return e.shaperFill(g.id, { x: num('x', 0), y: num('y', 0) }, paint) ? text('Filled the face.', { id: g.id }) : fail('No face of that Shaper Group at that point.');
+          }
+          if (act === 'expand') return e.expandShaper([g.id]) ? text(`Expanded Shaper Group ${g.id} into plain paths.`, { id: g.id }) : fail('Nothing changed.');
+          return fail('action must be draw, scribble, fill or expand.');
+        }
         case 'symbolism': {
           const op = str('op') as SymbolismOp;
           if (!SYMBOLISM_NAMES[op]) return fail('op must be shift, scrunch, size, spin, stain, screen or style.');

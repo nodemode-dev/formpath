@@ -11,8 +11,8 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `color_harmony`, `graphic_style`
 - Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `opacity_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`, `puppet_warp`
-- Path operations: `pathfinder`, `path_operation`, `shape_builder`
-- Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
+- Path operations: `pathfinder`, `path_operation`, `shape_builder`, `shaper`
+- Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
 - Type: `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
 - Commands: `list_commands`, `run_command`
@@ -676,6 +676,29 @@ Live Paint: make a Live Paint group from paths (their crossings divide the area 
 - `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
 - `width`: number; Stroke width in points for edge; 0 hides the edge.
 - `gap`: number
+
+## intertwine
+
+Intertwine: make an intertwine object from two or more overlapping objects (paths, groups, type) so they can weave over and under each other like chain links; flip the stacking inside the overlap at x, y (with three or more objects each flip brings the next one down to the top there); define an area freely by encircling it with points; release back to plain objects in their base order; or expand into plain clipped groups. get_document lists the intertwine's areas.
+
+- `action`: string (make | flip | area | release | expand); required
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `id`: string; The intertwine object for flip, area, release and expand (make returns it); defaults to the selected one.
+- `x`: number
+- `y`: number
+- `points`: array; area: a closed loop of [x, y] document points around part of an overlap.
+
+## shaper
+
+Shaper: turn rough drawn points into a live shape the way the Shaper tool recognises a gesture (rectangle or square, circle, ellipse, triangle, polygon or line; near-orthogonal rectangles snap square to the axes); scribble a zigzag over overlapping shapes to punch out the region it stays in, merge the regions it crosses, or delete a single shape it covers alone (overlapping shapes become an editable Shaper Group that recomputes when its shapes change); fill the face of a Shaper Group at x, y; or expand a Shaper Group into plain paths.
+
+- `action`: string (draw | scribble | fill | expand); required
+- `points`: array; draw and scribble: the gesture as [x, y] document points in drawing order.
+- `id`: string; fill and expand: the Shaper Group (defaults to the selected one).
+- `x`: number
+- `y`: number
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `ids`: array; Object ids from get_document; the selection when left out.
 
 ## gradient_mesh
 
