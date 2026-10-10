@@ -2,7 +2,8 @@ import { findNode, newId } from '../engine/doc';
 import { cachedPath } from '../engine/render';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
 import { computeFaces, faceAt, faceContains, liveFaces } from '../engine/livepaint';
-import { insideFill, nearestOnPath } from '../engine/geometry';
+import { insideFill, nearestOnPath, pathLength } from '../engine/geometry';
+import { area } from '../engine/kernel';
 import { envelopeOutline } from '../engine/live';
 import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, toRgb, withFirstFill } from '../engine/paint';
 import type { Doc, Engine, FreeformPoint, Gradient, GroupNode, MeshNode, MeshPoint, PathData, Pt, VNode } from '../engine';
@@ -534,21 +535,47 @@ function spray(ctx: ToolContext, at: Pt, sym: string): void {
   ctx.redraw();
 }
 
-const ME = { on: false, a: { x: 0, y: 0 }, b: { x: 0, y: 0 } };
+const ME = { on: false, a: { x: 0, y: 0 }, b: { x: 0, y: 0 }, shape: null as null | { at: Pt; lines: string[] } };
+function closedShapes(n: VNode): PathData[] {
+  if (n.kind === 'path') { const d = n.d.filter((sp) => sp.closed && sp.pts.length > 2); return d.length ? [d] : []; }
+  if (n.kind === 'compound') { const d = n.children.flatMap((c) => c.d).filter((sp) => sp.closed && sp.pts.length > 2); return d.length ? [d] : []; }
+  if (n.kind === 'group' && !n.dim) return n.children.flatMap(closedShapes);
+  return [];
+}
+function areaLines(e: Engine, nodes: VNode[]): string[] {
+  const shapes = nodes.flatMap(closedShapes);
+  if (!shapes.length) return [];
+  const u = e.doc?.units ?? 'pt', k = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 }[u];
+  const a = shapes.reduce((s, d) => s + area(d), 0), per = shapes.reduce((s, d) => s + d.reduce((t, sp) => t + pathLength(sp), 0), 0);
+  return [`Area: ${fmt(a / (k * k))} ${u}²`, `Perimeter: ${unitLabel(e, per)}`];
+}
 registerTool({
   id: 'measure', label: 'Measure Tool', group: 'eyedropper', order: 77,
   icon: () => 'vMeasure',
-  hint: () => 'Drag to measure the distance and angle between two points; the result shows in the Info panel too.',
+  hint: () => 'Drag to measure the distance and angle between two points; click a closed shape (or measure with shapes selected) for its area and perimeter.',
   cursor: () => CURSORS.cross,
-  down: (ctx, p) => { ME.on = true; ME.a = ctx.snap(p.doc).p; ME.b = ME.a; },
+  down: (ctx, p) => { ME.on = true; ME.shape = null; ME.a = ctx.snap(p.doc).p; ME.b = ME.a; },
   move: (ctx, p) => { if (!ME.on) return; ME.b = p.shift ? (() => { const dx = p.doc.x - ME.a.x, dy = p.doc.y - ME.a.y, l = Math.hypot(dx, dy), q = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4); return { x: ME.a.x + Math.cos(q) * l, y: ME.a.y + Math.sin(q) * l }; })() : ctx.snap(p.doc, undefined, { from: ME.a }).p; ctx.redraw(); },
-  up: (ctx) => { ME.on = false; ctx.engine.setOverlay({ label: `D ${unitLabel(ctx.engine, Math.hypot(ME.b.x - ME.a.x, ME.b.y - ME.a.y))}`, at: ME.b, lines: [] }); },
+  up: (ctx, p) => {
+    const e = ctx.engine;
+    ME.on = false;
+    if (Math.hypot(ME.b.x - ME.a.x, ME.b.y - ME.a.y) * ctx.view().zoom < 2) {
+      const h = e.hit(p.doc), n = h ? e.nodeById(e.selectableFor(h.id)) : null, lines = n ? areaLines(e, [n]) : areaLines(e, e.selected());
+      ME.a = ME.b = p.doc;
+      ME.shape = lines.length ? { at: p.doc, lines } : null;
+      e.setOverlay({ label: lines.length ? lines.join('  ') : null, at: p.doc, lines: [] });
+      ctx.redraw();
+      return;
+    }
+    e.setOverlay({ label: `D ${unitLabel(e, Math.hypot(ME.b.x - ME.a.x, ME.b.y - ME.a.y))}`, at: ME.b, lines: [] });
+  },
   overlay: (ctx, g) => {
+    if (ME.shape) { hud(ctx, g, ctx.view().toScreen(ME.shape.at), ME.shape.lines); return; }
     if (ME.a.x === ME.b.x && ME.a.y === ME.b.y) return;
     const v = ctx.view(), s = v.toScreen(ME.a), t = v.toScreen(ME.b), e = ctx.engine;
     g.save(); g.strokeStyle = ctx.paint().accent; g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(t.x, t.y); g.stroke(); g.restore();
     const dx = ME.b.x - ME.a.x, dy = ME.b.y - ME.a.y;
-    hud(ctx, g, t, [`D: ${unitLabel(e, Math.hypot(dx, dy))}`, `W: ${unitLabel(e, Math.abs(dx))}  H: ${unitLabel(e, Math.abs(dy))}`, `${fmt((-Math.atan2(dy, dx) * 180) / Math.PI)}°`]);
+    hud(ctx, g, t, [`D: ${unitLabel(e, Math.hypot(dx, dy))}`, `W: ${unitLabel(e, Math.abs(dx))}  H: ${unitLabel(e, Math.abs(dy))}`, `${fmt((-Math.atan2(dy, dx) * 180) / Math.PI)}°`, ...areaLines(e, e.selected())]);
   },
 });
 
