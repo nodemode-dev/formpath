@@ -2,6 +2,26 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.23.0 · 2026-10-10
+
+Files and generation. Every one of the 76 parity rows is built; an independent audit of the code puts parity at 72 of 76, 94.7 percent (68 Full, 8 Partial).
+
+### Added
+
+- DXF: open, place and drop ASCII DXF from R12 to 2018 (lines, polylines with arcs, circles, ellipses, splines, text and MTEXT, hatches, solids, dimensions, blocks and attributes, layers with colours and lineweights) with DXF Import Options; export AutoCAD 2000 or R12 with units, scale and type as text or outlines.
+- EPS: Level 3 export per artboard in RGB or CMYK with real gradient shadings; formpth's own EPS reopens editable, and other EPS opens through a PostScript path reader. DWG is refused with a message to convert to DXF.
+- Generative Shape Fill, Generate Patterns and Retype panels, running only on the model set for the Assistant and disabled until one is set. Model SVG is cleaned of scripts, images, event handlers and links before import.
+- Retype matches outlined type to installed fonts by letter shape without a model, and reads text in images with a model that reads images; Preferences > Plugins has "The model reads images".
+- MCP tools `generative_shape_fill`, `generate_patterns` and `retype`; EPS and DXF in open, place and export. 84 tools.
+
+### Changed
+
+- `docs/PARITY.md` takes its grades from a second independent audit, with PDF held at Partial; Smart Guides drops to Partial for fixed construction angles.
+
+### Fixed
+
+- The Export dialog no longer moves when its format changes.
+
 ## 0.22.0 · 2026-10-10
 
 Libraries, paint and links. Parity is 69 of 76, 90.8 percent.
