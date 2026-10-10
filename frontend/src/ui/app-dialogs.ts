@@ -395,13 +395,14 @@ export class ExportDialog extends Dialog {
 
   constructor() {
     super('Export', 440);
+    q<HTMLElement>(this.scrim, '.cv-dialog').classList.add('cv-export');
     this.rows.format = row('Format', this.format);
     this.rows.scope = row('Export', this.scope);
     this.rows.scale = row('Resolution', this.scale);
     this.rows.quality = row('Quality (%)', this.quality);
     this.rows.transparent = row('Transparent background', this.transparent);
-    this.rows.outline = row('Convert type to outlines', this.outline);
     this.rows.preserve = row('Preserve formpth editing (reopens fully editable)', this.preserve);
+    this.rows.outline = row('Convert type to outlines', this.outline);
     this.rows.epsColor = row('Color', this.epsColor);
     this.rows.cadVersion = row('Version', this.cadVersion);
     this.rows.cadUnits = row('Units', this.cadUnits);
@@ -425,8 +426,17 @@ export class ExportDialog extends Dialog {
     this.artboard = artboard;
     (this.scope.querySelector('option[value="selection"]') as HTMLOptionElement).disabled = !hasSelection;
     if (this.scope.value === 'selection' && !hasSelection) this.scope.value = 'artboard';
+    return new Promise((res) => { this.resolve = res; this.open(); this.reserve(); });
+  }
+
+  private reserve(): void {
+    const keep = this.format.selectedIndex;
+    this.body.style.minHeight = '';
+    let h = 0;
+    for (let i = 0; i < this.format.options.length; i++) { this.format.selectedIndex = i; this.sync(); h = Math.max(h, this.body.offsetHeight); }
+    this.format.selectedIndex = keep;
     this.sync();
-    return new Promise((res) => { this.resolve = res; this.open(); });
+    this.body.style.minHeight = `${h}px`;
   }
 
   private sync(): void {

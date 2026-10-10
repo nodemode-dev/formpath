@@ -232,6 +232,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/appearance.ts
 - src/ui/panels/attributes.ts
 - src/ui/form-dialog.ts
+- src/ui/app-dialogs.ts
 - src/ui/commands.ts
 - src/ui/palette.ts
 - src/ui/icons.ts
@@ -2374,6 +2375,15 @@ One reusable dialog for every exact-values dialog: number, select, check, text, 
 - logged: v0.20.0 · 2026-10-10
 
 formHooks.onResult receives every dialog's title and returned values (null when cancelled), which is how the Actions panel records dialog values. formHooks.supply is consumed by the next ask: its values replace the fields' starting values, and unless modal the promise resolves at once with them and no dialog opens. Values that do not fit a field (a select choice that no longer exists, a non-number for a number) keep the field's own value.
+
+## src/ui/app-dialogs.ts
+
+### src/ui/app-dialogs.ts · Export dialog holds still
+- refers-to: src/ui/app-dialogs.ts :: ExportDialog.reserve, ExportDialog.ask, ExportDialog constructor row order; src/styles/formpth.css :: .cv-export .cv-dialog-body
+- kind: rationale
+- logged: v0.23.0 · 2026-10-10
+
+Each format shows a different set of option rows (DXF has seven, PDF three), so the dialog changed height on every format switch and the centred scrim moved the whole dialog (layout shift about 0.008). On open, reserve walks every format through sync in the same task (selectedIndex, so the dropdown label is not touched), takes the tallest body height and sets it as the body's min-height; nothing paints in between. The body aligns its rows to the top so the spare space sits below the options. Preserve editing now comes before Convert type to outlines, so switching SVG to PDF hides a row below Preserve instead of above it and no row moves. Anchoring the dialog's top was the alternative; it was not taken because every other dialog is centred and the Export dialog would then sit differently from them. The other dialogs are untouched: the rule is scoped to the cv-export class.
 
 ## src/ui/commands.ts
 

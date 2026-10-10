@@ -478,6 +478,7 @@
 .cv-newdoc-side { display: flex; flex-direction: column; gap: 8px; }
 .cv-dialog-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; }
 .cv-dialog-row > .cv-input, .cv-dialog-row > select { width: 100%; }
+.cv-export .cv-dialog-body { align-content: start; }
 .cv-input-num { font-family: var(--font-mono); }
 .cv-dialog .cv-num { height: var(--ctl-md); }
 .cv-dialog .cv-num input { width: 100%; }
