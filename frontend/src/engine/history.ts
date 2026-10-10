@@ -38,6 +38,16 @@ export class History {
   }
 
   noteSelection(selection: string[]): void { this.states[this.at] = { ...this.current, selection }; }
+  stateAt(i: number): HistoryState | null { return this.states[i] ?? null; }
+  trim(): void {
+    const drop = this.states.length - History.limit - 1;
+    if (drop <= 0) return;
+    const cut = Math.min(drop, this.at);
+    if (cut <= 0) return;
+    this.states.splice(0, cut);
+    this.at -= cut;
+    this.rev += 1;
+  }
 
   mark(): number { return this.at; }
   squash(from: number): boolean {

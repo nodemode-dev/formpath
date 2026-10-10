@@ -33,6 +33,10 @@ import { dimensionNode, dimensionSpec } from './dimension';
 import { expandedIntertwine, inArea, intertwineFlip as flipIntertwine, intertwineLasso, intertwineNode, intertwineOverlapping } from './intertwine';
 import { expandedShaper, recognizeShape, samplePolyline, shaperFill, shaperNode, shaperRegionAt, shaperRegions, shaperScribble, type ShapeKind } from './shaper';
 import type { IntertwineSpec } from './types';
+import { cleanData, graphNode, graphSpec, GRAPH_TYPES, restyleText, seriesOfPart } from './graph';
+import { applyDataSetDoc, captureValues, kindFits, uniqueName, type ResolvedImage } from './variables';
+import { History } from './history';
+import type { DataSet, GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from './types';
 import { rectCorners } from './geometry';
 import type { DimensionSpec, EnvelopeNode, EnvelopeOptions, EnvelopeSpec } from './types';
 
@@ -57,8 +61,17 @@ export interface ToolOptions {
   shapeMode: 'normal' | 'behind' | 'inside'; textMode: 'point' | 'area' | 'path'; vertical: boolean; arcConvex: boolean; liquifySize: number; liquifyKind: string;
   ftMode?: 'transform' | 'perspective' | 'free'; ftConstrain?: boolean;
   puppetExpand?: number; puppetMesh?: boolean; dim?: Partial<DimensionSpec>; dimPick?: 'center' | 'three';
+  graph?: Partial<GraphSpec>;
 }
 export interface ClipboardData { stamp: string; nodes: VNode[]; symbols: Doc['symbols']; swatches: Doc['swatches']; patterns: Doc['patterns']; brushes: Doc['brushes']; images: Doc['images']; assets: Map<string, Blob>; bounds: Rect }
+
+export type RecordedOp =
+  | { op: 'transform'; m: Mat; c: Pt; copy: boolean; name: string }
+  | { op: 'add'; name: string; nodes: VNode[] }
+  | { op: 'fill'; paint: Paint }
+  | { op: 'stroke'; patch: Partial<StrokeItem> }
+  | { op: 'props'; patch: Record<string, unknown> }
+  | { op: 'style'; id: string };
 
 export type SelectMode = 'replace' | 'add' | 'subtract' | 'toggle';
 export interface ErrorEntry { at: number; what: string; message: string }
@@ -180,7 +193,33 @@ export class Engine extends Emitter<EngineEvents> {
   beginStep(): void { const p = this.current; this.step = p ? { p, at: p.history.mark() } : null; }
   endStep(): void { const s = this.step; this.step = null; if (s && s.p.history.squash(s.at)) this.emit('history', null); }
 
-  beginDrag(name: string): void { const p = this.current; if (!p) return; this.dragBase = p.doc; this.dragName = name; }
+  recorder: ((op: RecordedOp) => void) | null = null;
+  recordMute = 0;
+  private dragXf: { m: Mat; copy: boolean; c: Pt } | null = null;
+  private rec(op: RecordedOp): void { if (this.recorder && this.recordMute === 0) this.recorder(op); }
+  noteDragTransform(m: Mat, copy: boolean): void {
+    const p = this.current, base = this.dragBase;
+    if (!p || !base) return;
+    const c = this.dragXf?.c ?? (() => { const b = selectionBounds(base, topObjects(base, p.selection).map((id) => findNode(base, id)).filter((n): n is VNode => !!n), false); return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; })();
+    this.dragXf = { m, copy, c };
+  }
+  playOp(op: RecordedOp): boolean {
+    switch (op.op) {
+      case 'transform': {
+        const b = this.selectionBounds(false);
+        if (!b) return false;
+        const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 }, t = apply(op.m, op.c.x, op.c.y), m: Mat = [op.m[0], op.m[1], op.m[2], op.m[3], 0, 0];
+        return this.transform(mul(translate(c.x + t.x - op.c.x, c.y + t.y - op.c.y), mul(m, translate(-c.x, -c.y))), { copy: op.copy, name: op.name });
+      }
+      case 'add': return this.addNodes(op.name, op.nodes.map((n) => cloneNode(n))).length > 0;
+      case 'fill': if (!this.hasSelection) return false; this.setFill(op.paint); return true;
+      case 'stroke': if (!this.hasSelection) return false; this.setStroke(op.patch); return true;
+      case 'props': if (!this.hasSelection) return false; this.setObjectProps(op.patch as Parameters<Engine['setObjectProps']>[0]); return true;
+      case 'style': if (!this.hasSelection) return false; this.applyGraphicStyle(op.id); return true;
+      default: return false;
+    }
+  }
+  beginDrag(name: string): void { const p = this.current; if (!p) return; this.dragBase = p.doc; this.dragName = name; this.dragXf = null; }
   dragTo(doc: Doc): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = reflow(doc); invalidateBounds(); this.emit('render', null); }
   reflowAll(): void { for (const p of this.projects) { if (p.id === this.currentId && this.dragBase) continue; const d = reflow(p.doc); if (d !== p.doc) p.doc = d; } this.refresh(); }
   get dragging(): boolean { return this.dragBase !== null; }
@@ -193,10 +232,13 @@ export class Engine extends Emitter<EngineEvents> {
     if (select) p.selection = new Set(select);
     this.pruneSelection(p);
     if (changed) p.history.push(this.dragName, p.doc, [...p.selection]);
+    const xf = this.dragXf;
+    this.dragXf = null;
+    if (changed && xf) { this.lastTransform = { m: xf.m, copy: xf.copy }; this.rec({ op: 'transform', m: xf.m, c: xf.c, copy: xf.copy, name: this.dragName }); }
     this.refresh();
     return changed;
   }
-  cancelDrag(): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = this.dragBase; this.dragBase = null; this.refresh(); }
+  cancelDrag(): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = this.dragBase; this.dragBase = null; this.dragXf = null; this.refresh(); }
 
   undo(steps = 1): boolean { const p = this.current; if (!p) return false; let s = null; for (let i = 0; i < steps; i++) s = p.history.undo() ?? s; if (!s) return false; this.restore(p, s.doc, s.selection); return true; }
   redo(steps = 1): boolean { const p = this.current; if (!p) return false; let s = null; for (let i = 0; i < steps; i++) s = p.history.redo() ?? s; if (!s) return false; this.restore(p, s.doc, s.selection); return true; }
@@ -404,10 +446,11 @@ export class Engine extends Emitter<EngineEvents> {
         void ok;
       }
     }
-    this.edit(name, (d) => {
+    const ok = this.edit(name, (d) => {
       const at = this.insertionPoint(d, p, opts);
       return { doc: insertInto(d, at.parent, at.index, nodes), select: opts.select === false ? undefined : nodes.map((n) => n.id) };
     });
+    if (ok && !opts.layer && !opts.above) this.rec({ op: 'add', name, nodes });
     return nodes.map((n) => n.id);
   }
 
@@ -478,6 +521,7 @@ export class Engine extends Emitter<EngineEvents> {
     const sf = ids ? null : this.shaperFaceSelected();
     if (sf) { this.shaperFill(sf.group, sf.at, paint); return; }
     if (!this.applyToSelection('Fill', (n) => (n.kind === 'group' && n.livePaint ? { ...n, livePaint: { ...n.livePaint, fills: liveFaces(n).map((f) => ({ at: interiorOf(f), paint })) } } : this.paintDeep(n, (ap) => withFirstFill(ap, paint))), ids)) this.emit('options', null);
+    else if (!ids) this.rec({ op: 'fill', paint });
   }
   editLiveShape(patch: LivePatch, ids?: string[], name = 'Shape'): boolean {
     return this.applyToSelection(name, (n) => (n.kind === 'path' && n.live ? editLive(n, patch) : n), ids);
@@ -502,6 +546,7 @@ export class Engine extends Emitter<EngineEvents> {
     const lps = ids ? null : this.livePaintSelected();
     if (lps) { if (lps.edges.length) this.livePaintEdges(lps, patch); return; }
     if (!this.applyToSelection('Stroke', (n) => this.paintDeep(n, (ap) => withFirstStroke(ap, patch)), ids)) this.emit('options', null);
+    else if (!ids) this.rec({ op: 'stroke', patch });
   }
   swapFillStroke(): void {
     const f = this.fillPaint, s = this.strokePaint;
@@ -525,7 +570,7 @@ export class Engine extends Emitter<EngineEvents> {
     const p = this.current; if (!p) return;
     const t = ids && ids.length ? ids : this.targetIds();
     if (!t.length) return;
-    this.edit(patch.opacity !== undefined ? 'Opacity' : patch.blend ? 'Blending Mode' : patch.name !== undefined ? 'Rename' : patch.knockout !== undefined || patch.knockoutShape !== undefined ? 'Knockout' : 'Object Options', (d) => setProps(d, t, patch));
+    if (this.edit(patch.opacity !== undefined ? 'Opacity' : patch.blend ? 'Blending Mode' : patch.name !== undefined ? 'Rename' : patch.knockout !== undefined || patch.knockoutShape !== undefined ? 'Knockout' : 'Object Options', (d) => setProps(d, t, patch)) && !(ids && ids.length) && patch.name === undefined) this.rec({ op: 'props', patch });
   }
 
   setStrokeGradientMode(mode: 'within' | 'along' | 'across', ids?: string[]): boolean {
@@ -645,7 +690,10 @@ export class Engine extends Emitter<EngineEvents> {
     if (!t.length) return false;
     this.lastTransform = { m, copy: !!opts.copy };
     const o = { strokes: this.view.scaleStrokes, patterns: this.view.transformPatterns, gradients: true };
-    return this.edit(opts.name ?? 'Transform', (d) => { const r = transformNodes(d, t, m, opts.copy, o); return { doc: r.doc, select: r.ids }; });
+    const b = selectionBounds(p.doc, t.map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n), false);
+    const ok = this.edit(opts.name ?? 'Transform', (d) => { const r = transformNodes(d, t, m, opts.copy, o); return { doc: r.doc, select: r.ids }; });
+    if (ok && !opts.ids) this.rec({ op: 'transform', m, c: { x: b.x + b.w / 2, y: b.y + b.h / 2 }, copy: !!opts.copy, name: opts.name ?? 'Transform' });
+    return ok;
   }
   transformEach(make: (b: Rect) => Mat, opts: { copy?: boolean; ids?: string[] } = {}): boolean {
     const p = this.current; if (!p) return false;
@@ -910,7 +958,7 @@ export class Engine extends Emitter<EngineEvents> {
     const st = this.doc?.styles.find((s) => s.id === id || s.name === id);
     if (!st) return;
     this.currentStyle = st.id;
-    this.applyToSelection('Graphic Style', (n) => withStyle(n, st), ids);
+    if (this.applyToSelection('Graphic Style', (n) => withStyle(n, st), ids) && !ids) this.rec({ op: 'style', id: st.name });
   }
   useLibraryStyle(key: string, name: string, ids?: string[]): string {
     const p = this.current, lib = styleLibrary(key), src = lib?.styles.find((s) => s.name === name);
@@ -1235,6 +1283,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (obj && n.kind === 'group' && n.trace) return this.expandNode(doc, { ...n, trace: undefined }, what);
     if (obj && n.kind === 'group' && n.livePaint) return this.expandNode(doc, this.expandedLivePaint(n), what);
     if (obj && n.kind === 'group' && n.dim) return this.expandNode(doc, { ...n, dim: undefined }, what);
+    if (obj && n.kind === 'group' && n.graph) return this.expandNode(doc, { ...n, graph: undefined, graphKey: undefined }, what);
     if (obj && n.kind === 'group' && n.intertwine) return this.expandNode(doc, expandedIntertwine(n), what);
     if (obj && n.kind === 'group' && n.shaper) return this.expandNode(doc, expandedShaper(n), what);
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
@@ -1403,6 +1452,150 @@ export class Engine extends Emitter<EngineEvents> {
     const t = this.dimensionIds(ids);
     if (!t.length) return false;
     return this.edit(name, (d) => updateNodes(d, t, (n) => (n.kind === 'group' && n.dim ? { ...n, dim: { ...n.dim, ...patch } } : n)));
+  }
+
+  addGraph(type: GraphType, r: Rect, data?: GraphData, patch: Partial<GraphSpec> = {}, select = true): string | null {
+    const d = this.doc;
+    if (!d) return null;
+    const s = graphSpec(type, r.w, r.h, [1, 0, 0, 1, r.x, r.y], data ? cleanData(data) : undefined, { ...(this.options.graph ?? {}), ...patch });
+    return this.addNodes(`${GRAPH_TYPES.find((t) => t[0] === type)?.[1] ?? 'Column'} Graph`, [graphNode(d, s)], { select })[0] ?? null;
+  }
+  graphOf(id: string): string | null {
+    const p = this.current;
+    if (!p) return null;
+    const n = findNode(p.doc, id);
+    if (n?.kind === 'group' && n.graph) return n.id;
+    for (const a of ancestors(p.doc, id).reverse()) if (a.kind === 'group' && a.graph) return a.id;
+    return null;
+  }
+  graphTargets(ids?: string[]): string[] {
+    const p = this.current;
+    if (!p) return [];
+    const src = ids && ids.length ? ids : [...p.selection];
+    return [...new Set(src.map((id) => this.graphOf(id)).filter((x): x is string => !!x))];
+  }
+  graphSeriesSelected(): { graph: string; series: number[] } | null {
+    const p = this.current;
+    if (!p) return null;
+    const g = this.graphTargets()[0];
+    if (!g) return null;
+    const out = new Set<number>();
+    for (const id of p.selection) {
+      if (id === g || this.graphOf(id) !== g) continue;
+      const chain = [findNode(p.doc, id), ...ancestors(p.doc, id)].filter((n): n is VNode => !!n);
+      for (const n of chain) { const k = seriesOfPart(n.part); if (k !== null) { out.add(k); break; } }
+    }
+    return { graph: g, series: [...out].sort((a, b) => a - b) };
+  }
+  setGraph(patch: Partial<GraphSpec>, ids?: string[], name = 'Graph Type'): boolean {
+    const t = this.graphTargets(ids);
+    if (!t.length) return false;
+    const txt: { font?: string; style?: string; size?: number } = {};
+    if (patch.font !== undefined) txt.font = patch.font;
+    if (patch.style !== undefined) txt.style = patch.style;
+    if (patch.size !== undefined) txt.size = patch.size;
+    return this.edit(name, (d) => updateNodes(d, t, (n) => {
+      if (n.kind !== 'group' || !n.graph) return n;
+      const next: GraphSpec = { ...n.graph, ...patch, ...(patch.data ? { data: cleanData(patch.data) } : {}) };
+      const kids = Object.keys(txt).length ? n.children.map((c) => restyleText(c, txt)) : n.children;
+      return { ...n, graph: next, children: kids, ...(patch.type && patch.type !== n.graph.type && /^(Column|Stacked Column|Bar|Stacked Bar|Line|Area|Scatter|Pie|Radar) Graph$/.test(n.name ?? '') ? { name: `${GRAPH_TYPES.find((x) => x[0] === patch.type)?.[1]} Graph` } : {}) };
+    }));
+  }
+  setGraphData(data: GraphData, ids?: string[]): boolean { return this.setGraph({ data }, ids, 'Graph Data'); }
+  setGraphSeries(series: number[], patch: { type?: GraphSeriesType | null; column?: GraphColumnDesign | null; marker?: string | null }, ids?: string[]): boolean {
+    const t = this.graphTargets(ids);
+    if (!t.length || !series.length) return false;
+    const put = <V,>(rec: Record<string, V> | undefined, v: V | null | undefined): Record<string, V> | undefined => { if (v === undefined) return rec; const o = { ...(rec ?? {}) }; for (const k of series) { if (v === null) delete o[k]; else o[k] = v; } return Object.keys(o).length ? o : undefined; };
+    return this.edit(patch.type !== undefined ? 'Graph Type' : patch.column !== undefined ? 'Graph Column' : 'Graph Marker', (d) => updateNodes(d, t, (n) => (n.kind === 'group' && n.graph ? { ...n, graph: { ...n.graph, seriesTypes: put(n.graph.seriesTypes, patch.type), columns: put(n.graph.columns, patch.column), markers: put(n.graph.markers, patch.marker) } } : n)));
+  }
+  addGraphDesign(name: string, ids?: string[]): string | null {
+    const p = this.current;
+    if (!p) return null;
+    const t = this.targetIds(ids).filter((id) => !this.graphOf(id));
+    if (!t.length) return null;
+    const nodes = inDocOrder(p.doc, new Set(t)).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n);
+    const art: VNode = nodes.length === 1 ? cloneNode(nodes[0]) : { id: newId('g'), kind: 'group', clip: false, children: nodes.map((n) => cloneNode(n)), opacity: 1, blend: 'normal', ap: emptyAppearance() };
+    const id = newId('gd');
+    return this.edit('New Design', (d) => ({ ...d, graphDesigns: [...(d.graphDesigns ?? []), { id, name: name || `Design ${(d.graphDesigns?.length ?? 0) + 1}`, art }] })) ? id : null;
+  }
+  renameGraphDesign(id: string, name: string): boolean { return this.edit('Rename Design', (d) => ({ ...d, graphDesigns: (d.graphDesigns ?? []).map((x) => (x.id === id ? { ...x, name } : x)) })); }
+  deleteGraphDesign(id: string): boolean {
+    return this.edit('Delete Design', (d) => {
+      let out: Doc = { ...d, graphDesigns: (d.graphDesigns ?? []).filter((x) => x.id !== id) };
+      const fix: string[] = [];
+      walk(out.layers, (n) => { if (n.kind === 'group' && n.graph) { if (Object.values(n.graph.columns ?? {}).some((c) => c.design === id) || Object.values(n.graph.markers ?? {}).includes(id)) fix.push(n.id); return false; } });
+      const strip = <V,>(r: Record<string, V> | undefined, used: (v: V) => boolean): Record<string, V> | undefined => { const o = Object.fromEntries(Object.entries(r ?? {}).filter(([, v]) => !used(v))); return Object.keys(o).length ? o : undefined; };
+      out = updateNodes(out, fix, (n) => (n.kind === 'group' && n.graph ? { ...n, graph: { ...n.graph, columns: strip(n.graph.columns, (c) => c.design === id), markers: strip(n.graph.markers, (m) => m === id) } } : n));
+      return out;
+    });
+  }
+  pasteGraphDesign(id: string): string[] {
+    const des = this.doc?.graphDesigns?.find((x) => x.id === id), v = this.current?.viewport;
+    if (!des || !v) return [];
+    const n = cloneNode(des.art), b = this.boundsOf(n), c = v.toDoc(v.centerX, v.height / 2);
+    return this.addNodes('Paste Design', [transformNode(n, translate(c.x - b.x - b.w / 2, c.y - b.y - b.h / 2))]);
+  }
+
+  setVariables(fn: (vars: Variable[], d: Doc) => Variable[], name = 'Variables'): boolean { return this.edit(name, (d) => { const next = fn(d.variables ?? [], d); return next === d.variables ? d : { ...d, variables: next }; }); }
+  makeVariable(kind: VariableKind, nodeId?: string | null, name?: string): string | null {
+    const p = this.current;
+    if (!p) return null;
+    const n = nodeId ? findNode(p.doc, nodeId) : null;
+    if (nodeId && !kindFits(kind, n)) return null;
+    const id = newId('var'), base = { text: 'Text', image: 'Image', visibility: 'Visibility', graph: 'Graph' }[kind];
+    const ok = this.edit('New Variable', (d) => ({ ...d, variables: [...(d.variables ?? []).map((v) => (n && v.node === n.id && v.kind === kind ? { ...v, node: null } : v)), { id, name: name?.trim() || uniqueName(d, base), kind, node: n ? n.id : null }] }));
+    return ok ? id : null;
+  }
+  bindVariable(varId: string, nodeId: string | null): boolean {
+    const p = this.current, v = p?.doc.variables?.find((x) => x.id === varId);
+    if (!p || !v) return false;
+    const n = nodeId ? findNode(p.doc, nodeId) : null;
+    if (nodeId && !kindFits(v.kind, n)) return false;
+    return this.setVariables((vars) => vars.map((x) => (x.id === varId ? { ...x, node: n ? n.id : null } : n && x.node === n.id && x.kind === v.kind ? { ...x, node: null } : x)), nodeId ? 'Bind Variable' : 'Unbind Variable');
+  }
+  renameVariable(varId: string, name: string): boolean { const nm = name.trim(); return !!nm && this.setVariables((vars) => (vars.some((x) => x.name === nm && x.id !== varId) ? vars : vars.map((x) => (x.id === varId ? { ...x, name: nm } : x))), 'Rename Variable'); }
+  deleteVariable(varId: string): boolean { return this.edit('Delete Variable', (d) => ({ ...d, variables: (d.variables ?? []).filter((x) => x.id !== varId), dataSets: (d.dataSets ?? []).map((s) => { const values = { ...s.values }; delete values[varId]; return { ...s, values }; }) })); }
+  captureDataSet(name?: string): number {
+    const p = this.current;
+    if (!p || !(p.doc.variables ?? []).length) return -1;
+    const n = (p.doc.dataSets ?? []).length;
+    return this.edit('Capture Data Set', (d) => ({ ...d, dataSets: [...(d.dataSets ?? []), { id: newId('ds'), name: name?.trim() || `Data Set ${n + 1}`, values: captureValues(d) }], dataSet: n })) ? n : -1;
+  }
+  updateDataSet(index?: number): boolean {
+    const p = this.current, i = index ?? p?.doc.dataSet ?? -1;
+    if (!p || !p.doc.dataSets?.[i]) return false;
+    return this.edit('Update Data Set', (d) => ({ ...d, dataSets: (d.dataSets ?? []).map((s, k) => (k === i ? { ...s, values: { ...s.values, ...captureValues(d) } } : s)) }));
+  }
+  renameDataSet(index: number, name: string): boolean { return !!name.trim() && this.edit('Rename Data Set', (d) => ({ ...d, dataSets: (d.dataSets ?? []).map((s, k) => (k === index ? { ...s, name: name.trim() } : s)) })); }
+  deleteDataSet(index: number): boolean {
+    return this.edit('Delete Data Set', (d) => { const sets = (d.dataSets ?? []).filter((_, k) => k !== index); const cur = d.dataSet ?? -1; return { ...d, dataSets: sets, dataSet: !sets.length ? undefined : cur > index ? cur - 1 : Math.min(cur, sets.length - 1) }; });
+  }
+  addDataSets(vars: Variable[], sets: DataSet[], name = 'Import Data Sets'): boolean {
+    if (!sets.length) return false;
+    return this.edit(name, (d) => ({ ...d, variables: vars, dataSets: [...(d.dataSets ?? []), ...sets] }));
+  }
+  applyDataSet(index: number, images: Record<string, ResolvedImage> = {}): boolean {
+    const p = this.current;
+    if (!p || !p.doc.dataSets?.[index]) return false;
+    return this.edit(`Data Set: ${p.doc.dataSets[index].name}`, (d) => applyDataSetDoc(d, index, images));
+  }
+
+  get historyLimit(): number { return History.limit; }
+  setHistoryLimit(n: number): void {
+    History.limit = Math.max(5, Math.min(1000, Math.round(n)));
+    for (const p of this.projects) p.history.trim();
+    this.emit('history', null);
+  }
+  newDocumentFromState(index?: number): Project | null {
+    const p = this.current;
+    if (!p) return null;
+    const st = p.history.stateAt(index ?? p.history.mark());
+    if (!st) return null;
+    const q = this.addProject(st.doc, `${p.name} ${st.name}`.slice(0, 80));
+    for (const [k, b] of p.assets) q.assets.set(k, b);
+    q.history.markUnsaved();
+    this.emit('projects', null);
+    return q;
   }
 
   createMesh(rows: number, cols: number, highlight: 'flat' | 'center' | 'edge' = 'flat', ids?: string[]): boolean {

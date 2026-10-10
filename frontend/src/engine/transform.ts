@@ -4,6 +4,7 @@ import { envelopeMapper } from './live';
 import { dimHandles, dimOffsetFor } from './dimension';
 import { transformIntertwine } from './intertwine';
 import { mapShaper } from './shaper';
+import { xfGraph } from './graph';
 import type { Appearance, AppearanceItem, DimensionSpec, Gradient, LiveShape, Mat, Paint, VNode } from './types';
 
 function xfDim(s: DimensionSpec, m: Mat): DimensionSpec {
@@ -57,7 +58,7 @@ export function transformNode<T extends VNode>(n: T, m: Mat, o: XfOpts = { strok
     case 'image': return { ...base, xf: mul(m, n.xf), ...(n.warp ? { warp: { ...n.warp, pts: n.warp.pts.map((p) => applyPt(m, p)) } } : {}) } as T;
     case 'symbol': return { ...base, xf: mul(m, n.xf) } as T;
     case 'mesh': return { ...base, points: n.points.map((p) => { const q = apply(m, p.x, p.y); const hs = p.h.map((h) => { const a = apply(m, p.x + h.x, p.y + h.y); return { x: a.x - q.x, y: a.y - q.y }; }) as [typeof p.h[0], typeof p.h[0], typeof p.h[0], typeof p.h[0]]; return { ...p, x: q.x, y: q.y, h: hs }; }) } as T;
-    case 'group': return { ...base, children: n.children.map((c) => transformNode(c, m, o)), ...(n.dim ? { dim: xfDim(n.dim, m) } : {}), ...(n.intertwine ? { intertwine: transformIntertwine(n.intertwine, m) } : {}), ...(n.shaper ? { shaper: mapShaper(n.shaper, (p) => applyPt(m, p), (pp) => xfPaint(pp, m, o)) } : {}), ...(n.trace ? { trace: { ...n.trace, src: transformNode(n.trace.src, m, o) } } : {}), ...(n.livePaint ? { livePaint: { ...n.livePaint, fills: n.livePaint.fills.map((f) => ({ at: apply(m, f.at.x, f.at.y), paint: xfPaint(f.paint, m, o) })) } } : {}) } as T;
+    case 'group': return { ...base, children: n.children.map((c) => transformNode(c, m, o)), ...(n.dim ? { dim: xfDim(n.dim, m) } : {}), ...(n.graph ? { graph: xfGraph(n.graph, m) } : {}), ...(n.intertwine ? { intertwine: transformIntertwine(n.intertwine, m) } : {}), ...(n.shaper ? { shaper: mapShaper(n.shaper, (p) => applyPt(m, p), (pp) => xfPaint(pp, m, o)) } : {}), ...(n.trace ? { trace: { ...n.trace, src: transformNode(n.trace.src, m, o) } } : {}), ...(n.livePaint ? { livePaint: { ...n.livePaint, fills: n.livePaint.fills.map((f) => ({ at: apply(m, f.at.x, f.at.y), paint: xfPaint(f.paint, m, o) })) } } : {}) } as T;
     case 'layer': return { ...base, children: n.children.map((c) => transformNode(c, m, o)) } as T;
     case 'blend': return { ...base, children: n.children.map((c) => transformNode(c, m, o)), spec: { ...n.spec, spine: n.spec.spine ? transformPath(n.spec.spine, m) : null } } as T;
     case 'envelope': {

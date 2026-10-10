@@ -98,6 +98,7 @@ export interface NodeBase {
   note?: string;
   wrap?: TextWrap | null;
   bbox?: number;
+  part?: string;
 }
 
 export interface LayerNode extends NodeBase { kind: 'layer'; children: VNode[]; color: string; template?: boolean; printable?: boolean; clip?: boolean }
@@ -117,7 +118,21 @@ export interface DimensionSpec {
 export interface IntertwineZone { d: PathData; top: string }
 export interface IntertwineSpec { zones: IntertwineZone[] }
 export interface ShaperSpec { cuts: Pt[]; merges: Array<{ pts: Pt[]; src: string }>; fills: Array<{ at: Pt; paint: Paint }> }
-export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint; dim?: DimensionSpec; intertwine?: IntertwineSpec; shaper?: ShaperSpec }
+export type GraphType = 'column' | 'stacked' | 'bar' | 'stackedBar' | 'line' | 'area' | 'scatter' | 'pie' | 'radar';
+export type GraphSeriesType = 'column' | 'stacked' | 'line' | 'area';
+export interface GraphData { series: string[]; cats: string[]; values: Array<Array<number | null>> }
+export interface GraphColumnDesign { design: string; mode: 'vertical' | 'uniform' | 'repeat'; per: number; fraction: 'chop' | 'scale' }
+export interface GraphSpec {
+  type: GraphType; w: number; h: number; xf: Mat; data: GraphData;
+  axis: 'start' | 'end' | 'both'; auto: boolean; min: number; max: number; divisions: number;
+  valueTicks: 'none' | 'short' | 'full'; catTicks: 'none' | 'short' | 'full'; prefix: string; suffix: string;
+  legend: 'right' | 'top' | 'none'; pieLegend: 'standard' | 'wedges' | 'none'; pieSort: 'none' | 'all' | 'first'; piePosition: 'ratio' | 'even' | 'stacked';
+  colWidth: number; clusterWidth: number; mark: boolean; connect: boolean; edgeToEdge: boolean; fillLines: boolean; lineWidth: number; markerSize: number;
+  shadow: boolean; font: string; style: string; size: number;
+  seriesTypes?: Record<string, GraphSeriesType>; columns?: Record<string, GraphColumnDesign>; markers?: Record<string, string>;
+}
+export interface GraphDesign { id: string; name: string; art: VNode }
+export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint; dim?: DimensionSpec; intertwine?: IntertwineSpec; shaper?: ShaperSpec; graph?: GraphSpec; graphKey?: string }
 export interface PathNode extends NodeBase { kind: 'path'; d: PathData; rule: FillRule; live?: LiveShape; guide?: boolean }
 export interface CompoundNode extends NodeBase { kind: 'compound'; children: PathNode[]; rule: FillRule }
 
@@ -228,7 +243,16 @@ export interface Doc {
   images: Record<string, ImageAsset>;
   rasterPpi: number;
   exportAssets?: ExportAsset[];
+  graphDesigns?: GraphDesign[];
+  variables?: Variable[];
+  dataSets?: DataSet[];
+  dataSet?: number;
 }
+
+export type VariableKind = 'text' | 'image' | 'visibility' | 'graph';
+export interface Variable { id: string; name: string; kind: VariableKind; node: string | null }
+export type VariableValue = string | boolean | GraphData;
+export interface DataSet { id: string; name: string; values: Record<string, VariableValue> }
 
 export type ToolId = string;
 export interface Notice { text: string; kind: 'info' | 'error' }
