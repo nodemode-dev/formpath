@@ -155,7 +155,7 @@ class Writer {
     const pt = this.paint(it.paint, b);
     if (it.brush) {
       const parts = brushGeometry(this.doc, id, it);
-      if (parts) { for (const part of parts) out.push(`<path d="${this.d(part.d)}" fill="${part.paint ? this.paint(part.paint, b).v : pt.v}"${blend}/>`); return; }
+      if (parts) { const op = (part: { opacity?: number }): number => it.opacity * (part.opacity ?? 1); for (const part of parts) out.push(`<path d="${this.d(part.d)}" fill="${part.paint ? this.paint(part.paint, b).v : pt.v}"${op(part) < 1 ? ` fill-opacity="${num(op(part))}"` : ''}${blend}/>`); return; }
     }
     const art = gradientStrokeArt(this.doc, id, it, rule === 'evenodd' ? 'evenodd' : 'nonzero');
     if (art) { out.push(this.gradientStroke(art, strokeRegion(id, rule === 'evenodd' ? 'evenodd' : 'nonzero', it), it, b, blend)); return; }

@@ -18,6 +18,7 @@ export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: numbe
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
 const f = (v: number): string => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? '0' : String(r); };
+const pdfName = (s: string): string => (s || 'Spot').replace(/[^\x21-\x7e]|[#()<>[\]{}/%]/g, (ch) => [...new TextEncoder().encode(ch)].map((b) => `#${b.toString(16).padStart(2, '0')}`).join(''));
 const pdfString = (s: string): string => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).replace(/[^\x20-\x7e]/g, '?')})`;
 
 async function deflate(data: Uint8Array): Promise<Uint8Array> {
@@ -54,6 +55,7 @@ class Painter {
   readonly gs = new Map<string, number>();
   readonly patterns = new Map<string, number>();
   readonly xobjects = new Map<string, number>();
+  readonly spaces = new Map<string, number>();
   private n = 0;
   constructor(private readonly pdf: PdfFile, private readonly p: Project, private readonly o: PdfOptions, private readonly cmyk: boolean, private readonly outlines: Map<string, PathData>) {}
   get doc(): Doc { return this.p.doc; }
@@ -110,7 +112,23 @@ class Painter {
     return id;
   }
 
+  separation(raw: Paint, stroke: boolean): string | null {
+    if (raw.type !== 'color' || !raw.swatch) return null;
+    const sw = this.doc.swatches.find((s) => s.id === raw.swatch);
+    const reg = sw?.name === '[Registration]';
+    if (!sw || !(sw.spot || reg) || sw.paint.type !== 'color') return null;
+    let id = this.spaces.get(sw.name);
+    if (!id) {
+      const k = toCmyk(sw.paint.color), alt = reg ? '1 1 1 1' : k.kind === 'cmyk' ? `${f(k.c / 100)} ${f(k.m / 100)} ${f(k.y / 100)} ${f(k.k / 100)}` : '0 0 0 1';
+      id = this.pdf.add(`[/Separation /${reg ? 'All' : pdfName(sw.name)} /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [${alt}] /N 1 >>]`);
+      this.spaces.set(sw.name, id);
+    }
+    return `/CS${id} ${stroke ? 'CS' : 'cs'} ${f(Math.max(0, Math.min(100, raw.tint ?? 100)) / 100)} ${stroke ? 'SCN' : 'scn'}`;
+  }
+
   paint(raw: Paint, stroke: boolean, b: Rect, page: Mat): string | null {
+    const sep = this.separation(raw, stroke);
+    if (sep) return sep;
     const p = resolvePaint(this.doc, raw);
     if (p.type === 'none') return null;
     if (p.type === 'color') return this.color(p.color, stroke);
@@ -155,7 +173,7 @@ class Painter {
       if (!c || !cf) continue;
       const gsx = it.opacity < 1 || it.blend !== 'normal' ? `${this.extGState(it.opacity, true, it.blend)} ${this.extGState(it.opacity, false, it.blend)}` : '';
       const brush = it.brush ? brushGeometry(this.doc, id, it) : null;
-      if (brush) { for (const part of brush) out.push(`q ${gsx} ${part.paint ? this.paint(part.paint, false, b, page) ?? cf : cf}\n${this.path(part.d)}\nf Q`); continue; }
+      if (brush) { for (const part of brush) { const po = part.opacity ?? 1, g2 = po < 1 ? this.extGState(it.opacity * po, false, it.blend) : gsx; out.push(`q ${g2} ${part.paint ? this.paint(part.paint, false, b, page) ?? cf : cf}\n${this.path(part.d)}\nf Q`); } continue; }
       const closed = id.every((sp) => sp.closed);
       if (it.profile && it.profile.length) out.push(`q ${gsx} ${cf}\n${this.path(strokeOutline(id, it))}\nf Q`);
       else {
@@ -331,7 +349,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(a.w)} ${f(a.h)}] /TrimBox [0 0 ${f(a.w)} ${f(a.h)}] /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
   }
   const res = (m: Map<string, number>, pre: string): string => [...m.values()].map((id) => `/${pre}${id} ${id} 0 R`).join(' ');
-  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >> >>`);
+  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${painter.spaces.size ? ` /ColorSpace << ${res(painter.spaces, 'CS')} >>` : ''} >>`);
   pdf.set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((x) => `${x} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
   let names = '';
   if (o.preserve) {
