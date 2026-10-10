@@ -5,7 +5,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 ## Contents
 
 - Look: `get_document`, `get_image`, `get_svg`, `get_object`
-- Files and documents: `new_document`, `open_file`, `save_project`, `export_file`, `switch_document`, `place_image`, `document_setup`
+- Files and documents: `new_document`, `open_file`, `save_project`, `export_file`, `switch_document`, `place_image`, `links`, `document_setup`
 - Selecting: `select`, `select_same`, `select_similar`
 - Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`, `add_dimension`, `perspective`
 - Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `swatch_library`, `swatch_group`, `color_harmony`, `graphic_style`
@@ -100,12 +100,23 @@ Makes another open document the active one, by its index or name from get_docume
 
 ## place_image
 
-Places an image file (absolute path: PNG, JPEG, WebP, GIF or SVG) into the document at x, y, embedded; width scales it in proportion.
+Places an image file (absolute path: PNG, JPEG, WebP, GIF or SVG) into the document at x, y, embedded; width scales it in proportion. With link true (raster images only) the image stays linked to its file: formpth reads it again when it changes (see the links tool).
 
 - `path`: string; required
 - `x`: number
 - `y`: number
 - `width`: number
+- `link`: boolean; default false
+
+## links
+
+Placed images and their files, as in the Links panel. list gives every placed image with its state (linked, modified when the file changed on disk, missing, embedded) and path. relink points the image in id at another file (path; all true relinks every image sharing its link); relink_folder relinks every missing link to the file of the same name in folder; update reads a modified file again (id, or all true); embed copies a linked image into the document; unembed writes an embedded image to a file next to the project and links it.
+
+- `action`: string (list | relink | relink_folder | update | embed | unembed); default "list"
+- `id`: string; A placed image.
+- `path`: string; Absolute path of an image file (relink).
+- `folder`: string; Absolute folder path (relink_folder).
+- `all`: boolean; default false
 
 ## document_setup
 
@@ -654,14 +665,27 @@ Repeat: makes the objects a live radial, grid or mirror repeat, changes its opti
 
 ## symbol
 
-Symbols: create one from the objects, place an instance, list them, break an instance's link, or replace instances with another symbol.
+Symbols: create one from the objects (type dynamic or static, registration point, 9-slice scaling), place an instance (from the document, or from a symbol library with library), list them, break an instance's link, replace instances with another symbol, delete one. edit enters symbol editing mode on the symbol (or the instance in id): its art becomes an ordinary group you change with any tool while every instance follows; exit saves and leaves, cancel throws the changes away. redefine replaces the symbol's art with the objects in ids; duplicate copies it; options renames it (new_name), sets its type or turns 9-slice guides on or off (slice, or slice_guides [x1, y1, x2, y2] in the symbol's own coordinates, origin at the registration point). override recolours one part of a dynamic instance (id, part from get_document's parts list, fill, stroke, stroke_width, opacity in percent); reset_overrides clears them. libraries lists the symbol libraries (arrows, web icons, nature, shapes, flowchart and saved ones); load_library adds a library's symbols (all, or names) to the Symbols panel.
 
-- `action`: string (create | place | list | break_link | replace | delete); required
+- `action`: string (create | place | list | break_link | replace | delete | edit | exit | cancel | redefine | duplicate | options | override | reset_overrides | libraries | load_library); required
 - `name`: string
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `x`: number
 - `y`: number
 - `scale`: number
+- `id`: string; A symbol instance (edit, override).
+- `type`: string (dynamic | static)
+- `registration`: string (tl | t | tr | l | c | r | bl | b | br); default "c"
+- `slice`: boolean; Turn 9-slice scaling guides on (corners keep their size when an instance scales) or off.
+- `slice_guides`: array
+- `new_name`: string
+- `part`: string
+- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `stroke_width`: number
+- `opacity`: number
+- `library`: string; A symbol library id or name (place, load_library).
+- `names`: array
 
 ## apply_brush
 
@@ -719,13 +743,21 @@ Traces a placed image into a live tracing object (the paths are its children, th
 
 - `id`: string; A placed image or an image tracing object.
 - `action`: string (trace | expand | release); default "trace"
-- `preset`: string
+- `preset`: string; Also outline (black and white centreline strokes).
 - `mode`: string (color | gray | bw)
 - `colors`: integer
 - `threshold`: integer
-- `paths`: number
+- `paths`: number; Path fidelity in percent.
 - `ignore_white`: boolean
 - `smooth`: boolean
+- `palette`: string (auto | limited | full | library); Colour and grayscale modes: automatic count, limited to colors, full tone, or the document's colour swatches.
+- `corners`: number; Percent: higher keeps more sharp corners.
+- `noise`: integer; Areas smaller than this many pixels merge into their neighbours.
+- `method`: string (abutting | overlapping); abutting cuts each colour out of the others; overlapping stacks the colours so there are no gaps.
+- `fills`: boolean
+- `strokes`: boolean; Black and white mode: trace thin lines along their centre (a one-pixel skeleton fitted with curves) as stroked paths.
+- `stroke_width`: number; Pixels: lines up to this thick become strokes; thicker areas stay fills.
+- `snap_lines`: boolean; Straighten nearly straight curves and snap lines near 0 or 90 degrees.
 - `view`: string (result | result_outlines | outlines | outlines_source | source)
 - `expand`: boolean; default false
 

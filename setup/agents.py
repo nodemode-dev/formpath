@@ -25,7 +25,7 @@ MIRROR = ROOT / ".agents" / "skills" / NAME
 LAUNCH = str(ROOT / ("formpth.bat" if os.name == "nt" else "formpth"))
 GROUPS = [
     ("Look", {"get_document", "get_image", "get_svg", "get_object"}),
-    ("Files and documents", {"new_document", "open_file", "save_project", "export_file", "switch_document", "place_image", "document_setup"}),
+    ("Files and documents", {"new_document", "open_file", "save_project", "export_file", "switch_document", "place_image", "links", "document_setup"}),
     ("Selecting", {"select", "select_same", "select_similar"}),
     ("Drawing", {"draw_path", "draw_shape", "edit_shape", "add_text", "edit_anchors", "add_dimension", "perspective"}),
     ("Paint and appearance", {"set_paint", "set_stroke", "set_appearance", "add_swatch", "swatch_library", "swatch_group", "color_harmony", "graphic_style"}),
