@@ -301,6 +301,18 @@ ask it questions.
   and how dim. Edit the art as usual, then Done (or Escape) adds the swatch, Save a Copy adds another, Cancel leaves
   nothing behind. Double-click a pattern swatch, or Object > Pattern > Edit Pattern, to change one; every object
   filled with it updates. Patterns fill and stroke like colours.
+- Generate Patterns (Object > Pattern > Generate Patterns) turns a prompt into pattern swatches with the language
+  model set for the Assistant. Choose the colours (a preset such as Warm, Cool, Pastel, Earth, Vivid, Monochrome,
+  Forest or Ocean, the document's swatches, the colours of the selection, or up to 12 of your own as hex values),
+  the density (1 very sparse to 5 packed) and how many variations. The model draws a seamless SVG tile; formpth
+  imports it as editable paths, snaps every colour to your palette and shows each tile repeated. Click a tile to
+  leave it out, then Save to Swatches makes a pattern swatch of each (Fill the selection with the first fills the
+  selected objects); edit them like any pattern. One undo step.
+- Generative Shape Fill (Object > Generative > Shape Fill) fills a selected closed path with vector art from an
+  optional prompt. Shape Strength sets how closely the art follows the outline (high takes its silhouette, low
+  composes freely and only crops), Detail sets how many shapes, Variations how many to compare. Pick a variation
+  and Apply: the art comes in as editable paths, fitted to the shape and clipped by it (the shape is the clipping
+  path, so its stroke stays). One undo step; Release Clipping Mask gives back the art and the shape.
 
 ## Stroke, transparency and appearance
 
@@ -443,6 +455,14 @@ ask it questions.
 - Type > Create Outlines turns type into paths, letter by letter, in a group. Change Case sets upper, lower, title or
   sentence case. Find and Replace searches every text object. Find Font lists the fonts the document uses, selects
   the type that uses one, and replaces a family and style everywhere.
+- Retype (Type > Retype) finds the font of outlined type or of text in a placed image and makes it live type again.
+  Select the outlines (or an image, plus a rectangle over it to read only that region) and click Find Fonts. If your
+  language model reads images, it reads the words and describes the typeface first; without it, formpth reads
+  outlined letters by comparing each letter's shape with the letters of every installed font, and for an image you
+  type the words in the panel. formpth then sets the text in each installed font, compares the shapes with the
+  original and lists the ten closest with a score. Pick one and Apply (or double-click it): the outlines become live
+  type in that font, sized, tracked and placed over the original; for an image the type goes on top, and Keep the
+  image decides whether the image stays. One undo step.
 
 ## Layers and objects
 
@@ -569,7 +589,7 @@ ask it questions.
 
 - .fpth projects keep everything editable: artboards, layers, live shapes, effects, symbols, swatches, styles,
   brushes and the images inside (linked images keep their link and a cached preview).
-- File > Export > Export As writes SVG, PDF, PNG, JPEG or WebP of the active artboard, every artboard, or the
+- File > Export > Export As writes SVG, PDF, EPS, DXF, PNG, JPEG or WebP of the active artboard, every artboard, or the
   selection. Export for Screens writes chosen artboards at several scales and formats in one ZIP.
 - Asset Export: File > Export > Collect for Export as Single Asset adds the selection as one asset, as Multiple
   Assets adds each selected object. The Asset Export panel (Window) shows them; double-click to rename, set scales,
@@ -585,6 +605,26 @@ ask it questions.
   editable paths, gradients, clipping groups, images and point type. Type takes the installed font of the same name,
   or the nearest of Helvetica, Times New Roman and Courier New; a message lists the substitutions and anything left
   out (encrypted files, mesh shadings, tiling patterns and some scanned image formats do not come in).
+- EPS: File > Export > EPS writes Level 3 PostScript with a bounding box and no preview, per artboard (All
+  artboards gives a ZIP with one EPS each), in RGB or CMYK. Paths, gradients (as smooth shadings), clipping, type
+  (as outlines) and images (with their transparency as a mask) are vector or image data; transparency, blend modes,
+  masks, patterns and raster effects are flattened into an image of the object over what lies below it. With
+  Preserve formpth editing on, the EPS carries the document and formpth reopens it fully editable. Opening any other
+  EPS runs its PostScript in formpth's own interpreter and keeps the paths, fills, strokes, clipping, gradients and
+  simple text; images inside it are left out and the message says so.
+- DXF: File > Open (or Place) reads ASCII DXF from AutoCAD R12 to 2018. The DXF Import Options choose the layout
+  (model space or a paper space layout), the scale (the drawing's units, one drawing unit as millimetres, inches and
+  so on, times a scale factor, or fit to a Letter artboard) and whether to merge every layer into one. Lines,
+  polylines with arcs, circles, arcs, ellipses, splines, text and MTEXT (as point type), hatches (as filled paths,
+  gradient hatches as gradients), solids, leaders, dimensions and block inserts (with their attributes) come in on
+  layers named after the DXF layers, with their colours, line weights and hidden state.
+- File > Export > AutoCAD Interchange (DXF) writes AutoCAD 2000 (paths as lightweight polylines with arc bulges, or
+  splines where they curve; fills as solid hatches; true colours and lineweights) or R12 (polylines with arcs, curves
+  as short segments, no fills). Choose the units and the scale (drawing units per unit of art, so 100 writes a 1:100
+  drawing at full size), type as TEXT objects or outlines, and whether lineweights scale with the drawing. Each layer
+  stays a DXF layer.
+- DWG is a closed binary format and formpth does not read or write it. Save the drawing as DXF in your CAD program
+  and open the DXF.
 - File > Send to NodeMode sends the active artboard as an image to a NodeMode canvas (Preferences > Plugins sets its
   address).
 
@@ -606,6 +646,11 @@ ask it questions.
   for any menu command. Every change is one undo step.
 - The assistant (Window > Assistant) uses a language model you set in Preferences > Plugins (a local Ollama model or
   an OpenAI-compatible endpoint) with the same tools, and Undo This Turn reverses all of its changes at once.
+- Generative Shape Fill (Object > Generative > Shape Fill), Generate Patterns (Object > Pattern) and Retype
+  (Type > Retype) run on that same model; formpth calls no other service. When no model is set, their panels say so
+  and the Generate buttons stay off. Turn on The model reads images in Preferences > Plugins when your model accepts
+  images (Retype then reads text in pictures). The tools generative_shape_fill, generate_patterns and retype give
+  agents the same features.
 
 ## Plugins
 

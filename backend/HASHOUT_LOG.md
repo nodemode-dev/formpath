@@ -45,6 +45,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - formpth_engine.py
 - app/core/config.py
 - app/routers/mcp.py
+- app/services/llm.py
 - app/routers/batch.py
 - app/routers/projects.py
 - app/routers/fonts.py
@@ -167,6 +168,22 @@ Three tools run in the window like every other: graph (create, update, get, make
 - logged: v0.21.0 · 2026-10-10
 
 One tool covers the perspective grid with an action: get, grid (preset or type plus the Define Grid values, show, lock, snap, active_plane), draw (a shape in plane coordinates), place, attach, move, scale, release and match_plane. Agents say horizontal for the ground plane, as Illustrator's menus do; the engine calls it floor. Plane coordinates are explained in the description because an agent cannot see the grid's local frames; get reports each plane's extent in them. It runs in the window and needs nothing from _run. setup/agents.py lists it under Drawing.
+
+### app/routers/mcp.py · EPS, DXF, DWG and the generative tools
+- refers-to: app/routers/mcp.py :: _OPENABLE, _PLACEABLE, _EXPORTS, _run, open_file, export_file, place_image, generative_shape_fill, generate_patterns, retype; setup/agents.py :: GROUPS
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+.eps, .epsf, .ps and .dxf open; .eps and .dxf place; .eps and .dxf export (the window builds the bytes, _write writes them). A .dwg path is answered in _run before the extension check with the sentence that DWG is not read and to save a DXF, rather than the generic list of extensions. The new parameters on open_file, place_image and export_file are optional with defaults, so older calls are unchanged. generative_shape_fill, generate_patterns and retype run in the window, which calls /api/llm/generate on the person's configured model; they are marked openWorld because that model may be a remote service the person chose. setup/agents.py lists retype under Type and the other two under a new Generative group.
+
+## app/services/llm.py
+
+### app/services/llm.py · generate and the vision flag
+- refers-to: app/services/llm.py :: generate, save, status; app/routers/llm.py :: generate, settings
+- kind: rationale
+- logged: v0.23.0 · 2026-10-10
+
+`generate` is one chat completion with an optional system message and, when the person marked the model as reading images (`vision` in llm.json, the Preferences checkbox The model reads images), an image as an OpenAI-style image_url content part with a data URL. It goes to the same base URL, model and key as the Assistant through `_call`, so no other service is ever contacted, and an unset model gives the same 428 sentence. Without the vision flag an image request is refused before anything is sent, because many local models reject image parts with an unhelpful error. Temperature and max_tokens are clamped; the answer text is capped at 400 KB. The route takes JSON and returns {text, model}.
 
 ## app/routers/batch.py
 

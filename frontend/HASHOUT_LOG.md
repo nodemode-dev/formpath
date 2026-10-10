@@ -101,6 +101,11 @@ frontend/
     │   ├── trace-core.ts       image trace pixels to paths, centreline strokes (no DOM)
     │   ├── trace.worker.ts     runs trace-core off the main thread
     │   ├── links.ts            linked image states, file handles, re-reading files
+    │   ├── dxf.ts              DXF reader (R12 to 2018) and writer (R12, 2000), ACI colours
+    │   ├── eps.ts              EPS writer (Level 3 PostScript) and the embedded formpth document
+    │   ├── ps-read.ts          a small PostScript interpreter that reads foreign EPS into nodes
+    │   ├── generative.ts       Generative Shape Fill and Text to Pattern on the Assistant's model, SVG sanitising
+    │   ├── retype.ts           Retype: letter masks, font ranking by shape overlap, live text in place
     │   ├── fonts.ts            bundled and installed fonts, outlines
     │   ├── recovery.ts         crash recovery store
     │   └── zip.ts              zip read and write
@@ -188,6 +193,11 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/trace.ts
 - src/io/trace-core.ts
 - src/io/links.ts
+- src/io/dxf.ts
+- src/io/eps.ts
+- src/io/ps-read.ts
+- src/io/generative.ts
+- src/io/retype.ts
 - src/plugins/host.ts
 - src/ui/stage.ts
 - src/ui/text-editor.ts
@@ -213,6 +223,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/text-styles.ts
 - src/ui/panels/asset-export.ts
 - src/ui/panels/image-trace.ts
+- src/ui/panels/generative.ts
 - src/ui/file-dialog.ts
 - src/ui/panels/pattern-options.ts
 - src/ui/panels/preview-edit.ts
@@ -321,6 +332,13 @@ View > Perspective Grid holds Show or Hide Grid (Shift+Ctrl+I), Lock Grid, Snap 
 - logged: v0.22.0 · 2026-10-08
 
 The library tabs are `swatch-library` and `brush-library`: TAB_HOMES keys become Window commands labelled from the id, and `swatch-libraries` produced a "Swatch Libraries" panel command that shadowed the Swatch Libraries submenu of the same label. The Window menu is built by a function so the User Defined submenus list libraries saved during the session; their commands (`sw-user-0` to `sw-user-11`, `br-user-0` to `br-user-11`) take their labels from storage, as the recent-file commands do. Save Swatch Library as formpth and Save Brushes write a .fpth made from a blank document carrying only the swatches and patterns, or the brushes; any .fpth opens as a library through Other Library or Open Brush Library, and File > Open routes .ase files to the Swatch Library panel. The old Recolor Artwork form (a picker per colour plus hue, saturation and brightness shifts) is replaced by the RecolorDialog.
+
+### src/app.ts · EPS, DXF and DWG, generative panels
+- refers-to: src/app.ts :: dxfOptions, readForeign, openFiles, placeFile, exportBlob, exportAs, export-eps, export-dxf, generate-patterns, generative-shape-fill, retype, TAB_HOMES
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+`readForeign` is the one door for .dxf, .eps, .epsf, .ps and .dwg, used by Open, Place, drop and the agent bridge: DWG throws the sentence that says it is not read and to save a DXF; DXF shows DXF Import Options (askForm, so it shows the drawing's version and layer count and offers its layouts) unless options are passed; EPS tries the embedded document first, then the interpreter, and the toast lists what was left out. Place takes the result as one group, like SVG. EPS export of All artboards is a ZIP, so `exportAs` names it .zip. The three generative panels live as dock tabs (Generative Shape Fill and Generate Patterns in the Symbols group, Retype in the Type group), and the new commands only show those tabs; no shortcut was added, since the free keys were taken by recent tools. Window lists them through TAB_HOMES.
 
 ## src/automation/agent-bridge.ts
 
@@ -436,6 +454,13 @@ Each action is one engine call and so one undo step, except grid, which applies 
 
 New tools sit beside the old ones; no name or parameter changed. add_swatch gained tint_of and tint, so color is no longer required (it is still checked when tint_of is absent), and spot implies global. swatch_library and brush_library read the built-in libraries plus the person's User Defined ones through `AgentDeps.userLibraries`, since the bridge cannot import the UI. swatch_group make with colors adds the swatches in one gesture. new_brush maps paint_opacity and flip_along onto the brush fields and checks that pattern tiles name pattern swatches before building. recolor's reduce, group and harmony actions build rows with the same functions as the dialog and apply them in one Recolor Artwork step; preserve_tints defaults on except for a plain harmony.
 
+### src/automation/agent-bridge.ts · EPS, DXF and the generative tools
+- refers-to: src/automation/agent-bridge.ts :: dxfArgs, __open, __place, __export, shapeFillTool, patternsTool, retypeTool; backend/app/routers/mcp.py :: open_file, export_file, place_image, generative_shape_fill, generate_patterns, retype
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+open_file and place_image gained optional DXF parameters (units, drawing_scale, layout, merge_layers, fit_artboard); `dxfArgs` passes them as a partial options object, which skips the import dialog, so an agent never waits on a modal. Opening merges nothing by default; placing merges into one group. export_file's new parameters (color for EPS; dxf_version, units, drawing_scale, scale_lineweights for DXF, and the existing outline_text) map onto the same ExportChoice the dialog builds. The generative tools check `modelState` first and fail with its sentence when no model is set, so an agent tells the person instead of retrying. generative_shape_fill applies one variation (pick, else the first that worked) and lists the others' errors; generate_patterns saves every usable tile; retype lists the ten matches unless apply is true, and for an image without a model that reads images it asks for text.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture
@@ -479,6 +504,13 @@ selectionFrame is the bounding box the stage draws and the tools drag: when ever
 - logged: v0.20.0 · 2026-10-10
 
 Every graph and variable change is one edit. graphTargets maps any selected part to its graph, so commands work after Group Selection. Deleting a design also removes it from every graph that used it. The recorder is a single optional callback; methods call rec only for selection-wide changes (no ids passed), so agent and panel calls aimed at specific objects are not recorded as actions. noteDragTransform keeps the latest matrix of a tool drag and the centre of the dragged selection, which commitDrag records (and makes Transform Again repeat the drag). playOp replays those operations against the current selection; added nodes are cloned with new ids.
+
+### src/engine/index.ts · generated patterns, shape fill and retype edits
+- refers-to: src/engine/index.ts :: Engine.addPatternSwatches, Engine.replaceWithClip, Engine.replaceWithText
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+The engine never calls the model; the io layer brings back finished nodes and these three methods make each result one undo step. `addPatternSwatches` adds grid PatternDefs with their tiles and a pattern swatch for each, and optionally fills objects with the first, in one edit, so generated patterns are ordinary patterns (Edit Pattern, edit_pattern, SVG and PDF all treat them alike). `replaceWithClip` puts the generated art and the original shape into a clipping group in the shape's place, the shape last so it is the clipping path and keeps its stroke. `replaceWithText` inserts Retype's live type above the last source object and removes the sources unless asked to keep them (an image under the type).
 
 ## src/engine/history.ts
 
@@ -1784,6 +1816,58 @@ Create Strokes (black and white mode) measures each 8-connected black region wit
 
 `ImageNode.link` stays the plain file name (older files carry it); a real link is `linked`: the absolute path when the engine service is there (desktop or `./formpth boot`), or the id of a File System Access handle kept in IndexedDB in a Chromium browser without the engine, plus the size and modified time read with the pixels. The state is never stored: `LinkManager` stats every linked path in one `/api/files/stat` call (or asks each handle for its file) when the window regains focus, when it becomes visible, every four seconds and shortly after a document change, and compares size and time with what was read (Modified) or finds nothing (Missing). A handle whose permission lapsed after a reload reads as Linked until Update asks the browser again. Opening a project re-reads every unchanged linked file into the asset map and leaves a changed one on its cached preview until Update; a Missing file that comes back is re-read the same way. Relink, Update, Relink Missing and Unembed give the image a new asset key and go through `setImageSource`, which keeps the placed size when the pixel size changes, so each is one undo step (several files are squashed with `beginStep`). Without either path or handle, Place Linked and Relink fall back to embedding and say so.
 
+## src/io/dxf.ts
+
+### src/io/dxf.ts · reading DXF
+- refers-to: src/io/dxf.ts :: parseDxf, dxfToDoc, bspline, bulgeArc, polyPath, aciRgb, mtextPlain
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+Written from Autodesk's DXF reference. `parseDxf` reads ASCII group-code pairs (binary DXF is refused with a message), the header's `$ACADVER`, `$INSUNITS` and `$MEASUREMENT`, the LAYER table (colour, true colour, lineweight, off or frozen) and STYLE table (font file), BLOCKS and ENTITIES; paper space entities (code 67) are grouped by their layout name (410) so the import dialog can pick one. Geometry is built in drawing units with y up and mapped once at the end (`toDoc`, units times scale, or fit to Letter). Bulges become arcs (`bulgeArc`: angle 4 atan b, centre on the chord's left normal for a positive bulge); arcs, ellipses (an affine of the unit circle) and hatch edges use `arcSegmentPath`. Splines of degree 3 or less without varying weights are converted exactly: every knot inside the domain is inserted (Boehm) up to multiplicity p, then each span's p+1 control points are a Bezier (quadratics raised to cubics); rational or higher-degree splines are sampled with de Boor and fitted with `fitCurve`; fit-point-only splines get Catmull-Rom tangents. Colour 256 is BYLAYER, 0 is BYBLOCK (the INSERT's colour), 7 prints black; the ACI table 10 to 249 is generated from the published hue, value and saturation layout instead of a copied table. Lineweight is hundredths of a millimetre with -1, -2 and -3 for layer, block and the 0.25 mm default. Entities with an extrusion of z -1 are mirrored in x (the OCS case that matters in 2D). TEXT and MTEXT become point type in a font named after the style's font file (SHX fonts fall to Arial); the cap height (code 40) divided by 0.7 gives the size. Not read: 3D meshes and polyface polylines, images, points, rays and xlines; the message counts what was left out.
+
+### src/io/dxf.ts · writing DXF
+- refers-to: src/io/dxf.ts :: exportDxf, DxfWriter, arcOf, nearestAci, STD_LW
+- kind: rationale
+- logged: v0.23.0 · 2026-10-10
+
+AutoCAD 2000 output carries the structure AutoCAD expects of an AC1015 file: handles and owners on every table record and entity, the VPORT, LTYPE, LAYER, STYLE, VIEW, UCS, APPID, DIMSTYLE and BLOCK_RECORD tables, the model and paper space blocks, an OBJECTS section with the root dictionary, and `$HANDSEED` spliced in after the last handle is known. Each subpath goes out as an LWPOLYLINE when every segment is a line or a circular arc (`arcOf` fits a circle through the ends and midpoint and checks four more points to 0.1 percent of the radius, so formpth's own circles and rounded corners keep exact bulges), else as a degree 3 SPLINE whose control points are the Bezier handles with every joint knot tripled, which is exact. Filled closed paths add a solid HATCH with polyline loops flagged external; nonzero fill maps to the outer style and even-odd to normal. R12 has no lightweight polylines, splines or hatches, so it writes POLYLINE and VERTEX with bulges, flattens other curves to 0.05 pt and leaves fills as outlines. Colours are the nearest ACI plus the 420 true colour in 2000; lineweights snap to AutoCAD's standard list and scale with the drawing only when asked. Gradients write their middle colour; images, effects and transparency are not written, since DXF has no equivalent that CAD programs read reliably.
+
+## src/io/eps.ts
+
+### src/io/eps.ts · EPS writer
+- refers-to: src/io/eps.ts :: exportEps, PsPainter, ascii85, trimAfter, readEpsNative
+- kind: rationale
+- logged: v0.23.0 · 2026-10-10
+
+Follows the EPSF 3.0 conventions (one page, `%%BoundingBox` in whole points with `%%HiResBoundingBox`, `%%LanguageLevel: 3`, no preview, save and restore around the page) and the PLRM for operators. The page flips once (`[1 0 0 -1 ...] concat`) so paths are written in document points. Gradients are Level 3 `shfill` with type 2 or 3 shadings and the same stitching functions as the PDF writer, painted inside a clip of the path; gradient strokes use `strokepath clip`. PostScript has no transparency, so any object with opacity, a blend mode, a mask, a pattern, a freeform gradient, a transparent gradient stop or a raster effect is flattened the way a print flattener does it: `trimAfter` builds the document up to and including that object, it is rendered opaque over the artboard, and drawn as an ImageType 3 image whose mask (InterleaveType 1, one byte per sample, 0 paints) is the object's own coverage, so the result matches the screen over whatever lies below. Placed images use the same masked image when they have alpha. Image data is Flate inside ASCII85 (`currentfile /ASCII85Decode filter /FlateDecode filter`), which keeps the file 7-bit clean. The editable document rides at the end as `%FPTH:` comment lines between `%FormpthDocument-Begin` and `-End`, which interpreters skip; `readEpsNative` finds them. All artboards export as a ZIP of one EPS per artboard, since an EPS holds one page.
+
+## src/io/ps-read.ts
+
+### src/io/ps-read.ts · reading foreign EPS
+- refers-to: src/io/ps-read.ts :: Interp, Lexer, OPS, readEpsVector, epsSource, shadingPaint, showText
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+A small PostScript interpreter written from the PLRM: a lexer for numbers, radix numbers, names, literal names, strings with escapes, hex and ASCII85 strings, procedures, arrays and dictionaries; an operand stack and a dictionary stack (systemdict of the operators below, userdict); and a graphics state with the CTM, the current path in device space, colour (gray, RGB, CMYK, a Separation over CMYK as black), line settings, dash, clip and font. Paths are transformed as they are built, so `concat`, `scale` and `rotate` inside procedures work; painting turns the path into a node in document points using the bounding box. Clipping wraps following nodes in a clip group per clip path. `shfill` with axial or radial shadings and type 2 or 3 functions becomes a gradient fill of the clip path. `show` and its relatives become point type at the current point with the CTM, the PostScript font name mapped to an installed family. Control flow (if, ifelse, for, repeat, loop, forall, exit, stop, stopped), arithmetic, stack, array, dictionary and matrix operators are there; unknown names are skipped and reported. Images (`image`, `colorimage`, `imagemask`) are skipped, with the inline data passed over when it is ASCII85 or hex. DOS EPS files with a binary header are unwrapped first. A step limit stops runaway programs.
+
+## src/io/generative.ts
+
+### src/io/generative.ts · generative features on the person's model
+- refers-to: src/io/generative.ts :: modelState, shapeFillVariations, patternVariations, sanitizeSvg, extractSvg, clipToShape, PATTERN_PRESETS; backend/app/services/llm.py :: generate
+- kind: rationale
+- logged: v0.23.0 · 2026-10-10
+
+Generative Shape Fill and Text to Pattern ask the model the person set for the Assistant, through the engine's `/api/llm/generate`; nothing else is called, and `modelState` turns a missing model or engine into one sentence the panels and tools show. The model is asked for SVG because formpth already imports SVG into editable nodes. Its answer is untrusted: `extractSvg` takes the outermost svg element out of any prose or code fence, `sanitizeSvg` keeps only shape, group, gradient and clip elements with presentation attributes and same-document references (no script, image, foreignObject, event handlers or external URLs) and caps size and element count, and `importSvg` (which never renders) builds the nodes. Shape Fill sends the outline normalised to a 1000 unit viewBox so the coordinates are short; Shape Strength goes into the prompt in three bands and, at the top band, the art's bounds are stretched onto the shape's. Variations run in parallel at rising temperatures. Text to Pattern asks for a 200 unit tile and says that motifs may cross the edges, because the pattern renderer draws the neighbouring copies (`latticeCopies` reach 1) and so wraps them; every colour is then snapped to the chosen palette with `nearestFn`, so a preset or custom palette is kept even when the model strays. The colour presets are formpth's own small palettes.
+
+## src/io/retype.ts
+
+### src/io/retype.ts · finding a font by shape
+- refers-to: src/io/retype.ts :: sourceFromOutlines, sourceFromImage, group, finish, rankFonts, readGlyphs, wordScore, plainPath, retypeNode, recognize, candidateFaces
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+The source becomes letter shapes either way: outlined type by its subpaths, an image by Otsu thresholding (ink polarity from the border) and 4-connected components. `group` sorts the pieces into lines by vertical overlap and into letters by horizontal overlap (so the dot of an i joins its stem). Each letter is a 32 by 32 mask fitted with its aspect kept, plus its height and top relative to the cap-height estimate (the 75th percentile letter height); the longest line is also kept as one 48 pixel high mask. Without known words, `readGlyphs` compares every letter with A to Z, a to z, digits and some punctuation of each installed face (mask overlap minus penalties for relative height, top and aspect), and the seven best faces vote on each letter. With the words (typed, or read by a model that reads images), `wordScore` sets the line in each face with `plainPath` (glyph by glyph with kerning; opentype.js's own layout throws on some GSUB lookups), stretches it onto the source line's mask and scores a blurred overlap times an aspect penalty; with letter reads the two scores mix 65 to 35, and the model's typeface description nudges weight, slant and width. CJK, emoji, symbol and math faces are skipped and at most 220 faces load, so a run takes seconds. `retypeNode` sizes the type so the line's ink height matches, aligns its ink box to the source and sets tracking to match the width.
+
 ## src/plugins/host.ts
 
 ### src/plugins/host.ts · blocked tools
@@ -2185,7 +2269,15 @@ A browser file input never reveals a path, and the desktop shell has no dialog p
 
 The panel keeps its own options and loads them from a tracing object whenever the selection or that object's options change. With Preview on, an option change on a tracing object traces again after 280 ms of quiet; on a plain image nothing happens until Trace, because tracing a photo takes long enough that it should be asked for. Colours and Threshold share one slot and swap with the mode. The form and the hint are built once and swapped with `hidden`.
 
-## src/ui/panels/pattern-options.ts
+## src/ui/panels/generative.ts
+
+### src/ui/panels/generative.ts · Shape Fill, Generate Patterns and Retype panels
+- refers-to: src/ui/panels/generative.ts :: ShapeFillPanel, PatternGenPanel, RetypePanel, ModelPanel, paintPreview, tiles
+- kind: explainer
+- logged: v0.23.0 · 2026-10-10
+
+Each panel is built once. The status line reserves four lines and says which model runs, or why nothing can (no model, engine offline, no image reading); it is checked when the panel is built, when the pointer enters it (at most every four seconds) and before each run, so a model set in Preferences shows up without a reload. Generate stays disabled while no model is set. The variation tiles are fixed: three square tiles for Shape Fill (hidden past the chosen count, which is a direct input) and a two by two grid for patterns; previews are drawn into their canvases with `renderRegion` (the fill clipped to the shape, the pattern tile repeated twice each way), so nothing is rebuilt. The palette strip always has twelve chips and empty ones are dashed. Retype's matches are a keyed list at the end of the panel, so rows arriving never move anything above them; the read text sits in a line that reserves two lines.
+
 
 ### src/ui/panels/pattern-options.ts · Pattern Options
 - refers-to: src/ui/panels/pattern-options.ts :: PatternOptionsPanel; src/ui/stage.ts :: renderScene; src/app.ts :: syncChrome, make-pattern, edit-pattern, pattern-done, pattern-copy, pattern-cancel
