@@ -26,6 +26,8 @@ import { exportDataSets, showDataSet } from '../io/data-merge';
 import { VERSION } from '../version';
 import type { GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from '../engine/types';
 import { api } from '../io/api';
+import { attachPlace, gridOf, leafPlaneBounds, planeLocalRect, presetGrid, vanishing } from '../engine/perspective';
+import type { Doc, PerspPlane } from '../engine/types';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
 export interface AgentDeps {
@@ -257,6 +259,83 @@ export class AgentBridge {
     return p;
   }
 
+  private perspectiveTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): McpResult {
+    const e = this.engine, doc = e.doc as Doc, act = str('action', 'get');
+    const toPlane = (v: string): PerspPlane | null => (v === 'horizontal' || v === 'floor' ? 'floor' : v === 'left' || v === 'right' ? v : null);
+    const planeArg = (): PerspPlane => {
+      if (has('plane')) { const p = toPlane(str('plane')); if (!p) throw new ToolError('plane must be left, right or horizontal.'); return p; }
+      const v = e.perspView.plane;
+      if (v === 'none') throw new ToolError('No plane is active: pass plane (left, right or horizontal).');
+      return v;
+    };
+    const outName = (p: PerspPlane): string => (p === 'floor' ? 'horizontal' : p);
+    const describe = (): McpResult => {
+      const g = gridOf(e.doc as Doc), v = e.perspView, vp = vanishing(g), pt = (q: Pt | null): number[] | null => (q ? [r2(q.x), r2(q.y)] : null);
+      const planes = Object.fromEntries((['left', 'right', 'floor'] as const).map((p) => { const r = planeLocalRect(g, p); return [outName(p), { x: r2(r.x), y: r2(r.y), width: r2(r.w), height: r2(r.h), offset: r2(g.off[p]) }]; }));
+      const attached: Array<Record<string, unknown>> = [];
+      const walkAll = (ns: VNode[]): void => { for (const n of ns) { if (n.persp) { const b = leafPlaneBounds(e.doc as Doc, n); attached.push({ id: n.id, kind: n.kind, plane: outName(n.persp.plane), offset: r2(n.persp.off), plane_bounds: box(b) }); } else if (n.kind === 'group' || n.kind === 'layer') walkAll(n.children); } };
+      walkAll((e.doc as Doc).layers);
+      const data = { type: g.type, show: v.show, lock: v.lock, snap: v.snap, active_plane: v.plane === 'none' ? 'none' : outName(v.plane), cell: r2(g.cell), angle: r2(g.angle), distance: r2(g.distance), horizon_height: r2(g.height), vp3: r2(g.vp3), ground: [r2(g.ground.x), r2(g.ground.y)], station: r2(g.station), horizon_y: r2(vp.hy), vanishing_points: { left: pt(vp.left), right: pt(vp.right), center: pt(vp.center), third: pt(vp.third) }, planes, opacity: Math.round(g.opacity * 100), attached };
+      return text(`${g.type} point perspective grid${v.show ? '' : ' (hidden)'}, horizon at y ${r2(vp.hy)}, ground level origin at ${r2(g.ground.x)}, ${r2(g.ground.y)}, gridlines every ${r2(g.cell)} pt, active plane ${data.active_plane}; ${attached.length} object(s) in perspective.`, data);
+    };
+    switch (act) {
+      case 'get': return describe();
+      case 'grid': {
+        let g = has('preset') ? presetGrid(doc, str('preset') === 'one_point' ? 1 : str('preset') === 'three_point' ? 3 : 2) : gridOf(doc);
+        if (has('type')) { const t = Math.round(num('type', 2)); if (t < 1 || t > 3) throw new ToolError('type must be 1, 2 or 3.'); g = { ...g, type: t as 1 | 2 | 3 }; if (t === 3 && Math.abs(g.vp3) < 1) g = { ...g, vp3: Math.max(4 * g.distance, Math.abs(g.height) * 4) }; }
+        const n = (k: string, d: number): number => num(k, d);
+        if (has('cell')) g = { ...g, cell: n('cell', g.cell) };
+        if (has('angle')) g = { ...g, angle: n('angle', g.angle) };
+        if (has('distance')) g = { ...g, distance: n('distance', g.distance) };
+        if (has('horizon_height')) g = { ...g, height: n('horizon_height', g.height) };
+        if (has('vp3')) g = { ...g, vp3: n('vp3', g.vp3) };
+        if (has('ground_x') || has('ground_y')) g = { ...g, ground: { x: n('ground_x', g.ground.x), y: n('ground_y', g.ground.y) } };
+        if (has('station')) g = { ...g, station: n('station', g.station) };
+        g = { ...g, ext: { left: n('extent_left', g.ext.left), right: n('extent_right', g.ext.right), height: n('extent_height', g.ext.height) }, off: { left: n('offset_left', g.off.left), right: n('offset_right', g.off.right), floor: n('offset_horizontal', g.off.floor) } };
+        for (const [k, p] of [['left_color', 'left'], ['right_color', 'right'], ['horizontal_color', 'floor']] as const) if (has(k)) { const c = parseColor(str(k)); if (!c) throw new ToolError(`${k} must be #rrggbb.`); g = { ...g, colors: { ...g.colors, [p]: c } }; }
+        if (has('opacity')) g = { ...g, opacity: n('opacity', 50) / 100 };
+        const changed = JSON.stringify(g) !== JSON.stringify(gridOf(doc));
+        if (changed) e.setPerspGrid(g, has('preset') ? 'Perspective Grid Preset' : 'Define Perspective Grid');
+        const ap = has('active_plane') ? str('active_plane') : null;
+        if (ap !== null && ap !== 'none' && !toPlane(ap)) throw new ToolError('active_plane must be left, right, horizontal or none.');
+        e.setPerspView({ show: has('show') ? a.show === true : true, ...(has('lock') ? { lock: a.lock === true } : {}), ...(has('snap') ? { snap: a.snap === true } : {}), ...(ap !== null ? { plane: ap === 'none' ? 'none' : toPlane(ap) as PerspPlane } : {}) });
+        return describe();
+      }
+      case 'draw': {
+        const plane = planeArg(), g = gridOf(doc), off = has('offset') ? num('offset', 0) : g.off[plane], shape = str('shape', 'rectangle');
+        const r = planeLocalRect(g, plane), w = num('width', 100), h = num('height', 100), x = num('x', r.x + r.w / 2 - w / 2), y = num('y', r.y + r.h / 2 - h / 2);
+        if (!(w > 0 && h > 0)) throw new ToolError('width and height must be positive.');
+        const node = shape === 'rectangular_grid' || shape === 'polar_grid' ? e.gridGroup(shape === 'polar_grid' ? 'polar' : 'rectangular', x, y, w, h, e.options.gridRows, e.options.gridCols) : shape === 'line' ? e.shapePath('line', x, y, w, h, { x2: x + w, y2: y + h }) : e.shapePath(shape, x, y, w, h);
+        const placed = attachPlace(doc, node, g, { plane, off }, [1, 0, 0, 1, 0, 0]);
+        const label = shape.replace(/_/g, ' ');
+        const id = e.addNodes(`${label[0].toUpperCase()}${label.slice(1)} in Perspective`, [placed])[0];
+        return text(`Drew a ${shape.replace(/_/g, ' ')} on the ${outName(plane)} plane (id ${id}).`, { id, plane: outName(plane), bounds: box(e.boundsOf(e.nodeById(id) as VNode)) });
+      }
+      case 'place': {
+        const plane = planeArg(), ids = this.ids(a);
+        const out = e.placeOnPlane(ids, plane, { ...(has('x') ? { x: num('x', 0) } : {}), ...(has('y') ? { y: num('y', 0) } : {}), scale: Math.max(0.001, num('scale', 1)), ...(has('offset') ? { off: num('offset', 0) } : {}), copy: a.copy === true });
+        if (!out.length) return fail('Nothing was placed: the art must be in front of the viewer on that plane (try x and y inside the plane extents from get).');
+        return text(`Brought ${out.length} object(s) onto the ${outName(plane)} plane: ${out.join(', ')}.`, { ids: out, plane: outName(plane) });
+      }
+      case 'attach': {
+        const plane = planeArg(), out = e.attachToPlane(this.ids(a), plane);
+        return out.length ? text(`Attached ${out.join(', ')} to the ${outName(plane)} plane.`, { ids: out }) : fail('Nothing was attached.');
+      }
+      case 'move': {
+        const out = e.perspMove({ x: num('dx', 0), y: num('dy', 0), n: num('dn', 0) }, { ids: this.ids(a), copy: a.copy === true });
+        return out.length ? text(`${a.copy === true ? 'Copied' : 'Moved'} ${out.join(', ')} in perspective.`, { ids: out }) : fail('The objects are not in perspective: place or attach them first.');
+      }
+      case 'scale': {
+        const sx = num('sx', 1), sy = num('sy', sx);
+        if (!(Math.abs(sx) > 1e-6 && Math.abs(sy) > 1e-6)) throw new ToolError('sx and sy must not be 0.');
+        return e.perspScale(sx, sy, { ids: this.ids(a) }) ? text('Scaled in perspective.', { selection: e.selectedIds() }) : fail('The objects are not in perspective: place or attach them first.');
+      }
+      case 'release': return e.releasePerspective(this.ids(a)) ? text('Released from perspective; the art keeps its look.') : fail('The objects are not in perspective.');
+      case 'match_plane': return e.movePlaneToObject(this.ids(a)) ? describe() : fail('The object is not in perspective.');
+    }
+    return fail('Unknown perspective action: use get, grid, draw, place, attach, move, scale, release or match_plane.');
+  }
+
   private graphTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): McpResult {
     const e = this.engine, act = str('action', has('id') ? 'update' : 'create');
     const describeGraph = (id: string): McpResult => {
@@ -418,6 +497,7 @@ export class AgentBridge {
       if (!p) return fail('No document is open: call new_document or open_file first.');
       switch (name) {
         case 'graph': return this.graphTool(a, num, str, has);
+        case 'perspective': return this.perspectiveTool(a, num, str, has);
         case 'variables': return await this.variablesTool(a, num, str, has);
         case 'get_document': { const d = e.describe(Math.max(1, Math.min(32, Math.round(num('depth', 8))))); return text(JSON.stringify(d), d); }
         case 'get_image': {

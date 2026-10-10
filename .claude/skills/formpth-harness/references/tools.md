@@ -7,7 +7,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Look: `get_document`, `get_image`, `get_svg`, `get_object`
 - Files and documents: `new_document`, `open_file`, `save_project`, `export_file`, `switch_document`, `place_image`, `document_setup`
 - Selecting: `select`, `select_same`, `select_similar`
-- Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`, `add_dimension`
+- Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`, `add_dimension`, `perspective`
 - Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `color_harmony`, `graphic_style`
 - Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `opacity_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`, `puppet_warp`
@@ -932,6 +932,51 @@ Variables and data merge: list the variables and data sets; make a variable (tex
 - `artboard`: integer
 - `scale`: number; default 1
 - `data_sets`: array; export: only these data sets.
+
+## perspective
+
+Perspective grid and art in perspective, as Illustrator's Perspective Grid and Perspective Selection tools. grid sets up the document's grid: preset one_point, two_point or three_point (laid out on the first artboard) or type 1, 2 or 3, then any of the Define Grid values (cell, viewing angle and distance, horizon height above the ground level, the third vanishing point's distance below the horizon, ground_x and ground_y, station, extents, plane offsets, plane colours and opacity), and show, lock, snap and active_plane; attached art is re-projected whenever the grid changes. Plane coordinates are points on the plane with x along it and y downward (left plane: x up to 0 at the corner; right plane: x from 0; horizontal plane: x up to 0, y up to 0 toward the back), and get reports each plane's extent. draw makes a shape (rectangle, rounded_rectangle, ellipse, polygon, star, line, rectangular_grid, polar_grid) at x, y, width, height in plane coordinates on a plane. place brings existing art onto a plane by a projective transform with its centre at x, y in plane coordinates (default: the plane point under where the art sits) at scale; attach attaches it to a plane where it already looks right; move slides attached art along its plane by dx, dy and dn perpendicular to it (copy duplicates); scale scales it in plane space by sx, sy about its plane-space centre; release keeps the look and detaches it; match_plane moves the grid's plane to the object; get reports the grid, its vanishing points and the attached objects. Type placed on a plane stays editable with set_text and is drawn through the projection.
+
+- `action`: string (get | grid | draw | place | attach | move | scale | release | match_plane); default "get"
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `preset`: string (one_point | two_point | three_point)
+- `type`: integer (1 | 2 | 3)
+- `cell`: number; Gridline every this many points.
+- `angle`: number; Viewing angle in degrees (two and three point).
+- `distance`: number; Viewing distance in points.
+- `horizon_height`: number; Horizon height above the ground level in points.
+- `vp3`: number; Three point: the third vanishing point's distance below the horizon in points (negative is above); at least twice the viewing distance.
+- `ground_x`: number
+- `ground_y`: number; ground_x, ground_y: the grid's origin on the ground level, where the planes meet, in document points.
+- `station`: number; Horizontal offset of the station point (the centre of vision) from the origin in points.
+- `extent_left`: number
+- `extent_right`: number
+- `extent_height`: number
+- `offset_left`: number
+- `offset_right`: number
+- `offset_horizontal`: number; offset_*: move a grid plane parallel to itself, in points.
+- `left_color`: string; #rrggbb
+- `right_color`: string; #rrggbb
+- `horizontal_color`: string; #rrggbb
+- `opacity`: number; Grid opacity in percent.
+- `show`: boolean
+- `lock`: boolean
+- `snap`: boolean; Snap drawing on a plane to the gridlines.
+- `active_plane`: string (left | right | horizontal | none)
+- `plane`: string (left | right | horizontal); draw, place and attach: the plane (default the active plane).
+- `shape`: string (rectangle | rounded_rectangle | ellipse | polygon | star | line | rectangular_grid | polar_grid); default "rectangle"
+- `x`: number
+- `y`: number
+- `width`: number
+- `height`: number
+- `scale`: number; default 1
+- `offset`: number; place and draw: the plane's offset (default the grid plane's).
+- `dx`: number
+- `dy`: number
+- `dn`: number
+- `sx`: number; Scale factor, 1 keeps the size.
+- `sy`: number
+- `copy`: boolean; default false
 
 ## actions
 
