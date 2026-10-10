@@ -1,6 +1,7 @@
 import { History } from './history';
 import type { PatternSession } from './pattern';
-import type { Doc } from './types';
+import { perspViewOf } from './perspective';
+import type { Doc, PerspView } from './types';
 import { Viewport } from './viewport';
 
 export class Project {
@@ -16,6 +17,7 @@ export class Project {
   layerTarget: string | null = null;
   patternEdit: PatternSession | null = null;
   activeArtboard = 0;
+  persp: PerspView;
   readonly history: History;
   readonly viewport = new Viewport();
   readonly assets = new Map<string, Blob>();
@@ -26,6 +28,7 @@ export class Project {
     this.doc = doc;
     this.name = name;
     this.history = new History(doc);
+    this.persp = perspViewOf(doc);
     this.activeLayer = doc.layers[doc.layers.length - 1]?.id ?? '';
   }
 

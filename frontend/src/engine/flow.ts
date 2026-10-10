@@ -4,6 +4,7 @@ import { apply, flattenSub, invert, isEmptyRect, rectCorners, simplifyPolyline }
 import { DEFAULT_CHAR, layoutText, mergeSpans, sliceSpans } from './text';
 import { refreshDimensions } from './dimension';
 import { refreshGraphs } from './graph';
+import { perspSync } from './perspective';
 import type { Doc, Pt, Span, TextNode, VNode, WrapShape } from './types';
 
 const MAX_PTS = 240;
@@ -102,7 +103,7 @@ function frameShape(t: TextNode): WrapShape[] {
 }
 
 export function reflow(raw: Doc): Doc {
-  const doc = refreshGraphs(refreshDimensions(raw));
+  const doc = perspSync(refreshGraphs(refreshDimensions(raw)));
   const wrappers: Array<{ n: VNode; path: IndexPath }> = [];
   const areas: Array<{ t: TextNode; path: IndexPath }> = [];
   let threads = false;

@@ -99,7 +99,18 @@ export interface NodeBase {
   wrap?: TextWrap | null;
   bbox?: number;
   part?: string;
+  persp?: PerspAttach;
 }
+
+export type PerspPlane = 'left' | 'right' | 'floor';
+export interface PerspAttach { plane: PerspPlane; off: number; m: Mat; src?: PathData[]; sig?: number }
+export interface PerspGrid {
+  type: 1 | 2 | 3; name?: string;
+  ground: Pt; height: number; station: number; angle: number; distance: number; vp3: number;
+  cell: number; ext: { left: number; right: number; height: number }; off: { left: number; right: number; floor: number };
+  colors: { left: Color; right: Color; floor: Color }; opacity: number;
+}
+export interface PerspView { show: boolean; lock: boolean; snap: boolean; plane: PerspPlane | 'none' }
 
 export interface LayerNode extends NodeBase { kind: 'layer'; children: VNode[]; color: string; template?: boolean; printable?: boolean; clip?: boolean }
 export type TraceView = 'result' | 'result_outlines' | 'outlines' | 'outlines_source' | 'source';
@@ -247,6 +258,8 @@ export interface Doc {
   variables?: Variable[];
   dataSets?: DataSet[];
   dataSet?: number;
+  persp?: PerspGrid;
+  perspView?: PerspView;
 }
 
 export type VariableKind = 'text' | 'image' | 'visibility' | 'graph';

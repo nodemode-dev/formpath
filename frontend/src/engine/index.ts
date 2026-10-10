@@ -39,6 +39,8 @@ import { History } from './history';
 import type { DataSet, GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from './types';
 import { rectCorners } from './geometry';
 import type { DimensionSpec, EnvelopeNode, EnvelopeOptions, EnvelopeSpec } from './types';
+import type { PerspGrid, PerspPlane, PerspView } from './types';
+import { attachKeep, attachPlace, DEFAULT_PERSP_VIEW, gridOf, leafPlaneBounds, mapLeaves, moveLeaf, perspLeaves, placeMatrix, planeAt, planeDeltaWorld, planeLocalRect, presetGrid, releaseNode, reprojectDoc, sanitizeGrid, scaleLeaf, type PlaneDelta } from './perspective';
 
 const styleLinked = (n: VNode, st: GraphicStyle): boolean => JSON.stringify(n.ap) === JSON.stringify(st.ap) && (n.kind === 'text' || (n.opacity === st.opacity && n.blend === st.blend));
 const withStyle = (n: VNode, st: GraphicStyle): VNode => (n.kind === 'text' ? { ...n, ap: st.ap, style: st.id } : { ...n, ap: st.ap, opacity: st.opacity, blend: st.blend, style: st.id });
@@ -1452,6 +1454,127 @@ export class Engine extends Emitter<EngineEvents> {
     const t = this.dimensionIds(ids);
     if (!t.length) return false;
     return this.edit(name, (d) => updateNodes(d, t, (n) => (n.kind === 'group' && n.dim ? { ...n, dim: { ...n.dim, ...patch } } : n)));
+  }
+
+  perspGrid(): PerspGrid | null { const d = this.doc; return d ? gridOf(d) : null; }
+  get perspView(): PerspView { return this.current?.persp ?? DEFAULT_PERSP_VIEW; }
+  setPerspView(patch: Partial<PerspView>): void {
+    const p = this.current;
+    if (!p) return;
+    const next = { ...p.persp, ...patch };
+    if (next.show === p.persp.show && next.lock === p.persp.lock && next.snap === p.persp.snap && next.plane === p.persp.plane) return;
+    p.persp = next;
+    this.emit('options', null); this.emit('overlay', null);
+  }
+  get perspActive(): { grid: PerspGrid; plane: PerspPlane; off: number } | null {
+    const d = this.doc, v = this.perspView;
+    if (!d || !v.show || v.plane === 'none') return null;
+    const g = gridOf(d);
+    return { grid: g, plane: v.plane, off: g.off[v.plane] };
+  }
+  setPerspGrid(next: PerspGrid, name = 'Define Perspective Grid'): boolean { return this.edit(name, (d) => reprojectDoc(d, sanitizeGrid(next))); }
+  perspPreset(type: 1 | 2 | 3 | PerspGrid): boolean {
+    const d = this.doc;
+    if (!d) return false;
+    const g = typeof type === 'number' ? presetGrid(d, type) : type, cur = d.persp;
+    const ok = this.setPerspGrid(cur && typeof type === 'number' ? { ...g, colors: cur.colors, opacity: cur.opacity } : g, typeof type === 'number' ? `${type} Point Perspective` : 'Perspective Grid Preset');
+    this.setPerspView({ show: true });
+    return ok;
+  }
+  attachToPlane(ids?: string[], plane?: PerspPlane): string[] {
+    const t = this.targetIds(ids), pl = plane ?? (this.perspView.plane === 'none' ? null : this.perspView.plane);
+    if (!t.length || !pl) return [];
+    let out: string[] = [];
+    this.edit('Attach to Active Plane', (d) => {
+      const g = gridOf(d), to = { plane: pl, off: g.off[pl] }, map = new Map<string, VNode>();
+      for (const id of t) { const n = findNode(d, id); if (n) map.set(id, attachKeep(d, n, g, to)); }
+      out = t.map((id) => map.get(id)?.id ?? id);
+      return { doc: updateNodes({ ...d, persp: g }, map.keys(), (n) => map.get(n.id) ?? n), select: out };
+    });
+    return out;
+  }
+  placeOnPlane(ids: string[] | undefined, plane: PerspPlane, opts: { x?: number; y?: number; scale?: number; off?: number; copy?: boolean } = {}): string[] {
+    const t = this.targetIds(ids);
+    if (!t.length) return [];
+    let out: string[] = [];
+    this.edit(opts.copy ? 'Duplicate into Perspective' : 'Bring into Perspective', (d0) => {
+      let d = d0, src = t;
+      if (opts.copy) { const r = duplicateNodes(d, t); d = r.doc; src = r.ids; }
+      const g = gridOf(d), off = opts.off ?? g.off[plane], nodes = src.map((id) => findNode(d, id)).filter((n): n is VNode => !!n && n.kind !== 'layer');
+      if (!nodes.length) return d;
+      let b = emptyRect();
+      for (const n of nodes) b = unionRect(b, geomBounds(d, n));
+      const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 }, here = planeAt(g, plane, off, c), r = planeLocalRect(g, plane);
+      const at = { x: opts.x ?? here?.x ?? r.x + r.w / 2, y: opts.y ?? here?.y ?? r.y + r.h / 2 };
+      const m = placeMatrix(d, nodes, at, opts.scale ?? 1), map = new Map<string, VNode>();
+      for (const n of nodes) map.set(n.id, attachPlace(d, n, g, { plane, off }, m));
+      out = nodes.map((n) => map.get(n.id)?.id ?? n.id);
+      return { doc: updateNodes({ ...d, persp: g }, map.keys(), (n) => map.get(n.id) ?? n), select: out };
+    });
+    return out;
+  }
+  perspMoveDoc(doc: Doc, ids: string[], plane: PerspPlane, delta: PlaneDelta): Doc {
+    const g = gridOf(doc), w = planeDeltaWorld(g, plane, delta);
+    return updateNodes(doc, ids, (n) => mapLeaves(n, (leaf) => moveLeaf(doc, leaf, g, w)));
+  }
+  perspScaleDoc(doc: Doc, ids: string[], plane: PerspPlane, S: Mat): Doc {
+    const g = gridOf(doc);
+    return updateNodes(doc, ids, (n) => mapLeaves(n, (leaf) => scaleLeaf(doc, leaf, g, plane, S)));
+  }
+  perspTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return !!n && perspLeaves(n).length > 0; }) : []; }
+  perspMove(delta: PlaneDelta, opts: { ids?: string[]; plane?: PerspPlane; copy?: boolean } = {}): string[] {
+    const t = this.perspTargets(opts.ids);
+    if (!t.length) return [];
+    let out: string[] = [];
+    this.edit(opts.copy ? 'Duplicate in Perspective' : 'Move in Perspective', (d0) => {
+      let d = d0, src = t;
+      if (opts.copy) { const r = duplicateNodes(d, t); d = r.doc; src = r.ids; }
+      const first = perspLeaves(findNode(d, src[0]) as VNode)[0];
+      out = src;
+      return { doc: this.perspMoveDoc(d, src, opts.plane ?? first?.persp?.plane ?? 'right', delta), select: src };
+    });
+    return out;
+  }
+  perspScale(sx: number, sy: number, opts: { ids?: string[]; about?: Pt } = {}): boolean {
+    const t = this.perspTargets(opts.ids), d = this.doc;
+    if (!t.length || !d) return false;
+    const leaves = t.flatMap((id) => perspLeaves(findNode(d, id) as VNode)), plane = leaves[0]?.persp?.plane;
+    if (!plane) return false;
+    let b = emptyRect();
+    for (const l of leaves) if (l.persp?.plane === plane) b = unionRect(b, leafPlaneBounds(d, l));
+    if (isEmptyRect(b)) return false;
+    const c = opts.about ?? { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    return this.edit('Scale in Perspective', (doc) => this.perspScaleDoc(doc, t, plane, scaleAbout(sx, sy, c.x, c.y)));
+  }
+  releasePerspective(ids?: string[]): boolean {
+    const t = this.perspTargets(ids);
+    if (!t.length) return false;
+    return this.edit('Release with Perspective', (d) => updateNodes(d, t, (n) => releaseNode(n)));
+  }
+  movePlaneToObject(ids?: string[]): boolean {
+    const d = this.doc, t = this.perspTargets(ids);
+    const leaf = d && t.length ? perspLeaves(findNode(d, t[0]) as VNode)[0] : null, a = leaf?.persp;
+    if (!d || !a) return false;
+    const g = gridOf(d);
+    const ok = this.edit('Move Plane to Match Object', (doc) => ({ ...doc, persp: { ...gridOf(doc), off: { ...g.off, [a.plane]: a.off } } }));
+    this.setPerspView({ plane: a.plane, show: true });
+    return ok;
+  }
+  perspTextOf(id?: string): { env: string; text: string } | null {
+    const d = this.doc;
+    if (!d) return null;
+    const ids = id ? [id] : this.selectedIds();
+    for (const x of ids) {
+      const env = this.envelopeOf(x) ?? (() => { const n = findNode(d, x); return n?.kind === 'envelope' ? n : null; })();
+      if (env?.persp) { const t = env.children.find((c) => c.kind === 'text'); if (t) return { env: env.id, text: t.id }; }
+    }
+    return null;
+  }
+  perspEditText(id?: string): string | null {
+    const r = this.perspTextOf(id);
+    if (!r) return null;
+    this.select([r.text]);
+    return r.text;
   }
 
   addGraph(type: GraphType, r: Rect, data?: GraphData, patch: Partial<GraphSpec> = {}, select = true): string | null {
