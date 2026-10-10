@@ -4,6 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterE
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
+import { derivedArt } from '../engine/shaper';
 import { meshQuads } from '../engine/mesh';
 import { latticeCopies, patternLattice } from '../engine/pattern';
 import { instanceArt } from '../engine/symbolism';
@@ -318,7 +319,8 @@ class Writer {
           const inner = `<g${geo ? ` clip-path="url(#${cid})"` : ''}>${body}</g>${strokes}`;
           return n.kind === 'layer' ? `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}">${inner}</g>` : this.wrap(n, inner);
         }
-        const body = n.kind === 'group' && n.livePaint ? liveFaceNodes(n).map((f) => this.node(f)).join('') + n.children.map((c) => this.node(c)).join('') : this.kids(n, n.children);
+        const art = n.kind === 'group' ? derivedArt(n) : null;
+        const body = n.kind === 'group' && n.livePaint ? liveFaceNodes(n).map((f) => this.node(f)).join('') + n.children.map((c) => this.node(c)).join('') : art ? art.map((c) => this.node(c)).join('') : this.kids(n, n.children);
         let extra = '';
         if (n.ap.items.length) { const geo: PathData = []; const collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); }; collect(n); if (geo.length) extra = this.shape(n, geo, 'nonzero'); }
         if (n.kind === 'layer') { const fx = rasterEffects(n); return `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}"${n.opacity < 1 ? ` opacity="${num(n.opacity)}"` : ''}${n.blend !== 'normal' ? ` style="mix-blend-mode:${BLEND_CSS.get(n.blend) ?? 'normal'}"` : ''}${fx.length ? ` filter="url(#${this.filter(fx)})"` : ''}>${body}${extra}</g>`; }
