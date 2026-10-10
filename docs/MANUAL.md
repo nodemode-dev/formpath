@@ -31,7 +31,7 @@ ask it questions.
 - Properties (the column beside the stage) shows what matters for the selection: transform, fill, stroke, opacity
   and quick actions; with nothing selected it shows the document's units, artboards, rulers and grids.
 - Panels dock on the right in groups: Color, Swatches, Gradient; Stroke, Transparency, Brushes, Attributes; Appearance, Graphic
-  Styles; Symbols, Artboards, Links, Image Trace; Navigator, Info, History, Actions; Layers; Properties, Transform,
+  Styles; Symbols, Artboards, Links, Image Trace; Navigator, Info, History, Actions, Variables; Layers; Properties, Transform,
   Align, Pathfinder, Pattern Options; Character, Paragraph, Glyphs. Drag a tab into another group or between groups; Window lists every
   panel and Window > Reset Panels puts them back. Workspaces in the title bar arrange the panels for a kind of work.
 - Screen modes (F cycles): standard, full screen with menu bar, full screen. Tab hides the panels.
@@ -150,6 +150,36 @@ ask it questions.
   and its round handle to move the dimension line. Moving, scaling or rotating a dimension keeps it live; changing
   the document's units relabels it. Object > Expand turns it into plain paths and type. Dimensions export to SVG and
   PDF and are saved in .fpth files.
+
+## Graphs
+
+- The graph tools share one rail slot (Shift+G): Column, Stacked Column, Bar, Stacked Bar, Line, Area, Scatter, Pie
+  and Radar. Drag to set the size of the graph's body (Shift makes a square, Alt draws from the centre) or click for
+  exact dimensions; labels and the legend sit outside the body. The Graph Data window opens with sample numbers.
+- Graph Data (Object > Graph > Data, Ctrl+Alt+Shift+G, or Graph Data in Properties) is a spreadsheet: the top row
+  holds the legend labels, the left column the category labels, the cells the numbers. Type in a cell or in the entry
+  box above the grid; Tab moves right, Enter moves down (Shift+Enter up), Ctrl+Enter applies. Paste cells copied from
+  a spreadsheet into any cell (tab-separated or CSV), or import a CSV file. Transpose swaps rows and columns, Switch X
+  and Y swaps each pair of columns for scatter graphs, Revert throws away what you have not applied and Apply updates
+  the graph as one undo step. Rows are categories (one pie each in a pie graph, one axis each in a radar graph) and
+  columns are series; a scatter graph reads each pair of columns as Y then X.
+- Graph Type (Object > Graph > Type, or Graph Type in a graph tool's options bar) switches the type and
+  sets the value axis side, a drop shadow, the legend (right, top or none), the tick values (calculated, or your min,
+  max and divisions), tick marks (none, short or full width gridlines), a prefix and suffix for the value labels,
+  category tick marks, column and cluster width, line options (mark data points, connect them, edge to edge, filled
+  lines, line width, marker size), pie options (legend, legends in wedges, sort, ratio, even or stacked position)
+  and the label font and size. With nothing selected it sets the defaults for new graphs.
+- A graph is a group of ordinary paths and type. The Direct Selection tool selects one column, wedge or label; the
+  Group Selection tool selects one column, then clicking again selects its whole series with its legend key, so you
+  can recolour, restroke or add effects to a series. Those styles stay when you edit the data or change options.
+- Combined graphs: select a series with the Group Selection tool and choose a different type for it in Graph Type
+  (column, stacked column, line or area), for example a column graph with one series drawn as a line.
+- Designs: select some art and choose Object > Graph > Design, then New Design. Object > Graph > Column puts a
+  design on the selected series (or all series): vertically scaled, uniformly scaled or repeating, where each copy
+  stands for a number of units and fractions are chopped or scaled. Object > Graph > Marker uses a design for the
+  markers of line, scatter and radar graphs. Paste Design puts a design's art back on the artboard to edit it.
+- Moving, scaling or rotating a graph keeps it live; scaling resizes the body and redraws it with unscaled labels.
+  Ungroup (or Object > Expand) turns it into plain art. Graphs export to SVG and PDF and are saved in .fpth files.
 
 ## Paths and Pathfinder
 
@@ -389,6 +419,46 @@ ask it questions.
   outlines, outlines over the image and the image. Expand makes ordinary paths; Release brings the image back.
   Embed turns a linked image into one stored in the document.
 
+## Variables and data merge
+
+- Window > Variables binds data to objects. Select an object and click a kind under Make from selection: Text String
+  (point or area type), Linked File (a placed image, whose picture is replaced), Visibility (any object) or Graph
+  Data (a graph). With nothing selected the variable is made unbound; pick it and click Bind to bind it later. Unbind,
+  Select Bound Object and Delete act on the picked variable; double-click a variable to rename it.
+- Data sets: Capture Data Set records the bound objects as they are now; Update Data Set overwrites the shown one
+  with the artboard as it is; Previous and Next (or the menu) show a data set, and the artboard changes to it as one
+  undo step.
+- Import Data Sets reads CSV or JSON. In a CSV the header row names the variables (a name that matches an existing
+  variable uses it; a new name makes an unbound variable, a Linked File one when its values are image paths or a
+  header starts with @), each row is a data set, and a column called Data Set names them. Image values are absolute
+  paths the engine can read or web addresses. A graph value is spreadsheet text with rows split by | (or JSON
+  {series, categories, values}). JSON is an array of objects keyed by variable name, or {"dataSets": [...]}.
+- Export Variations writes one PNG, SVG or PDF per data set (optionally a .fpth too), named from the data set or a
+  text variable, into a folder through the engine or as a zip download; problems go into
+  formpth-data-merge-errors.txt. Variables and data sets are saved in .fpth files.
+
+## Actions, batch and history
+
+- Actions (Window > Actions) keeps action sets in the engine's library (the Actions folder in your formpth data
+  folder), one .fpaction file per set. New Action starts recording; menu commands are recorded with the values you
+  give their dialogs (Move, Rotate, Scale, Offset Path, effects and every other dialog), and drags with the
+  Selection, Rotate, Reflect, Scale and Shear tools, shapes you draw, fill and stroke changes, opacity and graphic
+  styles are recorded as the operations they performed. Stop ends recording; Record adds more after the picked step.
+- Each step has a check box to leave it out and, for steps with a dialog, a box that shows the dialog when the action
+  plays so you can change the values. Double-click a step to edit its recorded values, an action or a set to rename
+  it. Insert Stop adds a message that pauses playback (with or without Continue). Move Up, Move Down, Duplicate and
+  Delete organise steps, actions and sets. Load and Save read and write .fpaction files. A Default Actions set comes
+  with outline and expand, rotate, scale, reflect, move, opacity, drop shadow, simplify, type to outlines and
+  grayscale.
+- Play runs the picked action from the picked step. Transforms play about the centre of whatever is selected.
+- Batch (in the Actions panel or File > Automate) plays an action on every .fpth, SVG and PDF file in a folder, or
+  on each data set of the open document, and saves each result (as the source format, .fpth, SVG, PDF or PNG) into a
+  folder through the engine or a zip download, with formpth-batch-log.txt listing what ran and what failed. Choose
+  to stop at the first error or log it and go on.
+- History (Window > History) jumps to any recent state. New Document (the page button, or File > Automate > New
+  Document from History State) opens the current state as a new document; History Options sets how many undo steps
+  are kept (also in Preferences > File Handling).
+
 ## Saving and exporting
 
 - .fpth projects keep everything editable: artboards, layers, live shapes, effects, symbols, swatches, styles,
@@ -424,8 +494,9 @@ ask it questions.
 - The tools cover everything here: reading the document (get_document, get_image, get_svg, get_object), drawing
   (draw_shape, draw_path, add_text, edit_anchors), paint (set_paint, set_stroke, set_appearance, add_swatch,
   graphic_style), structure (group, arrange, compound_path, attributes, clipping_mask, layers), transforms and align, Pathfinder
-  and path operations, live effects, blends, envelopes, repeats, symbols, brushes, image trace, opening, saving and
-  exporting, and run_command for any menu command. Every change is one undo step.
+  and path operations, live effects, blends, envelopes, repeats, symbols, brushes, image trace, graphs (graph),
+  variables and data merge (variables), actions and batch (actions), opening, saving and exporting, and run_command
+  for any menu command. Every change is one undo step.
 - The assistant (Window > Assistant) uses a language model you set in Preferences > Plugins (a local Ollama model or
   an OpenAI-compatible endpoint) with the same tools, and Undo This Turn reverses all of its changes at once.
 

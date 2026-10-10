@@ -50,6 +50,8 @@ frontend/
     │   ├── livepaint.ts        Live Paint faces, gap closing and face paint
     │   ├── puppet.ts           Puppet Warp mesh and as-rigid-as-possible solve
     │   ├── dimension.ts        live dimension groups and their labels
+    │   ├── graph.ts            live graph groups: data table, nine graph types, designs, part styles
+    │   ├── variables.ts        variables, data sets and applying a data set to the document
     │   ├── intertwine.ts       intertwine objects: member areas, overlap faces, zones
     │   ├── shaper.ts           Shaper gesture recognition, Shaper Group faces and scribbles
     │   ├── transform.ts        node transforms
@@ -76,12 +78,14 @@ frontend/
     │   ├── paint.ts            Eyedropper, Gradient, Mesh, Live Paint, Shape Builder, Blend, Sprayer, Measure
     │   ├── puppet.ts           Puppet Warp
     │   ├── dimension.ts        Dimension
+    │   ├── graph.ts            the nine graph tools
     │   ├── shaper.ts           Shaper, Intertwine
     │   ├── symbolism.ts        Symbol Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler
     │   ├── type.ts             type tools and their options
     │   └── view.ts             Hand, Rotate View, Zoom, Artboard
     ├── io/
     │   ├── api.ts              engine service client
+    │   ├── data-merge.ts       data set images, variation projects and the variations export
     │   ├── project-io.ts       .fpth manifest in and out
     │   ├── svg.ts              SVG export and import
     │   ├── pdf.ts              PDF writer and native reader
@@ -135,6 +139,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/ops/distort.ts
 - src/engine/puppet.ts
 - src/engine/dimension.ts
+- src/engine/graph.ts
+- src/engine/variables.ts
 - src/engine/intertwine.ts
 - src/engine/shaper.ts
 - src/engine/style-libraries.ts
@@ -148,11 +154,13 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/tools/paint.ts
 - src/tools/puppet.ts
 - src/tools/dimension.ts
+- src/tools/graph.ts
 - src/tools/shaper.ts
 - src/tools/symbolism.ts
 - src/tools/type.ts
 - src/tools/view.ts
 - src/io/api.ts
+- src/io/data-merge.ts
 - src/io/project-io.ts
 - src/io/svg.ts
 - src/io/pdf.ts
@@ -173,6 +181,10 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/color-guide.ts
 - src/ui/panels/color-picker.ts
 - src/ui/panels/navigator.ts
+- src/ui/panels/actions.ts
+- src/ui/panels/variables.ts
+- src/ui/panels/graph-data.ts
+- src/ui/panels/graph-dialogs.ts
 - src/ui/panels/stroke.ts
 - src/ui/panels/type.ts
 - src/ui/panels/text-styles.ts
@@ -185,6 +197,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/appearance.ts
 - src/ui/panels/attributes.ts
 - src/ui/form-dialog.ts
+- src/ui/commands.ts
 - src/ui/palette.ts
 - src/ui/icons.ts
 - src/styles/tokens.css
@@ -263,6 +276,13 @@ The label toggles between Outline and Preview, as Illustrator's View menu does. 
 - logged: v0.17.0 · 2026-10-08
 
 Attributes joins the Stroke group (Window > Attributes comes from `TAB_HOMES`). The `fx-*` commands and Effect Gallery pass the Appearance panel's `effectSlot()` and are enabled when it has one, so an effect lands on the targeted fill, stroke or layer. Window > Graphic Style Libraries lists one `gs-lib-<id>` command per library, which shows the Graphic Styles panel on that library. The Window menu is taller than a 1000 px window and scrolls, as it did before; hovering a submenu at the bottom needs the menu scrolled to it first.
+
+### src/app.ts · graphs, variables, actions and history wiring
+- refers-to: src/app.ts :: graph-type, graph-data, graph-design, graph-column, graph-marker, graph-size, action-batch, history-new-document, history-options, historyOptions, TAB_HOMES.variables
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+Object > Graph holds Type, Data (Alt+Shift+Ctrl+G), Design, Column and Marker; graph-size is the click-to-size dialog of the graph tools. File > Automate holds Play Action, Batch, New Document from History State and History Options. The Variables panel sits in the Navigator group (Window > Variables). The Actions panel gets openFiles, deliver and toast from here, and agents.actions points the bridge at it.
 
 ## src/automation/agent-bridge.ts
 
@@ -357,6 +377,13 @@ Two new tools. puppet_warp takes pins as x, y with optional to_x, to_y (a pin le
 
 intertwine takes action make (ids or the selection), flip (x, y inside an overlap), area (a loop of points), release and expand; id defaults to the selected intertwine object and get_document reports its zones (top member id and bounds). shaper takes action draw (the gesture as points, answered with the recognised kind and the live shape's id), scribble (punch, merge or delete by the same rules as the tool), fill (x, y and color for one face) and expand. Each call is one engine edit, so one undo step.
 
+### src/automation/agent-bridge.ts · graph, variables and actions
+- refers-to: src/automation/agent-bridge.ts :: graphTool, graphPatch, variablesTool, actionsTool, AgentBridge.actions
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+graph creates (default without id), updates (default with id or any part's id), gets or makes a design; data comes as {series, categories, values} or spreadsheet text, and the answer lists every series group id so set_paint can restyle a series. Setting min, max or divisions turns calculated ticks off; auto true turns them back on. variables runs the Variables panel's operations and export writes into an absolute folder through the engine. actions lists, plays (stops that allow continue are passed, others end the run and are reported) and batches; it runs before the open-document check so list and batch work with no document. Each call is still one history step through beginStep and endStep.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture
@@ -394,6 +421,13 @@ A new project is fitted to the last stage size the stage reported. Before, the f
 
 selectionFrame is the bounding box the stage draws and the tools drag: when every top selected object shares one bbox angle it is the union of their bounds measured in the turned frame (cached per node), with its corners turned back to the page; otherwise the plain selection bounds. Reset Bounding Box only drops bbox, one step. Edit Contents is stored on the envelope (editContents) rather than in the project, like Illustrator, so it survives save and undo: hit testing and marquee selection then go into the raw children, topSelectable stops below the envelope, and the selection becomes the children; Edit Envelope clears it and selects the envelope. Every envelope point edit goes through editEnvelopeMesh, which turns a warp or top-object envelope into a 4 by 4 mesh sampled from its current shape the first time, and pins the stored frame to the current contents box. Release now gives back the envelope's real outline (the mesh boundary, the warped box or the top shape) instead of the unwarped box.
 
+### src/engine/index.ts · graph, variable and recorder methods
+- refers-to: src/engine/index.ts :: Engine.addGraph, Engine.graphOf, Engine.graphTargets, Engine.graphSeriesSelected, Engine.setGraph, Engine.setGraphData, Engine.setGraphSeries, Engine.addGraphDesign, Engine.deleteGraphDesign, Engine.pasteGraphDesign, Engine.makeVariable, Engine.bindVariable, Engine.captureDataSet, Engine.applyDataSet, Engine.recorder, Engine.recordMute, Engine.noteDragTransform, Engine.playOp, Engine.newDocumentFromState, Engine.setHistoryLimit
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+Every graph and variable change is one edit. graphTargets maps any selected part to its graph, so commands work after Group Selection. Deleting a design also removes it from every graph that used it. The recorder is a single optional callback; methods call rec only for selection-wide changes (no ids passed), so agent and panel calls aimed at specific objects are not recorded as actions. noteDragTransform keeps the latest matrix of a tool drag and the centre of the dragged selection, which commitDrag records (and makes Transform Again repeat the drag). playOp replays those operations against the current selection; added nodes are cloned with new ids.
+
 ## src/engine/history.ts
 
 ### src/engine/history.ts · push merge
@@ -402,6 +436,13 @@ selectionFrame is the bounding box the stage draws and the tools drag: when ever
 - logged: v0.9.0 · 2026-10-07
 
 `merge` replaces the last state's document when the names match and the cursor is at the end; otherwise it pushes as usual. Redo states beyond the cursor are dropped on any push.
+
+### src/engine/history.ts · trim and stateAt
+- refers-to: src/engine/history.ts :: History.trim, History.stateAt, History.limit
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+History.limit is still one static value (the Preferences undo steps); Engine.setHistoryLimit sets it and calls trim on every project, which drops the oldest states beyond the limit but never the current one or anything after it. stateAt returns a state for New Document from State.
 
 ## src/engine/viewport.ts
 
@@ -882,6 +923,35 @@ The art maps through the deformed triangles with barycentric coordinates, and di
 
 A dimension is a group with dim set: the spec stores the measured points (linear a and b; angular vertex and two arm points; radial centre and rim point), the offset and the style. The children are derived, like Live Paint faces: refreshDimensions, run first in reflow, regenerates them whenever the spec object, the group id or the document's units change, from a cache keyed by the spec's identity, so an unchanged dimension costs one walk and an edit, drag, undo or file open always shows children that match the spec. Because the children are ordinary paths and point type, render, hit testing, SVG and PDF need nothing new, and expand only drops dim. Children ids are the group id plus -dl (lines), -dh (filled arrowheads and dots) and -dt (label), so regenerating keeps them stable. transformNode maps the points and re-derives the offset from where the dimension line's handle lands, which keeps the line on the correct side under reflection; distortNode maps the points. Linear offsets are measured from the measured point farthest along the normal (the nearer one when negative), so a horizontal dimension of points at different heights clears both. The label turns with the line but never reads upside down (its direction is flipped into the right half plane), and above or below stay on the side of the line away from or toward the art after that flip. Centre text cuts a gap in the dimension line the width of the laid out label plus padding. Editing a child directly (Direct Selection, a paint swatch) is overwritten on the next reflow; the dimension's colour, weight and type come from its settings.
 
+## src/engine/graph.ts
+
+### src/engine/graph.ts · live graph groups and their parts
+- refers-to: src/engine/graph.ts :: buildGraph, graphChildren, graphNode, refreshGraphs, graphKey, merge, family, xfGraph, restyleText, cleanData, parseTable, parseGrid, transposeData, swapXY, dataToText; src/engine/types.ts :: GraphSpec, GraphData, GraphDesign, GroupNode.graph, GroupNode.graphKey, NodeBase.part; src/engine/flow.ts :: reflow; src/engine/transform.ts :: transformNode
+- kind: rationale
+- logged: v0.20.0 · 2026-10-10
+
+A graph is a group with graph set: the spec holds the type, the body size (w, h), a placement matrix xf, the data table (series labels, category labels, values[row][column] with null for empty cells) and every option of the Graph Type dialog. Its children are ordinary paths and point type generated in the body's own frame and then mapped by xf, so render, hit testing, SVG, PDF, outlines and Ungroup need nothing new. Every generated node carries part, a role key: grid, axes, shadow, labels, legend, a series group s{i} holding its columns, markers or wedges s{i}:c{row}, its line s{i}:line, its area s{i}:area and its legend key s{i}:key, and texts vl{k}, cl{k}, lt{i}, wl{row}:{i}. Group Selection therefore climbs column, then series group with its key, then the graph, as in Illustrator.
+
+refreshGraphs runs in reflow and regenerates only when graphKey (the spec without xf, as JSON, memoised per spec object, plus the JSON of any design the graph uses) differs from the key stored on the group, so a direct edit of a part (moving a column with Direct Selection, retyping a label) stays until the data or an option changes, and undo, drags and file open cost a walk. Regeneration matches old parts by part, not by id, so copies and pasted graphs keep their styles: an existing part keeps its id, appearance, opacity, blend, graphic style, name, lock and hide; a new part takes the style of its family (a new column from the series' legend key, then a sibling column; a new label from another label of its kind). Type keeps the existing first span's character style; changing the graph's font or size in Graph Type restyles the type parts first (restyleText) so the new defaults show.
+
+transformNode maps xf: a translation or a positive axis-aligned scale is folded into w and h with xf back to a translation, which changes the key so the graph redraws at the new size with unscaled labels and the user's stroke weights; rotation, shear and reflection stay in xf and the children are transformed with it. distortNode drops graph so a distorted graph becomes plain art. Expand drops graph and graphKey. The value axis uses a 1, 2, 2.5, 5 nice step for about five divisions including zero unless the dialog overrides min, max and divisions; labels take the decimals the step needs. Columns of column series cluster per category (cluster width and column width are percents) with stacked series sharing one slot, areas stack cumulatively from the first area series and use edge-to-edge positions, lines use category centres unless edge-to-edge, scatter reads Y then X column pairs with a nice X axis, pies are drawn clockwise from twelve o'clock with ratio, even or concentric stacked sizing and none, all or first sort, radar draws rings of the value divisions on spokes from twelve o'clock. Filled lines are a mitred outline polygon of the polyline. Column designs map a design's bounds onto the column (vertically scaled), scale it to the column height (uniformly scaled) or repeat copies each worth per units with the last one chopped by a clip group or scaled; marker designs fit into twice the marker size.
+
+### src/engine/graph.ts · graph features left out
+- refers-to: src/engine/graph.ts :: cartesian, pie, radar; src/ui/panels/graph-dialogs.ts :: graphTypeDialog
+- kind: todo
+- logged: v0.20.0 · 2026-10-10
+
+Not built: sliding column designs (they need a horizontal slide line inside the design and a way to draw it), a second value axis for one series of a combined graph (combined series share the left or right axis), Illustrator's First Row in Front and First Column in Front stacking options, the separate category axis tick count and Draw Tick Marks Between Labels option, and rotating designs in bar graphs (designs are scaled into the bar without turning). Labels are measured with the shaped fonts when they are loaded; a top legend measured before a font loads keeps its spacing until the graph next regenerates.
+
+## src/engine/variables.ts
+
+### src/engine/variables.ts · variables and data sets
+- refers-to: src/engine/variables.ts :: kindFits, currentValue, captureValues, applyDataSetDoc, fitImage, asGraph, asBool, parseDataFile, variablesFromRows, fileStem; src/engine/types.ts :: Variable, DataSet, Doc.variables, Doc.dataSets, Doc.dataSet; src/engine/index.ts :: Engine.makeVariable, Engine.bindVariable, Engine.captureDataSet, Engine.updateDataSet, Engine.applyDataSet, Engine.addDataSets
+- kind: rationale
+- logged: v0.20.0 · 2026-10-10
+
+Variables live in the document (Doc.variables), each with a kind (text, image, visibility, graph) and the id of the one object it binds (or null); binding a second variable of the same kind to an object unbinds the first, as an object holds one variable per kind in Illustrator. Data sets (Doc.dataSets) map variable ids to values: a string for text and image, a boolean for visibility, GraphData for graphs; Doc.dataSet is the shown one. All three are optional fields, so older .fpth files open unchanged and the .fpth writer keeps them because it serialises the whole document. applyDataSetDoc is pure and synchronous: text replaces the plain text keeping the first span's style, visibility sets hidden, graph data replaces graph.data (a string value is spreadsheet text with rows split by | or newlines, or JSON), and an image swaps src for an asset the caller already resolved, fitted inside the old placement's width and height and centred, so a set never moves the layout. Image values are asset:key for pictures already in the document, absolute paths the engine service reads, or URLs; resolving them is async and lives in io/data-merge.ts. CSV import treats the header row as variable names (a leading @ forces an image variable; otherwise a column of image file names is an image variable, true and false a visibility variable), a column called Data Set names the sets, and unknown names become unbound variables.
+
 ## src/engine/intertwine.ts
 
 ### src/engine/intertwine.ts · zones over a base order
@@ -1125,6 +1195,15 @@ Pins live in the tool, not the document, as in Illustrator, where they disappear
 
 Points are taken by drag or by clicks (a press that does not move waits for the next click), snapped through ctx.snap so anchors, centres and smart guides catch them, with Shift holding 45 degree steps from the previous point. Once the type has its points the pointer sets the offset and the next click (or Enter) adds the dimension as one history step. Radial in Centre mode first tries the object under the pointer as a circle (a live ellipse, or a single closed path whose anchors are all on one circle) and takes its centre and radius, placing the rim point toward the click. The preview draws the generated children in the accent colour, so it matches the result. The options bar shows the first selected dimension's settings, or the defaults when none is selected; changing one sets the default and patches every selected dimension in one edit. Type changes only the default, because the points of one type do not fit another. Square handles on a selected dimension move its measured points (snapping, excluding the dimension itself) and the round handle its offset; each drag is one Edit Dimension step.
 
+## src/tools/graph.ts
+
+### src/tools/graph.ts · the graph tools
+- refers-to: src/tools/graph.ts :: graphTool, options, pendingGraph; src/app.ts :: graph-size, graph-data
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+Nine tools share the graph slot; Column Graph has Shift+G (J, Illustrator's old key, is Puppet Warp in formpth, and Shift+G was free). A drag sets the body rectangle (Shift square, Alt from the centre) and opens the Graph Data window; a click runs graph-size, which asks for width and height at the clicked point. The options bar shows Graph Data (with a graph selected), Graph Type, Legend, Ticks, Label Size and Drop Shadow; these write the selected graph or, with none, the defaults for new graphs in Engine.options.graph. The cursor is a crosshair with a column badge (CURSORS.graph).
+
 ## src/tools/shaper.ts
 
 ### src/tools/shaper.ts · Shaper and Intertwine tools
@@ -1183,6 +1262,22 @@ Drag on the pasteboard draws a new artboard; drag inside one moves it with its a
 - logged: v0.17.0 · 2026-10-08
 
 The window's side of the agent bridge goes through here now, as every other engine call does. `mcpSession` POSTs for a secret (null when the engine refuses or is down); `mcpNext` POSTs `{allowed}` with the secret in `X-Formpth-Bridge` and returns the status with the item, because the loop acts on 204, 205 and 403 differently; `mcpResult` and `mcpStop` carry the secret too. The unused GET-based `mcpNext` they replace took no secret.
+
+### src/io/api.ts · actions library and folder files
+- refers-to: src/io/api.ts :: actionSets, saveActionSet, deleteActionSet, listFolder, readFile, writeFile
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+These call backend/app/routers/batch.py, which answers only formpth's own window (the agent bridge's origin check) because they read and write arbitrary folders. All are POST; readFile returns the bytes, writeFile posts a form with the folder, the file name and the blob and returns the written path.
+
+## src/io/data-merge.ts
+
+### src/io/data-merge.ts · images and variations
+- refers-to: src/io/data-merge.ts :: resolveImages, showDataSet, variationProject, renderAs, projectBlob, exportDataSets
+- kind: rationale
+- logged: v0.20.0 · 2026-10-10
+
+resolveImages turns a data set's image values into assets before the synchronous engine edit: asset:key reuses a picture already in the document, a URL (http, https, data or blob) is fetched in the window, anything else is an absolute path read by the engine service. Each value is fetched once per project (cached by value) and stored in the project's assets under a fresh image key, so .fpth saves carry the pictures. Exports never touch the open document's history: each variation is a temporary Project built from applyDataSetDoc and reflow (so graphs regenerate) sharing the asset blobs, rendered by the same SVG, PDF and raster writers as File > Export. A folder destination writes each file through the engine and, when anything failed, formpth-data-merge-errors.txt; otherwise everything goes into one zip.
 
 ## src/io/project-io.ts
 
@@ -1604,6 +1699,65 @@ The picker keeps saturation and brightness in 0..1; `hsbToRgb` takes 0..100. Mul
 
 Rows store their action in `dataset.action`. `dataset.key` belongs to `patchList`; writing it broke row identity.
 
+### src/ui/panels/navigator.ts · ActionsPanel moved out
+- refers-to: src/ui/panels/navigator.ts :: ActionsPanel, Action, ACTIONS_KEY; src/ui/panels/actions.ts :: ActionsPanel
+- kind: removed-code
+- logged: v0.20.0 · 2026-10-10
+
+The old ActionsPanel kept a flat list of actions in localStorage under formpth.actions, each step only a command id and label, recorded through commands.onRun and played by running the ids in a row. It is replaced by src/ui/panels/actions.ts (sets in the engine's library, parameters, modal steps, stops, batch). The new panel imports any formpth.actions found once into a set called My Actions in the library and removes the key. The note above about dataset.key still holds for the new rows (they use the patchList key only).
+
+### src/ui/panels/navigator.ts · History footer
+- refers-to: src/ui/panels/navigator.ts :: HistoryPanel; src/engine/index.ts :: Engine.newDocumentFromState, Engine.setHistoryLimit; src/app.ts :: historyOptions
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+The History panel's footer has New Document (opens the shown history state as a new document with the same assets, marked unsaved) and History Options (the undo step limit, the same Preferences value historyStates). Changing the limit trims every open document's history from the oldest end, never past the current state.
+
+## src/ui/panels/actions.ts
+
+### src/ui/panels/actions.ts · recording parameters
+- refers-to: src/ui/panels/actions.ts :: ActionsPanel.onCommand, formHooks.onResult, engine.recorder, opLabel, stepLabel; src/ui/form-dialog.ts :: formHooks; src/ui/commands.ts :: Commands.onBefore, Commands.onAfter; src/engine/index.ts :: RecordedOp, Engine.recorder, Engine.noteDragTransform, Engine.playOp
+- kind: rationale
+- logged: v0.20.0 · 2026-10-10
+
+A step is a command (id, label, the values its dialog returned, the dialog title, a modal flag), an engine operation (RecordedOp) or a stop (message, allow continue); each has an on flag. Every dialog in formpth goes through askForm (previewEdit and effectDialog too), so FormDialog reports what it returned through formHooks.onResult; a command recorded while a dialog is open waits for that result and stores the values. Engine operations reach the panel through Engine.recorder from a few methods: transform (Move by arrows, Transform Again, agents), commitDrag after a tool called noteDragTransform (Selection move, scale and rotate; Rotate, Reflect, Scale and Shear tools), addNodes (drawn shapes, kept as their nodes), setFill, setStroke, setObjectProps (opacity, blend) and applyGraphicStyle. To keep a dialog command from also recording the engine edit it performs, Commands.onBefore and onAfter raise Engine.recordMute around every command, and operations are ignored while a dialog is open or while a dialog result is settling (inflight, cleared on the next macrotask after onResult, after the command's then-callbacks ran).
+
+Playback sets formHooks.supply before running a command: askForm then resolves at once with the recorded values over the field defaults, or opens prefilled when the step is modal, and the player waits between steps until no dialog is open and the engine is not busy. A transform operation is stored with the centre of the selection it moved; it plays as the same linear part about the centre of the current selection plus the recorded displacement of that centre, so a recorded move or rotation applies to whatever is selected. Commands that are views, panels, files, recent items, tools or the Graph Data window are not recorded (SKIP).
+
+### src/ui/panels/actions.ts · library, files and batch
+- refers-to: src/ui/panels/actions.ts :: ActionsPanel.load, ActionsPanel.save, ActionsPanel.fileOf, ActionsPanel.batch, predefined; src/io/api.ts :: actionSets, saveActionSet, deleteActionSet, listFolder, readFile, writeFile; backend/app/routers/batch.py
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+Each set is one .fpaction file ({format: com.nodemode.formpth.actions, version 1, name, actions}) in the Actions folder of the engine's data folder, read at start and written 250 ms after any change; Save writes the same JSON for download and Load reads one. With the engine offline the sets live in memory and the status line says so. A Default Actions set is created when the library is empty. Batch over a folder lists the .fpth, SVG and PDF files through the engine, opens each as a document, plays the action without stops (a stop that does not allow continue fails the file), saves the result through the engine (or into a zip) as the source format or the chosen one, closes the document and returns to the one that was active; batch over data sets builds each variation as a temporary document. formpth-batch-log.txt lists each file as ok or error and is written even when nothing failed. The batch does not run inside engine.task: the player waits for the engine to be idle between steps, so an outer task would make it wait forever.
+
+## src/ui/panels/variables.ts
+
+### src/ui/panels/variables.ts · Variables panel
+- refers-to: src/ui/panels/variables.ts :: VariablesPanel; src/io/data-merge.ts :: showDataSet, exportDataSets
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+Built once: a data set select (options patched by key), previous, next, capture, update and delete, a count line with reserved height, the variable list (rows keyed by variable id) and two button rows. Picking a bound object on the artboard picks its variable. Showing a data set resolves its images first (engine.task) and then applies it as one undo step. Export Variations defaults to a folder in the desktop app and a zip download in the browser.
+
+## src/ui/panels/graph-data.ts
+
+### src/ui/panels/graph-data.ts · Graph Data window
+- refers-to: src/ui/panels/graph-data.ts :: GraphDataWindow
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+A non-modal floating window (z-companion) built once; the grid is rows of text inputs patched by key and grown by whole rows and columns, always two spare of each, so typing at the edge adds room without rebuilding. The draft is a string grid with the corner, legend labels in row 0 and category labels in column 0; Apply parses numbers (thousands separators, a currency sign and a trailing % are accepted) and trims empty trailing rows and columns. While the draft has unapplied edits the window does not follow a different selected graph. Keys typed in the window stop propagating so tool shortcuts do not fire.
+
+## src/ui/panels/graph-dialogs.ts
+
+### src/ui/panels/graph-dialogs.ts · Graph Type, Column, Marker and Design
+- refers-to: src/ui/panels/graph-dialogs.ts :: graphTypeDialog, graphColumnDialog, graphMarkerDialog, GraphDesignDialog, graphSizeDialog
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+Graph Type is an askForm (so actions record it) that only writes the options that changed, as one step with the series type change; with no graph selected it sets the defaults for new graphs (Engine.options.graph). The series a dialog acts on are those whose parts the Group or Direct Selection tool selected, or all series when the whole graph is selected.
+
 ## src/ui/panels/stroke.ts
 
 ### src/ui/panels/stroke.ts · new brushes and previews
@@ -1780,6 +1934,22 @@ Fill Rule buttons (Non-Zero Winding, Even-Odd) with the current rule named besid
 - logged: v0.9.0 · 2026-10-07
 
 One reusable dialog for every exact-values dialog: number, select, check, text, colour and note fields, an optional Preview box and an optional extra button (Copy in the transform dialogs).
+
+### src/ui/form-dialog.ts · hooks for actions
+- refers-to: src/ui/form-dialog.ts :: formHooks, withValues, FormDialog.ask, FormDialog.finish
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+formHooks.onResult receives every dialog's title and returned values (null when cancelled), which is how the Actions panel records dialog values. formHooks.supply is consumed by the next ask: its values replace the fields' starting values, and unless modal the promise resolves at once with them and no dialog opens. Values that do not fit a field (a select choice that no longer exists, a non-number for a number) keep the field's own value.
+
+## src/ui/commands.ts
+
+### src/ui/commands.ts · onBefore and onAfter
+- refers-to: src/ui/commands.ts :: Commands.run, Commands.onBefore, Commands.onAfter, Commands.onRun
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+run calls onBefore, the command, onAfter (in a finally) and then onRun. The Actions panel uses the first two to mute engine operation recording while a command runs, so a command is recorded once, as a command.
 
 ## src/ui/palette.ts
 

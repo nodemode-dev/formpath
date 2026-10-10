@@ -25,6 +25,7 @@ backend/
     │   ├── fonts.py            installed fonts: list, find, file
     │   ├── io.py               writes exports for the window
     │   ├── mcp.py              MCP endpoint, the TOOLS catalogue, the window bridge
+    │   ├── batch.py            action library, folder listing, file read and write for batch and data merge
     │   ├── llm.py              the assistant's model, status and step
     │   ├── plugins.py          installed plugin scripts
     │   └── nodemode.py         send artwork to a NodeMode canvas
@@ -44,6 +45,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - formpth_engine.py
 - app/core/config.py
 - app/routers/mcp.py
+- app/routers/batch.py
 - app/routers/projects.py
 - app/routers/fonts.py
 - app/services/fonts.py
@@ -151,6 +153,22 @@ The desktop shell loads the main window from the sidecar as an external URL (`ht
 - logged: v0.17.0 · 2026-10-08
 
 `attributes` mirrors the Attributes panel: `fill_rule` sets nonzero or evenodd on paths and compound paths (groups pass it down), `reverse` reverses path direction (one compound subpath when its own id is passed), and `note` sets the object note; it answers with each object's rule and note. `apply_effect` gained `item`, an index into `ap.items` as `get_object` lists it, for effects on one fill or stroke; 3D effects are refused there because they turn the whole object. `graphic_style` gained `redefine`, `break_link`, `libraries` and `load_library`, and `apply` with `library` adds one library style to the document and applies it. `set_appearance` says that groups and layers have their own stack. The catalogue is at 67 tools.
+
+### app/routers/mcp.py · graph, variables and actions tools
+- refers-to: app/routers/mcp.py :: TOOLS graph, variables, actions; setup/agents.py :: GROUPS
+- kind: explainer
+- logged: v0.20.0 · 2026-10-10
+
+Three tools run in the window like every other: graph (create, update, get, make_design), variables (list, make, bind, unbind, rename, delete, capture, update, import, show, export) and actions (list, play, batch). Their folder arguments are not handled by _run here: the window writes and reads through batch.py, which it may call because it has the app origin. setup/agents.py lists graph and variables under Graphs and data and actions under Commands.
+
+## app/routers/batch.py
+
+### app/routers/batch.py · library and folder access for the window
+- refers-to: app/routers/batch.py :: actions_list, actions_save, actions_delete, files_list, files_read, files_write, _folder, READABLE, WRITABLE
+- kind: rationale
+- logged: v0.20.0 · 2026-10-10
+
+Action sets are .fpaction JSON files in the data folder's Actions directory, one per set named after it (no slashes or control characters, 16 MiB cap). Batch and data merge need to list a folder, read the files in it and write results to another; those endpoints read and write any absolute path, so every one is a POST that refuses requests without formpth's own Origin (mcp._app_origin, the same check that guards the agent bridge): a web page cannot call them, and a page that sends no Origin is refused too. Reads are limited to the formats formpth opens plus CSV, TSV, text, JSON, XML and .fpaction; writes to the formats it exports plus text, CSV, JSON, .fpaction and zip, with the file name reduced to a plain name and the destination folder created when missing. 512 MiB caps both directions.
 
 ## app/routers/projects.py
 

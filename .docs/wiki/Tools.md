@@ -13,6 +13,7 @@ Tools live in `frontend/src/tools/`, one module per family, and register through
 | `puppet.ts` | Puppet Warp (pins over an as-rigid-as-possible mesh from `engine/puppet.ts`) |
 | `shaper.ts` | Shaper (gesture recognition and scribbles into Shaper Groups from `engine/shaper.ts`), Intertwine (the editing mode of intertwine objects from `engine/intertwine.ts`) |
 | `dimension.ts` | Dimension (linear, angular and radial dimension objects from `engine/dimension.ts`) |
+| `graph.ts` | Column, Stacked Column, Bar, Stacked Bar, Line, Area, Scatter, Pie and Radar Graph (live graph groups from `engine/graph.ts`; the Graph Data window is `ui/panels/graph-data.ts`) |
 | `type.ts` | Type, Area Type, Type on a Path, Vertical Type, Vertical Area Type, Vertical Type on a Path, Touch Type |
 | `view.ts` | Hand, Rotate View, Zoom, Artboard |
 

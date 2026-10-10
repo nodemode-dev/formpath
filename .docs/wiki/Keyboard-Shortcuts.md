@@ -11,6 +11,7 @@ Ctrl stands for Command on a Mac. Help > Keyboard Shortcuts in the app lists eve
 | Pencil, Paintbrush, Blob Brush, Eraser, Scissors | N, B, Shift+B, Shift+E, C |
 | Rotate, Reflect, Scale, Free Transform, Puppet Warp, Width, Warp | R, O, S, E, J, Shift+W, Shift+R |
 | Dimension | Shift+I |
+| Column Graph (the graph tools' slot) | Shift+G |
 | Shaper, Intertwine | Shift+N, Shift+J |
 | Eyedropper, Gradient, Mesh, Live Paint, Live Paint Selection, Shape Builder, Blend | I, G, U, K, Shift+L, Shift+M, W |
 | Symbol Sprayer, Artboard | Shift+S, Shift+O |
@@ -22,6 +23,7 @@ Ctrl stands for Command on a Mac. Help > Keyboard Shortcuts in the app lists eve
 | New, Open, Save | Ctrl+N, Ctrl+O, Ctrl+S |
 | Undo, Redo | Ctrl+Z, Shift+Ctrl+Z |
 | Group, Ungroup | Ctrl+G, Shift+Ctrl+G |
+| Graph Data | Alt+Shift+Ctrl+G |
 | Bring Forward, to Front | Ctrl+], Shift+Ctrl+] |
 | Send Backward, to Back | Ctrl+[, Shift+Ctrl+[ |
 | Lock, Hide | Ctrl+2, Ctrl+3 |
