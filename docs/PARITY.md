@@ -12,9 +12,9 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list.
 
-## Score at v0.19.0
+## Score at v0.20.0
 
-**62.5 of 76 scored rows, 82.2 percent:** 56 Full, 13 Partial, 7 None. The tally is at the end.
+**65 of 76 scored rows, 85.5 percent:** 59 Full, 12 Partial, 5 None. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -42,7 +42,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Rulers, guides and grids | Full | Rulers from the active artboard, guides dragged from rulers, lock, make, release, clear, grid with subdivisions and snapping |
 | Puppet Warp | Full | Puppet Warp tool (J): default and added pins, drag to bend while other pins hold, Shift to select several, Alt-drag to twist, Delete, Expand, Show Mesh; an as-rigid-as-possible solve over a triangle mesh of the art; type, images and symbols carried in an envelope. Pins belong to the tool, as in Illustrator |
 
-## Drawing · 8 of 10
+## Drawing · 9 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Shaper tool | Full | Shaper (Shift+N) turns gestures into live rectangles, rotated rectangles, circles, ellipses, triangles, polygons and lines; scribbles punch out, merge or delete regions; Shaper Groups keep their source shapes, with Faces and Shapes modes, face fills and Expand |
 | Perspective Grid | None | No perspective grid model, tool or view |
 | Dimension tool | Full | Dimension tool (Shift+I): linear (horizontal, vertical, aligned), angular, radius and diameter dimensions that keep measuring when moved or scaled and relabel with the document units; units, precision, scale ratio, arrows, label font and position; Expand. The Measure tool also reports area and perimeter |
-| Graphs | None | No graph objects, data table or graph tools |
+| Graphs | Full | Nine graph tools (column, stacked column, bar, stacked bar, line, area, scatter, pie, radar) making live graphs; the Graph Data window with typing, paste, CSV import, transpose and Switch X/Y; Graph Type options and combined graphs; column and marker designs; series styles survive data edits; Ungroup gives plain art. Missing: sliding column designs and a second value axis |
 
 ## Paths and Pathfinder · 8 of 8
 
@@ -123,7 +123,7 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | Text to Pattern | None | No prompt-to-pattern feature |
 | Retype | None | No font recognition from images or outlines |
 
-## Files, colour and output · 6.5 of 11
+## Files, colour and output · 8 of 11
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -135,9 +135,9 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | Raster export | Full | PNG, JPEG, WebP of an artboard, all artboards or the selection, at any scale, with transparency |
 | Export for Screens and asset export | Full | Export for Screens with artboards, scales, suffixes and formats in a zip; the Asset Export panel with Collect for Export as single or multiple assets, renaming, and each asset cropped to its art in PNG, JPEG, WebP, SVG or PDF |
 | Placed images and links | Partial | Place, a Links panel, Relink and Embed, but every placed image is copied into the document: a linked image does not follow its file |
-| History and Actions | Partial | History panel with every step; Actions record and play menu commands. Missing: dialog values and tool drags in actions, action sets saved to files, and Batch |
+| History and Actions | Full | History panel with every step, New Document from State and History Options; Actions record menu commands, dialog values, transforms (tool drags included), drawn shapes, fills, strokes, opacity and styles, with per-step toggles, modal dialogs, stops, editing and reordering; action sets saved as `.fpaction` files with a Default Actions set; Batch over a folder or over data sets with a log. Dialogs outside the common form (Export, Effect Gallery) open during playback instead of replaying |
 | Colour management and print | Partial | CMYK document mode and CMYK PDF. Missing: ICC profiles (CMYK converts by formula), proof colours, separations and overprint preview, and a print dialog with marks and bleed |
-| Variables and data merge | None | No variables, data sets or data merge |
+| Variables and data merge | Full | Variables panel with text, image, visibility and graph variables bound to objects; data sets captured, updated, deleted and stepped through live; CSV and JSON import; Export Variations as PNG, SVG, PDF or `.fpth` per data set to a folder or a zip |
 
 ## Platforms and access (not scored)
 
@@ -145,7 +145,7 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | --- | --- |
 | Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
 | Web app | The same app in a browser against the local engine |
-| Agents over MCP | 72 tools, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
+| Agents over MCP | 75 tools, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |
 
 ## Tally
@@ -154,22 +154,21 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | --- | --- | --- |
 | Objects and layers | 8 | 8 |
 | Selection and transform | 8 | 8 |
-| Drawing | 8 | 10 |
+| Drawing | 9 | 10 |
 | Paths and Pathfinder | 8 | 8 |
 | Paint and colour | 7 | 8 |
 | Effects and live objects | 8 | 10 |
 | Type | 8 | 8 |
 | Generative AI | 1 | 5 |
-| Files, colour and output | 6.5 | 11 |
-| **Total** | **62.5** | **76** |
+| Files, colour and output | 8 | 11 |
+| **Total** | **65** | **76** |
 
-56 rows Full, 13 Partial, 7 None: 82.2 percent.
+59 rows Full, 12 Partial, 5 None: 85.5 percent.
 
 ## Next to close
 
 In release order:
 
-1. v0.20.0: graphs, variables and data merge, and Actions with Batch.
-2. v0.21.0: the Perspective Grid.
-3. v0.22.0: swatch libraries and Separation spaces, the Recolor colour wheel, the Bristle brush and brush libraries, symbol editing and libraries, full-resolution Image Trace, and linked images.
-4. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
+1. v0.21.0: the Perspective Grid.
+2. v0.22.0: swatch libraries and Separation spaces, the Recolor colour wheel, the Bristle brush and brush libraries, symbol editing and libraries, full-resolution Image Trace, and linked images.
+3. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
