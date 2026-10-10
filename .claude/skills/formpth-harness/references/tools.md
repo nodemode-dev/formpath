@@ -7,10 +7,10 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Look: `get_document`, `get_image`, `get_svg`, `get_object`
 - Files and documents: `new_document`, `open_file`, `save_project`, `export_file`, `switch_document`, `place_image`, `document_setup`
 - Selecting: `select`, `select_same`, `select_similar`
-- Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`
+- Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`, `add_dimension`
 - Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `color_harmony`, `graphic_style`
 - Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `opacity_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
-- Transform and align: `transform`, `align`
+- Transform and align: `transform`, `align`, `puppet_warp`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
@@ -457,6 +457,39 @@ Aligns or distributes the objects, relative to the selection's bounds, the artbo
 - `to`: string (selection | artboard | key); default "selection"
 - `key`: string; An object id from get_document.
 - `spacing`: number
+
+## puppet_warp
+
+Puppet Warp: bends the objects (paths, groups, compound paths; type, images and symbols go into an envelope mesh) as rigidly as possible so each pin lands on its target while the art between the pins bends without shearing. Give at least one pin; a pin with no move holds that spot in place, so pass three or more pins for a bend. rotate twists the art around a pin. The result is ordinary path geometry; get_image shows it.
+
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `pins`: array; required; Pins on the art in document points; to_x, to_y is where each pin goes (it stays put when left out).
+- `expand`: number; default 3; How far in points the deformation mesh reaches past the art's edges.
+
+## add_dimension
+
+Adds a dimension annotation that stays live: linear (two points; horizontal, vertical or aligned), angular (the vertex, then a point on each arm) or radial (centre and a point on the rim, three points on a circle, or the id of a circle or ellipse). Its dimension line, extension lines, arrowheads and label regenerate when it moves or its settings change; expand turns it into plain paths and type. With ids and no points it changes the settings of those dimensions instead.
+
+- `type`: string (linear | angular | radial); default "linear"
+- `points`: array; Document points: linear [a, b]; angular [vertex, arm1, arm2]; radial [centre, rim] or three rim points with from three_points.
+- `circle`: string; radial: the id of a circle, ellipse or arc to measure.
+- `from`: string (centre | three_points); default "centre"
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `orientation`: string (horizontal | vertical | aligned); default "aligned"
+- `measure`: string (radius | diameter); default "radius"
+- `offset`: number; Linear: distance from the farther point to the dimension line (negative puts it on the other side). Angular: radius of the arc. Radial: how far the leader runs past the rim.
+- `units`: string (doc | pt | px | mm | cm | in | pc); default "doc"
+- `precision`: integer; default 2
+- `scale`: number; default 1; Drawing scale: the label shows the measured length times this (100 for 1:100).
+- `show_units`: boolean; default true
+- `arrow`: string (filled | open | tick | dot | none); default "filled"
+- `arrow_size`: number; default 6
+- `font`: string
+- `style`: string
+- `size`: number; default 9
+- `text_position`: string (above | center | below); default "above"
+- `color`: string; #rrggbb, default black.
+- `weight`: number; default 0.75
 
 ## pathfinder
 

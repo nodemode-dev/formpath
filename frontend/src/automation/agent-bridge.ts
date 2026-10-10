@@ -15,6 +15,8 @@ import { transformNode } from '../engine/transform';
 import { interiorOf, liveFaceNodes, liveFaces } from '../engine/livepaint';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
 import { envelopeOptions, meshHandles } from '../engine/envelope';
+import { circleFrom, circumcentre, dimLabel } from '../engine/dimension';
+import type { DimensionSpec } from '../engine/types';
 import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type ParaStyle, type Justification, type TabStop, type ListStyle, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
 import { api } from '../io/api';
@@ -532,6 +534,62 @@ export class AgentBridge {
           return ok ? text(`Transformed; bounds now ${JSON.stringify(box(e.selectionBounds(false)))}.`, { selection: e.selectedIds(), bounds: box(e.selectionBounds(false)) }) : fail('Nothing changed.');
         }
         case 'align': { const ok = e.align(str('action') as 'left', (str('to', 'selection') as 'selection'), has('key') ? String(this.node(a.key).id) : null, has('spacing') ? num('spacing', 0) : null, this.ids(a)); return ok ? text('Aligned.') : fail('Nothing moved: align needs two or more objects, or to: artboard.'); }
+        case 'puppet_warp': {
+          const raw = Array.isArray(a.pins) ? a.pins as Array<Record<string, unknown>> : [];
+          const pins = raw.map((q) => {
+            const x = Number(q.x), y = Number(q.y), tx = q.to_x === undefined ? x : Number(q.to_x), ty = q.to_y === undefined ? y : Number(q.to_y);
+            return { from: { x, y }, to: { x: tx, y: ty }, ...(q.rotate !== undefined && q.rotate !== null ? { rotate: Number(q.rotate) } : {}) };
+          });
+          if (!pins.length || pins.some((q) => ![q.from.x, q.from.y, q.to.x, q.to.y].every(Number.isFinite) || (q.rotate !== undefined && !Number.isFinite(q.rotate)))) return fail('Give pins as [{x, y, to_x, to_y}] in document points.');
+          const ok = e.puppetWarp(pins, { expand: Math.max(0, Math.min(100, num('expand', 3))) }, this.ids(a));
+          return ok ? text(`Warped ${e.selectedIds().length} object(s) with ${pins.length} pin(s).`, { selection: e.selectedIds() }) : fail('Nothing changed: select art (or pass ids) and put the pins on or near it.');
+        }
+        case 'add_dimension': {
+          const color = has('color') ? parseColor(str('color')) : null;
+          if (has('color') && !color) return fail('color must be #rrggbb.');
+          const patch: Partial<DimensionSpec> = {};
+          if (has('orientation')) patch.orient = str('orientation') as DimensionSpec['orient'];
+          if (has('measure')) patch.radial = str('measure') as DimensionSpec['radial'];
+          if (has('offset')) patch.offset = num('offset', 18);
+          if (has('units')) patch.units = str('units') as DimensionSpec['units'];
+          if (has('precision')) patch.precision = Math.max(0, Math.min(6, Math.round(num('precision', 2))));
+          if (has('scale')) patch.scale = Math.max(0.0001, num('scale', 1));
+          if (has('show_units')) patch.showUnits = a.show_units === true;
+          if (has('arrow')) patch.arrow = str('arrow') as DimensionSpec['arrow'];
+          if (has('arrow_size')) patch.arrowSize = Math.max(1, num('arrow_size', 6));
+          if (has('font')) patch.font = str('font');
+          if (has('style')) patch.style = str('style');
+          if (has('size')) patch.size = Math.max(1, num('size', 9));
+          if (has('text_position')) patch.textPos = str('text_position') as DimensionSpec['textPos'];
+          if (has('weight')) patch.weight = Math.max(0.05, num('weight', 0.75));
+          if (color) patch.color = color;
+          const pts = (Array.isArray(a.points) ? a.points : []).map((q) => (Array.isArray(q) ? { x: Number(q[0]), y: Number(q[1]) } : { x: NaN, y: NaN }));
+          if (pts.some((q) => !Number.isFinite(q.x) || !Number.isFinite(q.y))) return fail('points must be [x, y] pairs in document points.');
+          if (!pts.length && !has('circle') && has('ids')) {
+            const ok = e.setDimension(patch, this.ids(a));
+            return ok ? text('Changed the dimension settings.', { selection: e.selectedIds() }) : fail('Nothing changed: ids must be dimensions.');
+          }
+          const type = str('type', 'linear') as DimensionSpec['type'];
+          let at = pts;
+          if (type === 'radial') {
+            if (has('circle')) {
+              const c = circleFrom(this.node(a.circle));
+              if (!c) return fail(`${String(a.circle)} is not a circle, ellipse or circular arc: give points instead.`);
+              const dir = pts[0] ? Math.atan2(pts[0].y - c.c.y, pts[0].x - c.c.x) : -Math.PI / 4;
+              at = [c.c, { x: c.c.x + Math.cos(dir) * c.r, y: c.c.y + Math.sin(dir) * c.r }];
+            } else if (str('from') === 'three_points') {
+              const c = pts.length === 3 ? circumcentre(pts[0], pts[1], pts[2]) : null;
+              if (!c) return fail('three_points needs three points that are not in a line.');
+              at = [c, pts[0]];
+            }
+          }
+          const want = type === 'angular' ? 3 : 2;
+          if (at.length !== want) return fail(`A ${type} dimension needs ${want} points.`);
+          const id = e.addDimension({ ...patch, type, pts: at.slice(0, want) });
+          if (!id) return fail('Could not add the dimension.');
+          const g = this.node(id);
+          return text(`Added ${type === 'angular' ? 'an' : 'a'} ${type} dimension (id ${id}) reading ${g.kind === 'group' && g.dim ? dimLabel(g.dim, p.doc.units) : ''}.`, { id, label: g.kind === 'group' && g.dim ? dimLabel(g.dim, p.doc.units) : '' });
+        }
         case 'pathfinder': { const ok = e.pathfinder(str('operation') as 'unite', this.ids(a)); return ok ? text(`Pathfinder ${str('operation')} done.`, { selection: e.selectedIds() }) : fail('Nothing changed: Pathfinder needs two or more overlapping shapes (crop, divide and outline can take one).'); }
         case 'path_operation': {
           const op = str('operation') as Parameters<Engine['pathOp']>[0];

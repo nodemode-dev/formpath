@@ -1,6 +1,6 @@
 ---
 name: paths-and-shapes
-description: Drawing and reshaping vector geometry in formpth through MCP. Owns draw_shape live shapes and edit_shape to change their size, corners, sides and points later, draw_path curves from SVG path data or points, edit_anchors, pathfinder, path_operation (offset, outline stroke, simplify, join, divide, split into grid), shape_builder, compound paths and clipping masks. Load for any shape-building or path-editing step.
+description: Drawing and reshaping vector geometry in formpth through MCP. Owns draw_shape live shapes and edit_shape to change their size, corners, sides and points later, draw_path curves from SVG path data or points, edit_anchors, pathfinder, path_operation (offset, outline stroke, simplify, join, divide, split into grid), shape_builder, compound paths, clipping masks, puppet_warp and add_dimension. Load for any shape-building or path-editing step.
 ---
 
 # paths-and-shapes
@@ -23,6 +23,8 @@ The plan gives positions and sizes in points.
 6. **Masks.** Put the clipping shape on top, select it with the art, `clipping_mask` make.
 7. **Path commands.** `path_operation`: offset (outline at a distance, joins), outline_stroke (a stroke becomes a filled shape), simplify (precision), smooth, join (two open ends), average, reverse, add_anchors, remove_anchors, divide_objects_below, split_into_grid, clean_up.
 8. **Shape Builder.** `shape_builder` with points inside the regions to merge, or delete true to remove them.
+9. **Bend a figure.** `puppet_warp` with pins on the art: a pin with no to_x, to_y holds that spot, a moved pin drags the art there and the rest bends as rigidly as it can (no shear, no collapse). Pin the parts that must stay (two or three pins), then move one; rotate twists the art around a pin. Paths, groups and compound paths stay paths; type and images go into an envelope mesh.
+10. **Dimensions.** `add_dimension` linear (two points, orientation horizontal, vertical or aligned, offset to the dimension line), angular (vertex, then a point on each arm; offset is the arc radius) or radial (circle with a circle's id, or centre and rim points, or from three_points). Units default to the document's; precision, scale (100 for 1:100), arrow, font, size, text_position, color and weight style it. The dimension stays live (moving it keeps it measuring); `add_dimension` with ids and no points restyles existing ones; `expand` turns it into paths and type.
 
 ## Gate
 
