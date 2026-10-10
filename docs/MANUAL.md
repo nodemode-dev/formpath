@@ -221,12 +221,30 @@ ask it questions.
 ## Type
 
 - Type (T): click for point type, drag for area type; click a path with Type on a Path to set type along it;
-  Vertical Type sets columns. Typing works as in any text field: arrows, Shift to select, double-click a word,
-  Ctrl+A selects all of the type, copy and paste.
+  click a closed path with Area Type to fill it. Typing works as in any text field: arrows, Shift to select,
+  double-click a word, Ctrl+A selects all of the type, copy and paste.
+- Vertical type: Vertical Type, Vertical Area Type and Vertical Type on a Path (in the Type tool's flyout) set
+  characters top to bottom in columns that advance right to left, inside a frame or any closed shape too. Chinese,
+  Japanese and Korean characters and full-width forms stand upright, punctuation and brackets take the font's
+  vertical forms, and Latin letters and digits turn 90 degrees clockwise; Upright Latin in vertical type in the
+  Character panel stands them upright. Up and Down move through the characters, Left and Right move to the next and
+  previous column. Type > Type Orientation switches selected type between Horizontal and Vertical. Vertical type
+  draws, outlines, and exports to SVG and PDF the way it shows on the canvas; use a font that has the CJK glyphs,
+  such as Noto Sans CJK, so outlines and PDF carry every character.
 - Character panel: font family and style, size, leading, kerning, tracking, scale, baseline shift, case, and the fonts
   installed on your computer when the engine runs. Paragraph panel: alignment, indents, space before and after,
-  and Area Type Options (rows, columns, gutter, inset). Glyphs shows a font's characters to insert; with a character
-  selected in type, the row above the grid shows its alternates, and clicking one sets that character in it.
+  and the area type columns, gutter and inset. Type > Area Type Options sets the frame's width and height, rows and
+  row gutter, columns and column gutter, inset spacing, the first baseline (Ascent, Cap Height, Leading, x Height,
+  Em Box Height, Fixed or Legacy, with a Min distance from the top) and whether text flows by rows or by columns.
+  Glyphs shows a font's characters to insert; with a character selected in type, the row above the grid shows its
+  alternates, and clicking one sets that character in it.
+- Type on a path: select it with the Selection or Direct Selection tool to see three brackets. Drag the start or end
+  bracket to change where the type begins and ends along the path; drag the centre bracket along the path to move
+  the type, or across the path to flip it to the other side. Type > Type on a Path chooses the effect: Rainbow
+  (baselines follow the path), Skew (letters stay vertical), 3D Ribbon (horizontal edges stay horizontal), Stair Step
+  (upright letters stepping along the path) or Gravity (letters turn toward the path's centre). Type on a Path
+  Options also sets Flip, Align to Path (Ascender, Descender, Center, Baseline), Spacing (tightens letters that fan
+  out around tight curves), and the start and end.
 - OpenType, at the foot of the Character panel: figure style, position, stylistic set, and ligatures, contextual
   alternates, swash, alternates, titling, ordinals, fractions, slashed zero and case forms. Options the font does
   not have are dimmed;

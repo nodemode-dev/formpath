@@ -245,6 +245,13 @@ Attributes joins the Stroke group (Window > Attributes comes from `TAB_HOMES`). 
 
 ## src/automation/agent-bridge.ts
 
+### src/automation/agent-bridge.ts · set_text type options
+- refers-to: src/automation/agent-bridge.ts :: add_text (orientation), set_text (orientation, upright_latin, path_*, area_*, first_baseline*)
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+New optional parameters only. `set_text` validates the enumerations and refuses path options on type that is not on a path and area options on type that is not area type before changing anything, then writes every node-level option (orientation, path and area options) in one `setTextNode` edit, so each call adds one history step for them. `upright_latin` is a character attribute and honours `start` and `end`.
+
 ### src/automation/agent-bridge.ts · add_text default colour
 - refers-to: src/automation/agent-bridge.ts :: run, case add_text
 - kind: rationale
@@ -493,6 +500,41 @@ One `ColorFn` per Edit Colors action (invert, grayscale, cmyk, rgb, saturate, hu
 
 ## src/engine/text.ts
 
+### src/engine/text.ts · vertical layout
+- refers-to: src/engine/text.ts :: layoutLines, place, absRect, absPt, toAbs, lineRect, lineBaseline, caretAt, indexAt, stepLine, selectionQuads
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Vertical type reuses the horizontal line breaker by running it in an abstract frame: the inline axis u is the node's local y and the block axis v is minus its local x, so lines become columns that advance right to left. Frames, cells and wrap outlines are mapped into that frame on the way in; `place` maps each glyph back out, and `Line` keeps abstract numbers while `lineRect`, `lineBaseline`, `selectionQuads`, caret and hit testing map them to local space through the layout's `vertical` flag. Every glyph carries `iu` and `ia`, its inline start and advance, so caret, hit testing and arrow keys never need to know the orientation. A column is one em wide (ascent and descent half the size each) and the column pitch is the leading. Upright glyphs sit in an em cell whose top is the inline position, with the baseline `vorg` below it (the font's vertical origin, 0.88 em without one) and an inline advance from vmtx or one em; turned glyphs use the 90 degree matrix `m` and are centred on the column. Point vertical type starts at its origin, which is the top of the first column's centre line.
+
+### src/engine/text.ts · vertical orientation
+- refers-to: src/engine/text.ts :: verticalClass, orient, UPRIGHT, TURNED, cjkBreakAfter
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`verticalClass` is a compact reading of Unicode's Vertical_Orientation property (UAX 50): Han, kana, Hangul, full-width forms, CJK symbols and a few signs are upright; brackets, the long vowel mark, wave dash and full-width dashes are "turned", which means upright with the font's `vert` form when it has one and turned 90 degrees clockwise when it does not; everything else (Latin, digits, half-width forms) turns clockwise unless `CharStyle.upright` is set. `orient` asks the shaping layer for each character's vertical shape and keeps a glyph id only when `vert` replaced it, so ordinary characters still draw with `fillText` and the browser's font fallback (Inter plus Japanese keeps working). Line breaking also allows a break after any upright CJK character, except before small kana and closing punctuation and after opening brackets, so CJK paragraphs no longer split a following Latin word.
+
+### src/engine/text.ts · glyph matrix
+- refers-to: src/engine/text.ts :: Glyph.m, Glyph.box, glyphMat, glyphBox, glyphCorners, glyphCenter
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+A glyph used to be a position and a rotation. Skew, 3D Ribbon and turned vertical glyphs need a shear, so a glyph may carry `m`, the linear part of its transform (glyph x axis, then glyph y axis, y down); `glyphMat` falls back to the rotation by `angle` when it is absent, so horizontal type is unchanged. `box` is the glyph's cell in that frame, used by selection, caret, hit testing and bounds. The canvas, `textOutline`, `outlineText`, SVG and PDF all build the glyph from `glyphMat` times the horizontal and vertical scale, which is why the four renderings match.
+
+### src/engine/text.ts · type on a path
+- refers-to: src/engine/text.ts :: pathSpan, spanPoint, pathParamAt, layoutOnPath, pathBrackets
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+`pathStart` and `pathEnd` are fractions of the path's length; on a closed path an end before the start wraps through the path's first point. Flip lays the type out on the reversed path (a closed path is reversed about its own first point so the fractions keep their places), which puts it on the other side and reverses its direction; `pathBrackets` reports the start and end brackets in the original direction. Effects, per glyph at the midpoint of its advance with tangent t and normal n: Rainbow uses t and n; Skew keeps the glyph's vertical axis vertical (its sign follows n, so nothing is mirrored) and shears along t; 3D Ribbon keeps horizontal edges horizontal, with the x axis the horizontal part of t, and turns the vertical edges to n, so glyphs narrow where the path is steep like a ribbon seen edge on; Stair Step keeps glyphs upright with the left end of each baseline on the path; Gravity puts the centre of each baseline on the path and points each glyph's vertical axis at the path's centre point (the centre of its bounds, which for a circle or an arc is the centre of curvature), as Illustrator defines it. Align to Path moves the baseline along the glyph's vertical axis by the ascent, the descent or half their difference. Spacing removes up to its value between two glyphs where the path turns toward the glyphs' feet, which is where their tops fan apart, in proportion to half the type size times the turn angle. Vertical type on a path treats the path as the column's centre line: upright glyphs take the tangent as their down direction, turned glyphs read along it.
+
+### src/engine/text.ts · first baseline and rows
+- refers-to: src/engine/text.ts :: firstBase, areaCells, layoutLines
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Area type is laid out in cells: the frame less its inset is split into rows by `rowGutter` (the column gutter when unset) and into columns by `gutter`, and text flows by rows (across then down) or by columns, reading right to left across columns in vertical type. The first line of each cell sits `firstBase` below the cell's top: Ascent keeps the old 0.8 em so documents made before are unchanged; Cap Height and x Height use the font's OS/2 values (0.7 and 0.5 em until the font has loaded); Leading uses the line's leading; Em Box Height uses the ideographic em box top, 0.88 em; Fixed is the Min value itself; Legacy uses the font's own hhea ascender. Min is a floor for all of them. Vertical type centres its first column half an em inside the right edge (or Fixed or Min).
+
 ### src/engine/text.ts · textOutline
 - refers-to: src/engine/text.ts :: textOutline
 - kind: warning-context
@@ -691,6 +733,13 @@ Moving a selection snaps its box (edges and centre) to other objects and the gri
 
 ## src/tools/select.ts
 
+### src/tools/select.ts · path type brackets
+- refers-to: src/tools/select.ts :: bracketAt, bracketDown, bracketMove, bracketUp; src/ui/stage.ts :: drawPathBrackets
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Selected type on a path shows three brackets drawn by the stage: start and end, sixteen pixels long on the type's side of the path, and the centre bracket crossing the path. The Selection and Direct Selection tools test them before anything else. Dragging start or end projects the pointer on the path (`pathParamAt`) and sets `pathStart` or `pathEnd`, kept one percent apart on an open path. Dragging the centre bracket moves both by the change in path position (wrapping on a closed path) and flips the type when the pointer is more than four pixels on the side of the path opposite the type. Each drag previews with `dragTo` and commits once, so it is one undo step.
+
 ### src/tools/select.ts · handles
 - refers-to: src/tools/select.ts :: handleAt, beginTransform, dragTransform
 - kind: explainer
@@ -817,6 +866,13 @@ One stroke is one drag preview (`beginDrag`, `dragTo` per step, `commitDrag` on 
 
 ## src/tools/type.ts
 
+### src/tools/type.ts · vertical tools
+- refers-to: src/tools/type.ts :: typeTool, up; src/ui/text-editor.ts :: Pending.vertical; src/engine/index.ts :: addText (vertical)
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+The Vertical Type tool used to set a flag after the type was made, as a second history step, and nothing read it. Every type tool now passes `vertical` with its request, the editor keeps it on the pending type, and `addText` creates the node vertical in the same step. Vertical Area Type and Vertical Type on a Path are the same tools as their horizontal siblings with the flag set; they share the type flyout. Making type from a path (area type in a shape, type on a path) adds the type and removes the source path inside `beginStep` and `endStep`, so it is one Type step instead of Type followed by Clear.
+
 ### src/tools/type.ts · activate
 - refers-to: src/tools/type.ts :: typeTool, activate
 - kind: rationale
@@ -852,6 +908,13 @@ The window's side of the agent bridge goes through here now, as every other engi
 Artboards carry `rect: [x, y, w, h]` beside `x, y, w, h` so other tools can read the manifest without knowing the engine's field names. Readers prefer `rect`. The cast in `docFromManifest` exists because the manifest type does not declare `rect`.
 
 ## src/io/svg.ts
+
+### src/io/svg.ts · per-glyph type
+- refers-to: src/io/svg.ts :: Writer.text
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Vertical type and type on a path are written one glyph per element, each with the matrix the canvas uses (glyph matrix times the horizontal and vertical scale), inside a group carrying the node's transform. `writing-mode` and `textPath` were rejected: Chromium places vertical glyphs, punctuation and path glyphs by its own rules, so neither matched the canvas, and textPath cannot express Skew, 3D Ribbon, Stair Step, Gravity, flip or spacing. A glyph the canvas draws from a glyph id (a `vert` form or an OpenType substitution) is written as its outline path so the browser cannot pick a different form; the rest stay live text. Upright glyphs draw underline and strike-through as rules along the column like the canvas.
 
 ### src/io/svg.ts · gradient href chains
 - refers-to: src/io/svg.ts :: importSvg, gradPaint
@@ -984,6 +1047,13 @@ Each artboard and each scale and format becomes one file named after the artboar
 
 ## src/io/fonts.ts
 
+### src/io/fonts.ts · vertical metrics
+- refers-to: src/io/fonts.ts :: vmetricsOf, verticalMetrics, featureGlyphs, installShaping (vertical, metrics), subsOf, CJK_SCRIPTS
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+opentype.js does not read vhea, vmtx or VORG, so `fontFor` keeps each font's raw bytes and `vmetricsOf` reads those tables from the sfnt table directory itself (WOFF faces, which are compressed, fall back to one em). The vertical advance is vmtx's advanceHeight; the vertical origin is VORG's value for the glyph or its default, otherwise the glyph's yMax plus its top side bearing, otherwise 0.88 em. The `vertical` shaping call applies the style's features and then `vert` looked up under the DFLT, hani, kana, hang and latn scripts (Noto Sans CJK lists it under all of them; the Latin-only list missed fonts that list it only under CJK scripts), and reports for each glyph whether `vert` replaced it. `metrics` returns cap height, x height and the hhea ascender for the area type first baseline options.
+
 ### src/io/fonts.ts · bundled faces
 - refers-to: src/io/fonts.ts :: bundledLoader, import.meta.glob
 - kind: explainer
@@ -1068,6 +1138,13 @@ Mesh edges came from `n.outline`, which mesh nodes do not have; they now use the
 Selected area type shows an in port at its top left and an out port at its bottom right, and so does every other frame of its thread. A filled triangle marks a port that is threaded; a red plus on the out port marks overflow, in the `--danger` token through `StagePaint.danger`. Thread lines join an out port to the next in port when View > Show Text Threads is on (`ViewFlags.threads`). The overflow mark used to live in the text editor's overlay, so it showed only while typing; it moved here. The frame outline now goes through the node's `xf`, which it ignored before, so a moved or rotated text box outlined its original place; a frame with a `framePath` outlines that shape.
 
 ## src/ui/text-editor.ts
+
+### src/ui/text-editor.ts · vertical editing
+- refers-to: src/ui/text-editor.ts :: arrow, lineStep, overlay; src/engine/text.ts :: stepLine, selectionQuads, caretAt
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+In vertical type Up and Down move through the characters and Left and Right move to the next and previous column (columns advance leftward), as in Illustrator; `stepLine` keeps the inline position. The caret is a rule across the column and the selection is drawn from `selectionQuads`, so both follow vertical type, path effects and the node's transform without the editor knowing which. The hidden textarea still sits at the caret, so an input method opens its window there.
 
 ### src/ui/text-editor.ts · hidden textarea
 - refers-to: src/ui/text-editor.ts :: TextEditor
@@ -1232,6 +1309,13 @@ Knockout Group is a native checkbox cycled off, on, inherit (shown as the indete
 Browsers report "ResizeObserver loop completed with undelivered notifications" as a window error when a layout settles over two frames, for example when a hidden panel group is shown. Nothing failed, so the log ignores it instead of showing the error toast.
 
 ## src/ui/panels/type.ts
+
+### src/ui/panels/type.ts · type option dialogs
+- refers-to: src/ui/panels/type.ts :: areaTypeOptionsDialog, pathTypeOptionsDialog, CharacterPanel.upright; src/app.ts :: area-type-options, type-on-path-options, type-path-*, type-orientation-*
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Area Type Options used to open the Paragraph panel, which had no rows or first baseline. It is now a dialog through `previewEdit` (live preview, one undo step) with width and height for rectangular frames, rows and row gutter, columns and column gutter, inset, first baseline with Min, and text flow; width and height are shown rounded and applied only when changed, so opening and confirming never nudges a frame. Type on a Path Options is the same kind of dialog with effect, flip, align to path, spacing, start and end, and Type > Type on a Path also lists the five effects as checked commands. The Character panel's Upright Latin check is enabled only when vertical type is selected or being edited.
 
 ### src/ui/panels/type.ts · findReplaceDialog
 - refers-to: src/ui/panels/type.ts :: findReplaceDialog
