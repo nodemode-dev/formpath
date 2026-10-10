@@ -8,6 +8,18 @@
 .cv-ft-btn:hover { background: var(--surface-2); color: var(--text-primary); }
 .cv-ft-btn.is-active { border-color: var(--accent-line); background: var(--accent-soft); color: var(--text-primary); }
 .cv-ft-sep { width: 18px; height: 1px; margin: 2px 0; background: var(--line-2); }
+.cv-persp-widget { position: absolute; left: 0; top: 0; z-index: var(--z-raised); display: flex; flex-direction: column; align-items: center; gap: 2px; box-sizing: border-box; width: 72px; height: 86px; padding: 4px; border: 1px solid var(--glass-border); border-radius: 8px; background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter); box-shadow: var(--shadow-md); transform: translate(var(--pw-x, 0px), var(--pw-y, 0px)); }
+.cv-persp-widget[hidden] { display: none; }
+.cv-persp-cube { display: block; width: 64px; height: 54px; flex: none; }
+.cv-persp-face { fill-opacity: 0.32; stroke: var(--text-muted); stroke-width: 1; cursor: pointer; }
+.cv-persp-face.is-left { fill: var(--cv-persp-left); }
+.cv-persp-face.is-right { fill: var(--cv-persp-right); }
+.cv-persp-face.is-floor { fill: var(--cv-persp-floor); }
+.cv-persp-face:hover { fill-opacity: 0.55; }
+.cv-persp-face.is-active { fill-opacity: 0.95; stroke: var(--text-primary); stroke-width: 1.5; }
+.cv-persp-none { width: 60px; height: 20px; flex: none; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: 11px; line-height: 18px; cursor: pointer; }
+.cv-persp-none:hover { background: var(--surface-2); color: var(--text-primary); }
+.cv-persp-none.is-active { border-color: var(--accent-line); background: var(--accent-soft); color: var(--text-primary); }
 .cv-isolation-label { color: var(--text-secondary); }
 .cv-isolation .cv-btn { height: 26px; }
 .cv-iso-pattern { display: flex; gap: var(--space-1); }
@@ -416,6 +428,8 @@
 .cv-dialog .cv-num { height: var(--ctl-md); }
 .cv-dialog .cv-num input { width: 100%; }
 .cv-dialog .cv-field .cv-select, .cv-dialog .cv-field .cv-dd-btn { width: 100%; height: var(--ctl-md); }
+.cv-dialog .cv-field > .cv-num { width: 110px; box-sizing: border-box; }
+.cv-dialog .cv-field > .cv-num input { flex: 1 1 auto; width: 100%; min-width: 0; }
 .cv-form-preview { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
 .cv-form-preview[hidden] { display: none; }
 .cv-form-preview input { accent-color: var(--accent-color); }

@@ -7,6 +7,7 @@ import { layoutText, lineBaseline, pathBrackets } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
 import { envelopeFrame, envelopeGrid } from '../engine/live';
 import { cssColor } from '../engine/paint';
+import { gridGeometry, gridOf, vanishing } from '../engine/perspective';
 import { latticeCopies, tileOutline } from '../engine/pattern';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
 import type { Project } from '../engine/project';
@@ -49,6 +50,8 @@ export class Stage {
   private lastTool: Tool | undefined;
   private readonly ftWidget: HTMLElement;
   private readonly ftButtons: Array<{ id: string; b: HTMLButtonElement }> = [];
+  private readonly perspWidget: HTMLElement;
+  private readonly perspFaces = new Map<string, Element>();
   onPointerDoc: ((p: Pt | null) => void) | null = null;
 
   static prefs: { zoomWheel: boolean; gridColor: string; guideColor: string; snapTol: number; gridInBack: boolean; cell: number } = { zoomWheel: false, gridColor: '', guideColor: '', snapTol: 4, gridInBack: true, cell: 8 };
@@ -70,6 +73,18 @@ export class Stage {
       this.ftButtons.push({ id, b });
     }
     host.appendChild(this.ftWidget);
+    this.perspWidget = el(`<div class="cv-persp-widget" role="radiogroup" aria-label="Active perspective plane" hidden><svg class="cv-persp-cube" viewBox="0 0 64 54">
+      <path class="cv-persp-face is-left" data-plane="left" role="radio" aria-label="Left plane (1)" aria-checked="false" d="M30 7v22L6 37V11z"/>
+      <path class="cv-persp-face is-right" data-plane="right" role="radio" aria-label="Right plane (3)" aria-checked="false" d="M34 7l24 4v26l-24-8z"/>
+      <path class="cv-persp-face is-floor" data-plane="floor" role="radio" aria-label="Horizontal plane (2)" aria-checked="false" d="M32 32l25 8-25 11-25-11z"/>
+    </svg><button class="cv-persp-none" type="button" data-plane="none" role="radio" aria-checked="false" title="No active plane (4)">None</button></div>`);
+    this.perspWidget.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    this.perspWidget.addEventListener('click', (ev) => {
+      const t = ev.target instanceof Element ? ev.target.closest('[data-plane]') : null, id = t?.getAttribute('data-plane');
+      if (id === 'left' || id === 'right' || id === 'floor' || id === 'none') engine.setPerspView({ plane: id });
+    });
+    for (const f of this.perspWidget.querySelectorAll('[data-plane]')) this.perspFaces.set(f.getAttribute('data-plane') ?? '', f);
+    host.appendChild(this.perspWidget);
     const s = this.scene.getContext('2d');
     const o = this.overlay.getContext('2d');
     if (!s || !o) throw new Error('2D canvas is unavailable');
@@ -383,14 +398,53 @@ export class Stage {
     this.renderRulers();
     const p = this.engine.current;
     this.syncFtWidget(p);
-    if (!p) return;
+    if (!p) { setHidden(this.perspWidget, true); return; }
     const pal = paint(), d = this.dpr;
     g.setTransform(d, 0, 0, d, 0, 0);
     this.drawGuides(g, p, pal);
+    this.syncPerspWidget(p);
+    try { this.drawPerspective(g, p, pal); } catch (err) { console.error(err); }
     this.drawArtboardNames(g, p, pal);
     try { this.drawSelection(g, p, pal); this.drawTextPorts(g, p, pal); this.drawPathBrackets(g, p, pal); } catch (err) { console.error(err); }
     this.drawSmart(g, p, pal);
     try { this.tool()?.overlay?.(this.ctx, g); } catch (err) { console.error(err); }
+  }
+
+  private syncPerspWidget(p: Project): void {
+    const v = p.persp;
+    if (!v.show) { setHidden(this.perspWidget, true); return; }
+    const inset = this.engine.view.rulers ? RULER + 8 : 8;
+    setStyleVar(this.perspWidget, '--pw-x', `${inset}px`);
+    setStyleVar(this.perspWidget, '--pw-y', `${inset}px`);
+    for (const [id, b] of this.perspFaces) { const on = id === v.plane; setClass(b, 'is-active', on); if (b.getAttribute('aria-checked') !== String(on)) b.setAttribute('aria-checked', String(on)); }
+    setHidden(this.perspWidget, false);
+  }
+
+  private drawPerspective(g: CanvasRenderingContext2D, p: Project, pal: StagePaint): void {
+    if (!p.persp.show) return;
+    const grid = gridOf(p.doc), v = p.viewport, active = p.persp.plane, sc = (q: Pt): Pt => v.toScreen(q.x, q.y);
+    g.save();
+    g.lineWidth = 1;
+    for (const plane of ['floor', 'left', 'right'] as const) {
+      const geo = gridGeometry(grid, plane), col = grid.colors[plane], on = plane === active, a = grid.opacity;
+      if (geo.quad.length > 2) {
+        g.fillStyle = cssColor(col, a * (on ? 0.3 : 0.14));
+        g.beginPath(); geo.quad.forEach((q, i) => { const s = sc(q); if (i) g.lineTo(s.x, s.y); else g.moveTo(s.x, s.y); }); g.closePath(); g.fill();
+      }
+      g.strokeStyle = cssColor(col, Math.min(1, a * (on ? 1.4 : 0.8)));
+      g.beginPath();
+      for (const [s0, s1] of geo.lines) { const a0 = sc(s0), a1 = sc(s1); g.moveTo(a0.x, a0.y); g.lineTo(a1.x, a1.y); }
+      g.stroke();
+    }
+    const vp = vanishing(grid), hy = v.toScreen(0, vp.hy).y, gy = v.toScreen(0, grid.ground.y).y;
+    g.strokeStyle = pal.rulerText; g.globalAlpha = 0.85;
+    g.beginPath(); g.moveTo(0, Math.round(hy) + 0.5); g.lineTo(this.cssW, Math.round(hy) + 0.5); g.stroke();
+    g.globalAlpha = 0.45; g.setLineDash([6, 4]);
+    g.beginPath(); g.moveTo(0, Math.round(gy) + 0.5); g.lineTo(this.cssW, Math.round(gy) + 0.5); g.stroke();
+    g.setLineDash([]); g.globalAlpha = 1;
+    g.fillStyle = pal.rulerText;
+    for (const q of [vp.left, vp.right, vp.center, vp.third]) { if (!q) continue; const s = sc(q); g.beginPath(); g.arc(s.x, s.y, 3, 0, Math.PI * 2); g.fill(); }
+    g.restore();
   }
 
   private syncFtWidget(p: Project | null): void {

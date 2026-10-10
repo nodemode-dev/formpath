@@ -207,6 +207,9 @@ body.nm-home .nm-canvas-surface { display: none !important; }
   --cv-artboard: #ffffff;
   --cv-artboard-edge: rgba(0, 0, 0, 0.6);
   --cv-guide: #4fdfff;
+  --cv-persp-left: #4078ff;
+  --cv-persp-right: #ff6838;
+  --cv-persp-floor: #30ba60;
   --cv-chip: 26px;
   --z-toast: 3000;
 }
