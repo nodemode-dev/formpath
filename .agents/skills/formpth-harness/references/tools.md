@@ -8,11 +8,11 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Files and documents: `new_document`, `open_file`, `save_project`, `export_file`, `switch_document`, `place_image`, `document_setup`
 - Selecting: `select`, `select_same`, `select_similar`
 - Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`, `add_dimension`, `perspective`
-- Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `color_harmony`, `graphic_style`
+- Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `swatch_library`, `swatch_group`, `color_harmony`, `graphic_style`
 - Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `opacity_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`, `puppet_warp`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`, `shaper`
-- Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
+- Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `new_brush`, `brush_library`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
 - Type: `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
 - Graphs and data: `graph`, `variables`
@@ -282,13 +282,35 @@ Edits the appearance stack: object opacity and blend mode, an added fill or stro
 
 ## add_swatch
 
-Adds a swatch to the document: a colour or gradient, optionally global (editing it recolours every use) or spot.
+Adds a swatch to the document: a colour or gradient, optionally global (editing it recolours every use) or spot (its own plate: PDF writes it as a Separation colour space), into a colour group; or a tint of a global or spot swatch with tint_of and tint.
 
 - `name`: string; required
-- `color`: string or object; required; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
 - `global`: boolean; default false
 - `spot`: boolean; default false
 - `group`: string
+- `tint_of`: string; The name of a global or spot swatch; makes a tint swatch of it (color is then not needed).
+- `tint`: number; default 50; Tint percent for tint_of.
+
+## swatch_library
+
+Swatch libraries, as Window > Swatch Libraries: list the built-in libraries (colour themes, skin tones, earth tones, metals, web, grayscale, gradients, patterns, seasons, spot inks) and the person's saved ones with their groups; or load a library (or one of its groups, or some swatches by name) into the document's Swatches panel, keeping its colour groups, and optionally fill objects with one of them.
+
+- `action`: string (list | load); default "list"
+- `library`: string; Library id or name from list.
+- `group`: string; Load only this colour group of the library.
+- `names`: array; Load only these swatches.
+- `apply_to`: array; Fill these objects with the first loaded swatch.
+
+## swatch_group
+
+Colour groups in the Swatches panel: list them with their swatches; make one from swatch names or ids (or from colours, which become new swatches); move swatches into a group (or out with group none); rename, ungroup (keeps the swatches) or delete a group with its swatches.
+
+- `action`: string (list | make | move | rename | ungroup | delete); default "list"
+- `name`: string; The group's name (make, rename, ungroup, delete); the target group for move (none to take swatches out of their group).
+- `swatches`: array; Swatch names or ids (make, move).
+- `colors`: array; Colours that become new swatches in the group (make).
+- `new_name`: string
 
 ## color_harmony
 
@@ -643,11 +665,53 @@ Symbols: create one from the objects, place an instance, list them, break an ins
 
 ## apply_brush
 
-Applies a brush to the strokes of the objects (calligraphic, scatter, art or pattern), removes it with brush none, or lists the brushes with list true.
+Applies a brush to the strokes of the objects (calligraphic, scatter, art, bristle or pattern), removes it with brush none, or lists the brushes with list true. With library, the brush comes from a brush library (see brush_library) and joins the Brushes panel first.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `brush`: string
 - `list`: boolean; default false
+- `library`: string; A brush library id or name; brush then names one of its brushes.
+
+## new_brush
+
+Makes a brush for the Brushes panel and optionally applies it. calligraphic (angle, roundness, size), bristle (shape, size, length, density, thickness, paint_opacity, stiffness: many thin semi-transparent bristle strokes), and from the art in ids: scatter (size, spacing, scatter, rotation), art (width, scale_mode with guides, flip, flip_along) or pattern (the art is the side tile; outer, inner, start and end tiles are pattern swatch names; fit, spacing).
+
+- `kind`: string (calligraphic | scatter | art | pattern | bristle); required
+- `name`: string
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `apply_to`: array; Objects to stroke with the new brush.
+- `angle`: number
+- `roundness`: number
+- `size`: number; Calligraphic and bristle: points; scatter: percent.
+- `spacing`: number; Percent.
+- `scatter`: number
+- `rotation`: number
+- `relative`: boolean
+- `width`: number; Art brush width, percent.
+- `scale_mode`: string (proportional | stretch | guides); Art brush: scale proportionately, stretch to the stroke length, or stretch only between the guides.
+- `guides`: array; Art brush guides [start, end] as percent of the art's length.
+- `flip`: boolean
+- `flip_along`: boolean
+- `fit`: string (stretch | space | approximate)
+- `outer`: string
+- `inner`: string
+- `start`: string
+- `end`: string
+- `shape`: string (round_point | flat_point | round_blunt | flat_blunt | round_curve | flat_curve | round_angle | flat_angle | fan)
+- `length`: number
+- `density`: number
+- `thickness`: number
+- `paint_opacity`: number
+- `stiffness`: number
+- `colorize`: string (none | tints | tints_shades | hue_shift); default "none"
+
+## brush_library
+
+Brush libraries, as Window > Brush Libraries: list the built-in libraries (arrows, borders, decorative scatter, artistic ink, bristle brushes) and the person's saved ones, or load a library's brushes (all or some by name) into the Brushes panel.
+
+- `action`: string (list | load); default "list"
+- `library`: string
+- `names`: array
 
 ## image_trace
 
@@ -767,13 +831,18 @@ Changes a pattern swatch in place, and every object filled with it: name, tile t
 
 ## recolor
 
-Recolours the objects: map colours to new ones, fit them to a palette, or invert, convert to grayscale, CMYK or RGB, or saturate by amount (-100..100).
+Recolours the objects: map colours to new ones, fit them to a palette, or invert, convert to grayscale, CMYK or RGB, or saturate by amount (-100..100). As Recolor Artwork: colors reduces the artwork to that many colours (clustered in OKLab, tints kept), group recolours with a swatch group or library, harmony applies a colour harmony around the base colour.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `map`: object; From colour to colour, both #rrggbb.
 - `palette`: array
-- `action`: string (map | palette | invert | grayscale | cmyk | rgb | saturate); default "map"
+- `action`: string (map | palette | invert | grayscale | cmyk | rgb | saturate | reduce | group | harmony); default "map"
 - `amount`: number
+- `colors`: integer; Reduce to this many colours.
+- `group`: string; A document swatch group name, or a swatch library id, or library:group.
+- `preserve_tints`: boolean; default true; Keep each merged colour's tint and shade relative to its row's new colour.
+- `harmony`: string; A harmony rule (as color_harmony) around base.
+- `base`: string; Base colour for harmony, #rrggbb; the most saturated artwork colour by default.
 
 ## artboard
 
