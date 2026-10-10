@@ -97,6 +97,7 @@ export interface NodeBase {
   style?: string;
   note?: string;
   wrap?: TextWrap | null;
+  bbox?: number;
 }
 
 export interface LayerNode extends NodeBase { kind: 'layer'; children: VNode[]; color: string; template?: boolean; printable?: boolean; clip?: boolean }
@@ -144,7 +145,8 @@ export interface TextNode extends NodeBase {
   wrapShape?: WrapShape[];
 }
 
-export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; trace?: Record<string, number | string | boolean> }
+export interface ImageWarp { rows: number; cols: number; pts: Pt[]; smooth: boolean }
+export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; trace?: Record<string, number | string | boolean>; warp?: ImageWarp }
 export interface SymbolNode extends NodeBase { kind: 'symbol'; symbol: string; xf: Mat; tint?: { color: Color; amount: number } }
 
 export interface BlendSpec { spacing: 'smooth' | 'steps' | 'distance'; steps: number; distance: number; alignToPath: boolean; spine: PathData | null }
@@ -152,9 +154,10 @@ export interface BlendNode extends NodeBase { kind: 'blend'; children: VNode[]; 
 
 export type EnvelopeSpec =
   | { kind: 'warp'; style: string; bend: number; h: number; v: number; vertical: boolean }
-  | { kind: 'mesh'; rows: number; cols: number; points: Pt[] }
+  | { kind: 'mesh'; rows: number; cols: number; points: Pt[]; h?: Array<[Pt, Pt, Pt, Pt]>; u?: number[]; v?: number[] }
   | { kind: 'top'; shape: PathData };
-export interface EnvelopeNode extends NodeBase { kind: 'envelope'; children: VNode[]; spec: EnvelopeSpec; frame: Rect }
+export interface EnvelopeOptions { fidelity: number; appearance: boolean; gradients: boolean; patterns: boolean; antiAlias: boolean }
+export interface EnvelopeNode extends NodeBase { kind: 'envelope'; children: VNode[]; spec: EnvelopeSpec; frame: Rect; opts?: Partial<EnvelopeOptions>; editContents?: boolean }
 
 export interface MeshPoint { x: number; y: number; color: Color; opacity: number; h: [Pt, Pt, Pt, Pt] }
 export interface MeshNode extends NodeBase { kind: 'mesh'; rows: number; cols: number; points: MeshPoint[] }

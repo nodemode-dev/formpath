@@ -1,5 +1,14 @@
+import { mapMeshSpec, meshFromMapper } from './envelope';
 import { apply, applyPt, isIdentity, matScale, mul, transformPath } from './geometry';
+import { envelopeMapper } from './live';
 import type { Appearance, AppearanceItem, Gradient, LiveShape, Mat, Paint, VNode } from './types';
+
+export function boxAngle(prev: number | undefined, m: Mat): number | undefined {
+  const t = ((prev ?? 0) * Math.PI) / 180, ux = Math.cos(t), uy = Math.sin(t);
+  const a = (Math.atan2(m[1] * ux + m[3] * uy, m[0] * ux + m[2] * uy) * 180) / Math.PI;
+  const r = ((((a + 45) % 90) + 90) % 90) - 45;
+  return Math.abs(r) < 0.01 ? undefined : r;
+}
 
 export interface XfOpts { strokes?: boolean; patterns?: boolean; gradients?: boolean }
 
@@ -29,20 +38,26 @@ export function transformNode<T extends VNode>(n: T, m: Mat, o: XfOpts = { strok
   if (isIdentity(m)) return n;
   const ap = xfAppearance(n.ap, m, o);
   const mask = n.mask ? { ...n.mask, art: n.mask.linked ? transformNode(n.mask.art, m, o) : n.mask.art } : n.mask;
-  const base = { ...n, ap, ...(n.mask !== undefined ? { mask } : {}) };
+  const ang = boxAngle(n.bbox, m);
+  const base = { ...n, ap, ...(n.mask !== undefined ? { mask } : {}), ...(ang !== undefined ? { bbox: ang } : n.bbox !== undefined ? { bbox: undefined } : {}) };
   switch (n.kind) {
     case 'path': return { ...base, d: transformPath(n.d, m), ...(n.live ? { live: xfLive(n.live, m) } : {}) } as T;
     case 'compound': return { ...base, children: n.children.map((c) => transformNode(c, m, o)) } as T;
     case 'text':
       if (n.mode === 'path') return { ...base, path: n.path ? transformPath(n.path, m) : n.path, spans: o.strokes ? n.spans : n.spans } as T;
       return { ...base, xf: mul(m, n.xf) } as T;
-    case 'image': case 'symbol': return { ...base, xf: mul(m, n.xf) } as T;
+    case 'image': return { ...base, xf: mul(m, n.xf), ...(n.warp ? { warp: { ...n.warp, pts: n.warp.pts.map((p) => applyPt(m, p)) } } : {}) } as T;
+    case 'symbol': return { ...base, xf: mul(m, n.xf) } as T;
     case 'mesh': return { ...base, points: n.points.map((p) => { const q = apply(m, p.x, p.y); const hs = p.h.map((h) => { const a = apply(m, p.x + h.x, p.y + h.y); return { x: a.x - q.x, y: a.y - q.y }; }) as [typeof p.h[0], typeof p.h[0], typeof p.h[0], typeof p.h[0]]; return { ...p, x: q.x, y: q.y, h: hs }; }) } as T;
     case 'group': return { ...base, children: n.children.map((c) => transformNode(c, m, o)), ...(n.trace ? { trace: { ...n.trace, src: transformNode(n.trace.src, m, o) } } : {}), ...(n.livePaint ? { livePaint: { ...n.livePaint, fills: n.livePaint.fills.map((f) => ({ at: apply(m, f.at.x, f.at.y), paint: xfPaint(f.paint, m, o) })) } } : {}) } as T;
     case 'layer': return { ...base, children: n.children.map((c) => transformNode(c, m, o)) } as T;
     case 'blend': return { ...base, children: n.children.map((c) => transformNode(c, m, o)), spec: { ...n.spec, spine: n.spec.spine ? transformPath(n.spec.spine, m) : null } } as T;
     case 'envelope': {
-      const spec = n.spec.kind === 'mesh' ? { ...n.spec, points: n.spec.points.map((p) => applyPt(m, p)) } : n.spec.kind === 'top' ? { ...n.spec, shape: transformPath(n.spec.shape, m) } : n.spec;
+      if (!(Math.abs(m[1]) < 1e-9 && Math.abs(m[2]) < 1e-9 && m[0] > 0 && m[3] > 0)) {
+        const s = n.spec.kind === 'mesh' ? n.spec : meshFromMapper(n.frame, 6, 6, envelopeMapper(n));
+        return { ...base, spec: mapMeshSpec(s, (p) => applyPt(m, p)) } as T;
+      }
+      const spec = n.spec.kind === 'mesh' ? { ...n.spec, points: n.spec.points.map((p) => applyPt(m, p)), ...(n.spec.h ? { h: n.spec.h.map((hs) => hs.map((h) => ({ x: h.x * m[0], y: h.y * m[3] }))) as typeof n.spec.h } : {}) } : n.spec.kind === 'top' ? { ...n.spec, shape: transformPath(n.spec.shape, m) } : n.spec;
       const tl = apply(m, n.frame.x, n.frame.y), br = apply(m, n.frame.x + n.frame.w, n.frame.y + n.frame.h);
       return { ...base, children: n.children.map((c) => transformNode(c, m, o)), spec, frame: { x: Math.min(tl.x, br.x), y: Math.min(tl.y, br.y), w: Math.abs(br.x - tl.x), h: Math.abs(br.y - tl.y) } } as T;
     }

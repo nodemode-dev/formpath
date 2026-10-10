@@ -25,6 +25,11 @@ import { transformNode } from './transform';
 import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
 import { Viewport } from './viewport';
 import { styleLibrary } from './style-libraries';
+import { meshAddLine, meshFromMapper, meshRemoveLines, withMeshHandle, withMeshPoint, type MeshSpec } from './envelope';
+import { envelopeFrame, envelopeMapper, envelopeOutline } from './live';
+import { quadDistort } from './ops/distort';
+import { rectCorners } from './geometry';
+import type { EnvelopeNode, EnvelopeOptions, EnvelopeSpec } from './types';
 
 const styleLinked = (n: VNode, st: GraphicStyle): boolean => JSON.stringify(n.ap) === JSON.stringify(st.ap) && (n.kind === 'text' || (n.opacity === st.opacity && n.blend === st.blend));
 const withStyle = (n: VNode, st: GraphicStyle): VNode => (n.kind === 'text' ? { ...n, ap: st.ap, style: st.id } : { ...n, ap: st.ap, opacity: st.opacity, blend: st.blend, style: st.id });
@@ -45,6 +50,7 @@ export interface ToolOptions {
   gridRows: number; gridCols: number; pencilFidelity: number; pencilSmooth: number; keepSelected: boolean; brushSize: number; blobSize: number;
   eraserSize: number; widthPreset: string; magicTolerance: number; symbolDensity: number; symbolIntensity: number; symbolMethod: SymbolismMethod; meshRows: number; meshCols: number; blendSteps: number;
   shapeMode: 'normal' | 'behind' | 'inside'; textMode: 'point' | 'area' | 'path'; vertical: boolean; arcConvex: boolean; liquifySize: number; liquifyKind: string;
+  ftMode?: 'transform' | 'perspective' | 'free'; ftConstrain?: boolean;
 }
 export interface ClipboardData { stamp: string; nodes: VNode[]; symbols: Doc['symbols']; swatches: Doc['swatches']; patterns: Doc['patterns']; brushes: Doc['brushes']; images: Doc['images']; assets: Map<string, Blob>; bounds: Rect }
 
@@ -279,6 +285,7 @@ export class Engine extends Emitter<EngineEvents> {
         if (n.hidden || n.locked) continue;
         if (n.kind === 'layer') { if (!n.template) visit(n.children); continue; }
         if (deep && (n.kind === 'group' || n.kind === 'compound')) { visit(n.kind === 'compound' ? n.children : n.children); continue; }
+        if (n.kind === 'envelope' && n.editContents) { visit(n.children); continue; }
         if (nodeTouchesRect(p.doc, n, r)) ids.push(n.id);
       }
     };
@@ -1099,7 +1106,7 @@ export class Engine extends Emitter<EngineEvents> {
         const n = findNode(out, id);
         if (!n || (n.kind !== 'blend' && n.kind !== 'envelope' && n.kind !== 'repeat')) { res.push(id); continue; }
         const kids = n.children;
-        out = updateNodes(out, [id], () => (n.kind === 'envelope' ? [...kids, { id: newId('p'), kind: 'path', d: n.spec.kind === 'top' ? n.spec.shape : rectPath(n.frame.x, n.frame.y, n.frame.w, n.frame.h), rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items: [fill(NONE), stroke(NONE)], effects: [] } } as VNode] : kids));
+        out = updateNodes(out, [id], () => (n.kind === 'envelope' ? [...kids, { id: newId('p'), kind: 'path', d: envelopeOutline(out, n), rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items: [fill(NONE), stroke(NONE)], effects: [] } } as VNode] : kids));
         res.push(...kids.map((k) => k.id));
       }
       return { doc: out, ids: res };
@@ -1182,6 +1189,96 @@ export class Engine extends Emitter<EngineEvents> {
     });
   }
   setEnvelopeSpec(spec: import('./types').EnvelopeSpec, ids?: string[]): boolean { return this.applyToSelection('Envelope Options', (n) => (n.kind === 'envelope' ? { ...n, spec } : n), ids); }
+  envelopeOf(id: string): EnvelopeNode | null {
+    const d = this.doc; if (!d) return null;
+    const n = findNode(d, id);
+    if (n?.kind === 'envelope') return n;
+    const up = ancestors(d, id).filter((a): a is EnvelopeNode => a.kind === 'envelope');
+    return up[up.length - 1] ?? null;
+  }
+  selectedEnvelopes(): EnvelopeNode[] { const out = new Map<string, EnvelopeNode>(); for (const id of this.selectedIds()) { const e = this.envelopeOf(id); if (e) out.set(e.id, e); } return [...out.values()]; }
+  setEnvelopeOptions(patch: Partial<EnvelopeOptions>, ids?: string[]): boolean {
+    const t = ids && ids.length ? ids : this.selectedEnvelopes().map((e) => e.id);
+    if (!t.length) return false;
+    return this.edit('Envelope Options', (d) => updateNodes(d, t, (n) => (n.kind === 'envelope' ? { ...n, opts: { ...n.opts, ...patch } } : n)));
+  }
+  envelopeContents(on: boolean, ids?: string[]): boolean {
+    const envs = (ids && ids.length ? ids.map((id) => this.envelopeOf(id)).filter((e): e is EnvelopeNode => !!e) : this.selectedEnvelopes()).map((e) => e.id);
+    if (!envs.length) return false;
+    return this.edit(on ? 'Edit Contents' : 'Edit Envelope', (d) => {
+      const out = updateNodes(d, envs, (n) => (n.kind === 'envelope' ? { ...n, editContents: on ? true : undefined } : n));
+      const sel = on ? envs.flatMap((id) => { const e = findNode(out, id); return e?.kind === 'envelope' ? e.children.filter((c) => !c.hidden && !c.locked).map((c) => c.id) : []; }) : envs;
+      return { doc: out, select: sel };
+    });
+  }
+  envelopeMesh(doc: Doc, n: EnvelopeNode): MeshSpec {
+    if (n.spec.kind === 'mesh' && n.spec.points.length === (n.spec.rows + 1) * (n.spec.cols + 1)) return n.spec;
+    const fr = envelopeFrame(doc, n);
+    return meshFromMapper(fr, 4, 4, envelopeMapper(n, fr));
+  }
+  resetEnvelope(to: { kind: 'mesh'; rows: number; cols: number; keepShape?: boolean } | Extract<EnvelopeSpec, { kind: 'warp' }>, ids?: string[]): boolean {
+    const t = (ids && ids.length ? ids : this.selectedEnvelopes().map((e) => e.id)).filter((id) => this.nodeById(id)?.kind === 'envelope');
+    if (!t.length) return false;
+    return this.edit(to.kind === 'mesh' ? 'Reset with Mesh' : 'Reset with Warp', (d) => updateNodes(d, t, (n) => {
+      if (n.kind !== 'envelope') return n;
+      const fr = envelopeFrame(d, n);
+      if (to.kind === 'warp') return { ...n, frame: fr, spec: to };
+      const rows = Math.max(1, Math.min(50, Math.round(to.rows))), cols = Math.max(1, Math.min(50, Math.round(to.cols)));
+      return { ...n, frame: fr, spec: to.keepShape === false ? { kind: 'mesh', rows, cols, points: meshGridLocal(fr, rows, cols) } : meshFromMapper(fr, rows, cols, envelopeMapper(n, fr)) };
+    }));
+  }
+  editEnvelopeMesh(id: string, name: string, fn: (s: MeshSpec) => MeshSpec | null): boolean {
+    return this.edit(name, (d) => {
+      const n = findNode(d, id);
+      if (n?.kind !== 'envelope') return d;
+      const next = fn(this.envelopeMesh(d, n));
+      return next ? updateNodes(d, [id], () => ({ ...n, frame: envelopeFrame(d, n), spec: next })) : d;
+    });
+  }
+  moveEnvelopePoint(id: string, index: number, at: Pt, handle = -1, mirror = false): boolean {
+    return this.editEnvelopeMesh(id, handle >= 0 ? 'Move Envelope Handle' : 'Move Envelope Point', (s) => (index < 0 || index >= s.points.length ? null : handle >= 0 ? withMeshHandle(s, index, handle, at, mirror) : withMeshPoint(s, index, at)));
+  }
+  addEnvelopeMeshLine(id: string, at: Pt, tol = 8): number {
+    let idx = -1;
+    this.editEnvelopeMesh(id, 'Add Envelope Mesh Line', (s) => { const r = meshAddLine(s, at, tol); if (!r) return null; idx = r.index; return r.spec; });
+    return idx;
+  }
+  removeEnvelopeMeshLines(id: string, index: number): boolean { return this.editEnvelopeMesh(id, 'Delete Envelope Mesh Point', (s) => { const r = meshRemoveLines(s, index); return r === s ? null : r; }); }
+
+  private frameCache = new WeakMap<VNode, { a: number; r: Rect }>();
+  selectionFrame(ids?: string[]): { angle: number; local: Rect; corners: Pt[] } | null {
+    const p = this.current; if (!p) return null;
+    const nodes = (ids ?? topObjects(p.doc, p.selection)).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n);
+    if (!nodes.length) return null;
+    const a = nodes[0].bbox ?? 0;
+    if (!a || !nodes.every((n) => Math.abs((n.bbox ?? 0) - a) < 0.01)) { const b = selectionBounds(p.doc, nodes, false); return isEmptyRect(b) ? null : { angle: 0, local: b, corners: rectCorners(b) }; }
+    let r = emptyRect();
+    for (const n of nodes) {
+      let c = this.frameCache.get(n);
+      if (!c || c.a !== a) { c = { a, r: geomBounds(p.doc, transformNode(n, rotateAbout(-a, 0, 0))) }; this.frameCache.set(n, c); }
+      r = unionRect(r, c.r);
+    }
+    if (isEmptyRect(r)) return null;
+    const L = rotateAbout(a, 0, 0);
+    return { angle: a, local: r, corners: rectCorners(r).map((q) => apply(L, q.x, q.y)) };
+  }
+  resetBoundingBox(ids?: string[]): boolean {
+    const t = this.targetIds(ids).filter((id) => this.nodeById(id)?.bbox !== undefined);
+    if (!t.length) return false;
+    return this.edit('Reset Bounding Box', (d) => updateNodes(d, t, (n) => ({ ...n, bbox: undefined })));
+  }
+  distortTargets(doc: Doc, ids: string[], from: Pt[], to: Pt[], envIds: Map<string, string>): { doc: Doc; select: string[] } {
+    const nodes = ids.map((id) => findNode(doc, id)).filter((n): n is VNode => !!n);
+    const out = quadDistort(doc, nodes, from, to, (id) => { let e = envIds.get(id); if (!e) { e = newId('e'); envIds.set(id, e); } return e; });
+    let d = doc;
+    nodes.forEach((n, i) => { d = updateNodes(d, [n.id], () => out[i]); });
+    return { doc: d, select: out.map((n) => n.id) };
+  }
+  distort(to: Pt[], ids?: string[], name = 'Free Distort'): boolean {
+    const t = this.targetIds(ids), fr = this.selectionFrame(t);
+    if (!t.length || !fr || to.length !== 4) return false;
+    return this.edit(name, (d) => this.distortTargets(d, t, fr.corners, to, new Map()));
+  }
 
   createMesh(rows: number, cols: number, highlight: 'flat' | 'center' | 'edge' = 'flat', ids?: string[]): boolean {
     return this.run('Create Gradient Mesh', (d, t) => {

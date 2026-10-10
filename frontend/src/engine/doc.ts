@@ -159,7 +159,7 @@ export function topSelectable(doc: Doc, id: string, isolation: string | null): s
     const ip = pathOf(doc, isolation);
     if (ip && p.length > ip.length && ip.every((v, i) => v === p[i])) start = ip.length + 1;
   }
-  for (let k = start; k <= p.length; k++) { const n = nodeAt(doc, p.slice(0, k)); if (n && n.kind !== 'layer') return n.id; }
+  for (let k = start; k <= p.length; k++) { const n = nodeAt(doc, p.slice(0, k)); if (n && n.kind !== 'layer' && !(n.kind === 'envelope' && n.editContents && k < p.length)) return n.id; }
   return id;
 }
 

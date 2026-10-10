@@ -31,7 +31,7 @@ function computeGeom(doc: Doc, n: VNode): Rect {
     case 'path': return pathBounds(n.d);
     case 'compound': return n.children.reduce((r, c) => unionRect(r, pathBounds(c.d)), emptyRect());
     case 'text': return textBounds(n);
-    case 'image': return transformRect({ x: 0, y: 0, w: n.w, h: n.h }, n.xf);
+    case 'image': return n.warp ? n.warp.pts.reduce<Rect>((r, p) => unionRect(r, { x: p.x, y: p.y, w: 0, h: 0 }), emptyRect()) : transformRect({ x: 0, y: 0, w: n.w, h: n.h }, n.xf);
     case 'symbol': {
       const s = doc.symbols.find((x) => x.id === n.symbol);
       return s ? transformRect(geomBounds(doc, s.art), n.xf) : transformRect({ x: -10, y: -10, w: 20, h: 20 }, n.xf);

@@ -11,7 +11,7 @@ import { instanceArt } from './symbolism';
 import { runFilter, type FilterFrame } from './filters';
 import { gradientStrokeArt, type GradientStrokeArt, type StrokePiece } from './stroke-gradient';
 import { drawText, textEpoch } from './text';
-import { BLEND_MODES, type AppearanceItem, type BlendMode, type Doc, type Gradient, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
+import { BLEND_MODES, type AppearanceItem, type BlendMode, type Doc, type Gradient, type ImageNode, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Pt, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
 
 export interface RenderContext {
   doc: Doc;
@@ -537,6 +537,11 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
     }
     case 'image': {
       const img = rc.assets(n.src);
+      if (n.warp) {
+        if (rc.outline || !img) { const w = n.warp, row = (j: number): Pt[] => Array.from({ length: w.cols + 1 }, (_, i) => w.pts[j * (w.cols + 1) + i]), col = (i: number): Pt[] => Array.from({ length: w.rows + 1 }, (_, j) => w.pts[j * (w.cols + 1) + i]); const ring = [...row(0), ...col(w.cols), ...row(w.rows).reverse(), ...col(0).reverse()], p = new Path2D(); ring.forEach((q, i) => (i ? p.lineTo(q.x, q.y) : p.moveTo(q.x, q.y))); p.closePath(); outlineStroke(ctx, rc, p); return; }
+        drawWarpedImage(ctx, img, n, rc.scale * (rc.pixelRatio ?? 1));
+        return;
+      }
       ctx.save();
       ctx.transform(n.xf[0], n.xf[1], n.xf[2], n.xf[3], n.xf[4], n.xf[5]);
       if (rc.outline || !img) {
@@ -622,6 +627,45 @@ export function clipGeometry(n: VNode): { d: PathData; rule: CanvasFillRule } | 
 
 export function renderDocument(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
   for (const l of rc.doc.layers) renderNode(ctx, l, rc);
+}
+
+function triangleMat(s: [Pt, Pt, Pt], d: [Pt, Pt, Pt]): Mat | null {
+  const ux = s[1].x - s[0].x, uy = s[1].y - s[0].y, vx = s[2].x - s[0].x, vy = s[2].y - s[0].y, det = ux * vy - vx * uy;
+  if (Math.abs(det) < 1e-12) return null;
+  const Ux = d[1].x - d[0].x, Uy = d[1].y - d[0].y, Vx = d[2].x - d[0].x, Vy = d[2].y - d[0].y;
+  const a = (Ux * vy - Vx * uy) / det, c = (Vx * ux - Ux * vx) / det, b = (Uy * vy - Vy * uy) / det, dd = (Vy * ux - Uy * vx) / det;
+  return [a, b, c, dd, d[0].x - a * s[0].x - c * s[0].y, d[0].y - b * s[0].x - dd * s[0].y];
+}
+
+export function drawWarpedImage(ctx: CanvasRenderingContext2D, img: CanvasImageSource, n: ImageNode, devScale: number): void {
+  const w = n.warp;
+  if (!w) return;
+  const sz = img as { naturalWidth?: number; naturalHeight?: number; width?: number | { baseVal: { value: number } }; height?: number | { baseVal: { value: number } } };
+  const iw = sz.naturalWidth || (typeof sz.width === 'number' ? sz.width : 0) || n.w, ih = sz.naturalHeight || (typeof sz.height === 'number' ? sz.height : 0) || n.h;
+  const kx = iw / n.w, ky = ih / n.h, grow = 0.7 / Math.max(1e-6, devScale), W = w.cols + 1;
+  ctx.save();
+  ctx.imageSmoothingEnabled = w.smooth;
+  if (w.smooth) ctx.imageSmoothingQuality = 'high';
+  for (let j = 0; j < w.rows; j++) for (let i = 0; i < w.cols; i++) {
+    const x0 = (n.w * i) / w.cols, x1 = (n.w * (i + 1)) / w.cols, y0 = (n.h * j) / w.rows, y1 = (n.h * (j + 1)) / w.rows;
+    const s00 = { x: x0, y: y0 }, s10 = { x: x1, y: y0 }, s11 = { x: x1, y: y1 }, s01 = { x: x0, y: y1 };
+    const d00 = w.pts[j * W + i], d10 = w.pts[j * W + i + 1], d11 = w.pts[(j + 1) * W + i + 1], d01 = w.pts[(j + 1) * W + i];
+    for (const [s, d] of [[[s00, s10, s11], [d00, d10, d11]], [[s00, s11, s01], [d00, d11, d01]]] as Array<[[Pt, Pt, Pt], [Pt, Pt, Pt]]>) {
+      const m = triangleMat(s, d);
+      if (!m) continue;
+      const cx = (d[0].x + d[1].x + d[2].x) / 3, cy = (d[0].y + d[1].y + d[2].y) / 3;
+      ctx.save();
+      ctx.beginPath();
+      d.forEach((q, k) => { const dx = q.x - cx, dy = q.y - cy, l = Math.hypot(dx, dy) || 1, x = q.x + (dx / l) * grow, y = q.y + (dy / l) * grow; if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.closePath();
+      ctx.clip();
+      ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      const sx = Math.max(0, x0 - 1 / kx), sy = Math.max(0, y0 - 1 / ky), ex = Math.min(n.w, x1 + 1 / kx), ey = Math.min(n.h, y1 + 1 / ky);
+      ctx.drawImage(img, sx * kx, sy * ky, (ex - sx) * kx, (ey - sy) * ky, sx, sy, ex - sx, ey - sy);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
 }
 
 export function docArtBounds(doc: Doc): Rect {

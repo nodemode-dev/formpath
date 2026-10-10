@@ -1,18 +1,32 @@
+import { geomBounds } from './bounds';
 import { childrenOf, cloneNode } from './doc';
-import { anchor, bezSplit, dist, emptyRect, flattenSub, isLineSeg, pathBounds, pathLength, pointAtLength, rotateAbout, reflectAbout, segLength, segOf, segTAtLength, segments, translate, unionRect } from './geometry';
-import { mixColor, resolvePaint, toRgb } from './paint';
+import { envelopeOptions, fidelityTol, localAffine, mapPathAdaptive, meshCurves, meshMapper, meshOutline, segsToSub } from './envelope';
+import { anchor, apply, bezSplit, dist, emptyRect, flattenSub, isEmptyRect, isLineSeg, pathBounds, pathLength, pointAtLength, rotateAbout, reflectAbout, segLength, segOf, segTAtLength, segments, translate, unionRect } from './geometry';
+import { expandAppearance } from './ops/expand';
+import { fill, mixColor, resolvePaint, stroke, toRgb } from './paint';
+import { instanceArt } from './symbolism';
+import { textEpoch, textOutlineRuns } from './text';
 import { transformNode } from './transform';
-import type { Anchor, AppearanceItem, BlendNode, Color, Doc, EnvelopeNode, Paint, PathData, Pt, Rect, RepeatNode, SubPath, VNode } from './types';
+import type { Anchor, Appearance, AppearanceItem, BlendNode, Color, Doc, EnvelopeNode, EnvelopeOptions, Gradient, Paint, PathData, Pt, Rect, RepeatNode, SubPath, VNode } from './types';
 
 const cache = new WeakMap<VNode, VNode[]>();
+const envCache = new WeakMap<VNode, { epoch: number; symbols: Doc['symbols']; out: VNode[] }>();
 
 export function liveChildren(doc: Doc, n: VNode): VNode[] {
   if (n.kind !== 'blend' && n.kind !== 'envelope' && n.kind !== 'repeat') return childrenOf(n) ?? [];
+  if (n.kind === 'envelope') {
+    const e = envCache.get(n), epoch = textEpoch();
+    if (e && e.epoch === epoch && e.symbols === doc.symbols) return e.out;
+    let out: VNode[];
+    try { out = envelopeContent(doc, n); } catch { out = n.children; }
+    envCache.set(n, { epoch, symbols: doc.symbols, out });
+    return out;
+  }
   const hit = cache.get(n);
   if (hit) return hit;
   let out: VNode[];
   try {
-    out = n.kind === 'blend' ? blendSteps(doc, n) : n.kind === 'envelope' ? envelopeContent(n) : repeatInstances(n);
+    out = n.kind === 'blend' ? blendSteps(doc, n) : repeatInstances(n);
   } catch { out = n.children; }
   cache.set(n, out);
   return out;
@@ -288,13 +302,6 @@ export function mapNode(n: VNode, f: (p: Pt) => Pt): VNode {
   return n;
 }
 
-function bilinear(pts: Pt[], rows: number, cols: number, u: number, v: number): Pt {
-  const cu = Math.min(cols - 1, Math.max(0, Math.floor(u * cols))), cv = Math.min(rows - 1, Math.max(0, Math.floor(v * rows)));
-  const fu = u * cols - cu, fv = v * rows - cv, w = cols + 1;
-  const p00 = pts[cv * w + cu], p10 = pts[cv * w + cu + 1], p01 = pts[(cv + 1) * w + cu], p11 = pts[(cv + 1) * w + cu + 1];
-  return { x: (1 - fu) * (1 - fv) * p00.x + fu * (1 - fv) * p10.x + (1 - fu) * fv * p01.x + fu * fv * p11.x, y: (1 - fu) * (1 - fv) * p00.y + fu * (1 - fv) * p10.y + (1 - fu) * fv * p01.y + fu * fv * p11.y };
-}
-
 export function meshGrid(r: Rect, rows: number, cols: number): Pt[] {
   const out: Pt[] = [];
   for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) out.push({ x: r.x + (r.w * i) / cols, y: r.y + (r.h * j) / rows });
@@ -325,16 +332,113 @@ function coonsFromShape(shape: PathData): ((u: number, v: number) => Pt) | null 
   };
 }
 
-export function envelopeMapper(n: EnvelopeNode): (p: Pt) => Pt {
-  const r = n.frame, s = n.spec;
+export function envelopeFrame(doc: Doc, n: EnvelopeNode): Rect {
+  const b = n.children.reduce((r, c) => (c.hidden ? r : unionRect(r, geomBounds(doc, c))), emptyRect());
+  return isEmptyRect(b) || b.w < 1e-6 || b.h < 1e-6 ? n.frame : b;
+}
+
+export function envelopeMapper(n: EnvelopeNode, frame: Rect = n.frame): (p: Pt) => Pt {
+  const r = frame, s = n.spec;
   if (s.kind === 'warp') return (p) => warpPoint(s.style, s.bend, s.h, s.v, s.vertical, r, p);
-  if (s.kind === 'mesh') return (p) => bilinear(s.points, s.rows, s.cols, Math.max(0, Math.min(1, (p.x - r.x) / (r.w || 1))), Math.max(0, Math.min(1, (p.y - r.y) / (r.h || 1))));
+  if (s.kind === 'mesh') return s.points.length === (s.rows + 1) * (s.cols + 1) ? meshMapper(s, r) : (p) => p;
   const coons = coonsFromShape(s.shape);
   if (!coons) return (p) => p;
   return (p) => coons(Math.max(0, Math.min(1, (p.x - r.x) / (r.w || 1))), Math.max(0, Math.min(1, (p.y - r.y) / (r.h || 1))));
 }
 
-export function envelopeContent(n: EnvelopeNode): VNode[] {
-  const f = envelopeMapper(n);
-  return n.children.map((c) => mapNode(c, f));
+export function envelopeOutline(doc: Doc, n: EnvelopeNode): PathData {
+  const s = n.spec;
+  if (s.kind === 'mesh' && s.points.length === (s.rows + 1) * (s.cols + 1)) return meshOutline(s);
+  if (s.kind === 'top') return s.shape;
+  const fr = envelopeFrame(doc, n);
+  return mapPathAdaptive([{ closed: true, pts: [anchor(fr.x, fr.y), anchor(fr.x + fr.w, fr.y), anchor(fr.x + fr.w, fr.y + fr.h), anchor(fr.x, fr.y + fr.h)] }], envelopeMapper(n, fr), 0.25);
+}
+
+const gridCache = new WeakMap<VNode, PathData>();
+export function envelopeGrid(doc: Doc, n: EnvelopeNode): PathData {
+  const hit = gridCache.get(n);
+  if (hit) return hit;
+  const s = n.spec;
+  let out: PathData;
+  if (s.kind === 'mesh' && s.points.length === (s.rows + 1) * (s.cols + 1)) out = meshCurves(s).map((c) => segsToSub([c], false));
+  else if (s.kind === 'top') out = s.shape;
+  else {
+    const fr = envelopeFrame(doc, n), f = envelopeMapper(n, fr), lines: PathData = [], k = 4;
+    for (let i = 0; i <= k; i++) {
+      const x = fr.x + (fr.w * i) / k, y = fr.y + (fr.h * i) / k;
+      lines.push({ closed: false, pts: [anchor(x, fr.y), anchor(x, fr.y + fr.h)] }, { closed: false, pts: [anchor(fr.x, y), anchor(fr.x + fr.w, y)] });
+    }
+    out = mapPathAdaptive(lines, f, 0.25);
+  }
+  gridCache.set(n, out);
+  return out;
+}
+
+function linearLine(gr: Gradient, b: Rect): { x1: number; y1: number; x2: number; y2: number } {
+  if (gr.geom) return gr.geom;
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2, a = (gr.angle * Math.PI) / 180, dx = Math.cos(a), dy = -Math.sin(a), half = (Math.abs(b.w * dx) + Math.abs(b.h * dy)) / 2;
+  return { x1: cx - dx * half, y1: cy - dy * half, x2: cx + dx * half, y2: cy + dy * half };
+}
+function warpPaint(p: Paint, f: (p: Pt) => Pt, o: EnvelopeOptions, b: Rect): Paint {
+  if (p.type === 'gradient' && o.gradients && p.gradient.kind === 'linear') {
+    const g = linearLine(p.gradient, b), a = f({ x: g.x1, y: g.y1 }), z = f({ x: g.x2, y: g.y2 });
+    return { ...p, gradient: { ...p.gradient, geom: { x1: a.x, y1: a.y, x2: z.x, y2: z.y } } };
+  }
+  if (p.type === 'pattern' && o.patterns) return { ...p, xf: mulM(localAffine(f, { x: b.x + b.w / 2, y: b.y + b.h / 2 }, Math.max(b.w, b.h)), p.xf) };
+  return p;
+}
+function warpItems(ap: Appearance, f: (p: Pt) => Pt, o: EnvelopeOptions, b: Rect): Appearance {
+  if (!o.gradients && !o.patterns) return ap;
+  return { ...ap, items: ap.items.map((it) => ({ ...it, paint: warpPaint(it.paint, f, o, b) })) };
+}
+const asGroup = (c: VNode, children: VNode[], effects = c.ap.effects): VNode => ({ id: c.id, kind: 'group', clip: false, children, opacity: c.opacity, blend: c.blend, ap: { items: [], effects }, ...(c.mask ? { mask: c.mask } : {}) });
+
+function warpNode(doc: Doc, c: VNode, f: (p: Pt) => Pt, o: EnvelopeOptions, tol: number): VNode {
+  if (c.hidden) return c;
+  switch (c.kind) {
+    case 'path': case 'compound': {
+      if (o.appearance && (c.ap.items.some((i) => i.visible && i.kind === 'stroke' && i.paint.type !== 'none') || c.ap.effects.some((e) => e.visible))) {
+        const parts = expandAppearance(doc, c);
+        if (parts.length && !(parts.length === 1 && parts[0] === c)) return asGroup(c, parts.map((x) => warpNode(doc, x, f, { ...o, appearance: false }, tol)), []);
+      }
+      const b = pathBounds(c.kind === 'path' ? c.d : c.children.flatMap((k) => k.d)), ap = warpItems(c.ap, f, o, b);
+      if (c.kind === 'path') return { ...c, d: mapPathAdaptive(c.d, f, tol), live: undefined, bbox: undefined, ap };
+      return { ...c, ap, bbox: undefined, children: c.children.map((k) => ({ ...k, d: mapPathAdaptive(k.d, f, tol), live: undefined })) };
+    }
+    case 'text': {
+      const runs = textOutlineRuns(c);
+      if (!runs || !runs.length) return c;
+      return asGroup(c, runs.map((r, k) => {
+        const items: AppearanceItem[] = [fill(r.style.fill)];
+        if (r.style.stroke.type !== 'none' && r.style.strokeWidth > 0) items.push(stroke(r.style.stroke, r.style.strokeWidth));
+        return warpNode(doc, { id: `${c.id}~${k}`, kind: 'path', d: r.d, rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items, effects: [] } }, f, o, tol);
+      }));
+    }
+    case 'image': {
+      if (c.warp) return { ...c, warp: { ...c.warp, pts: c.warp.pts.map(f), smooth: o.antiAlias } };
+      const k = Math.round(6 + (Math.max(0, Math.min(100, o.fidelity)) / 100) * 26), aspect = c.w / Math.max(1e-6, c.h);
+      const cols = Math.max(2, Math.round(aspect >= 1 ? k : k * aspect)), rows = Math.max(2, Math.round(aspect >= 1 ? k / aspect : k)), pts: Pt[] = [];
+      for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) pts.push(f(apply(c.xf, (c.w * i) / cols, (c.h * j) / rows)));
+      return { ...c, bbox: undefined, warp: { rows, cols, pts, smooth: o.antiAlias } };
+    }
+    case 'symbol': {
+      const art = instanceArt(doc, c);
+      return art ? asGroup(c, [warpNode(doc, transformNode(art, c.xf), f, o, tol)]) : c;
+    }
+    case 'mesh': {
+      const e = 1e-4;
+      return { ...c, bbox: undefined, points: c.points.map((p) => {
+        const q = f(p);
+        return { ...p, x: q.x, y: q.y, h: p.h.map((h) => { if (Math.abs(h.x) + Math.abs(h.y) < 1e-12) return h; const z = f({ x: p.x + h.x * e, y: p.y + h.y * e }); return { x: (z.x - q.x) / e, y: (z.y - q.y) / e }; }) as typeof p.h };
+      }) };
+    }
+    case 'group': return { ...c, bbox: undefined, trace: undefined, children: c.children.map((k) => warpNode(doc, k, f, o, tol)), ...(c.livePaint ? { livePaint: { ...c.livePaint, fills: c.livePaint.fills.map((x) => ({ ...x, at: f(x.at) })) } } : {}) };
+    case 'blend': case 'repeat': case 'envelope': return asGroup(c, liveChildren(doc, c).map((k) => warpNode(doc, k, f, o, tol)));
+    default: return c;
+  }
+}
+
+export function envelopeContent(doc: Doc, n: EnvelopeNode): VNode[] {
+  const fr = envelopeFrame(doc, n), f = envelopeMapper(n, fr), o = envelopeOptions(n.opts), tol = fidelityTol(o.fidelity);
+  return n.children.map((c) => warpNode(doc, c, f, o, tol));
 }

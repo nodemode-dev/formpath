@@ -462,6 +462,22 @@ export function textOutline(n: TextNode): PathData | null {
   return out;
 }
 
+export function textOutlineRuns(n: TextNode): Array<{ d: PathData; style: CharStyle }> | null {
+  if (!shaping) return null;
+  const runs: Array<{ d: PathData; style: CharStyle }> = [];
+  for (const g of layoutText(n).glyphs) {
+    if (!g.ch.trim()) continue;
+    const st = g.style, gid = g.gid ?? shaping.shape(st, g.ch, [])?.[0]?.gid, d = gid === undefined ? null : shaping.outline(st, gid);
+    if (!d) return null;
+    const m: Mat = mul(glyphMat(g), [(g.size * st.hscale) / 100, 0, 0, (g.size * st.vscale) / 100, 0, 0]);
+    const out = transformPath(d, n.mode === 'path' ? m : mul(n.xf, m)).map((sp) => ({ ...sp, closed: true }));
+    const last = runs[runs.length - 1];
+    if (last && (last.style === st || (JSON.stringify(last.style.fill) === JSON.stringify(st.fill) && JSON.stringify(last.style.stroke) === JSON.stringify(st.stroke) && last.style.strokeWidth === st.strokeWidth))) last.d.push(...out);
+    else runs.push({ d: out, style: st });
+  }
+  return runs;
+}
+
 const glyphPaths = new WeakMap<PathData, Path2D>();
 export function drawText(ctx: CanvasRenderingContext2D, n: TextNode, paintStyle: (p: CharStyle['fill'], b: Rect) => string | CanvasGradient | CanvasPattern | null, extraFills: Array<string | CanvasGradient | CanvasPattern>): void {
   const lay = layoutText(n);

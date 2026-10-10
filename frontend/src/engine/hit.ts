@@ -1,6 +1,6 @@
 import { geomBounds, nodePath } from './bounds';
 import { childrenOf } from './doc';
-import { apply, flatIndex, hasIn, hasOut, inflate, invert, nearestOnPath, rectContains, rectsTouch, segments, segBounds, flattenSub } from './geometry';
+import { apply, flatIndex, hasIn, hasOut, inflate, invert, nearestOnPath, pointInPolygon, rectContains, rectsTouch, segments, segBounds, flattenSub } from './geometry';
 import { liveChildren } from './live';
 import { liveFaceNodes } from './livepaint';
 import { cachedPath, clipGeometry } from './render';
@@ -45,7 +45,10 @@ function leafHit(doc: Doc, n: VNode, p: Pt, o: HitOpts): Hit['part'] | null {
       for (const l of lay.lines) { const r0 = lineRect(lay, l), r = { x: r0.x - t - 1, y: r0.y - t - 1, w: r0.w + 2 * t + 2, h: r0.h + 2 * t + 2 }; if (rectContains(r, q)) return 'text'; }
       return null;
     }
-    case 'image': { const q = apply(invert(n.xf), p.x, p.y); return q.x >= 0 && q.y >= 0 && q.x <= n.w && q.y <= n.h ? 'image' : null; }
+    case 'image': {
+      if (n.warp) { const w = n.warp, W = w.cols + 1; for (let j = 0; j < w.rows; j++) for (let i = 0; i < w.cols; i++) if (pointInPolygon(p, [w.pts[j * W + i], w.pts[j * W + i + 1], w.pts[(j + 1) * W + i + 1], w.pts[(j + 1) * W + i]]) !== 0) return 'image'; return null; }
+      const q = apply(invert(n.xf), p.x, p.y); return q.x >= 0 && q.y >= 0 && q.x <= n.w && q.y <= n.h ? 'image' : null;
+    }
     case 'symbol': { const s = doc.symbols.find((x) => x.id === n.symbol); if (!s) return null; const q = apply(invert(n.xf), p.x, p.y); return deepHit(doc, [s.art], q, { ...o, tol: o.tol / Math.max(1e-6, Math.hypot(n.xf[0], n.xf[1])) }, []) ? 'fill' : null; }
     case 'mesh': return rectContains(geomBounds(doc, n), p) ? 'fill' : null;
     default: return null;
@@ -57,6 +60,7 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
     const n = nodes[i];
     if (n.hidden || (o.skipLocked !== false && n.locked) || o.exclude?.has(n.id)) continue;
     if (n.kind === 'layer' && n.template) continue;
+    if (n.kind === 'envelope' && n.editContents) { const h = deepHit(doc, n.children, p, o, [...chain, n.id]); if (h) return h; continue; }
     const b = geomBounds(doc, n);
     if (Number.isFinite(b.x) && !rectContains(inflate(b, o.tol + 40), p) && n.kind !== 'layer') continue;
     if (n.kind === 'blend' || n.kind === 'envelope' || n.kind === 'repeat') {
