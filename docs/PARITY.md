@@ -12,9 +12,9 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list.
 
-## Score at v0.18.0
+## Score at v0.19.0
 
-**58.5 of 76 scored rows, 77.0 percent:** 52 Full, 13 Partial, 11 None. The tally is at the end.
+**62.5 of 76 scored rows, 82.2 percent:** 56 Full, 13 Partial, 7 None. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -29,7 +29,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Clipping masks | Full | Make and Release, layer clipping masks, isolation of clip groups |
 | Transparency, blend modes, opacity masks | Full | 16 blend modes, opacity, opacity masks with Clip and Invert, Isolate Blending; Knockout Group drawn on the canvas and written to SVG and PDF (PDF also carries it through soft masks, since common readers ignore /K) |
 
-## Selection and transform · 7 of 8
+## Selection and transform · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -40,9 +40,9 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Rotate, Reflect, Scale, Shear, Transform Each and Again | Full | Origin click, Alt copy, exact dialogs, Transform Each with random, Transform Again |
 | Smart Guides and snapping | Full | Alignment to edges and centres, equal-spacing guides with gap marks, angle construction, labels, snap to point, grid and pixel |
 | Rulers, guides and grids | Full | Rulers from the active artboard, guides dragged from rulers, lock, make, release, clear, grid with subdivisions and snapping |
-| Puppet Warp | None | No Puppet Warp tool or pin model |
+| Puppet Warp | Full | Puppet Warp tool (J): default and added pins, drag to bend while other pins hold, Shift to select several, Alt-drag to twist, Delete, Expand, Show Mesh; an as-rigid-as-possible solve over a triangle mesh of the art; type, images and symbols carried in an envelope. Pins belong to the tool, as in Illustrator |
 
-## Drawing · 6 of 10
+## Drawing · 8 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -52,12 +52,12 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Line, Arc, Spiral and grids | Full | Line Segment, Arc, Spiral, Rectangular Grid, Polar Grid, Flare |
 | Paintbrush and Blob Brush | Full | Paintbrush with the current brush; Blob Brush merging same-fill shapes |
 | Eraser, Scissors and Knife | Full | All three cut real geometry |
-| Shaper tool | None | No Shaper tool or gesture recognition |
+| Shaper tool | Full | Shaper (Shift+N) turns gestures into live rectangles, rotated rectangles, circles, ellipses, triangles, polygons and lines; scribbles punch out, merge or delete regions; Shaper Groups keep their source shapes, with Faces and Shapes modes, face fills and Expand |
 | Perspective Grid | None | No perspective grid model, tool or view |
-| Dimension tool | None | The Measure tool shows a transient readout; nothing is left in the document |
+| Dimension tool | Full | Dimension tool (Shift+I): linear (horizontal, vertical, aligned), angular, radius and diameter dimensions that keep measuring when moved or scaled and relabel with the document units; units, precision, scale ratio, arrows, label font and position; Expand. The Measure tool also reports area and perimeter |
 | Graphs | None | No graph objects, data table or graph tools |
 
-## Paths and Pathfinder · 7 of 8
+## Paths and Pathfinder · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Offset Path and Outline Stroke | Full | With joins and miter limit, as commands and as live effects |
 | Simplify, Average, Join, anchors | Full | Simplify with preview, Smooth, Average, Join, Add and Remove Anchors, Reverse, Divide Objects Below, Split into Grid, Clean Up |
 | Width tool and profiles | Full | Width points dragged on strokes; eight width profiles |
-| Intertwine | None | No Intertwine command or over-under zone model |
+| Intertwine | Full | Make, Release and Edit Intertwine; the Intertwine tool (Shift+J) highlights overlaps, flips or cycles which object is on top with a click, and draws free zones with a drag; zones stay put when members move; Expand; drawn and exported with real clip paths |
 
 ## Paint and colour · 7 of 8
 
@@ -145,7 +145,7 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | --- | --- |
 | Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
 | Web app | The same app in a browser against the local engine |
-| Agents over MCP | 68 tools, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
+| Agents over MCP | 72 tools, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |
 
 ## Tally
@@ -153,24 +153,23 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | Category | Score | Rows |
 | --- | --- | --- |
 | Objects and layers | 8 | 8 |
-| Selection and transform | 7 | 8 |
-| Drawing | 6 | 10 |
-| Paths and Pathfinder | 7 | 8 |
+| Selection and transform | 8 | 8 |
+| Drawing | 8 | 10 |
+| Paths and Pathfinder | 8 | 8 |
 | Paint and colour | 7 | 8 |
 | Effects and live objects | 8 | 10 |
 | Type | 8 | 8 |
 | Generative AI | 1 | 5 |
 | Files, colour and output | 6.5 | 11 |
-| **Total** | **58.5** | **76** |
+| **Total** | **62.5** | **76** |
 
-52 rows Full, 13 Partial, 11 None: 77.0 percent.
+56 rows Full, 13 Partial, 7 None: 82.2 percent.
 
 ## Next to close
 
 In release order:
 
-1. v0.19.0: Puppet Warp, the Dimension tool, Intertwine and the Shaper tool.
-2. v0.20.0: graphs, variables and data merge, and Actions with Batch.
-3. v0.21.0: the Perspective Grid.
-4. v0.22.0: swatch libraries and Separation spaces, the Recolor colour wheel, the Bristle brush and brush libraries, symbol editing and libraries, full-resolution Image Trace, and linked images.
-5. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
+1. v0.20.0: graphs, variables and data merge, and Actions with Batch.
+2. v0.21.0: the Perspective Grid.
+3. v0.22.0: swatch libraries and Separation spaces, the Recolor colour wheel, the Bristle brush and brush libraries, symbol editing and libraries, full-resolution Image Trace, and linked images.
+4. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
