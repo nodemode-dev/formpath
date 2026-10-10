@@ -388,6 +388,7 @@
 
 .cv-opt-label, .cv-opt-unit { color: var(--text-muted); font-size: var(--fs-11); }
 .cv-opt .cv-seg { padding: 2px; }
+.cv-opt .cv-dd-btn.cv-opt-select { width: 128px; flex: none; }
 .cv-opt .cv-seg button { height: 22px; padding: 0 8px; }
 .cv-btn-label:empty { display: none; }
 .cv-search-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

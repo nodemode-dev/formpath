@@ -72,6 +72,7 @@ export const VECTOR_ICONS: Record<string, string> = {
   vGradient: S('<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M7 12h10"/>' + SQ(7, 12, 3) + `<rect x="15.5" y="10.5" width="3" height="3" fill="none"/>`),
   vEyedropper: S('<path d="M15 4l5 5-2 2-1-1-8 8H6v-3l8-8-1-1 2-2z"/><path d="M4 20l2-2"/>'),
   vMeasure: S('<path d="M3.5 16h17M3.5 12.5v7M20.5 12.5v7M6.5 14.5L5 16l1.5 1.5M17.5 14.5L19 16l-1.5 1.5"/><path d="M7.5 4.5h9v4h-9zM10.5 4.5v2M13.5 4.5v2" stroke-width="1.2"/>'),
+  vDimension: S('<path d="M4 9v11M20 9v11M4.5 15h15"/><path d="M7.5 13l-3 2 3 2M16.5 13l3 2-3 2"/><path d="M9 6h1.5v4M9 10h3M14 6.5a1.4 1.4 0 0 1 2.4 1L14 10h2.6" stroke-width="1.2"/>'),
   vBlend: S('<rect x="3" y="4" width="7" height="7" rx="1"/><circle cx="17.5" cy="16.5" r="3.5"/><path d="M8 11l7 3M9 9.5l6.8 3.8" stroke-dasharray="1.5 2"/>'),
   vSymbolSprayer: S('<path d="M8 10h6v11H8z"/><path d="M9 10V7h4v3M13 7.5h3"/><path d="M19 4l.1.1M21 7l.1.1M18 8l.1.1M20 10.5l.1.1M17 5l.1.1" stroke-width="2.4"/>'),
   vSymbolShifter: S('<rect x="3" y="10" width="6" height="6" rx="1"/><rect x="9" y="3" width="5" height="5" rx="1"/><path d="M11 18h10M18 15l3 3-3 3"/>'),
