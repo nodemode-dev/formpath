@@ -118,7 +118,7 @@ class Painter {
   }
 
   needsRaster(n: VNode): boolean {
-    if (rasterEffects(n).length || (n.mask && !n.mask.disabled) || n.kind === 'mesh') return true;
+    if (rasterEffects(n).length || (n.mask && !n.mask.disabled) || n.kind === 'mesh' || (n.kind === 'image' && !!n.warp)) return true;
     if (n.kind === 'text' && !this.outlines.has(n.id)) return true;
     return n.ap.items.some((i) => i.visible && (i.paint.type === 'pattern' || (i.paint.type === 'gradient' && i.paint.gradient.kind === 'freeform') || rasterEffectsOf(i.effects).length > 0 || (i.kind === 'stroke' && !!strokeGradient(this.doc, i)?.stops.some((s) => s.opacity < 1))));
   }

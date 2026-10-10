@@ -267,7 +267,7 @@ class Writer {
 
   baked(n: VNode): string | null {
     const gallery = (fx: RasterFx[]): boolean => fx.some((f) => f.kind === 'filter');
-    if (typeof document === 'undefined' || !(gallery(rasterEffects(n)) || n.ap.items.some((i) => i.visible && gallery(rasterEffectsOf(i.effects))))) return null;
+    if (typeof document === 'undefined' || !((n.kind === 'image' && n.warp) || gallery(rasterEffects(n)) || n.ap.items.some((i) => i.visible && gallery(rasterEffectsOf(i.effects))))) return null;
     const b = visualBounds(this.doc, n);
     if (isEmptyRect(b)) return '';
     const k = Math.min(Math.max(1, (this.doc.rasterPpi || 150) / 72), Math.sqrt(16e6 / Math.max(1, b.w * b.h))), W = Math.max(1, Math.ceil(b.w * k)), H = Math.max(1, Math.ceil(b.h * k));
