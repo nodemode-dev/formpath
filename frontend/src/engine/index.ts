@@ -28,8 +28,10 @@ import { styleLibrary } from './style-libraries';
 import { meshAddLine, meshFromMapper, meshRemoveLines, withMeshHandle, withMeshPoint, type MeshSpec } from './envelope';
 import { envelopeFrame, envelopeMapper, envelopeOutline } from './live';
 import { quadDistort } from './ops/distort';
+import { puppetApply, puppetMesh, PuppetSolver } from './puppet';
+import { dimensionNode, dimensionSpec } from './dimension';
 import { rectCorners } from './geometry';
-import type { EnvelopeNode, EnvelopeOptions, EnvelopeSpec } from './types';
+import type { DimensionSpec, EnvelopeNode, EnvelopeOptions, EnvelopeSpec } from './types';
 
 const styleLinked = (n: VNode, st: GraphicStyle): boolean => JSON.stringify(n.ap) === JSON.stringify(st.ap) && (n.kind === 'text' || (n.opacity === st.opacity && n.blend === st.blend));
 const withStyle = (n: VNode, st: GraphicStyle): VNode => (n.kind === 'text' ? { ...n, ap: st.ap, style: st.id } : { ...n, ap: st.ap, opacity: st.opacity, blend: st.blend, style: st.id });
@@ -51,6 +53,7 @@ export interface ToolOptions {
   eraserSize: number; widthPreset: string; magicTolerance: number; symbolDensity: number; symbolIntensity: number; symbolMethod: SymbolismMethod; meshRows: number; meshCols: number; blendSteps: number;
   shapeMode: 'normal' | 'behind' | 'inside'; textMode: 'point' | 'area' | 'path'; vertical: boolean; arcConvex: boolean; liquifySize: number; liquifyKind: string;
   ftMode?: 'transform' | 'perspective' | 'free'; ftConstrain?: boolean;
+  puppetExpand?: number; puppetMesh?: boolean; dim?: Partial<DimensionSpec>; dimPick?: 'center' | 'three';
 }
 export interface ClipboardData { stamp: string; nodes: VNode[]; symbols: Doc['symbols']; swatches: Doc['swatches']; patterns: Doc['patterns']; brushes: Doc['brushes']; images: Doc['images']; assets: Map<string, Blob>; bounds: Rect }
 
@@ -1137,6 +1140,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (obj && n.kind === 'symbol') { const s = bakedInstance(doc, n); return s ? this.expandNode(doc, transformNode(cloneNode(s), n.xf), what) : [n]; }
     if (obj && n.kind === 'group' && n.trace) return this.expandNode(doc, { ...n, trace: undefined }, what);
     if (obj && n.kind === 'group' && n.livePaint) return this.expandNode(doc, this.expandedLivePaint(n), what);
+    if (obj && n.kind === 'group' && n.dim) return this.expandNode(doc, { ...n, dim: undefined }, what);
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
     if (app && n.kind !== 'layer' && has3d(n)) return expandAppearance(doc, n);
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
@@ -1279,6 +1283,30 @@ export class Engine extends Emitter<EngineEvents> {
     const t = this.targetIds(ids), fr = this.selectionFrame(t);
     if (!t.length || !fr || to.length !== 4) return false;
     return this.edit(name, (d) => this.distortTargets(d, t, fr.corners, to, new Map()));
+  }
+  puppetWarp(pins: Array<{ from: Pt; to: Pt; rotate?: number }>, opts: { expand?: number } = {}, ids?: string[]): boolean {
+    const t = this.targetIds(ids);
+    if (!t.length || !pins.length) return false;
+    return this.edit('Puppet Warp', (d) => {
+      const rest = t.map((id) => findNode(d, id)).filter((n): n is VNode => !!n && !n.locked);
+      const mesh = rest.length ? puppetMesh(d, rest, opts.expand ?? 3) : null;
+      if (!mesh) return d;
+      const solver = new PuppetSolver(mesh, pins.map((p) => ({ at: p.from, rot: p.rotate !== undefined })));
+      const def = solver.solve(pins.map((p) => ({ to: p.to, angle: (-(p.rotate ?? 0) * Math.PI) / 180 })));
+      return puppetApply(d, rest, mesh, def, new Map());
+    });
+  }
+  addDimension(spec: Partial<DimensionSpec> & Pick<DimensionSpec, 'type' | 'pts'>, select = true): string | null {
+    const d = this.doc;
+    if (!d) return null;
+    const s = dimensionSpec({ ...(this.options.dim ?? {}), ...spec });
+    return this.addNodes(s.type === 'linear' ? 'Linear Dimension' : s.type === 'angular' ? 'Angular Dimension' : 'Radial Dimension', [dimensionNode(s, d.units)], { select })[0] ?? null;
+  }
+  dimensionIds(ids?: string[]): string[] { return this.targetIds(ids).filter((id) => { const n = this.nodeById(id); return n?.kind === 'group' && !!n.dim; }); }
+  setDimension(patch: Partial<DimensionSpec>, ids?: string[], name = 'Dimension Settings'): boolean {
+    const t = this.dimensionIds(ids);
+    if (!t.length) return false;
+    return this.edit(name, (d) => updateNodes(d, t, (n) => (n.kind === 'group' && n.dim ? { ...n, dim: { ...n.dim, ...patch } } : n)));
   }
 
   createMesh(rows: number, cols: number, highlight: 'flat' | 'center' | 'edge' = 'flat', ids?: string[]): boolean {

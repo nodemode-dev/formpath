@@ -5,7 +5,7 @@ import { envelopeFrame, envelopeMapper } from '../live';
 import { emptyAppearance } from '../paint';
 import type { Appearance, Doc, EnvelopeNode, Pt, VNode } from '../types';
 
-export interface DistortOpts { affine: boolean; tol: number; envId: (id: string) => string }
+export interface DistortOpts { affine: boolean; tol: number; envId: (id: string) => string; bend?: boolean; grid?: number }
 
 function mapGradients(ap: Appearance, f: Mapper): Appearance {
   if (!ap.items.some((i) => i.paint.type === 'gradient' && i.paint.gradient.geom)) return ap;
@@ -18,9 +18,9 @@ function mapGradients(ap: Appearance, f: Mapper): Appearance {
 
 export function distortNode(doc: Doc, n: VNode, f: Mapper, o: DistortOpts): VNode {
   switch (n.kind) {
-    case 'path': return { ...n, d: mapPathAdaptive(n.d, f, o.tol, true), live: undefined, bbox: undefined, ap: mapGradients(n.ap, f) };
-    case 'compound': return { ...n, bbox: undefined, ap: mapGradients(n.ap, f), children: n.children.map((c) => ({ ...c, d: mapPathAdaptive(c.d, f, o.tol, true), live: undefined })) };
-    case 'group': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)), ...(n.livePaint ? { livePaint: { ...n.livePaint, fills: n.livePaint.fills.map((x) => ({ ...x, at: f(x.at) })) } } : {}) };
+    case 'path': return { ...n, d: mapPathAdaptive(n.d, f, o.tol, !o.bend), live: undefined, bbox: undefined, ap: mapGradients(n.ap, f) };
+    case 'compound': return { ...n, bbox: undefined, ap: mapGradients(n.ap, f), children: n.children.map((c) => ({ ...c, d: mapPathAdaptive(c.d, f, o.tol, !o.bend), live: undefined })) };
+    case 'group': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)), ...(n.livePaint ? { livePaint: { ...n.livePaint, fills: n.livePaint.fills.map((x) => ({ ...x, at: f(x.at) })) } } : {}), ...(n.dim ? { dim: { ...n.dim, pts: n.dim.pts.map(f) } } : {}) };
     case 'blend': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)), spec: { ...n.spec, spine: n.spec.spine ? mapPathAdaptive(n.spec.spine, f, o.tol, true) : null } };
     case 'repeat': return { ...n, bbox: undefined, children: n.children.map((c) => distortNode(doc, c, f, o)) };
     case 'mesh': {
@@ -37,7 +37,7 @@ export function distortNode(doc: Doc, n: VNode, f: Mapper, o: DistortOpts): VNod
     case 'text': case 'image': case 'symbol': {
       const fr = geomBounds(doc, n);
       if (isEmptyRect(fr) || fr.w < 1e-6 || fr.h < 1e-6) return n;
-      const k = o.affine ? 1 : 4;
+      const k = o.affine ? 1 : o.grid ?? 4;
       const env: EnvelopeNode = { id: o.envId(n.id), kind: 'envelope', children: [n], spec: meshFromMapper(fr, k, k, f), frame: fr, opacity: 1, blend: 'normal', ap: emptyAppearance() };
       return env;
     }

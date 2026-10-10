@@ -104,7 +104,17 @@ export interface LayerNode extends NodeBase { kind: 'layer'; children: VNode[]; 
 export type TraceView = 'result' | 'result_outlines' | 'outlines' | 'outlines_source' | 'source';
 export interface TraceInfo { src: ImageNode; opts: Record<string, number | string | boolean>; view: TraceView }
 export interface LivePaint { fills: Array<{ at: Pt; paint: Paint }>; gap: number }
-export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint }
+export type DimType = 'linear' | 'angular' | 'radial';
+export type DimOrient = 'horizontal' | 'vertical' | 'aligned';
+export type DimArrow = 'filled' | 'open' | 'tick' | 'dot' | 'none';
+export type DimTextPos = 'above' | 'center' | 'below';
+export interface DimensionSpec {
+  type: DimType; orient: DimOrient; radial: 'radius' | 'diameter'; pts: Pt[]; offset: number;
+  units: Units | 'doc'; precision: number; scale: number; showUnits: boolean;
+  arrow: DimArrow; arrowSize: number; font: string; style: string; size: number; textPos: DimTextPos;
+  color: Color; weight: number;
+}
+export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint; dim?: DimensionSpec }
 export interface PathNode extends NodeBase { kind: 'path'; d: PathData; rule: FillRule; live?: LiveShape; guide?: boolean }
 export interface CompoundNode extends NodeBase { kind: 'compound'; children: PathNode[]; rule: FillRule }
 

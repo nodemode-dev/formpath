@@ -2,6 +2,7 @@ import { geomBounds, nodePath } from './bounds';
 import { childrenOf, comparePaths, pathOf, updateNodes, walk, type IndexPath } from './doc';
 import { apply, flattenSub, invert, isEmptyRect, rectCorners, simplifyPolyline } from './geometry';
 import { DEFAULT_CHAR, layoutText, mergeSpans, sliceSpans } from './text';
+import { refreshDimensions } from './dimension';
 import type { Doc, Pt, Span, TextNode, VNode, WrapShape } from './types';
 
 const MAX_PTS = 240;
@@ -99,7 +100,8 @@ function frameShape(t: TextNode): WrapShape[] {
   return sp ? [{ pts: flattenSub(sp, 0.75).map(round), offset: t.area?.inset ?? 0, invert: true }] : [];
 }
 
-export function reflow(doc: Doc): Doc {
+export function reflow(raw: Doc): Doc {
+  const doc = refreshDimensions(raw);
   const wrappers: Array<{ n: VNode; path: IndexPath }> = [];
   const areas: Array<{ t: TextNode; path: IndexPath }> = [];
   let threads = false;
