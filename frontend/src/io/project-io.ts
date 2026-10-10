@@ -1,4 +1,4 @@
-import { newDoc } from '../engine/doc';
+import { allNodes, newDoc } from '../engine/doc';
 import type { Artboard, Doc, Project } from '../engine';
 import type { FilePart } from './api';
 
@@ -11,7 +11,17 @@ export function serialize(p: Project, app = 'formpth'): { manifest: Manifest; fi
   const d = p.doc;
   const document: Record<string, unknown> = { ...d, artboards: d.artboards.map((a) => ({ ...a, rect: [a.x, a.y, a.w, a.h] })), perspView: p.persp };
   const files: FilePart[] = [];
-  for (const key of Object.keys(d.images)) { const blob = p.assets.get(key); if (blob) files.push({ name: key, blob }); }
+  const linked = new Set<string>(), embedded = new Set<string>();
+  for (const n of allNodes(d)) {
+    if (n.kind === 'image') (n.linked ? linked : embedded).add(n.src);
+    if (n.kind === 'group' && n.trace) (n.trace.src.linked ? linked : embedded).add(n.trace.src.src);
+  }
+  for (const key of Object.keys(d.images)) {
+    const viaLink = linked.has(key) && !embedded.has(key);
+    if (viaLink && d.linkPreviews === false) continue;
+    const blob = (viaLink ? p.previews.get(key) : undefined) ?? p.assets.get(key);
+    if (blob) files.push({ name: key, blob });
+  }
   return { manifest: { format: FORMAT, version: FORMAT_VERSION, app, document, view: { activeArtboard: p.activeArtboard, activeLayer: p.activeLayer } }, files };
 }
 

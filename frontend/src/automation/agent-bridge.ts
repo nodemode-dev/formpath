@@ -7,6 +7,8 @@ import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, re
 import { collectColors, fitRowsToPalette, mapFn, nearestFn, oklab, RECOLOR, recolorDoc, reduceRows, rowReference, rowsFn } from '../engine/ops/recolor';
 import { libraryColors, swatchLibrary, SWATCH_LIBRARIES, type SwatchLibrary } from '../engine/swatch-libraries';
 import { brushLibrary, BRUSH_LIBRARIES, type BrushLibrary } from '../engine/brush-libraries';
+import { symbolLibrary, SYMBOL_LIBRARIES, type SymbolLibrary } from '../engine/symbol-libraries';
+import { SYMBOL_REGISTRATIONS, type SymbolRegistration } from '../engine/symbols';
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
 import { charStyleAt, DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
 import { DEFAULT_HYPH, DEFAULT_JUST } from '../engine/hyphen';
@@ -38,6 +40,8 @@ export interface AgentDeps {
   allow(): void;
   openFile(file: File): Promise<void>;
   placeFile(file: File, at: Pt | null, width: number | null): Promise<string | null>;
+  placeLinked?(path: string, at: Pt | null, width: number | null): Promise<string | null>;
+  links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
   projectBlob(): Promise<Blob | null>;
   exportBlob(format: 'svg' | 'pdf' | 'png' | 'jpeg' | 'webp', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean }): Promise<Blob | null>;
   image(scope: string, artboard: number | undefined, maxSize: number, outline: boolean): Promise<Blob | null>;
@@ -45,7 +49,7 @@ export interface AgentDeps {
   outlines(ids?: string[]): Promise<boolean>;
   trace(id: string, o: Record<string, unknown>): Promise<string | null>;
   ensureFace?(family: string, style: string): Promise<void>;
-  userLibraries?(): { swatches: SwatchLibrary[]; brushes: BrushLibrary[] };
+  userLibraries?(): { swatches: SwatchLibrary[]; brushes: BrushLibrary[]; symbols?: SymbolLibrary[] };
 }
 
 const text = (t: string, data?: Record<string, unknown>): McpResult => ({ content: [{ type: 'text', text: t }], ...(data ? { structuredContent: data } : {}) });
@@ -511,6 +515,10 @@ export class AgentBridge {
         case 'get_svg': { const s = await this.deps.svg(str('scope', 'artboard'), has('artboard') ? Math.round(num('artboard', 0)) : undefined, Array.isArray(a.ids) ? a.ids.map(String) : undefined); return text(s.length > 200000 ? `${s.slice(0, 200000)}\n<!-- truncated -->` : s); }
         case 'get_object': { const n = this.node(a.id); const out = { ...JSON.parse(JSON.stringify(n)) as Record<string, unknown>, bounds: box(geomBounds(p.doc, n)), visual_bounds: box(visualBounds(p.doc, n)), ...(n.kind === 'text' ? { text: plainText(n), overflow: layoutText(n).overflow >= 0 } : {}), ...(n.kind === 'path' && n.live ? { shape: { kind: n.live.kind, ...liveParams(n.live) } } : {}) }; return text(JSON.stringify(out).slice(0, 100000), out); }
         case '__place': {
+          if (a.link === true && has('path') && this.deps.placeLinked) {
+            const id = await this.deps.placeLinked(str('path'), has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null);
+            return id ? text(`Placed ${str('name')} linked to ${str('path')} (id ${id}); the links tool reports when the file changes.`, { id, linked: true }) : fail(`Could not place ${str('name')}.`);
+          }
           const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
           const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null);
           return id ? text(`Placed ${file.name} (id ${id}).`, { id }) : fail(`Could not place ${file.name}.`);
@@ -962,14 +970,53 @@ export class AgentBridge {
         }
         case 'symbol': {
           const act = str('action');
-          if (act === 'list') { const list = p.doc.symbols.map((s) => ({ id: s.id, name: s.name })); return text(list.map((s) => `${s.id}: ${s.name}`).join('\n') || 'No symbols yet.', { symbols: list }); }
-          if (act === 'create') { const id = e.makeSymbol(str('name') || `Symbol ${p.doc.symbols.length + 1}`, this.ids(a)); return id ? text(`Made the symbol (id ${id}); the art became an instance.`, { id, instance: e.selectedIds()[0] }) : fail('Select art to make a symbol from.'); }
-          const sym = p.doc.symbols.find((s) => s.id === str('name') || s.name === str('name'));
-          if (act === 'place') { if (!sym) return fail('No symbol has that name: call symbol with action list.'); const id = e.placeSymbol(sym.id, { x: num('x', 0), y: num('y', 0) }, num('scale', 1)); return text(`Placed ${sym.name} (id ${id}).`, { id }); }
+          const symLibs = (): SymbolLibrary[] => [...SYMBOL_LIBRARIES, ...(this.deps.userLibraries?.().symbols ?? [])];
+          const type = a.type === 'static' || a.type === 'dynamic' ? a.type : undefined;
+          const sliceArg = Array.isArray(a.slice_guides) && a.slice_guides.length === 4 && a.slice_guides.every((v) => typeof v === 'number') ? { x1: Number(a.slice_guides[0]), y1: Number(a.slice_guides[1]), x2: Number(a.slice_guides[2]), y2: Number(a.slice_guides[3]) } : null;
+          if (act === 'list') { const list = p.doc.symbols.map((s) => ({ id: s.id, name: s.name, type: s.type ?? 'static', slice: s.slice ?? null })); return text(list.map((s) => `${s.id}: ${s.name} (${s.type}${s.slice ? ', 9-slice' : ''})`).join('\n') || 'No symbols yet.', { symbols: list }); }
+          if (act === 'libraries') { const libs = symLibs(); return text(libs.map((l) => `${l.id}: ${l.name} (${l.symbols.map((s) => s.name).join(', ')})`).join('\n'), { libraries: libs.map((l) => ({ id: l.id, name: l.name, user: !!l.user, symbols: l.symbols.map((s) => s.name) })) }); }
+          if (act === 'create') { const reg = SYMBOL_REGISTRATIONS.some(([k]) => k === a.registration) ? a.registration as SymbolRegistration : undefined; const id = e.makeSymbol(str('name') || `Symbol ${p.doc.symbols.length + 1}`, this.ids(a), { type, reg, slice: a.slice === true || !!sliceArg }); if (id && sliceArg) e.setSymbolSlice(id, sliceArg); return id ? text(`Made the symbol (id ${id}); the art became an instance.`, { id, instance: e.selectedIds()[0] }) : fail('Select art to make a symbol from.'); }
+          if (act === 'load_library' || (act === 'place' && has('library'))) {
+            const lib = symbolLibrary(str('library'), symLibs().filter((l) => l.user));
+            if (!lib) return fail(`library is one of ${symLibs().map((l) => l.id).join(', ')}.`);
+            const want = act === 'place' ? [str('name')] : Array.isArray(a.names) ? a.names.map(String) : [];
+            const pick = want.length && want[0] ? lib.symbols.filter((s) => want.some((w) => w.toLowerCase() === s.name.toLowerCase())) : lib.symbols;
+            if (!pick.length) return fail(`${lib.name} has ${lib.symbols.map((s) => s.name).join(', ')}.`);
+            const ids = e.addLibrarySymbols(pick);
+            if (act === 'load_library') return text(`Loaded ${ids.length} symbols from ${lib.name} into the Symbols panel.`, { ids });
+            const id = e.placeSymbol(ids[0], { x: num('x', 0), y: num('y', 0) }, num('scale', 1));
+            return text(`Placed ${pick[0].name} from ${lib.name} (id ${id}).`, { id, symbol: ids[0] });
+          }
+          if (act === 'exit' || act === 'cancel') { if (!e.symbolSession) return fail('No symbol is being edited.'); const ok = e.exitSymbolEdit(act === 'exit'); return text(ok ? 'Saved the symbol and left symbol editing mode; every instance follows.' : 'Left symbol editing mode without keeping the changes.'); }
+          if (act === 'reset_overrides') return text(`Reset the overrides of ${e.resetSymbolParts(this.ids(a))} instances.`);
+          const inst = has('id') ? e.selectedInstances([str('id')])[0] : undefined;
+          const sym = p.doc.symbols.find((s) => s.id === str('name') || s.name === str('name')) ?? (inst ? p.doc.symbols.find((s) => s.id === inst.symbol) : undefined);
+          if (act === 'place') { if (!sym) return fail('No symbol has that name: call symbol with action list, or pass library.'); const id = e.placeSymbol(sym.id, { x: num('x', 0), y: num('y', 0) }, num('scale', 1)); return text(`Placed ${sym.name} (id ${id}).`, { id }); }
           if (act === 'break_link') { e.breakSymbolLink(this.ids(a)); return text('Broke the link to the symbol.'); }
-          if (act === 'replace') { if (!sym) return fail('Name the replacement symbol.'); const ids = this.ids(a) ?? e.targetIds(); e.edit('Replace Symbol', (d) => updateNodes(d, ids, (n) => (n.kind === 'symbol' ? { ...n, symbol: sym.id } : n))); return text(`Replaced with ${sym.name}.`); }
+          if (act === 'replace') { if (!sym) return fail('Name the replacement symbol.'); const n = e.replaceSymbol(sym.id, this.ids(a)); return n ? text(`Replaced ${n} instances with ${sym.name}.`) : fail('Select or pass symbol instances to replace.'); }
           if (act === 'delete') { if (!sym) return fail('Name the symbol.'); e.edit('Delete Symbol', (d) => ({ ...d, symbols: d.symbols.filter((s) => s.id !== sym.id) })); return text(`Deleted ${sym.name}.`); }
-          return fail('action must be create, place, list, break_link, replace or delete.');
+          if (!sym) return fail('Name the symbol (or pass an instance id): call symbol with action list.');
+          if (act === 'edit') {
+            if (!e.enterSymbolEdit(sym.id, inst?.id)) return fail('Could not enter symbol editing mode.');
+            const g = e.symbolSession?.group ?? '', kids = e.nodeById(g)?.kind === 'group' ? (e.nodeById(g) as VNode & { children: VNode[] }).children.map((c) => c.id) : [];
+            return text(`Editing ${sym.name}: its art is in the group ${g} (objects ${kids.join(', ')}). Change it with any tool (every instance follows), then call symbol with action exit.`, { group: g, objects: kids });
+          }
+          if (act === 'redefine') return e.redefineSymbol(sym.id, this.ids(a)) ? text(`Redefined ${sym.name} from the art; every instance follows.`, { instance: e.selectedIds()[0] }) : fail('Pass or select the art that should become the symbol.');
+          if (act === 'duplicate') { const id = e.duplicateSymbol(sym.id); return text(`Duplicated ${sym.name} (id ${id}).`, { id }); }
+          if (act === 'options') {
+            const ok = e.setSymbolOptions(sym.id, { ...(has('new_name') ? { name: str('new_name') } : {}), ...(type ? { type } : {}), ...(typeof a.slice === 'boolean' ? { slice: a.slice } : {}) });
+            if (sliceArg) e.setSymbolSlice(sym.id, sliceArg);
+            return ok || sliceArg ? text(`Updated ${sym.name}.`) : fail('Nothing changed.');
+          }
+          if (act === 'override') {
+            if (!inst) return fail('Pass id: the instance whose part to recolour.');
+            if (sym.type !== 'dynamic') return fail(`${sym.name} is a static symbol: set type dynamic with action options first.`);
+            const part = str('part');
+            if (!part) return fail('Pass part: the id of a part in the symbol art (see get_object on the symbol, or the ids listed by action edit).');
+            const ok = e.setSymbolPart(inst.id, part, { ...(has('fill') ? { fill: this.paint(a.fill, 'fill') } : {}), ...(has('stroke') ? { stroke: this.paint(a.stroke, 'stroke') } : {}), ...(typeof a.stroke_width === 'number' ? { strokeWidth: a.stroke_width } : {}), ...(typeof a.opacity === 'number' ? { opacity: Math.max(0, Math.min(100, a.opacity)) / 100 } : {}) });
+            return ok ? text(`Overrode part ${part} of ${inst.id}.`) : fail('No part has that id in this symbol.');
+          }
+          return fail('action must be create, place, list, break_link, replace, delete, edit, exit, cancel, redefine, duplicate, options, override, reset_overrides, libraries or load_library.');
         }
         case 'apply_brush': {
           if (a.list === true) { const list = p.doc.brushes.map((b) => ({ id: b.id, name: b.name, type: b.brush.type })); return text(list.map((b) => `${b.name} (${b.type})`).join('\n'), { brushes: list }); }
@@ -1010,6 +1057,11 @@ export class AgentBridge {
           if (!pick.length) return fail(`${lib.name} has ${lib.brushes.map((b) => b.name).join(', ')}.`);
           const ids = e.addLibraryBrushes(pick.map((b, i) => ({ ...b, id: `l${i}` })));
           return text(`Loaded ${ids.length} brush${ids.length === 1 ? '' : 'es'} from ${lib.name}: ${pick.map((b) => b.name).join(', ')}.`, { ids });
+        }
+        case 'links': {
+          if (!this.deps.links) return fail('Links are not available here.');
+          const r = await this.deps.links(a);
+          return r.ok ? text(r.text, r.data) : fail(r.text);
         }
         case 'image_trace': {
           const target = has('id') ? this.node(a.id) : e.selected().find((n) => n.kind === 'image' || (n.kind === 'group' && !!n.trace));

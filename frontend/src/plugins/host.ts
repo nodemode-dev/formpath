@@ -114,7 +114,7 @@ export class PluginHost {
         case 'done': { const f = this.runs.get(m.runId ?? -1); this.runs.delete(m.runId ?? -1); f?.(m.error); return; }
         case 'call': {
           const tool = String(m.args?.tool ?? '');
-          if (/^(open_file|save_project|export_file|place_image)$/.test(tool)) { reply(undefined, `${tool} reads or writes files, which plugins cannot do.`); return; }
+          if (/^(open_file|save_project|export_file|place_image|links)$/.test(tool)) { reply(undefined, `${tool} reads or writes files, which plugins cannot do.`); return; }
           reply(await this.bridge.run(tool, (m.args?.args ?? {}) as Record<string, unknown>));
           return;
         }

@@ -57,8 +57,14 @@ export const api = {
   async actionSets(): Promise<{ folder: string; sets: Array<{ file: string; set: unknown }> }> { return json(await request('/actions/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })); },
   async saveActionSet(name: string, set: unknown): Promise<{ path: string }> { return json(await request('/actions/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, set }) })); },
   async deleteActionSet(name: string): Promise<void> { await request('/actions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }); },
-  async listFolder(folder: string, kinds: string[]): Promise<{ folder: string; files: Array<{ name: string; path: string; size: number }> }> { return json(await request('/files/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder, kinds }) })); },
+  async listFolder(folder: string, kinds: string[], dirs = false): Promise<{ folder: string; parent?: string; dirs?: string[]; files: Array<{ name: string; path: string; size: number; mtime?: number }> }> { return json(await request('/files/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder, kinds, dirs }) })); },
   async readFile(path: string): Promise<Blob> { return (await request('/files/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) })).blob(); },
+  async readFileInfo(path: string): Promise<{ blob: Blob; name: string; path: string; size: number; mtime: number }> {
+    const r = await request('/files/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+    const h = (k: string): string => decodeURIComponent(r.headers.get(k) ?? '');
+    return { blob: await r.blob(), name: h('X-Formpth-Name') || path.split(/[\\/]/).pop() || path, path: h('X-Formpth-Path') || path, size: Number(r.headers.get('X-Formpth-Size') ?? 0), mtime: Number(r.headers.get('X-Formpth-Mtime') ?? 0) };
+  },
+  async statFiles(paths: string[]): Promise<Array<{ path: string; exists: boolean; size: number; mtime: number }>> { return (await json<{ files: Array<{ path: string; exists: boolean; size: number; mtime: number }> }>(await request('/files/stat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths }) }))).files; },
   async writeFile(folder: string, name: string, blob: Blob): Promise<string> { return (await json<{ path: string }>(await request('/files/write', { method: 'POST', body: form({ folder, name }, [{ name, blob }], 'file') }))).path; },
 
   async fonts(): Promise<FontInfo[]> { try { return await json<FontInfo[]>(await request('/fonts')); } catch { return []; } },

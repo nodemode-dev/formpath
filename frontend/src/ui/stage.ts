@@ -285,6 +285,20 @@ export class Stage {
         g.restore();
       }
       if (n) { g.save(); g.setTransform(...view); renderNode(g, n, this.renderContext(p, v.zoom)); g.restore(); }
+      const se = p.symbolEdit, sdef = se ? p.doc.symbols.find((x) => x.id === se.symbol) : null;
+      if (se && sdef) {
+        const ox = se.origin.x * z + view[4], oy = se.origin.y * z + view[5], d = this.dpr;
+        g.save(); g.lineWidth = Math.max(1, d); g.strokeStyle = pal.accent;
+        if (sdef.slice) {
+          g.setLineDash([5 * d, 4 * d]);
+          const sl = sdef.slice, xs = [sl.x1, sl.x2].map((x) => (x + se.origin.x) * z + view[4]), ys = [sl.y1, sl.y2].map((y) => (y + se.origin.y) * z + view[5]);
+          g.beginPath(); for (const x of xs) { g.moveTo(Math.round(x) + 0.5, 0); g.lineTo(Math.round(x) + 0.5, H); } for (const y of ys) { g.moveTo(0, Math.round(y) + 0.5); g.lineTo(W, Math.round(y) + 0.5); } g.stroke();
+          g.setLineDash([]);
+        }
+        g.beginPath(); g.moveTo(ox - 7 * d, oy); g.lineTo(ox + 7 * d, oy); g.moveTo(ox, oy - 7 * d); g.lineTo(ox, oy + 7 * d); g.stroke();
+        g.beginPath(); g.arc(ox, oy, 3 * d, 0, Math.PI * 2); g.stroke();
+        g.restore();
+      }
       if (pe && geo && pe.edge) {
         g.save(); g.lineWidth = Math.max(1, this.dpr); g.strokeStyle = pal.accent; g.setLineDash([4 * this.dpr, 3 * this.dpr]);
         g.beginPath(); tileOutline(geo).forEach((q, i) => { const sx = q.x * z + view[4], sy = q.y * z + view[5]; if (i) g.lineTo(sx, sy); else g.moveTo(sx, sy); }); g.closePath(); g.stroke();

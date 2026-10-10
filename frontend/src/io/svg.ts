@@ -31,7 +31,7 @@ class Writer {
   private defs: string[] = [];
   private n = 0;
   private gradients = new Map<string, string>();
-  private symbols = new Map<string, string>();
+  private symbolArts = new Map<VNode, string>();
   private ko = false;
   constructor(private readonly p: Project, private readonly o: SvgOptions, private readonly images: Map<string, string>, private readonly outlines: Map<string, PathData>) {}
   get doc(): Doc { return this.p.doc; }
@@ -334,9 +334,8 @@ class Writer {
       case 'symbol': {
         const s = this.doc.symbols.find((x) => x.id === n.symbol), art = instanceArt(this.doc, n);
         if (!s || !art) return '';
-        const key = n.tint && n.tint.amount > 0 ? `${s.id}:${hex(n.tint.color)}:${n.tint.amount.toFixed(3)}` : s.id;
-        let sid = this.symbols.get(key);
-        if (!sid) { sid = this.id('sym'); this.symbols.set(key, sid); this.defs.push(`<g id="${sid}" data-name="${esc(s.name)}">${this.node(art)}</g>`); }
+        let sid = this.symbolArts.get(art);
+        if (!sid) { sid = this.id('sym'); this.symbolArts.set(art, sid); this.defs.push(`<symbol id="${sid}" data-name="${esc(s.name)}" overflow="visible">${this.node(art)}</symbol>`); }
         return this.wrap(n, `<use href="#${sid}" transform="${mat(n.xf, this.o.precision)}"/>`);
       }
       case 'mesh': return this.wrap(n, meshQuads(n, 4).map((q) => `<path d="M${q.pts.map((v) => `${num(v.x)} ${num(v.y)}`).join('L')}Z" fill="${cssColor(q.color)}"${q.opacity < 1 ? ` fill-opacity="${num(q.opacity)}"` : ''} stroke="${cssColor(q.color)}" stroke-width="0.25"/>`).join(''));

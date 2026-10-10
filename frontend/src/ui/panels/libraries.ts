@@ -5,6 +5,7 @@ import { cssColor, parseColor, rgb, solid, stroke as makeStroke } from '../../en
 import type { BrushDef, Doc, Engine, PathData } from '../../engine';
 import { newDoc } from '../../engine/doc';
 import type { BrushLibrary } from '../../engine/brush-libraries';
+import type { SymbolLibrary } from '../../engine/symbol-libraries';
 import type { LibSwatch, SwatchLibrary } from '../../engine/swatch-libraries';
 import { el, patchList, q, setClass, setDisabled, setStyleVar, setText, setTitle } from '../dom';
 import { icon } from '../icons';
@@ -20,6 +21,9 @@ export const userSwatchLibraries = (): SwatchLibrary[] => read<SwatchLibrary>(US
 export const userBrushLibraries = (): BrushLibrary[] => read<BrushLibrary>(USER_BR).filter((l) => l && typeof l.id === 'string' && Array.isArray(l.brushes)).map((l) => ({ ...l, user: true }));
 export function keepUserSwatchLibrary(lib: SwatchLibrary): boolean { return write(USER_SW, [...userSwatchLibraries().filter((l) => l.id !== lib.id), { ...lib, user: true }]); }
 export function keepUserBrushLibrary(lib: BrushLibrary): boolean { return write(USER_BR, [...userBrushLibraries().filter((l) => l.id !== lib.id), { ...lib, user: true }]); }
+const USER_SY = 'formpth.userSymbolLibraries';
+export const userSymbolLibraries = (): SymbolLibrary[] => read<SymbolLibrary>(USER_SY).filter((l) => l && typeof l.id === 'string' && Array.isArray(l.symbols)).map((l) => ({ ...l, user: true }));
+export function keepUserSymbolLibrary(lib: SymbolLibrary): boolean { return write(USER_SY, [...userSymbolLibraries().filter((l) => l.id !== lib.id), { ...lib, user: true }]); }
 
 const swatchTitle = (s: LibSwatch): string => `${s.name}${s.spot ? ' · spot' : s.global ? ' · global process' : s.paint.type === 'color' ? ' · process' : s.paint.type === 'gradient' ? ' · gradient' : ' · pattern'}`;
 

@@ -1,12 +1,12 @@
 import { AgentBridge, regionOf } from './automation/agent-bridge';
-import { Engine, type Color, type Doc, type ExportAsset, type Pt, type TraceView, type Units, type VNode } from './engine';
+import { Engine, type Color, type Doc, type ExportAsset, type ImageNode, type Pt, type TraceView, type Units, type VNode } from './engine';
 import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc';
 import { EFFECTS } from './engine/effects';
 import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
 import { transformNodes } from './engine/ops/objects';
 import { pathOperation } from './engine/ops/paths';
 import { RECOLOR, recolorDoc } from './engine/ops/recolor';
-import { hex, solid, defaultGradient, NONE } from './engine/paint';
+import { hex, solid, defaultGradient, NONE, toRgb } from './engine/paint';
 import { fontsChanged, plainText } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
@@ -17,7 +17,7 @@ import { docFromManifest, serialize } from './io/project-io';
 import { canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
 import { exportRegion, exportSvg, importSvg } from './io/svg';
-import { TRACE_VIEWS, traceImage, traceOptions, type TraceOpts } from './io/trace';
+import { TRACE_VIEWS, traceImage, traceOptions, type TraceOpts, type TraceRun } from './io/trace';
 import { unzip, zipFiles } from './io/zip';
 import { PluginHost } from './plugins/host';
 import { registerBuiltinTools } from './tools';
@@ -47,7 +47,7 @@ import { envelopeOptions } from './engine/envelope';
 import { AgentConfirmDialog } from './ui/panels/agent-confirm';
 import { AssistantPanel } from './ui/panels/assistant';
 import { ColorPanel, GradientPanel, SwatchesPanel } from './ui/panels/color';
-import { BrushLibraryPanel, keepUserBrushLibrary, keepUserSwatchLibrary, SwatchLibraryPanel, userBrushLibraries, userSwatchLibraries } from './ui/panels/libraries';
+import { BrushLibraryPanel, keepUserBrushLibrary, keepUserSwatchLibrary, keepUserSymbolLibrary, SwatchLibraryPanel, userBrushLibraries, userSwatchLibraries, userSymbolLibraries } from './ui/panels/libraries';
 import { RecolorDialog } from './ui/panels/recolor';
 import { libraryFromDoc, SWATCH_LIBRARIES, type SwatchLibrary } from './engine/swatch-libraries';
 import { BRUSH_LIBRARIES, type BrushLibrary } from './engine/brush-libraries';
@@ -63,7 +63,11 @@ import { effectDialog, previewEdit } from './ui/panels/preview-edit';
 import { EffectGallery } from './ui/panels/effect-gallery';
 import { ThreeDPanel } from './ui/panels/three-d';
 import { BrushesPanel, StrokePanel, TransparencyPanel } from './ui/panels/stroke';
-import { ArtboardsPanel, LinksPanel, SymbolsPanel } from './ui/panels/symbols';
+import { ArtboardsPanel, LinksPanel, SymbolLibraryPanel, SymbolsPanel } from './ui/panels/symbols';
+import { SYMBOL_LIBRARIES, symbolLibraryFromDoc, type SymbolLibrary } from './engine/symbol-libraries';
+import { SYMBOL_REGISTRATIONS, type SymbolRegistration } from './engine/symbols';
+import { canLinkHandles, IMAGE_KINDS, LinkManager, linkKey, linkOf, pickLinkedFile, pickLinkFolder, saveLinkedFile, type LinkFile } from './io/links';
+import { FilePathDialog } from './ui/file-dialog';
 import { areaTypeOptionsDialog, CharacterPanel, findReplaceDialog, GlyphsPanel, hyphenationDialog, justificationDialog, ParagraphPanel, pathTypeOptionsDialog, TabsPanel } from './ui/panels/type';
 import { TextStylesPanel } from './ui/panels/text-styles';
 import { FindFontDialog } from './ui/panels/find-font';
@@ -121,7 +125,7 @@ const SHELL = `<div class="cv-app">
 <canvas class="cv-canvas cv-overlay-canvas"></canvas>
 <canvas class="cv-ruler cv-ruler-h" hidden></canvas>
 <canvas class="cv-ruler cv-ruler-v" hidden></canvas>
-<div class="cv-isolation" hidden><span class="cv-isolation-label"></span><button class="cv-btn cv-iso-exit" type="button" data-cmd="exit-isolation">${icon('exitIsolation', 14)}Exit Isolation Mode</button><span class="cv-iso-pattern" hidden><button class="cv-btn cv-btn-primary" type="button" data-cmd="pattern-done">Done</button><button class="cv-btn" type="button" data-cmd="pattern-copy">Save a Copy</button><button class="cv-btn" type="button" data-cmd="pattern-cancel">Cancel</button></span></div>
+<div class="cv-isolation" hidden><span class="cv-isolation-label"></span><button class="cv-btn cv-iso-exit" type="button" data-cmd="exit-isolation">${icon('exitIsolation', 14)}Exit Isolation Mode</button><span class="cv-iso-pattern" hidden><button class="cv-btn cv-btn-primary" type="button" data-cmd="pattern-done">Done</button><button class="cv-btn" type="button" data-cmd="pattern-copy">Save a Copy</button><button class="cv-btn" type="button" data-cmd="pattern-cancel">Cancel</button></span><span class="cv-iso-pattern cv-iso-symbol" hidden><button class="cv-btn cv-btn-primary" type="button" data-cmd="symbol-exit">${icon('exitIsolation', 14)}Exit</button><button class="cv-btn" type="button" data-cmd="symbol-cancel">Cancel</button></span></div>
 <div class="cv-welcome"><div class="cv-welcome-card">
 <div class="cv-welcome-title">${brandMark(28)}formpth</div>
 <div class="cv-welcome-sub">Vector illustration. Start a document, open a project, or drop an SVG anywhere on this stage.</div>
@@ -137,7 +141,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group', 'swatch-library': 'color-group', 'brush-library': 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group', 'swatch-library': 'color-group', 'brush-library': 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', 'symbol-library': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -191,12 +195,18 @@ export function startApp(): void {
   const effectsMenu = new PopupMenu(commands, null, true);
   const appearanceP = new AppearancePanel(engine, pickColor, (anchor) => { effectsMenu.setItems(effectItems()); const r = anchor.getBoundingClientRect(); effectsMenu.openAt(r.left, r.top - 8); });
   const stylesP = new GraphicStylesPanel(engine);
-  const symbolsP = new SymbolsPanel(engine), artboardsP = new ArtboardsPanel(engine);
+  const symbolsP = new SymbolsPanel(engine, (c) => { commands.run(c); }, { library: (a) => openLibMenu(a, symbolLibItems()), panel: (a) => openLibMenu(a, ['symbol-edit', 'symbol-exit', '-', 'symbol-duplicate', 'symbol-redefine', 'symbol-replace', 'symbol-reset', '-', 'symbol-options', 'new-symbol', 'break-symbol', 'symbol-delete', '-', 'sym-lib-other', 'sym-lib-save']) }), artboardsP = new ArtboardsPanel(engine);
+  const symbolLibP = new SymbolLibraryPanel(engine, (a) => openLibMenu(a, symbolLibItems()));
   const relinkInput = el<HTMLInputElement>('<input type="file" accept="image/*" hidden>');
   document.body.appendChild(relinkInput);
-  let relinkId: string | null = null;
-  relinkInput.addEventListener('change', () => { const f = relinkInput.files?.[0]; relinkInput.value = ''; if (f && relinkId) void relink(relinkId, f); });
-  const linksP = new LinksPanel(engine, (id) => { relinkId = id; relinkInput.click(); });
+  let relinkIds: string[] = [];
+  relinkInput.addEventListener('change', () => { const f = relinkInput.files?.[0]; relinkInput.value = ''; if (f && relinkIds.length) void relink(relinkIds, f); });
+  let caps: Capabilities | null = null;
+  const links = new LinkManager(engine, () => !!caps);
+  links.notify = (t) => toast(t);
+  const fileDialog = new FilePathDialog();
+  const canLink = (): boolean => !!caps || canLinkHandles();
+  const linksP = new LinksPanel(engine, links, (c) => { commands.run(c); }, (a) => openLibMenu(a, ['link-relink', 'link-relink-all', 'link-relink-folder', '-', 'link-update', 'link-update-all', '-', 'link-goto', 'link-info', '-', 'link-embed', 'link-unembed', '-', 'link-previews', 'place-linked']), canLink);
   const navP = new NavigatorPanel(engine), infoP = new InfoPanel(engine), historyP = new HistoryPanel(engine, () => void historyOptions());
   const actionsP = new ActionsPanel(engine, commands, { openFile: (f) => openFiles([f]), deliver: (b, n) => deliver(b, n), notify: (t, kind) => toast(t, kind ?? 'info'), version: VERSION, desktop: () => !!caps?.desktop });
   async function historyOptions(): Promise<void> {
@@ -219,7 +229,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }, { id: 'swatch-library', label: 'Swatch Library', body: swatchLibP.body }], 'Color');
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }, { id: 'brush-library', label: 'Brush Library', body: brushLibP.body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
-  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }], 'Symbols');
+  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'variables', label: 'Variables', body: variablesP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
@@ -257,7 +267,6 @@ export function startApp(): void {
   new OptionsBar(q(root, '.cv-options'), engine);
   const status = new StatusBar(q(root, '.cv-status'), engine);
   stage.onPointerDoc = (pt) => { status.setPointer(pt); infoP.setPointer(pt); };
-  let caps: Capabilities | null = null;
 
   const RECENT_KEY = 'formpth.recent';
   let recent: string[] = [];
@@ -371,11 +380,163 @@ export function startApp(): void {
     return engine.addImage(key, f, s.w, s.h, at ?? { x: center.x - w / 2, y: center.y - h / 2 }, w, f.name) || null;
   }
 
-  async function relink(id: string, f: File): Promise<void> {
+  async function relink(ids: string[], f: File): Promise<void> {
     const s = await imageSize(f), key = imageKey(f), p = engine.current;
     if (!p) return;
     p.assets.set(key, f);
-    engine.edit('Relink', (d) => ({ ...updateNodes(d, [id], (n) => (n.kind === 'image' ? { ...n, src: key, w: s.w, h: s.h, xf: [n.xf[0] * (n.w / s.w), n.xf[1] * (n.w / s.w), n.xf[2] * (n.h / s.h), n.xf[3] * (n.h / s.h), n.xf[4], n.xf[5]], link: f.name } : n)), images: { ...d.images, [key]: { mime: f.type || 'image/png', w: s.w, h: s.h } } }));
+    engine.setImageSource('Relink', ids, { key, mime: f.type || 'image/png', w: s.w, h: s.h }, null);
+    toast(`Replaced the image with ${f.name}. This browser cannot keep links to files, so it is embedded.`);
+  }
+
+  const pickedImage = (): ImageNode | null => (engine.selected().find((n) => n.kind === 'image') as ImageNode | undefined) ?? null;
+  const sameLink = (n: ImageNode): string[] => links.images().filter((x) => (n.linked && x.linked ? linkKey(x.linked) === linkKey(n.linked) : x.src === n.src)).map((x) => x.id);
+
+  async function chooseLinkFile(title: string): Promise<LinkFile | null> {
+    if (caps) {
+      const path = await fileDialog.choose({ title, mode: 'file', kinds: IMAGE_KINDS, ok: 'Link', note: 'formpth keeps the path and reads the file again when it changes.' });
+      if (!path) return null;
+      try { return await links.readPath(path); } catch (err) { toast(message(err), 'error'); return null; }
+    }
+    return canLinkHandles() ? pickLinkedFile() : null;
+  }
+
+  async function linkFileTo(ids: string[], f: LinkFile, name: string): Promise<boolean> {
+    const p = engine.current;
+    if (!p || !ids.length) return false;
+    const s = await imageSize(f.blob), key = imageKey(f.blob);
+    p.assets.set(key, f.blob);
+    const ok = engine.setImageSource(name, ids, { key, mime: f.blob.type || 'image/png', w: s.w, h: s.h }, linkOf(f));
+    void links.preview(p, key, f.blob);
+    void links.check();
+    return ok;
+  }
+
+  async function placeLinked(f: LinkFile | null, at: Pt | null = null, width: number | null = null): Promise<string | null> {
+    const p = engine.current;
+    if (!p || !f) return null;
+    const s = await imageSize(f.blob), key = imageKey(f.blob), v = p.viewport, center = v.toDoc(v.centerX, v.height / 2);
+    const w = width ?? s.w, h = (w / s.w) * s.h;
+    const id = engine.addImage(key, f.blob, s.w, s.h, at ?? { x: center.x - w / 2, y: center.y - h / 2 }, w, undefined, linkOf(f)) || null;
+    void links.preview(p, key, f.blob);
+    void links.check();
+    return id;
+  }
+
+  async function relinkFolder(): Promise<{ done: number; total: number }> {
+    const p = engine.current;
+    const missing = links.images().filter((n) => n.linked && links.state(n) === 'missing');
+    const groups = new Map<string, ImageNode[]>();
+    for (const n of missing) { const k = linkKey(n.linked as NonNullable<ImageNode['linked']>); groups.set(k, [...(groups.get(k) ?? []), n]); }
+    if (!p || !groups.size) { toast('No links are missing.'); return { done: 0, total: 0 }; }
+    let find: ((name: string) => Promise<LinkFile | null>) | null = null;
+    if (caps) {
+      const folder = await fileDialog.choose({ title: 'Relink Missing Links from a Folder', mode: 'folder', kinds: IMAGE_KINDS, note: '' });
+      if (!folder) return { done: 0, total: groups.size };
+      const list = await api.listFolder(folder, IMAGE_KINDS);
+      const byName = new Map(list.files.map((f) => [f.name.toLowerCase(), f.path]));
+      find = async (name) => { const path = byName.get(name.toLowerCase()); return path ? links.readPath(path) : null; };
+    } else if (canLinkHandles()) {
+      const dir = await pickLinkFolder();
+      if (!dir) return { done: 0, total: groups.size };
+      find = async (name) => { const get = dir.get(name.toLowerCase()); return get ? get() : null; };
+    } else { toast('This browser cannot keep links to files.', 'error'); return { done: 0, total: groups.size }; }
+    let done = 0;
+    engine.beginStep();
+    try {
+      for (const [, nodes] of groups) {
+        const f = await find(nodes[0].linked?.name ?? '').catch(() => null);
+        if (f && await linkFileTo(nodes.map((n) => n.id), f, 'Relink Missing Links')) done++;
+      }
+    } finally { engine.endStep(); }
+    toast(`Relinked ${done} of ${groups.size} missing ${groups.size === 1 ? 'link' : 'links'}.`, done < groups.size ? 'error' : 'info');
+    return { done, total: groups.size };
+  }
+
+  async function updateLinks(nodes: ImageNode[]): Promise<number> {
+    const groups = new Map<string, ImageNode[]>();
+    for (const n of nodes) if (n.linked) { const k = linkKey(n.linked); groups.set(k, [...(groups.get(k) ?? []), n]); }
+    let done = 0;
+    engine.beginStep();
+    try {
+      for (const [, ns] of groups) {
+        const f = await links.read(ns[0].linked as NonNullable<ImageNode['linked']>, true);
+        if (f && await linkFileTo(ns.map((n) => n.id), f, 'Update Link')) done++;
+      }
+    } finally { engine.endStep(); }
+    return done;
+  }
+
+  function embedLinks(nodes: ImageNode[]): number {
+    const t = nodes.filter((n) => n.linked);
+    if (!t.length) return 0;
+    if (t.some((n) => links.state(n) === 'missing')) toast('A missing file can only be embedded from its cached preview, at a lower resolution.', 'error');
+    engine.setImageSource('Embed Image', t.map((n) => n.id), null, null);
+    return t.length;
+  }
+
+  async function unembed(n: ImageNode): Promise<boolean> {
+    const p = engine.current, raw = p?.assets.get(n.src);
+    if (!p || !raw || n.linked) return false;
+    const ext = raw.type === 'image/jpeg' ? 'jpg' : raw.type === 'image/webp' ? 'webp' : 'png';
+    const blob = ext === 'png' && raw.type !== 'image/png' ? await (async () => { const b = await createImageBitmap(raw), c = new OffscreenCanvas(b.width, b.height); c.getContext('2d')?.drawImage(b, 0, 0); b.close(); return c.convertToBlob({ type: 'image/png' }); })() : raw;
+    const base = (n.name ?? n.link ?? 'Image').replace(/\.[a-z0-9]+$/i, '').replace(/[^A-Za-z0-9 ._()-]+/g, '_').trim() || 'Image', fname = `${base}.${ext}`;
+    let f: LinkFile | null = null;
+    if (caps) {
+      const lib = (await api.libraryFolder())?.folder ?? caps.libraryDir;
+      const folder = `${lib.replace(/[\\/]$/, '')}/${p.name.replace(/[\\/:*?"<>|]+/g, '_')} Links`;
+      try { f = await links.readPath(await api.writeFile(folder, fname, blob)); } catch (err) { toast(message(err), 'error'); return false; }
+    } else if (canLinkHandles()) f = await saveLinkedFile(blob, fname);
+    else { await deliver(blob, fname); toast('Saved a copy of the image. This browser cannot link files, so the image stays embedded.'); return false; }
+    if (!f) return false;
+    const ok = await linkFileTo([n.id], f, 'Unembed Image');
+    if (ok) toast(`Wrote ${f.path ?? f.name} and linked the image to it.`);
+    return ok;
+  }
+
+  async function linkInfo(n: ImageNode): Promise<void> {
+    const st = links.state(n), l = n.linked, sc = Math.hypot(n.xf[0], n.xf[1]), sy = Math.hypot(n.xf[2], n.xf[3]);
+    const ppi = (k: number): number => Math.round(72 / Math.max(1e-9, k));
+    const when = (t?: number): string => (t ? new Date(t).toLocaleString() : 'unknown');
+    await askForm('Link Info', [
+      { kind: 'note', text: `Name: ${l?.name ?? n.name ?? n.src}` },
+      { kind: 'note', text: `State: ${st === 'embedded' ? 'Embedded in the document' : st === 'modified' ? 'Modified on disk (update available)' : st === 'missing' ? 'Missing' : 'Linked'}` },
+      { kind: 'note', text: `Location: ${l?.path ?? (l?.handle ? 'A file chosen in this browser (kept by permission)' : 'Inside the document')}` },
+      ...(l ? [{ kind: 'note' as const, text: `File size: ${l.size !== undefined ? `${Math.round(l.size / 1024)} KB` : 'unknown'} · modified ${when(l.mtime)}` }] : []),
+      { kind: 'note', text: `Pixels: ${n.w} × ${n.h} · effective PPI ${ppi(sc)} × ${ppi(sy)}` },
+      { kind: 'note', text: `Placed at ${Math.round(n.xf[4])}, ${Math.round(n.xf[5])} pt · scale ${Math.round(sc * 1000) / 10}% × ${Math.round(sy * 1000) / 10}% · angle ${Math.round((Math.atan2(n.xf[1], n.xf[0]) * 1800) / Math.PI) / 10}°` },
+    ], { ok: 'Close' });
+  }
+
+  async function linkTool(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }> {
+    const act = String(a.action ?? 'list'), p = engine.current;
+    if (!p) return { ok: false, text: 'Open a document first.' };
+    const node = typeof a.id === 'string' ? (findNode(p.doc, a.id) as ImageNode | null) : pickedImage();
+    if (act === 'list') {
+      await links.check();
+      const list = links.images().map((n) => ({ id: n.id, name: n.linked?.name ?? n.name ?? n.src, state: links.state(n), path: n.linked?.path ?? null, pixels: `${n.w}x${n.h}` }));
+      return { ok: true, text: list.map((x) => `${x.id}: ${x.name} (${x.state}${x.path ? `, ${x.path}` : ''})`).join('\n') || 'No placed images.', data: { links: list } };
+    }
+    if (act === 'relink_folder') {
+      if (typeof a.folder !== 'string' || !caps) return { ok: false, text: 'Pass folder: an absolute folder path (the engine service reads it).' };
+      const list = await api.listFolder(a.folder, IMAGE_KINDS), byName = new Map(list.files.map((f) => [f.name.toLowerCase(), f.path]));
+      const miss = [...new Map(links.images().filter((n) => n.linked && links.state(n) === 'missing').map((n) => [linkKey(n.linked as NonNullable<ImageNode['linked']>), n])).values()];
+      let done = 0;
+      engine.beginStep();
+      try { for (const n of miss) { const path = byName.get((n.linked?.name ?? '').toLowerCase()); if (path && await linkFileTo(sameLink(n), await links.readPath(path), 'Relink Missing Links')) done++; } } finally { engine.endStep(); }
+      return { ok: true, text: `Relinked ${done} of ${miss.length} missing links from ${list.folder}.`, data: { relinked: done, missing: miss.length } };
+    }
+    if (act === 'update' && a.all === true) { const n = await updateLinks(links.images().filter((x) => links.state(x) === 'modified')); return { ok: true, text: `Updated ${n} modified links.` }; }
+    if (!node || node.kind !== 'image') return { ok: false, text: 'Pass id: a placed image (see links with action list).' };
+    if (act === 'relink') {
+      if (typeof a.path !== 'string' || !caps) return { ok: false, text: 'Pass path: the absolute path of the new image file.' };
+      const ids = a.all === true ? sameLink(node) : [node.id];
+      const ok = await linkFileTo(ids, await links.readPath(a.path), a.all === true ? 'Relink All Instances' : 'Relink');
+      return { ok, text: ok ? `Linked ${ids.length} ${ids.length === 1 ? 'image' : 'images'} to ${a.path}.` : 'Nothing changed.' };
+    }
+    if (act === 'update') { const n = await updateLinks([node]); return { ok: n > 0, text: n ? 'Updated the link from its file.' : 'Could not read the linked file.' }; }
+    if (act === 'embed') { const n = embedLinks(sameLink(node).map((id) => findNode(p.doc, id) as ImageNode)); return { ok: n > 0, text: n ? `Embedded ${n} ${n === 1 ? 'image' : 'images'}.` : 'The image is already embedded.' }; }
+    if (act === 'unembed') { const ok = await unembed(node); return { ok, text: ok ? `Wrote the image next to the project and linked it (${(findNode(engine.current?.doc as Doc, node.id) as ImageNode | null)?.linked?.path ?? ''}).` : 'Could not unembed the image.' }; }
+    return { ok: false, text: 'action is list, relink, relink_folder, update, embed or unembed.' };
   }
 
   async function projectZip(): Promise<Blob | null> {
@@ -479,23 +640,41 @@ export function startApp(): void {
     return engine.task(() => engine.createOutlines(async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n); }, ids));
   }
 
-  const traceRuns = new Map<string, number>();
+  const traceRuns = new Map<string, AbortController>();
   async function trace(id: string, a: Record<string, unknown>): Promise<string | null> {
     const p = engine.current, n = p ? findNode(p.doc, id) : null;
-    const live = n?.kind === 'group' && n.trace ? n : null, src = n?.kind === 'image' ? n : live?.trace?.src ?? null;
+    let live = n?.kind === 'group' && n.trace ? n : null;
+    const src = n?.kind === 'image' ? n : live?.trace?.src ?? null;
     if (!p || !n || !src) return null;
     const blob = p.assets.get(src.src);
     if (!blob) return null;
-    const run = (traceRuns.get(id) ?? 0) + 1;
-    traceRuns.set(id, run);
     const o = traceOptions(live?.trace?.opts as Partial<TraceOpts> | undefined ?? {}, a);
-    const g = await engine.task(() => traceImage(blob, src.xf, { w: src.w, h: src.h }, o));
-    if (traceRuns.get(id) !== run) return null;
-    if (!g || g.kind !== 'group') return null;
+    const library = p.doc.swatches.flatMap((s) => (s.paint.type === 'color' && !s.name.startsWith('[') ? [toRgb(s.paint.color)] : [])).map((c) => [c.r, c.g, c.b] as [number, number, number]);
+    if (o.palette === 'library' && !library.length) { toast('The document has no colour swatches for the Document Library palette.', 'error'); return null; }
     const view = TRACE_VIEWS.some(([v]) => v === a.view) ? a.view as TraceView : live?.trace?.view ?? 'result';
-    const info = { src, opts: { ...o }, view };
-    const next: VNode = live ? { ...live, children: g.children, trace: info } : { ...g, name: 'Image Tracing', trace: info };
-    engine.edit(live ? 'Image Trace Options' : 'Image Trace', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => next), select: [next.id] } : d), { merge: !!live });
+    const placeholder = !live;
+    if (!live) {
+      const ph: VNode = { id: newId('g'), kind: 'group', name: 'Image Tracing', clip: false, children: [{ ...src, id: newId('im') }], opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, trace: { src, opts: { ...o }, view } };
+      if (!engine.edit('Image Trace', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => ph), select: [ph.id] } : d))) return null;
+      live = ph as typeof live & object;
+      id = ph.id;
+    }
+    traceRuns.get(id)?.abort();
+    const ctl = new AbortController();
+    traceRuns.set(id, ctl);
+    const revert = (): void => { if (placeholder) engine.edit('Image Trace', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => src), select: [src.id] } : d), { merge: true }); };
+    let res: TraceRun;
+    try { res = await engine.task(() => traceImage(blob, src.xf, { w: src.w, h: src.h }, o, library, ctl.signal)); }
+    catch (err) { if (err instanceof DOMException && err.name === 'AbortError') return null; traceRuns.delete(id); revert(); throw err; }
+    if (traceRuns.get(id) !== ctl) return null;
+    traceRuns.delete(id);
+    const g = res.node;
+    if (!g || g.kind !== 'group') { revert(); return null; }
+    const cur = findNode(engine.current?.doc as Doc, id);
+    if (!cur || cur.kind !== 'group' || !cur.trace) return null;
+    const info = { src, opts: { ...o, traced: `${res.w}x${res.h}`, found: res.colors }, view: TRACE_VIEWS.some(([v]) => v === a.view) ? view : cur.trace.view };
+    const next: VNode = { ...cur, children: g.children, trace: info };
+    engine.edit(placeholder ? 'Image Trace' : 'Image Trace Options', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => next), select: [next.id] } : d), { merge: true });
     if (a.expand === true) engine.expandTrace([next.id]);
     return next.id;
   }
@@ -542,12 +721,14 @@ export function startApp(): void {
   placeInput.addEventListener('change', () => { const fs = Array.from(placeInput.files ?? []); placeInput.value = ''; void engine.task(async () => { for (const f of fs) { try { await placeFile(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } }); });
 
   const agents = new AgentBridge(engine, {
-    userLibraries: () => ({ swatches: userSwatchLibraries(), brushes: userBrushLibraries() }),
+    userLibraries: () => ({ swatches: userSwatchLibraries(), brushes: userBrushLibraries(), symbols: userSymbolLibraries() }),
     ask: (title, text) => agentConfirm.ask(title, text),
     note: (t) => status.setEngine(t),
     allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpth:agents', { detail: true })); },
     openFile: (f) => openFiles([f]),
     placeFile,
+    placeLinked: async (path, at, width) => placeLinked(await links.readPath(path), at, width),
+    links: (a) => linkTool(a),
     projectBlob: projectZip,
     exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' }); },
     image: async (scope, artboard, maxSize, outline) => {
@@ -701,7 +882,7 @@ export function startApp(): void {
 
   const libInput = el<HTMLInputElement>('<input type="file" accept=".ase,.fpth" hidden>');
   document.body.appendChild(libInput);
-  let libKind: 'swatch' | 'brush' = 'swatch';
+  let libKind: 'swatch' | 'brush' | 'symbol' = 'swatch';
   libInput.addEventListener('change', () => { const f = libInput.files?.[0]; libInput.value = ''; if (f) void openLibraryFile(f, libKind); });
 
   async function libraryDoc(f: File): Promise<Doc> {
@@ -711,9 +892,16 @@ export function startApp(): void {
     return docFromManifest(JSON.parse(new TextDecoder().decode(files.get(mk))) as Record<string, unknown>);
   }
 
-  async function openLibraryFile(f: File, kind: 'swatch' | 'brush'): Promise<void> {
+  async function openLibraryFile(f: File, kind: 'swatch' | 'brush' | 'symbol'): Promise<void> {
     try {
       const name = f.name.replace(/\.(ase|fpth)$/i, '');
+      if (kind === 'symbol') {
+        if (!/\.fpth$/i.test(f.name)) throw new Error('Symbol libraries are formpth projects (.fpth).');
+        const d = await libraryDoc(f);
+        if (!d.symbols.length) throw new Error(`${f.name} holds no symbols.`);
+        showSymbolLib(symbolLibraryFromDoc(d, name, `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`));
+        return;
+      }
       if (kind === 'brush') {
         if (!/\.fpth$/i.test(f.name)) throw new Error('Brush libraries are formpth projects (.fpth).');
         const d = await libraryDoc(f);
@@ -729,6 +917,37 @@ export function startApp(): void {
 
   function showSwatchLib(lib: SwatchLibrary): void { showPanel('swatch-library'); swatchLibP.show(lib); }
   function showBrushLib(lib: BrushLibrary): void { showPanel('brush-library'); brushLibP.show(lib); }
+  function showSymbolLib(lib: SymbolLibrary): void { showPanel('symbol-library'); symbolLibP.show(lib); }
+
+  async function saveSymbolLibrary(): Promise<void> {
+    const p = engine.current;
+    if (!p || !p.doc.symbols.length) { toast('The document has no symbols to save.', 'error'); return; }
+    const v = await askForm('Save Symbols', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Symbols` }, { kind: 'note', text: 'Saves the document’s symbols as a formpth project to open later with Open Symbol Library; it also appears under User Defined.' }], { ok: 'Save' });
+    if (!v) return;
+    const name = String(v.name).trim() || 'Symbols';
+    keepUserSymbolLibrary(symbolLibraryFromDoc(p.doc, name));
+    await deliver(await libraryProject(name, { symbols: p.doc.symbols }), `${name}.fpth`);
+  }
+  function symbolLibItems(): MenuItem[] {
+    const users = userSymbolLibraries();
+    return [...SYMBOL_LIBRARIES.map((l) => `sym-lib-${l.id}`), '-', { label: 'User Defined', items: users.length ? users.slice(0, 12).map((_, i) => `sym-user-${i}`) : ['sym-user-none'] }, '-', 'sym-lib-other', 'sym-lib-save'];
+  }
+  async function symbolOptions(make: boolean): Promise<void> {
+    const s = make ? null : engine.symbolDef();
+    if (!make && !s) { toast('Pick a symbol in the Symbols panel first.'); return; }
+    if (make && !engine.hasSelection) { toast('Select artwork to turn into a symbol.'); return; }
+    const v = await askForm(make ? 'New Symbol' : 'Symbol Options', [
+      { kind: 'text', key: 'name', label: 'Name', value: s?.name ?? `Symbol ${(engine.doc?.symbols.length ?? 0) + 1}` },
+      { kind: 'select', key: 'type', label: 'Symbol Type', value: s ? s.type ?? 'static' : 'dynamic', choices: [['dynamic', 'Dynamic Symbol'], ['static', 'Static Symbol']] },
+      ...(make ? [{ kind: 'select' as const, key: 'reg', label: 'Registration', value: 'c', choices: SYMBOL_REGISTRATIONS }] : []),
+      { kind: 'check', key: 'slice', label: 'Enable Guides for 9-Slice Scaling', value: !!s?.slice },
+      { kind: 'note', text: 'A dynamic symbol lets each instance keep its own fill, stroke and opacity on parts picked with the Direct Selection tool. 9-slice scaling keeps the corners of a scaled instance; drag the guides in symbol editing mode.' },
+    ], { ok: make ? 'Make Symbol' : 'OK' });
+    if (!v) return;
+    const type = v.type === 'static' ? 'static' as const : 'dynamic' as const;
+    if (make) engine.makeSymbol(String(v.name), undefined, { type, reg: String(v.reg) as SymbolRegistration, slice: !!v.slice });
+    else if (s) engine.setSymbolOptions(s.id, { name: String(v.name), type, slice: !!v.slice });
+  }
 
   async function libraryProject(name: string, part: Partial<Doc>): Promise<Blob> {
     const d: Doc = { ...blankDoc(612, 792, { title: name }), ...part };
@@ -963,7 +1182,18 @@ export function startApp(): void {
     { id: 'graph-size', label: 'Graph Size...', enabled: has, run: () => void graphSizeDialog(engine, pendingGraph.type, pendingGraph.at).then((id) => { if (id) graphData.open(id); }) },
     { id: 'trace-expand', label: 'Expand Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.expandTrace() },
     { id: 'trace-release', label: 'Release Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.releaseTrace() },
-    { id: 'embed-image', label: 'Embed Image', enabled: () => kindSel('image'), run: () => engine.applyToSelection('Embed Image', (n) => (n.kind === 'image' ? { ...n, link: undefined } : n)) },
+    { id: 'embed-image', label: 'Embed Image', enabled: () => engine.selected().some((n) => n.kind === 'image' && !!n.linked), run: () => { embedLinks(engine.selected().filter((n): n is ImageNode => n.kind === 'image')); } },
+    { id: 'place-linked', label: 'Place Linked...', enabled: has, run: () => void (async () => { if (!canLink()) { toast('This browser cannot keep links to files, so Place embeds the image instead.'); placeInput.click(); return; } await placeLinked(await chooseLinkFile('Place Linked')); })() },
+    { id: 'link-relink', label: 'Relink...', enabled: () => !!pickedImage(), run: () => void (async () => { const n = pickedImage(); if (!n) return; if (!canLink()) { relinkIds = [n.id]; relinkInput.click(); return; } const f = await chooseLinkFile('Relink'); if (f) await linkFileTo([n.id], f, 'Relink'); })() },
+    { id: 'link-relink-all', label: 'Relink All Instances...', enabled: () => !!pickedImage(), run: () => void (async () => { const n = pickedImage(); if (!n) return; const ids = sameLink(n); if (!canLink()) { relinkIds = ids; relinkInput.click(); return; } const f = await chooseLinkFile(`Relink ${ids.length} Instances`); if (f) await linkFileTo(ids, f, 'Relink All Instances'); })() },
+    { id: 'link-relink-folder', label: 'Relink Missing Links from Folder...', enabled: () => links.images().some((n) => links.state(n) === 'missing'), run: () => void relinkFolder() },
+    { id: 'link-update', label: 'Update Link', enabled: () => { const n = pickedImage(); return !!n && links.state(n) === 'modified'; }, run: () => void (async () => { const n = pickedImage(); if (n && !(await updateLinks(sameLink(n).map((id) => engine.nodeById(id) as ImageNode)))) toast('Could not read the linked file.', 'error'); })() },
+    { id: 'link-update-all', label: 'Update All Modified Links', enabled: () => links.images().some((n) => links.state(n) === 'modified'), run: () => void (async () => { const k = await updateLinks(links.images().filter((n) => links.state(n) === 'modified')); toast(`Updated ${k} ${k === 1 ? 'link' : 'links'}.`); })() },
+    { id: 'link-goto', label: 'Go To Link', enabled: () => !!pickedImage(), run: () => { const n = pickedImage(); if (n) { engine.select([n.id]); engine.fitSelection(); } } },
+    { id: 'link-embed', label: 'Embed Image', enabled: () => !!pickedImage()?.linked, run: () => { const n = pickedImage(); if (n) embedLinks(sameLink(n).map((id) => engine.nodeById(id) as ImageNode)); } },
+    { id: 'link-unembed', label: 'Unembed...', enabled: () => { const n = pickedImage(); return !!n && !n.linked; }, run: () => { const n = pickedImage(); if (n) void unembed(n); } },
+    { id: 'link-info', label: 'Link Info...', enabled: () => !!pickedImage(), run: () => { const n = pickedImage(); if (n) void linkInfo(n); } },
+    { id: 'link-previews', label: 'Save Previews of Linked Images', checked: () => engine.doc?.linkPreviews !== false, enabled: has, run: () => engine.setLinkPreviews(engine.doc?.linkPreviews === false) },
     { id: 'make-clip', label: 'Make Clipping Mask', keys: ['Mod+7'], enabled: many, run: () => engine.makeClip() },
     { id: 'release-clip', label: 'Release Clipping Mask', keys: ['Alt+Mod+7'], enabled: () => engine.selected().some((n) => n.kind === 'group' && n.clip), run: () => engine.releaseClip() },
     { id: 'compound-make', label: 'Make Compound Path', keys: ['Mod+8'], enabled: sel, run: () => engine.makeCompound() },
@@ -981,8 +1211,22 @@ export function startApp(): void {
     { id: 'artboard-options', label: 'Artboard Options...', enabled: has, run: () => { const p = engine.current; if (p) void artboardsP.options(p.activeArtboard); } },
     { id: 'collect-layer', label: 'Collect in New Layer', enabled: sel, run: () => engine.collectInNewLayer() },
     { id: 'new-layer', label: 'New Layer', keys: ['Mod+L'], enabled: has, run: () => engine.addLayer(undefined, { above: engine.activeLayer || undefined }) },
-    { id: 'new-symbol', label: 'New Symbol...', keys: ['F8'], enabled: sel, run: () => void askForm('Symbol Options', [{ kind: 'text', key: 'name', label: 'Name', value: `Symbol ${(engine.doc?.symbols.length ?? 0) + 1}` }]).then((v) => { if (v) engine.makeSymbol(String(v.name)); }) },
+    { id: 'new-symbol', label: 'New Symbol...', keys: ['F8'], enabled: () => sel() && !engine.symbolSession, run: () => void symbolOptions(true) },
     { id: 'break-symbol', label: 'Break Link to Symbol', enabled: () => kindSel('symbol'), run: () => engine.breakSymbolLink() },
+    { id: 'symbol-edit', label: 'Edit Symbol', enabled: () => !!engine.symbolDef() || kindSel('symbol'), run: () => { const inst = engine.selectedInstances()[0]; engine.enterSymbolEdit(inst?.symbol ?? engine.currentSymbol, inst?.id); } },
+    { id: 'symbol-exit', label: 'Exit Symbol Editing Mode', enabled: () => !!engine.symbolSession, run: () => engine.exitSymbolEdit(true) },
+    { id: 'symbol-cancel', label: 'Cancel Symbol Editing', enabled: () => !!engine.symbolSession, run: () => engine.exitSymbolEdit(false) },
+    { id: 'symbol-duplicate', label: 'Duplicate Symbol', enabled: () => !!engine.symbolDef(), run: () => engine.duplicateSymbol() },
+    { id: 'symbol-redefine', label: 'Redefine Symbol', enabled: () => !!engine.symbolDef() && sel() && !engine.symbolSession, run: () => engine.redefineSymbol() },
+    { id: 'symbol-replace', label: 'Replace Symbol', enabled: () => !!engine.symbolDef() && kindSel('symbol'), run: () => { const id = engine.currentSymbol; if (id) engine.replaceSymbol(id); } },
+    { id: 'symbol-reset', label: 'Reset Symbol Overrides', enabled: () => engine.selectedInstances().some((n) => !!n.parts), run: () => engine.resetSymbolParts() },
+    { id: 'symbol-options', label: 'Symbol Options...', enabled: () => !!engine.symbolDef(), run: () => void symbolOptions(false) },
+    { id: 'symbol-delete', label: 'Delete Symbol', enabled: () => !!engine.symbolDef() && !engine.symbolSession, run: () => { const s = engine.symbolDef(); if (!s) return; if (allNodes(engine.doc as Doc).some((n) => n.kind === 'symbol' && n.symbol === s.id)) { toast('The symbol is in use; break the links to its instances first.'); return; } engine.edit('Delete Symbol', (d) => ({ ...d, symbols: d.symbols.filter((x) => x.id !== s.id) })); engine.currentSymbol = null; } },
+    ...SYMBOL_LIBRARIES.map((l) => ({ id: `sym-lib-${l.id}`, label: l.name, run: () => showSymbolLib(l) })),
+    ...Array.from({ length: 12 }, (_, i) => ({ id: `sym-user-${i}`, label: () => userSymbolLibraries()[i]?.name ?? '', enabled: () => !!userSymbolLibraries()[i], run: () => { const l = userSymbolLibraries()[i]; if (l) showSymbolLib(l); } })),
+    { id: 'sym-user-none', label: 'No saved libraries yet', enabled: () => false, run: () => undefined },
+    { id: 'sym-lib-other', label: 'Open Symbol Library...', run: () => { libKind = 'symbol'; libInput.accept = '.fpth'; libInput.click(); } },
+    { id: 'sym-lib-save', label: 'Save Symbols...', enabled: () => !!engine.doc?.symbols.length, run: () => void saveSymbolLibrary() },
 
     { id: 'create-outlines', label: 'Create Outlines', keys: ['Shift+Mod+O'], enabled: () => kindSel('text'), run: () => void makeOutlines() },
     { id: 'edit-text', label: 'Edit Text', enabled: () => kindSel('text'), run: () => { const t = engine.selected().find((n) => n.kind === 'text'); if (t) { engine.setTool('type'); typing.begin({ id: t.id }); } } },
@@ -1116,7 +1360,7 @@ export function startApp(): void {
   }
 
   const menus: MenuDef[] = [
-    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
+    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
     { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'clear', '-', 'find-replace', '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'reset-bounding-box'] },
@@ -1131,6 +1375,7 @@ export function startApp(): void {
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'envelope-options', 'expand-object', '-', 'envelope-edit-contents', 'envelope-edit-envelope', '-', 'envelope-reset-warp', 'envelope-reset-mesh'] },
       { label: 'Perspective', items: ['persp-attach', 'persp-release', '-', 'persp-match-plane', 'persp-edit-text'] },
       { label: 'Image Trace', items: ['image-trace', 'image-trace-expand', '-', 'trace-release', 'trace-expand', '-', 'embed-image'] },
+      { label: 'Links', items: ['link-relink', 'link-relink-all', 'link-relink-folder', '-', 'link-update', 'link-update-all', '-', 'link-embed', 'link-unembed', 'link-info'] },
       { label: 'Live Paint', items: ['live-paint-make', 'live-paint-merge', 'live-paint-release', 'live-paint-gap', 'live-paint-expand'] },
       { label: 'Intertwine', items: ['intertwine-make', 'intertwine-release', 'intertwine-edit'] }, '-',
       { label: 'Graph', items: ['graph-type', 'graph-data', '-', 'graph-design', 'graph-column', 'graph-marker'] }, '-',
@@ -1138,14 +1383,14 @@ export function startApp(): void {
       { label: 'Clipping Mask', items: ['make-clip', 'release-clip'] },
       { label: 'Compound Path', items: ['compound-make', 'compound-release'] },
       { label: 'Opacity Mask', items: ['opacity-mask', 'release-opacity-mask', 'disable-opacity-mask', 'unlink-opacity-mask', '-', 'new-mask-clip', 'new-mask-invert'] },
-      { label: 'Symbol', items: ['new-symbol', 'break-symbol'] },
+      { label: 'Symbol', items: ['new-symbol', 'symbol-edit', 'symbol-exit', '-', 'symbol-redefine', 'symbol-duplicate', 'symbol-replace', 'symbol-reset', '-', 'break-symbol', 'symbol-options'] },
       { label: 'Artboards', items: ['artboards-from-selection', 'artboards-rearrange', 'artboard-fit-art', 'artboard-fit-selection', '-', 'artboard-options'] }] },
     { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: () => ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: () => ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);
@@ -1201,9 +1446,11 @@ export function startApp(): void {
       const iso = p?.isolation ? findNode(p.doc, p.isolation) : null;
       const pe = p?.patternEdit ?? null;
       setHidden(isoBar, !iso);
-      setHidden(q(isoBar, '.cv-iso-exit'), !!pe);
+      const se = p?.symbolEdit ?? null;
+      setHidden(q(isoBar, '.cv-iso-exit'), !!pe || !!se);
       setHidden(q(isoBar, '.cv-iso-pattern'), !pe);
-      if (iso) setText(q(isoBar, '.cv-isolation-label'), pe ? `Pattern Editing Mode: ${pe.name}` : `Isolation Mode: ${nodeLabel(iso)}`);
+      setHidden(q(isoBar, '.cv-iso-symbol'), !se);
+      if (iso) setText(q(isoBar, '.cv-isolation-label'), pe ? `Pattern Editing Mode: ${pe.name}` : se ? `Symbol Editing Mode: ${p?.doc.symbols.find((s) => s.id === se.symbol)?.name ?? ''}` : `Isolation Mode: ${nodeLabel(iso)}`);
       root.classList.toggle('is-isolated', !!iso);
     });
   };

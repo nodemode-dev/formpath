@@ -31,6 +31,7 @@
 .cv-3dp-kind button { flex: 1 1 0; }
 .cv-3dp .cv-kit-slider { grid-template-columns: 78px minmax(0, 1fr) 70px; }
 .cv-tracep [hidden] { display: none; }
+.cv-tracep .cv-patp-status { min-height: calc(11px * 1.4 * 4); }
 .cv-stage:has(> .cv-ruler-h:not([hidden])) > .cv-isolation { top: calc(18px + var(--space-2)); }
 .cv-app.is-isolated .cv-doc-tabs { box-shadow: inset 0 -2px 0 var(--accent-line); }
 
@@ -260,6 +261,11 @@
 .cv-stylesp-tile.is-linked { border-color: var(--accent-color); box-shadow: inset 0 0 0 1px var(--accent-color); }
 .cv-stylesp > .cv-props-field { margin-bottom: 2px; }
 .cv-stylesp-tile canvas, .cv-symp-tile canvas { display: block; width: 100%; height: 100%; }
+.cv-symp-tile { position: relative; }
+.cv-symp-tile canvas { background: var(--cv-artboard); border-radius: 5px; }
+.cv-symp-badge { position: absolute; right: 4px; bottom: 4px; width: 6px; height: 6px; border-radius: 50%; }
+.cv-symp-tile.is-dynamic .cv-symp-badge { background: var(--accent-color); }
+.cv-symp-note { min-height: 2.8em; margin: var(--space-1) 0 0; }
 .cv-assetp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: var(--space-1); max-height: 280px; overflow-y: auto; padding: 1px; }
 .cv-assetp-grid[hidden] { display: none; }
 .cv-assetp-tile { display: grid; grid-template-rows: 1fr auto; gap: 2px; padding: 4px; border: 1px solid var(--line-1); border-radius: 8px; background: var(--surface-2); color: var(--text-secondary); font-size: 11px; cursor: pointer; }
@@ -280,11 +286,24 @@
 .cv-abp-size { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 .cv-abp-opts { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .cv-abp-opts:hover { background: var(--surface-raised); color: var(--text-primary); }
-.cv-linkp-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 6px; color: var(--text-secondary); font-size: 12.5px; cursor: default; }
+.cv-linkp-row { display: grid; grid-template-columns: 16px 16px minmax(0, 1fr) auto; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 6px; color: var(--text-secondary); font-size: 12.5px; cursor: default; }
 .cv-linkp-row:hover { background: var(--bg-hover); }
 .cv-linkp-row.is-active { background: var(--accent-wash); color: var(--text-primary); }
 .cv-linkp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cv-linkp-state { color: var(--text-muted); font-size: 11px; }
+.cv-linkp-state { min-width: 64px; color: var(--text-muted); font-size: 11px; text-align: right; }
+.cv-linkp-flag { display: grid; place-items: center; width: 16px; height: 16px; color: var(--text-muted); }
+.cv-linkp-row.is-modified .cv-linkp-state, .cv-linkp-row.is-modified .cv-linkp-flag { color: var(--accent-color); }
+.cv-linkp-row.is-missing .cv-linkp-state, .cv-linkp-row.is-missing .cv-linkp-flag { color: var(--danger-soft); }
+.cv-linkp-note { min-height: 2.8em; margin: var(--space-1) 0 0; }
+.cv-fpd-head { display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2); }
+.cv-fpd-folder { flex: 1 1 auto; }
+.cv-fpd-list { display: flex; flex-direction: column; gap: 1px; height: 240px; overflow-y: auto; margin-bottom: var(--space-2); padding: 2px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--bg-input); }
+.cv-fpd-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 26px; padding: 0 8px; border-radius: 5px; color: var(--text-secondary); font-size: 12.5px; cursor: default; }
+.cv-fpd-row:hover { background: var(--bg-hover); }
+.cv-fpd-row.is-active { background: var(--accent-wash); color: var(--text-primary); }
+.cv-fpd-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-fpd-size { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cv-fpd-note { min-height: 1.4em; margin: var(--space-1) 0 0; }
 .cv-abp + .cv-panel-foot, .cv-linkp .cv-panel-foot, .cv-symp .cv-panel-foot, .cv-stylesp .cv-panel-foot, .cv-abp .cv-panel-foot, .cv-actp .cv-panel-foot, .cv-brushp .cv-panel-foot { margin: 0 -10px -8px; }
 
 .cv-nav-pct { align-self: flex-end; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
