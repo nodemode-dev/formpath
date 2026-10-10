@@ -29,7 +29,7 @@ GROUPS = [
     ("Selecting", {"select", "select_same", "select_similar"}),
     ("Drawing", {"draw_path", "draw_shape", "edit_shape", "add_text", "edit_anchors"}),
     ("Paint and appearance", {"set_paint", "set_stroke", "set_appearance", "add_swatch", "color_harmony", "graphic_style"}),
-    ("Objects and layers", {"set_object", "arrange", "group", "compound_path", "attributes", "clipping_mask", "delete_objects", "duplicate_objects", "add_layer", "set_layer", "delete_layer", "move_to_layer"}),
+    ("Objects and layers", {"set_object", "arrange", "group", "compound_path", "attributes", "clipping_mask", "opacity_mask", "delete_objects", "duplicate_objects", "add_layer", "set_layer", "delete_layer", "move_to_layer"}),
     ("Transform and align", {"transform", "align"}),
     ("Path operations", {"pathfinder", "path_operation", "shape_builder"}),
     ("Effects and live objects", {"apply_effect", "three_d", "expand", "make_blend", "envelope", "repeat", "symbol", "symbolism", "apply_brush", "image_trace", "live_paint", "gradient_mesh", "make_pattern", "edit_pattern", "recolor"}),

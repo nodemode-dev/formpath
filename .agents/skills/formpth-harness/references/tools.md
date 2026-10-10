@@ -9,7 +9,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Selecting: `select`, `select_same`, `select_similar`
 - Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`
 - Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `color_harmony`, `graphic_style`
-- Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
+- Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `opacity_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
 - Transform and align: `transform`, `align`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
@@ -248,7 +248,7 @@ Sets the fill and or stroke of the objects (their first fill and first stroke): 
 
 ## set_stroke
 
-Sets stroke attributes of the objects' first stroke: weight, caps, joins, miter limit, alignment, dashes, arrowheads and width profile.
+Sets stroke attributes of the objects' first stroke: weight, caps, joins, miter limit, alignment, dashes, arrowheads, width profile and how a gradient runs on it.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `width`: number
@@ -263,6 +263,7 @@ Sets stroke attributes of the objects' first stroke: weight, caps, joins, miter 
 - `end_arrow`: string
 - `arrow_scale`: number
 - `profile`: string (uniform | lens | taper_start | taper_end | taper_both | pinch | teardrop | wave)
+- `gradient_mode`: string (within | along | across); For a linear or radial gradient stroke (set it with set_paint first): within paints the gradient over the object's box, along runs it from the path's start to its end following every curve and corner, across runs it from one edge of the stroke to the other.
 
 ## set_appearance
 
@@ -308,7 +309,7 @@ Graphic styles: create one from an object's appearance (the object stays linked 
 
 ## set_object
 
-Changes objects' names, visibility, lock, opacity or blend mode.
+Changes objects' names, visibility, lock, opacity or blend mode, and the Transparency panel's group options: isolate blending, knockout group and whether opacity and mask define the knockout shape.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `name`: string
@@ -316,6 +317,9 @@ Changes objects' names, visibility, lock, opacity or blend mode.
 - `locked`: boolean
 - `opacity`: number
 - `blend_mode`: string (normal | darken | multiply | color_burn | lighten | screen | color_dodge | overlay | soft_light | hard_light | difference | exclusion | hue | saturation | color | luminosity)
+- `isolate`: boolean; Isolate Blending: blend modes inside the group blend only with the group's own objects.
+- `knockout`: string (on | off | inherit); Knockout Group: on makes each object in the group composite against what is under the group instead of against the objects below it in the group, so a see-through object hides them where it overlaps; inherit takes the setting of the enclosing group.
+- `knockout_shape`: boolean; Opacity and Mask Define Knockout Shape, set on an object inside a knockout group: it knocks out only as much as it is opaque, so a 50 percent object leaves half of what is under it.
 
 ## arrange
 
@@ -354,6 +358,17 @@ Clips the objects with the topmost one among them, or releases clipping groups.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `action`: string (make | release); default "make"
+
+## opacity_mask
+
+Opacity masks, as in the Transparency panel: make uses the topmost of the objects as the mask of the others (light areas show, dark areas hide), release puts the mask art back as an ordinary object, options changes a mask's clip, invert, disabled and linked settings. New masks take clip and invert from the arguments, else from the New Opacity Masks Are Clipping and Inverted settings.
+
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `action`: string (make | release | options); default "make"
+- `clip`: boolean; Hide the art outside the mask object.
+- `invert`: boolean; Swap light and dark in the mask.
+- `disabled`: boolean; Turn the mask off without removing it.
+- `linked`: boolean; The mask moves, scales and rotates with the art; false leaves it in place.
 
 ## delete_objects
 

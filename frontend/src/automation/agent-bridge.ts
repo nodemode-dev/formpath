@@ -1,5 +1,5 @@
 import { geomBounds, selectionBounds, visualBounds } from '../engine/bounds';
-import { findNode, nodeLabel, updateNodes } from '../engine/doc';
+import { findNode, inDocOrder, nodeLabel, updateNodes } from '../engine/doc';
 import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES } from '../engine/effects';
 import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
 import { ROTATION_PRESETS } from '../engine/threed';
@@ -335,6 +335,11 @@ export class AgentBridge {
           if (has('arrow_scale')) patch.arrowScale = [num('arrow_scale', 100), num('arrow_scale', 100)];
           if (Object.keys(patch).length) e.setStroke(patch, ids);
           if (has('profile')) { if (!WIDTH_PROFILES[str('profile')]) return fail(`profile must be one of ${Object.keys(WIDTH_PROFILES).join(', ')}.`); e.setWidthProfile(str('profile'), ids); }
+          if (has('gradient_mode')) {
+            const m = str('gradient_mode');
+            if (m !== 'within' && m !== 'along' && m !== 'across') return fail('gradient_mode is within, along or across.');
+            if (!e.setStrokeGradientMode(m, ids)) return fail('None of these objects has a linear or radial gradient stroke: give them one with set_paint (stroke: {type: linear, stops: [...]}) first.');
+          }
           return text('Set the stroke.');
         }
         case 'set_appearance': {
@@ -378,8 +383,28 @@ export class AgentBridge {
         }
         case 'set_object': {
           const ids = this.ids(a);
-          e.setObjectProps({ ...(has('name') ? { name: str('name') } : {}), ...(has('visible') ? { hidden: a.visible !== true } : {}), ...(has('locked') ? { locked: a.locked === true } : {}), ...(has('opacity') ? { opacity: Math.max(0, Math.min(1, num('opacity', 1) > 1 ? num('opacity', 100) / 100 : num('opacity', 1))) } : {}), ...(has('blend_mode') ? { blend: str('blend_mode') as BlendMode } : {}) }, ids);
-          return text('Updated the objects.');
+          const ko = has('knockout') ? str('knockout') : null;
+          if (ko !== null && ko !== 'on' && ko !== 'off' && ko !== 'inherit') return fail('knockout is on, off or inherit.');
+          e.setObjectProps({ ...(has('name') ? { name: str('name') } : {}), ...(has('visible') ? { hidden: a.visible !== true } : {}), ...(has('locked') ? { locked: a.locked === true } : {}), ...(has('opacity') ? { opacity: Math.max(0, Math.min(1, num('opacity', 1) > 1 ? num('opacity', 100) / 100 : num('opacity', 1))) } : {}), ...(has('blend_mode') ? { blend: str('blend_mode') as BlendMode } : {}), ...(has('isolate') ? { isolate: a.isolate === true } : {}), ...(ko ? { knockout: ko === 'inherit' ? 'inherit' as const : ko === 'on' } : {}), ...(has('knockout_shape') ? { knockoutShape: a.knockout_shape === true } : {}) }, ids);
+          const groups = (ids ?? e.targetIds()).filter((id) => { const k = this.node(id).kind; return k === 'group' || k === 'layer'; }).length;
+          return text(ko && !groups ? 'Updated the objects. Knockout takes effect on groups and layers: group the overlapping objects and set knockout on the group.' : 'Updated the objects.');
+        }
+        case 'opacity_mask': {
+          const ids = this.ids(a), act = str('action', 'make');
+          const patch = { ...(has('clip') ? { clip: a.clip === true } : {}), ...(has('invert') ? { invert: a.invert === true } : {}), ...(has('disabled') ? { disabled: a.disabled === true } : {}), ...(has('linked') ? { linked: a.linked === true } : {}) };
+          if (act === 'make') {
+            if (!e.makeOpacityMask(ids ? inDocOrder(p.doc, ids) : undefined)) return fail('Pass two or more objects (or select them): the topmost becomes the mask of the others.');
+            const id = e.selectedIds()[0];
+            if (Object.keys(patch).length) e.setOpacityMask(patch, [id]);
+            return text(`Made the opacity mask on ${id}.`, { id });
+          }
+          if (act === 'release') return e.releaseOpacityMask(ids) ? text('Released: the mask art is an ordinary object again.', { selection: e.selectedIds() }) : fail('None of these objects has an opacity mask.');
+          if (act !== 'options') return fail('action is make, release or options.');
+          const t = (ids ?? e.targetIds()).filter((id) => !!this.node(id).mask);
+          if (!t.length) return fail('None of these objects has an opacity mask: make one with action make.');
+          if (Object.keys(patch).length) e.setOpacityMask(patch, t);
+          const list = t.map((id) => { const m = this.node(id).mask!; return { id, clip: m.clip, invert: m.invert, disabled: m.disabled, linked: m.linked }; });
+          return text(list.map((m) => `${m.id}: clip ${m.clip}, invert ${m.invert}, disabled ${m.disabled}, linked ${m.linked}`).join('\n'), { masks: list });
         }
         case 'arrange': { e.arrange(str('order') as 'bring_to_front', this.ids(a)); return text('Rearranged.'); }
         case 'group': { const ok = str('action', 'group') === 'ungroup' ? e.ungroup(this.ids(a)) : e.group(this.ids(a)); return ok ? text(str('action', 'group') === 'ungroup' ? 'Ungrouped.' : `Grouped (id ${e.selectedIds()[0]}).`, { selection: e.selectedIds(), ...(str('action', 'group') === 'ungroup' ? {} : { id: e.selectedIds()[0] }) }) : fail('Nothing changed: check the ids.'); }
