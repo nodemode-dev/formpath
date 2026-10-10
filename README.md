@@ -11,9 +11,9 @@
 
 ## What it is
 
-formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, type that outlines to paths, symbols and the symbolism tools, blends, repeats, Live Paint, gradient meshes, pattern editing and live image trace. It saves its own `.fpth` projects, reads and writes SVG and PDF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 75 tools.
+formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, type that outlines to paths, symbols and the symbolism tools, blends, repeats, Live Paint, gradient meshes, pattern editing and live image trace. It saves its own `.fpth` projects, reads and writes SVG and PDF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 76 tools.
 
-**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 30,700 lines of TypeScript, 1,700 of CSS, 2,300 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
+**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 31,800 lines of TypeScript, 1,700 of CSS, 2,300 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
 
 ## Highlights
 
@@ -24,7 +24,7 @@ formpth is the vector member of the form family: an Illustrator alternative with
 - **Appearance and effects.** Multiple fills and strokes per object, Graphic Styles, and live effects: fifteen warps, Distort and Transform, Drop Shadow, glows, Feather, Round Corners, Scribble, Offset Path, Rasterize, and the Effect Gallery's 56 Photoshop effects from Watercolor to Stained Glass, all live. 3D Extrude & Bevel, Revolve, Inflate and Plane with materials, lighting, Map Art and shadows, on shapes, type and groups. Envelopes, blends, repeats, symbols with the seven symbolism tools, four brush kinds made from your own art, and Image Trace as a live object with five views.
 - **Type.** Point, area, vertical and on-path type typed on the canvas, area type inside any shape, threaded frames and text wrap, Character and Paragraph panels with OpenType features shaped from the font's own lookups (contextual alternates included), Character and Paragraph Styles, Glyphs with each character's alternates, Change Case, Find and Replace, Find Font, and Create Outlines through real glyph outlines.
 - **Files.** `.fpth` projects with a library, conflict copies and crash recovery; SVG in and out with exact round trips; PDF out with real vectors, shadings, transparency and CMYK, and in from any PDF or PDF-compatible `.ai` with one artboard per page; PNG, JPEG and WebP; Export for Screens and the Asset Export panel; placed and linked images.
-- **Agents.** `./formpth mcp` gives Claude Code, Codex and Cursor 75 tools, from `get_image` to `pathfinder` to `run_command` over every menu command. The window asks the person once. The `formpth-harness` skill pack teaches agents to look, plan, build, check and deliver.
+- **Agents.** `./formpth mcp` gives Claude Code, Codex and Cursor 76 tools, from `get_image` to `pathfinder` to `run_command` over every menu command. The window asks the person once. The `formpth-harness` skill pack teaches agents to look, plan, build, check and deliver.
 - **The assistant and plugins.** Window > Assistant edits through the same tools on the language model you choose; sandboxed JavaScript plugins add commands.
 - **Zero-flash UI.** Keyed DOM patching, guarded writes, a pre-paint theme boot, reveal after fonts; every interface change is checked in a throttled browser.
 
@@ -115,7 +115,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 65 of 76 rows against Illustrator 30 (59 Full, 12 Partial, 5 None), 85.5 percent. Not built yet: the Perspective Grid, EPS and DXF, and three generative rows. See `docs/PARITY.md`.
+- **Parity.** 66 of 76 rows against Illustrator 30 (60 Full, 12 Partial, 4 None), 86.8 percent. Not built yet: EPS and DXF, and three generative rows. See `docs/PARITY.md`.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors
