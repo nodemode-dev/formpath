@@ -223,6 +223,7 @@ Adds type: point type at x, y (the first baseline), area type filling a width by
 - `tracking`: number; In thousandths of an em.
 - `name`: string
 - `layer`: string
+- `orientation`: string (horizontal | vertical); default "horizontal"; vertical sets characters top to bottom in columns that advance right to left; CJK stands upright and Latin turns 90 degrees clockwise. For vertical point type, x, y is the top of the first column's centre line.
 
 ## edit_anchors
 
@@ -715,7 +716,7 @@ Artboards: add one, change one (name, x, y, width, height), delete one, fit one 
 
 ## set_text
 
-Changes a type object: its words, and its font, style, size, colour, leading, tracking, alignment, case and OpenType features, for all of it or the characters from start to end.
+Changes a type object: its words, and its font, style, size, colour, leading, tracking, alignment, case and OpenType features, for all of it or the characters from start to end; its orientation (horizontal or vertical); type on a path's effect, flip, alignment, spacing and start and end; and area type's rows, columns, gutters, inset and first baseline.
 
 - `id`: string; required; An object id from get_document.
 - `text`: string
@@ -730,6 +731,22 @@ Changes a type object: its words, and its font, style, size, colour, leading, tr
 - `end`: integer
 - `caps`: string (none | all | small)
 - `features`: array; OpenType feature tags to turn on, replacing the current list: liga, calt, dlig, frac, ordn, tnum, pnum, lnum, onum, zero, case, sups, subs, numr, dnom, swsh, salt, titl, smcp, ss01..ss20. Features the font lacks do nothing; find_font lists the fonts in use.
+- `orientation`: string (horizontal | vertical); Type Orientation: vertical sets columns right to left with CJK upright and Latin turned 90 degrees clockwise.
+- `upright_latin`: boolean; In vertical type, stand Latin letters and digits upright instead of turning them (for the characters from start to end, or all).
+- `path_effect`: string (rainbow | skew | ribbon | stair | gravity); Type on a path: rainbow (baselines tangent to the path), skew (glyphs stay vertical, sheared along the path), ribbon (3D Ribbon: horizontal edges stay horizontal, vertical edges perpendicular to the path), stair (Stair Step: upright glyphs, each baseline's left point on the path), gravity (each glyph's baseline centre on the path, turned toward the path's centre).
+- `path_flip`: boolean; Type on a path: put the type on the other side of the path, reading the other way.
+- `path_align`: string (baseline | ascender | descender | center); Type on a path: which line of the type sits on the path.
+- `path_spacing`: number; Type on a path: points of space removed between glyphs fanning out around tight curves. 0 leaves spacing as set.
+- `path_start`: number; Type on a path: where the start bracket sits, as a fraction of the path's length.
+- `path_end`: number; Type on a path: where the end bracket sits, as a fraction of the path's length.
+- `area_rows`: integer; Area type: number of rows.
+- `area_row_gutter`: number; Area type: points between rows.
+- `area_columns`: integer; Area type: number of columns.
+- `area_gutter`: number; Area type: points between columns.
+- `area_inset`: number; Area type: inset spacing in points.
+- `first_baseline`: string (ascent | cap | leading | x | em | fixed | legacy); Area type: what sets the first baseline's distance from the top: ascent, cap height, leading, x height, em box height, fixed (the min value), or legacy (the font's ascender).
+- `first_baseline_min`: number; Area type: the least distance in points from the top to the first baseline (the distance itself for fixed).
+- `area_flow`: string (rows | columns); Area type: fill row by row or column by column.
 
 ## text_flow
 

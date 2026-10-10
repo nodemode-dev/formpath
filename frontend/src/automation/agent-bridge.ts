@@ -278,7 +278,7 @@ export class AgentBridge {
           const style: Partial<typeof DEFAULT_CHAR> = { ...(has('font') ? { font: str('font') } : {}), ...(has('style') ? { style: /^\d{3}$/.test(str('style')) ? `${str('style')}` : str('style') } : {}), ...(has('size') ? { size: Math.max(0.1, num('size', 12)) } : {}), fill: has('color') ? this.paint(a.color, 'color') : solid(BLACK), ...(has('leading') ? { leading: num('leading', 14) } : {}), ...(has('tracking') ? { tracking: num('tracking', 0) } : {}) };
           let path: PathData | undefined;
           if (mode === 'path') { const src = this.node(a.path_id); if (src.kind !== 'path') return fail('path_id must be a path.'); path = src.d; }
-          const id = e.addText(str('text'), num('x', 0), num('y', 0), { mode, width: num('width', 200), height: num('height', 100), path, style, para: has('align') ? { align: str('align') as 'left' } : undefined, name: str('name') || undefined, layer: this.layer(a) });
+          const id = e.addText(str('text'), num('x', 0), num('y', 0), { mode, width: num('width', 200), height: num('height', 100), path, style, para: has('align') ? { align: str('align') as 'left' } : undefined, name: str('name') || undefined, layer: this.layer(a), vertical: str('orientation') === 'vertical' });
           if (!id) return fail('Could not add the type.');
           return text(`Added ${mode} type (id ${id}).`, this.describe(this.node(id)));
         }
@@ -659,6 +659,11 @@ export class AgentBridge {
         case 'set_text': {
           const n = this.node(a.id);
           if (n.kind !== 'text') return fail(`${n.id} is not type.`);
+          const pathKeys = ['path_effect', 'path_flip', 'path_align', 'path_spacing', 'path_start', 'path_end'].filter(has), areaKeys = ['area_rows', 'area_row_gutter', 'area_columns', 'area_gutter', 'area_inset', 'first_baseline', 'first_baseline_min', 'area_flow'].filter(has);
+          if (pathKeys.length && n.mode !== 'path') return fail(`${pathKeys.join(', ')} only work on type on a path, and ${n.id} is ${n.mode} type.`);
+          if (areaKeys.length && n.mode !== 'area') return fail(`${areaKeys.join(', ')} only work on area type, and ${n.id} is ${n.mode} type.`);
+          const bad = ([['orientation', ['horizontal', 'vertical']], ['path_effect', ['rainbow', 'skew', 'ribbon', 'stair', 'gravity']], ['path_align', ['baseline', 'ascender', 'descender', 'center']], ['first_baseline', ['ascent', 'cap', 'leading', 'x', 'em', 'fixed', 'legacy']], ['area_flow', ['rows', 'columns']]] as const).find(([k, ok]) => has(k) && !(ok as readonly string[]).includes(str(k)));
+          if (bad) return fail(`${bad[0]} is one of ${bad[1].join(', ')}.`);
           if (has('text')) e.setTextSpans(n.id, [{ text: str('text'), style: n.spans[0]?.style ?? DEFAULT_CHAR }], 'Edit Text');
           const patch: Partial<typeof DEFAULT_CHAR> = { ...(has('font') ? { font: str('font') } : {}), ...(has('style') ? { style: str('style') } : {}), ...(has('size') ? { size: Math.max(0.1, num('size', 12)) } : {}), ...(has('color') ? { fill: this.paint(a.color, 'color') } : {}), ...(has('leading') ? { leading: num('leading', 14) } : {}), ...(has('tracking') ? { tracking: num('tracking', 0) } : {}), ...(Array.isArray(a.features) ? { features: a.features.filter((f): f is string => typeof f === 'string' && /^[a-z0-9]{4}$/.test(f)) } : {}), ...(has('caps') ? { caps: str('caps') as 'none' } : {}) };
           if (Object.keys(patch).length) {
@@ -666,6 +671,31 @@ export class AgentBridge {
             e.edit('Character', (d) => updateNodes(d, [n.id], (x) => (x.kind === 'text' ? { ...x, spans: range ? styleSpans(x.spans, range[0], range[1], patch) : x.spans.map((s) => ({ ...s, style: { ...s.style, ...patch } })) } : x)));
           }
           if (has('align')) e.setParaStyle({ align: str('align') as 'left' }, [n.id]);
+          if (typeof a.upright_latin === 'boolean') {
+            const cur = e.nodeById(n.id) as TextNode, range: [number, number] | undefined = has('start') || has('end') ? [Math.max(0, Math.round(num('start', 0))), Math.round(num('end', plainText(cur).length))] : undefined, up = { upright: a.upright_latin ? true : undefined };
+            e.edit('Character', (d) => updateNodes(d, [n.id], (x) => (x.kind === 'text' ? { ...x, spans: range ? styleSpans(x.spans, range[0], range[1], up) : x.spans.map((s) => ({ ...s, style: { ...s.style, ...up } })) } : x)));
+          }
+          const node: Partial<TextNode> = {}, cur = e.nodeById(n.id) as TextNode;
+          if (has('orientation')) node.vertical = str('orientation') === 'vertical' || undefined;
+          if (has('path_effect')) node.pathEffect = str('path_effect') as TextNode['pathEffect'];
+          if (typeof a.path_flip === 'boolean') node.pathFlip = a.path_flip || undefined;
+          if (has('path_align')) node.pathAlign = str('path_align') as TextNode['pathAlign'];
+          if (has('path_spacing')) node.pathSpacing = Math.max(0, num('path_spacing', 0));
+          if (has('path_start')) node.pathStart = Math.max(0, Math.min(1, num('path_start', 0)));
+          if (has('path_end')) node.pathEnd = Math.max(0, Math.min(1, num('path_end', 1)));
+          if (areaKeys.length) {
+            const area = { ...(cur.area ?? { columns: 1, rows: 1, gutter: 12, inset: 0, firstBaseline: 'ascent' as const }) };
+            if (has('area_rows')) area.rows = Math.max(1, Math.round(num('area_rows', 1)));
+            if (has('area_row_gutter')) area.rowGutter = Math.max(0, num('area_row_gutter', 12));
+            if (has('area_columns')) area.columns = Math.max(1, Math.round(num('area_columns', 1)));
+            if (has('area_gutter')) area.gutter = Math.max(0, num('area_gutter', 12));
+            if (has('area_inset')) area.inset = Math.max(0, num('area_inset', 0));
+            if (has('first_baseline')) area.firstBaseline = str('first_baseline') as typeof area.firstBaseline;
+            if (has('first_baseline_min')) area.baselineMin = Math.max(0, num('first_baseline_min', 0));
+            if (has('area_flow')) area.flow = str('area_flow') === 'columns' ? 'columns' : 'rows';
+            node.area = area;
+          }
+          if (Object.keys(node).length) e.setTextNode(n.id, node, has('orientation') && Object.keys(node).length === 1 ? 'Type Orientation' : cur.mode === 'path' ? 'Type on a Path Options' : cur.mode === 'area' ? 'Area Type Options' : 'Type Options');
           return text('Changed the type.', this.describe(this.node(n.id)));
         }
         case 'select_similar': {
