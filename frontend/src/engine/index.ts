@@ -741,11 +741,11 @@ export class Engine extends Emitter<EngineEvents> {
   makeGuides(ids?: string[]): void { const t = this.targetIds(ids); this.edit('Make Guides', (d) => updateNodes(d, t, (n) => (n.kind === 'path' ? { ...n, guide: true } : n))); }
   releaseGuides(): void { const p = this.current; if (!p) return; const ids = allNodes(p.doc).filter((n) => n.kind === 'path' && n.guide).map((n) => n.id); this.edit('Release Guides', (d) => ({ doc: updateNodes(d, ids, (n) => (n.kind === 'path' ? { ...n, guide: false } : n)), select: ids })); }
 
-  addText(text: string, x: number, y: number, opts: { mode?: 'point' | 'area' | 'path'; width?: number; height?: number; path?: PathData; framePath?: PathData; style?: Partial<CharStyle>; para?: Partial<ParaStyle>; name?: string; layer?: string } = {}): string {
+  addText(text: string, x: number, y: number, opts: { mode?: 'point' | 'area' | 'path'; width?: number; height?: number; path?: PathData; framePath?: PathData; style?: Partial<CharStyle>; para?: Partial<ParaStyle>; name?: string; layer?: string; vertical?: boolean } = {}): string {
     const fillPaint = this.fillPaint.type === 'none' ? solid(BLACK) : this.fillPaint;
     const style: CharStyle = { ...DEFAULT_CHAR, fill: fillPaint, stroke: NONE, ...(opts.style ?? {}) };
     const mode = opts.mode ?? 'point';
-    const node: TextNode = { id: newId('t'), kind: 'text', mode, spans: [{ text, style }], para: { ...DEFAULT_PARA, ...(opts.para ?? {}) }, xf: [1, 0, 0, 1, mode === 'area' ? 0 : x, mode === 'area' ? 0 : y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(opts.name ? { name: opts.name } : {}) };
+    const node: TextNode = { id: newId('t'), kind: 'text', mode, spans: [{ text, style }], para: { ...DEFAULT_PARA, ...(opts.para ?? {}) }, xf: [1, 0, 0, 1, mode === 'area' ? 0 : x, mode === 'area' ? 0 : y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(opts.name ? { name: opts.name } : {}), ...(opts.vertical ? { vertical: true } : {}) };
     if (mode === 'area') { node.frame = { x, y, w: opts.width ?? 200, h: opts.height ?? 100 }; node.area = { columns: 1, rows: 1, gutter: 12, inset: 0, firstBaseline: 'ascent' }; if (opts.framePath?.some((sp) => sp.closed)) node.framePath = opts.framePath; }
     if (mode === 'path') { node.path = opts.path; node.pathStart = 0; node.xf = [1, 0, 0, 1, 0, 0]; }
     return this.addNodes('Type', [node], { layer: opts.layer })[0] ?? '';
@@ -756,6 +756,12 @@ export class Engine extends Emitter<EngineEvents> {
   }
   setParaStyle(patch: Partial<ParaStyle>, ids?: string[]): boolean { return this.applyToSelection('Paragraph', (n) => (n.kind === 'text' ? { ...n, para: { ...n.para, ...patch } } : n), ids); }
   setTextNode(id: string, patch: Partial<TextNode>, name = 'Type Options'): boolean { return this.edit(name, (d) => updateNodes(d, [id], (n) => (n.kind === 'text' ? ({ ...n, ...patch } as TextNode) : n))); }
+  setTextOrientation(vertical: boolean, ids?: string[]): boolean {
+    const p = this.current; if (!p) return false;
+    const t = this.targetIds(ids).filter((id) => { const n = findNode(p.doc, id); return n?.kind === 'text' && !!n.vertical !== vertical; });
+    if (!t.length) return false;
+    return this.edit('Type Orientation', (d) => updateNodes(d, t, (n) => (n.kind === 'text' ? ({ ...n, vertical: vertical || undefined }) as TextNode : n)), { keepAnchors: true });
+  }
   textOf(id: string): string { const n = this.doc ? findNode(this.doc, id) : null; return n?.kind === 'text' ? plainText(n) : ''; }
   threadText(ids?: string[]): boolean {
     const p = this.current; if (!p) return false;

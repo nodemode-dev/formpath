@@ -4,7 +4,7 @@ import { apply, flatIndex, hasIn, hasOut, inflate, invert, nearestOnPath, rectCo
 import { liveChildren } from './live';
 import { liveFaceNodes } from './livepaint';
 import { cachedPath, clipGeometry } from './render';
-import { layoutText } from './text';
+import { glyphCenter, layoutText, lineRect } from './text';
 import type { Doc, PathData, Pt, Rect, VNode } from './types';
 
 let hctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
@@ -36,13 +36,13 @@ function leafHit(doc: Doc, n: VNode, p: Pt, o: HitOpts): Hit['part'] | null {
     case 'text': {
       if (n.mode === 'path') {
         const lay = layoutText(n);
-        for (const g of lay.glyphs) if (Math.hypot(g.x + Math.cos(g.angle) * g.w / 2 - p.x, g.y + Math.sin(g.angle) * g.w / 2 - p.y) < Math.max(g.size * 0.6, o.tol)) return 'text';
+        for (const g of lay.glyphs) { const c = glyphCenter(g); if (Math.hypot(c.x - p.x, c.y - p.y) < Math.max(g.size * 0.6, o.tol)) return 'text'; }
         if (n.path) { const r = nearestOnPath(n.path, p); if (r && r.d <= o.tol) return 'edge'; }
         return null;
       }
       const inv = invert(n.xf), q = apply(inv, p.x, p.y), lay = layoutText(n), t = o.tol / Math.max(1e-6, Math.hypot(n.xf[0], n.xf[1]));
       if (n.mode === 'area' && n.frame) return rectContains(inflate(n.frame, t), q) ? 'text' : null;
-      for (const l of lay.lines) { const r = { x: Math.min(l.x, l.x + l.width) - t, y: l.y - l.ascent - t, w: Math.abs(l.width) + 2 * t + 2, h: l.ascent + l.descent + 2 * t }; if (rectContains(r, q)) return 'text'; }
+      for (const l of lay.lines) { const r0 = lineRect(lay, l), r = { x: r0.x - t - 1, y: r0.y - t - 1, w: r0.w + 2 * t + 2, h: r0.h + 2 * t + 2 }; if (rectContains(r, q)) return 'text'; }
       return null;
     }
     case 'image': { const q = apply(invert(n.xf), p.x, p.y); return q.x >= 0 && q.y >= 0 && q.x <= n.w && q.y <= n.h ? 'image' : null; }

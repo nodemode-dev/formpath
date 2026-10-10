@@ -110,7 +110,7 @@ export interface CompoundNode extends NodeBase { kind: 'compound'; children: Pat
 export interface CharStyle {
   font: string; style: string; size: number; leading: number | null; tracking: number; kerning: 'auto' | 'optical' | 'none';
   baseline: number; hscale: number; vscale: number; fill: Paint; stroke: Paint; strokeWidth: number;
-  underline: boolean; strike: boolean; caps: 'none' | 'all' | 'small'; position: 'normal' | 'super' | 'sub'; features: string[]; cs?: string; alt?: number;
+  underline: boolean; strike: boolean; caps: 'none' | 'all' | 'small'; position: 'normal' | 'super' | 'sub'; features: string[]; cs?: string; alt?: number; upright?: boolean;
 }
 export type TextAlign = 'left' | 'center' | 'right' | 'justify' | 'justify_center' | 'justify_right' | 'justify_all';
 export interface ParaStyle { align: TextAlign; indentLeft: number; indentRight: number; indentFirst: number; spaceBefore: number; spaceAfter: number; hyphenate: boolean; name?: string; ps?: string }
@@ -119,7 +119,10 @@ export interface CharStyleDef { id: string; name: string; style: Partial<CharSty
 export interface ParaStyleDef { id: string; name: string; style: Partial<ParaStyle>; char?: Partial<CharStyle> }
 export const CHAR_STYLE_KEYS = ['font', 'style', 'size', 'leading', 'tracking', 'kerning', 'baseline', 'hscale', 'vscale', 'fill', 'stroke', 'strokeWidth', 'underline', 'strike', 'caps', 'position', 'features'] as const;
 export const PARA_STYLE_KEYS = ['align', 'indentLeft', 'indentRight', 'indentFirst', 'spaceBefore', 'spaceAfter', 'hyphenate'] as const;
-export interface AreaOptions { columns: number; rows: number; gutter: number; inset: number; firstBaseline: 'ascent' | 'cap' | 'x' | 'leading' | 'fixed' }
+export type FirstBaseline = 'ascent' | 'cap' | 'x' | 'leading' | 'fixed' | 'em' | 'legacy';
+export interface AreaOptions { columns: number; rows: number; gutter: number; inset: number; firstBaseline: FirstBaseline; rowGutter?: number; baselineMin?: number; flow?: 'rows' | 'columns' }
+export type PathEffect = 'rainbow' | 'skew' | 'ribbon' | 'stair' | 'gravity';
+export type PathAlign = 'baseline' | 'ascender' | 'descender' | 'center';
 export interface TextNode extends NodeBase {
   kind: 'text';
   mode: 'point' | 'area' | 'path';
@@ -130,8 +133,11 @@ export interface TextNode extends NodeBase {
   framePath?: PathData;
   path?: PathData;
   pathStart?: number;
-  pathEffect?: 'rainbow' | 'skew' | 'ribbon' | 'stair' | 'gravity';
+  pathEnd?: number;
+  pathEffect?: PathEffect;
   pathFlip?: boolean;
+  pathAlign?: PathAlign;
+  pathSpacing?: number;
   vertical?: boolean;
   area?: AreaOptions;
   next?: string;
