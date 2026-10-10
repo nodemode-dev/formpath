@@ -4,6 +4,7 @@ import { apply, flatIndex, hasIn, hasOut, invert, nearestOnPath, normRect, point
 import { transformNodes } from '../engine/ops/objects';
 import { constrainAngle } from '../engine/snap';
 import { framePort } from '../engine/flow';
+import { pathBrackets, pathParamAt } from '../engine/text';
 import { editLive, normalizeLive } from '../engine/ops/live-shapes';
 import { updateNodes } from '../engine/doc';
 import type { Anchor, Doc, Engine, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
@@ -116,6 +117,64 @@ function placeLoaded(ctx: ToolContext, p: ToolPointer): void {
   e.endGesture();
 }
 
+type BracketKind = 'start' | 'end' | 'centre';
+const BR = { on: false, id: '', kind: 'start' as BracketKind, moved: false, u0: 0, start0: 0, end0: 1, flip0: false };
+
+function bracketAt(ctx: ToolContext, p: ToolPointer): { id: string; kind: BracketKind } | null {
+  const e = ctx.engine, pr = e.current;
+  if (!pr || !e.view.edges) return null;
+  const v = ctx.view();
+  for (const id of pr.selection) {
+    const n = findNode(pr.doc, id);
+    if (n?.kind !== 'text' || n.mode !== 'path') continue;
+    const br = pathBrackets(n);
+    if (!br) continue;
+    const parts: Array<[BracketKind, { p: Pt; t: Pt }, number, number]> = [['start', br.start, 0, 16], ['end', br.end, 0, 16], ['centre', br.centre, -10, 10]];
+    for (const [kind, b, a0, a1] of parts) {
+      const s = v.toScreen(b.p), nx = -b.t.y, ny = b.t.x, ax = s.x - nx * a0, ay = s.y - ny * a0, bx = s.x - nx * a1, by = s.y - ny * a1;
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy || 1, k = Math.max(0, Math.min(1, ((p.screen.x - ax) * dx + (p.screen.y - ay) * dy) / l2));
+      if (Math.hypot(p.screen.x - (ax + dx * k), p.screen.y - (ay + dy * k)) <= 5) return { id, kind };
+    }
+  }
+  return null;
+}
+
+function bracketDown(ctx: ToolContext, p: ToolPointer): boolean {
+  const e = ctx.engine, pr = e.current, hit = bracketAt(ctx, p);
+  const n = hit && pr ? findNode(pr.doc, hit.id) : null;
+  if (!hit || n?.kind !== 'text') return false;
+  const at = pathParamAt(n, p.doc);
+  Object.assign(BR, { on: true, id: hit.id, kind: hit.kind, moved: false, u0: at?.u ?? 0, start0: n.pathStart ?? 0, end0: n.pathEnd ?? 1, flip0: !!n.pathFlip });
+  e.beginDrag(hit.kind === 'centre' ? 'Move Type on a Path' : 'Type on a Path Range');
+  return true;
+}
+
+function bracketMove(ctx: ToolContext, p: ToolPointer): void {
+  const e = ctx.engine, base = e.dragOrigin, n0 = base ? findNode(base, BR.id) : null;
+  if (!base || n0?.kind !== 'text') return;
+  const at = pathParamAt(n0, p.doc);
+  if (!at) return;
+  const closed = !!n0.path?.[0]?.closed, gap = 0.01;
+  let start = BR.start0, end = BR.end0, flip = BR.flip0;
+  if (BR.kind === 'start') start = closed ? at.u : Math.min(at.u, end - gap);
+  else if (BR.kind === 'end') end = closed ? at.u : Math.max(at.u, start + gap);
+  else {
+    let du = at.u - BR.u0;
+    if (closed) { du -= Math.round(du); start = ((start + du) % 1 + 1) % 1; end = ((end + du) % 1 + 1) % 1; }
+    else { du = Math.max(-start, Math.min(1 - end, du)); start += du; end += du; }
+    const textSide = BR.flip0 ? 1 : -1;
+    if (at.side === -textSide && at.d * ctx.view().zoom > 4) flip = !BR.flip0;
+  }
+  BR.moved = true;
+  e.dragTo(updateNodes(base, [BR.id], (x) => (x.kind === 'text' ? { ...x, pathStart: start, pathEnd: end, pathFlip: flip || undefined } : x)));
+}
+
+function bracketUp(ctx: ToolContext): void {
+  const e = ctx.engine;
+  BR.on = false;
+  if (e.dragging) { if (BR.moved) e.commitDrag(); else e.cancelDrag(); }
+}
+
 const BH = { at: null as Pt | null, skip: new Set<string>() };
 interface Widget { id: string; at: Pt; corner: number; dir: Pt; origin: Pt; xf: Mat; k: number; max: number }
 const CW = { on: false, w: null as Widget | null, moved: false };
@@ -172,6 +231,7 @@ registerTool({
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
     if (L.id) { L.drag = true; L.start = p.doc; L.cur = p.doc; return; }
+    if (bracketDown(ctx, p)) return;
     const port = outPortAt(ctx, p);
     if (port) { L.id = port; ctx.redraw(); return; }
     const wdg = widgetAt(ctx, p);
@@ -196,6 +256,7 @@ registerTool({
     S.mode = 'marquee'; S.start = p.doc; S.cur = p.doc;
   },
   move: (ctx, p) => {
+    if (BR.on) { bracketMove(ctx, p); return; }
     if (CW.on) { dragWidget(ctx, p); return; }
     if (L.drag) { L.cur = p.doc; ctx.redraw(); return; }
     if (S.mode === 'marquee') { S.cur = p.doc; ctx.redraw(); return; }
@@ -203,6 +264,7 @@ registerTool({
   },
   up: (ctx, p) => {
     const e = ctx.engine;
+    if (BR.on) { bracketUp(ctx); return; }
     if (CW.on) { CW.on = false; CW.w = null; e.clearOverlay(); if (CW.moved) e.commitDrag(); else e.cancelDrag(); return; }
     if (L.drag) { placeLoaded(ctx, p); ctx.redraw(); return; }
     if (S.mode === 'marquee') {
@@ -214,7 +276,7 @@ registerTool({
     }
     endTransform(ctx, S);
   },
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; L.id = null; L.drag = false; ctx.redraw(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; L.id = null; L.drag = false; BR.on = false; ctx.redraw(); },
   deactivate: () => { L.id = null; L.drag = false; },
   hover: (ctx, p) => {
     const next = p && ctx.engine.view.smartGuides ? (() => { const h = ctx.engine.hit(p.doc); return h ? ctx.engine.selectableFor(h.id) : null; })() : null;
@@ -505,11 +567,11 @@ registerTool({
   icon: () => 'vDirect',
   hint: () => 'Click an anchor or segment to edit it, drag handles to reshape curves, Alt-drag a handle to break it. Drag a marquee to select anchors.',
   cursor: (_ctx, p) => (p && hoverAnchor ? CURSORS.directPoint : CURSORS.direct),
-  down: (ctx, p) => directDown(ctx, p, false),
-  move: directMove,
-  up: directUp,
+  down: (ctx, p) => { if (!bracketDown(ctx, p)) directDown(ctx, p, false); },
+  move: (ctx, p) => { if (BR.on) bracketMove(ctx, p); else directMove(ctx, p); },
+  up: (ctx, p) => { if (BR.on) bracketUp(ctx); else directUp(ctx, p); },
   hover: directHover,
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); D.mode = null; ctx.redraw(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); D.mode = null; BR.on = false; ctx.redraw(); },
   overlay: directOverlay,
 });
 

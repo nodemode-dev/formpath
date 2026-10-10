@@ -3,7 +3,7 @@ import { findNode, layerOf, topObjects } from '../engine/doc';
 import { apply, flatIndex, hasIn, hasOut, tracePath, transformPath } from '../engine/geometry';
 import { cachedPath, invalidateLayers, renderDocument, renderNode, type RenderContext } from '../engine/render';
 import { collectTargets, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
-import { layoutText } from '../engine/text';
+import { layoutText, lineBaseline, pathBrackets } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
 import { cssColor } from '../engine/paint';
 import { latticeCopies, tileOutline } from '../engine/pattern';
@@ -15,7 +15,7 @@ import { paint, type StagePaint } from './palette';
 
 const RULER = 18;
 
-export interface TypeRequest { id?: string; x?: number; y?: number; box?: { w: number; h: number }; path?: string; caret?: number }
+export interface TypeRequest { id?: string; x?: number; y?: number; box?: { w: number; h: number }; path?: string; caret?: number; vertical?: boolean }
 interface GuideDraft { vertical: boolean; pos: number; id: string | null }
 
 export class Stage {
@@ -373,7 +373,7 @@ export class Stage {
     g.setTransform(d, 0, 0, d, 0, 0);
     this.drawGuides(g, p, pal);
     this.drawArtboardNames(g, p, pal);
-    try { this.drawSelection(g, p, pal); this.drawTextPorts(g, p, pal); } catch (err) { console.error(err); }
+    try { this.drawSelection(g, p, pal); this.drawTextPorts(g, p, pal); this.drawPathBrackets(g, p, pal); } catch (err) { console.error(err); }
     this.drawSmart(g, p, pal);
     try { this.tool()?.overlay?.(this.ctx, g); } catch (err) { console.error(err); }
   }
@@ -433,6 +433,34 @@ export class Stage {
       g.fillText(o.label, x + 5, y + 8);
     }
     g.restore();
+  }
+
+  private drawPathBrackets(g: CanvasRenderingContext2D, p: Project, pal: StagePaint): void {
+    if (!p.selection.size || !this.engine.view.edges) return;
+    const doc = p.doc, v = p.viewport;
+    for (const id of topObjects(doc, p.selection)) {
+      const n = findNode(doc, id);
+      if (n?.kind !== 'text' || n.mode !== 'path') continue;
+      const br = pathBrackets(n);
+      if (!br) continue;
+      const color = layerOf(doc, n.id)?.color || pal.layer, over = !n.next && layoutText(n).overflow >= 0;
+      g.save();
+      g.lineWidth = 1.5; g.strokeStyle = color; g.lineCap = 'round';
+      const seg = (b: { p: Pt; t: Pt }, a0: number, a1: number, foot: number): void => {
+        const s = v.toScreen(b.p.x, b.p.y), nx = -b.t.y, ny = b.t.x;
+        g.beginPath(); g.moveTo(s.x - nx * a0, s.y - ny * a0); g.lineTo(s.x - nx * a1, s.y - ny * a1);
+        if (foot) g.lineTo(s.x - nx * a1 + b.t.x * foot, s.y - ny * a1 + b.t.y * foot);
+        g.stroke();
+      };
+      seg(br.start, 0, 16, 5); seg(br.end, 0, 16, -5); seg(br.centre, -10, 10, 0);
+      if (over) {
+        const s = v.toScreen(br.end.p.x, br.end.p.y), nx = -br.end.t.y, ny = br.end.t.x, c = { x: Math.round(s.x - nx * 24 + br.end.t.x * 8) + 0.5, y: Math.round(s.y - ny * 24 + br.end.t.y * 8) + 0.5 };
+        g.lineWidth = 1; g.fillStyle = pal.handle; g.strokeStyle = pal.danger;
+        g.fillRect(c.x - 4, c.y - 4, 8, 8); g.strokeRect(c.x - 4, c.y - 4, 8, 8);
+        g.beginPath(); g.moveTo(c.x - 2.5, c.y); g.lineTo(c.x + 2.5, c.y); g.moveTo(c.x, c.y - 2.5); g.lineTo(c.x, c.y + 2.5); g.stroke();
+      }
+      g.restore();
+    }
   }
 
   private drawTextPorts(g: CanvasRenderingContext2D, p: Project, pal: StagePaint): void {
@@ -513,7 +541,7 @@ export class Stage {
         g.beginPath();
         for (const l of lay.lines) {
           if (n.mode === 'path') continue;
-          const a = apply(m, l.x, l.y), b = apply(m, l.x + Math.max(l.width, 1), l.y);
+          const [p0, p1] = lineBaseline(lay, l), a = apply(m, p0.x, p0.y), b = apply(m, p1.x, p1.y);
           g.moveTo(a.x, a.y); g.lineTo(b.x, b.y);
         }
         g.stroke();

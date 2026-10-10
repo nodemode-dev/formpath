@@ -1,8 +1,9 @@
-import { allNodes } from '../../engine/doc';
+import { allNodes, updateNodes } from '../../engine/doc';
 import { DEFAULT_CHAR, fontHasFeature, plainText, styleAt } from '../../engine/text';
-import type { CharStyle, Engine, ParaStyle, TextNode } from '../../engine';
+import type { AreaOptions, CharStyle, Engine, FirstBaseline, ParaStyle, PathAlign, PathEffect, TextNode } from '../../engine';
 import { el, patchList, q, setClass, setHidden, setText, setTitle } from '../dom';
 import { askForm } from '../form-dialog';
+import { previewEdit } from './preview-edit';
 import { typing } from '../text-editor';
 import { families, glyphAlternates, glyphList, stylesOf, ensureFace } from '../../io/fonts';
 import { typeDefaults } from '../../tools/type';
@@ -48,6 +49,7 @@ export class CharacterPanel {
   private readonly position;
   private readonly underline;
   private readonly strike;
+  private readonly upright;
   private readonly ot;
   private readonly figures;
   private readonly otPos;
@@ -73,7 +75,8 @@ export class CharacterPanel {
     this.position = seg([{ id: 'normal', label: 'Normal' }, { id: 'super', label: 'Superscript' }, { id: 'sub', label: 'Subscript' }], (id) => set({ position: id as CharStyle['position'] }));
     this.underline = check('Underline', (v) => set({ underline: v }));
     this.strike = check('Strikethrough', (v) => set({ strike: v }));
-    this.body.append(this.font.el, this.style.el, row(this.size.el, this.leading.el), row(this.kerning.el, this.tracking.el), row(this.hscale.el, this.vscale.el), this.baseline.el, section('Case'), this.caps.el, section('Position'), this.position.el, row(this.underline.el, this.strike.el), section('OpenType'), this.figures.el, this.otPos.el, this.sset.el);
+    this.upright = check('Upright Latin in vertical type', (v) => set({ upright: v || undefined }));
+    this.body.append(this.font.el, this.style.el, row(this.size.el, this.leading.el), row(this.kerning.el, this.tracking.el), row(this.hscale.el, this.vscale.el), this.baseline.el, section('Case'), this.caps.el, section('Position'), this.position.el, row(this.underline.el, this.strike.el), this.upright.el, section('OpenType'), this.figures.el, this.otPos.el, this.sset.el);
     for (let i = 0; i < this.ot.length; i += 2) this.body.append(row(...this.ot.slice(i, i + 2).map((o) => o.ctl.el)));
     for (const k of ['selection', 'doc', 'active', 'options'] as const) engine.on(k, () => this.queue());
     this.sync();
@@ -98,6 +101,8 @@ export class CharacterPanel {
     this.position.set(st?.position ?? 'normal');
     this.underline.set(!!st?.underline);
     this.strike.set(!!st?.strike);
+    this.upright.set(!!st?.upright);
+    this.upright.enable(texts(this.engine).some((t) => !!t.vertical) || !!typing.editor?.node()?.vertical);
     const f = new Set(st?.features ?? []), probe: CharStyle = st ?? { ...DEFAULT_CHAR, font: fam, style: typeDefaults.style };
     const has = (t: string): boolean => f.has(t) || fontHasFeature(probe, t);
     for (const o of this.ot) { o.ctl.set(f.has(o.tag)); o.ctl.enable(has(o.tag)); }
@@ -226,6 +231,47 @@ export class GlyphsPanel {
     });
     setClass(this.body, 'has-glyphs', list.length > 0);
   }
+}
+
+const BASELINES: ReadonlyArray<readonly [FirstBaseline, string]> = [['ascent', 'Ascent'], ['cap', 'Cap Height'], ['leading', 'Leading'], ['x', 'x Height'], ['em', 'Em Box Height'], ['fixed', 'Fixed'], ['legacy', 'Legacy']];
+
+export async function areaTypeOptionsDialog(engine: Engine): Promise<void> {
+  const list = texts(engine).filter((t) => t.mode === 'area');
+  const t = list[0];
+  if (!t) return;
+  const a: AreaOptions = t.area ?? { columns: 1, rows: 1, gutter: 12, inset: 0, firstBaseline: 'ascent' }, rect = !t.framePath && !!t.frame, ids = list.map((x) => x.id);
+  await previewEdit(engine, 'Area Type Options', [
+    ...(rect ? [{ kind: 'number', key: 'w', label: 'Width', value: Math.round(t.frame?.w ?? 0), min: 1, unit: 'pt' } as const, { kind: 'number', key: 'h', label: 'Height', value: Math.round(t.frame?.h ?? 0), min: 1, unit: 'pt' } as const] : []),
+    { kind: 'number', key: 'rows', label: 'Rows', value: a.rows ?? 1, min: 1, max: 100 },
+    { kind: 'number', key: 'rowGutter', label: 'Row gutter', value: a.rowGutter ?? a.gutter ?? 12, min: 0, unit: 'pt' },
+    { kind: 'number', key: 'columns', label: 'Columns', value: a.columns ?? 1, min: 1, max: 100 },
+    { kind: 'number', key: 'gutter', label: 'Column gutter', value: a.gutter ?? 12, min: 0, unit: 'pt' },
+    { kind: 'number', key: 'inset', label: 'Inset spacing', value: a.inset ?? 0, min: 0, unit: 'pt' },
+    { kind: 'select', key: 'first', label: 'First baseline', value: a.firstBaseline ?? 'ascent', choices: BASELINES },
+    { kind: 'number', key: 'min', label: 'Min', value: a.baselineMin ?? 0, min: 0, unit: 'pt' },
+    { kind: 'select', key: 'flow', label: 'Text flow', value: a.flow ?? 'rows', choices: [['rows', 'By rows'], ['columns', 'By columns']] },
+  ], (origin, v) => updateNodes(origin, ids, (n) => {
+    if (n.kind !== 'text' || n.mode !== 'area') return n;
+    const area: AreaOptions = { ...(n.area ?? a), rows: Math.max(1, Math.round(Number(v.rows))), rowGutter: Math.max(0, Number(v.rowGutter)), columns: Math.max(1, Math.round(Number(v.columns))), gutter: Math.max(0, Number(v.gutter)), inset: Math.max(0, Number(v.inset)), firstBaseline: String(v.first) as FirstBaseline, baselineMin: Math.max(0, Number(v.min)), flow: v.flow === 'columns' ? 'columns' : 'rows' };
+    const fw = Number(v.w), fh = Number(v.h), f0 = n.frame;
+    const frame = rect && f0 && n.id === t.id && v.w !== undefined ? { ...f0, w: fw === Math.round(f0.w) ? f0.w : Math.max(1, fw), h: fh === Math.round(f0.h) ? f0.h : Math.max(1, fh) } : f0;
+    return { ...n, area, frame };
+  }));
+}
+
+export async function pathTypeOptionsDialog(engine: Engine): Promise<void> {
+  const list = texts(engine).filter((t) => t.mode === 'path');
+  const t = list[0];
+  if (!t) return;
+  const ids = list.map((x) => x.id);
+  await previewEdit(engine, 'Type on a Path Options', [
+    { kind: 'select', key: 'effect', label: 'Effect', value: t.pathEffect ?? 'rainbow', choices: [['rainbow', 'Rainbow'], ['skew', 'Skew'], ['ribbon', '3D Ribbon'], ['stair', 'Stair Step'], ['gravity', 'Gravity']] },
+    { kind: 'check', key: 'flip', label: 'Flip', value: !!t.pathFlip },
+    { kind: 'select', key: 'align', label: 'Align to path', value: t.pathAlign ?? 'baseline', choices: [['ascender', 'Ascender'], ['descender', 'Descender'], ['center', 'Center'], ['baseline', 'Baseline']] },
+    { kind: 'number', key: 'spacing', label: 'Spacing', value: t.pathSpacing ?? 0, min: 0, max: 1000, unit: 'pt' },
+    { kind: 'number', key: 'start', label: 'Start', value: Math.round((t.pathStart ?? 0) * 1000) / 10, min: 0, max: 100, unit: '%' },
+    { kind: 'number', key: 'end', label: 'End', value: Math.round((t.pathEnd ?? 1) * 1000) / 10, min: 0, max: 100, unit: '%' },
+  ], (origin, v) => updateNodes(origin, ids, (n) => (n.kind === 'text' && n.mode === 'path' ? { ...n, pathEffect: String(v.effect) as PathEffect, pathFlip: v.flip ? true : undefined, pathAlign: String(v.align) as PathAlign, pathSpacing: Math.max(0, Number(v.spacing)), pathStart: Math.max(0, Math.min(1, Number(v.start) / 100)), pathEnd: Math.max(0, Math.min(1, Number(v.end) / 100)) } : n)));
 }
 
 export async function findReplaceDialog(engine: Engine): Promise<void> {

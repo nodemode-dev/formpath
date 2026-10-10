@@ -37,7 +37,7 @@ function typeTool(id: string, label: string, iconName: string, order: number, sh
   registerTool({
     id, label, group: 'type', order, shortcut,
     icon: () => iconName,
-    hint: () => kind === 'point' ? 'Click to type a line, drag to make a text box. Click in existing type to edit it; double-click selects a word. Escape finishes.' : kind === 'area' ? 'Click a closed path to fill it with type, or drag a text box.' : 'Click a path to set type along it.',
+    hint: () => (kind === 'point' ? `Click to type a ${vertical ? 'vertical column' : 'line'}, drag to make a text box. Click in existing type to edit it; double-click selects a word. Escape finishes.` : kind === 'area' ? `Click a closed path to fill it with ${vertical ? 'vertical ' : ''}type, or drag a text box.` : `Click a path to set ${vertical ? 'vertical ' : ''}type along it.`),
     cursor: () => (vertical ? CURSORS.typeVertical : CURSORS.type),
     options: typeOptions,
     activate: (ctx) => {
@@ -72,19 +72,20 @@ function up(ctx: ToolContext, p: ToolPointer, kind: 'point' | 'area' | 'path', v
   if (!S.on || !pr) return;
   S.on = false;
   const r = normRect(S.start.x, S.start.y, p.doc.x, p.doc.y), z = ctx.view().zoom;
-  if (r.w * z > 6 && r.h * z > 6) { ctx.typeAt({ x: r.x, y: r.y, box: { w: r.w, h: r.h } }); ctx.redraw(); return; }
+  if (r.w * z > 6 && r.h * z > 6) { ctx.typeAt({ x: r.x, y: r.y, box: { w: r.w, h: r.h }, vertical }); ctx.redraw(); return; }
   const h = e.hit(S.start, 4), n = h ? findNode(pr.doc, h.id) : null;
   if (n?.kind === 'text') { ctx.typeAt({ id: n.id, x: S.start.x, y: S.start.y }); return; }
   if (n?.kind === 'path' && kind !== 'point') {
-    if (kind === 'area' && n.d.every((sp) => sp.closed)) { ed?.begin({ path: n.id, mode: 'area' }); return; }
-    if (kind === 'path') { ed?.begin({ path: n.id, mode: 'path' }); return; }
+    if (kind === 'area' && n.d.every((sp) => sp.closed)) { ed?.begin({ path: n.id, mode: 'area', vertical }); return; }
+    if (kind === 'path') { ed?.begin({ path: n.id, mode: 'path', vertical }); return; }
   }
-  if (n?.kind === 'path' && kind === 'point' && p.alt) { ed?.begin({ path: n.id, mode: 'path' }); return; }
-  if (ed) ed.vertical = vertical;
-  ctx.typeAt({ x: S.start.x, y: S.start.y });
+  if (n?.kind === 'path' && kind === 'point' && p.alt) { ed?.begin({ path: n.id, mode: 'path', vertical }); return; }
+  ctx.typeAt({ x: S.start.x, y: S.start.y, vertical });
 }
 
 typeTool('type', 'Type Tool', 'vType', 80, 'T', 'point');
 typeTool('areaType', 'Area Type Tool', 'vAreaType', 81, undefined, 'area');
 typeTool('typePath', 'Type on a Path Tool', 'vTypePath', 82, undefined, 'path');
 typeTool('typeVertical', 'Vertical Type Tool', 'vTypeVertical', 83, undefined, 'point', true);
+typeTool('areaTypeVertical', 'Vertical Area Type Tool', 'vAreaTypeVertical', 84, undefined, 'area', true);
+typeTool('typePathVertical', 'Vertical Type on a Path Tool', 'vTypePathVertical', 84.5, undefined, 'path', true);

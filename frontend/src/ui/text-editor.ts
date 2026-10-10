@@ -1,12 +1,12 @@
 import { findNode } from '../engine/doc';
 import { apply, invert, rectContains, inflate } from '../engine/geometry';
-import { caretAt, deleteText, indexAt, insertText, layoutText, plainText } from '../engine/text';
+import { caretAt, deleteText, indexAt, insertText, layoutText, plainText, selectionQuads, stepLine } from '../engine/text';
 import type { CharStyle, Engine, PathData, Pt, TextNode } from '../engine';
 import type { ToolContext } from '../extensions/registry';
 import { el } from './dom';
 import type { TypeRequest } from './stage';
 
-type Pending = { x: number; y: number; mode: 'point' | 'area' | 'path'; box?: { w: number; h: number }; path?: PathData; replace?: string };
+type Pending = { x: number; y: number; mode: 'point' | 'area' | 'path'; box?: { w: number; h: number }; path?: PathData; replace?: string; vertical: boolean };
 
 const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -20,7 +20,6 @@ export class TextEditor {
   private on = true;
   private timer = 0;
   private composing = false;
-  vertical = false;
   redraw: () => void = () => undefined;
   style: () => Partial<CharStyle> = () => ({});
 
@@ -35,7 +34,7 @@ export class TextEditor {
     this.ta.addEventListener('cut', (e) => { const s = this.selectedText(); if (!s) return; e.preventDefault(); e.clipboardData?.setData('text/plain', s); this.replace(''); });
     this.ta.addEventListener('paste', (e) => { e.preventDefault(); const s = e.clipboardData?.getData('text/plain') ?? ''; if (s) this.replace(s.replace(/\r\n?/g, '\n')); });
     this.ta.addEventListener('blur', () => { if (this.active) window.setTimeout(() => { if (this.active && document.activeElement !== this.ta && !document.activeElement?.closest('.cv-dock, .cv-props-col, .cv-options, .cv-layers, .cv-dialog')) this.end(); }, 0); });
-    engine.on('tool', () => { if (this.active && !/^(type|areaType|typePath|typeVertical)$/.test(engine.tool)) this.end(); });
+    engine.on('tool', () => { if (this.active && !/^(type|areaType|typePath|typeVertical|areaTypeVertical|typePathVertical)$/.test(engine.tool)) this.end(); });
     engine.on('active', () => { if (this.active) this.end(); });
     engine.on('history', () => { if (this.id && !this.node()) this.end(); else this.clamp(); });
   }
@@ -61,11 +60,12 @@ export class TextEditor {
       const src = findNode(doc, r.path);
       const d = src && (src.kind === 'path' ? src.d : null);
       if (!d) return;
-      const b = e.boundsOf(src);
-      this.pending = r.mode === 'area' ? { x: b.x, y: b.y, mode: 'area', box: { w: b.w, h: b.h }, replace: r.path, path: d } : { x: 0, y: 0, mode: 'path', path: d, replace: r.path };
+      const b = e.boundsOf(src), vertical = !!r.vertical;
+      this.pending = r.mode === 'area' ? { x: b.x, y: b.y, mode: 'area', box: { w: b.w, h: b.h }, replace: r.path, path: d, vertical } : { x: d[0]?.pts[0]?.x ?? 0, y: d[0]?.pts[0]?.y ?? 0, mode: 'path', path: d, replace: r.path, vertical };
       this.caret = this.anchor = 0;
     } else if (typeof r.x === 'number' && typeof r.y === 'number') {
-      this.pending = r.box ? { x: r.x, y: r.y, mode: 'area', box: r.box } : { x: r.x, y: r.y, mode: 'point' };
+      const vertical = !!r.vertical;
+      this.pending = r.box ? { x: r.x, y: r.y, mode: 'area', box: r.box, vertical } : { x: r.x, y: r.y, mode: 'point', vertical };
       this.caret = this.anchor = 0;
     } else return;
     this.focus();
@@ -139,13 +139,15 @@ export class TextEditor {
       const pd = this.pending;
       this.pending = null;
       const style = this.style();
+      const vertical = pd.vertical || undefined;
       if (pd.mode === 'path' || (pd.mode === 'area' && pd.replace)) {
-        const id = e.addText(s, pd.x, pd.y, pd.mode === 'path' ? { mode: 'path', path: pd.path, style } : { mode: 'area', width: pd.box?.w, height: pd.box?.h, framePath: pd.path, style });
+        e.beginStep();
+        const id = e.addText(s, pd.x, pd.y, pd.mode === 'path' ? { mode: 'path', path: pd.path, style, vertical } : { mode: 'area', width: pd.box?.w, height: pd.box?.h, framePath: pd.path, style, vertical });
         if (pd.replace) e.deleteSelection([pd.replace]);
+        e.endStep();
         this.id = id;
         if (id) e.select([id]);
-      } else this.id = e.addText(s, pd.x, pd.y, pd.mode === 'area' ? { mode: 'area', width: pd.box?.w, height: pd.box?.h, style } : { style });
-      if (this.id && this.vertical) e.setTextNode(this.id, { vertical: true }, 'Vertical Type');
+      } else this.id = e.addText(s, pd.x, pd.y, pd.mode === 'area' ? { mode: 'area', width: pd.box?.w, height: pd.box?.h, style, vertical } : { style, vertical });
       this.caret = this.anchor = s.length;
       this.place();
       this.redraw();
@@ -176,11 +178,15 @@ export class TextEditor {
   private lineStep(dir: 1 | -1): number {
     const n = this.node();
     if (!n || n.mode === 'path') return this.caret;
-    const lay = layoutText(n), li = lay.lines.findIndex((l) => this.caret >= l.start && this.caret <= l.end);
-    const target = lay.lines[li + dir];
-    if (!target) return dir < 0 ? 0 : plainText(n).length;
-    const c = caretAt(n, this.caret), local = apply(invert(n.xf), c.x, c.y);
-    return indexAt(n, { x: local.x, y: target.y - target.ascent / 2 });
+    return stepLine(n, this.caret, dir);
+  }
+
+  private arrow(key: string): { kind: 'char' | 'line'; dir: 1 | -1 } {
+    const v = !!this.node()?.vertical;
+    if (key === 'ArrowLeft') return v ? { kind: 'line', dir: 1 } : { kind: 'char', dir: -1 };
+    if (key === 'ArrowRight') return v ? { kind: 'line', dir: -1 } : { kind: 'char', dir: 1 };
+    if (key === 'ArrowUp') return v ? { kind: 'char', dir: -1 } : { kind: 'line', dir: -1 };
+    return v ? { kind: 'char', dir: 1 } : { kind: 'line', dir: 1 };
   }
 
   private lineEdge(end: boolean): number {
@@ -200,10 +206,14 @@ export class TextEditor {
       case 'Tab': e.preventDefault(); this.replace('\t'); return;
       case 'Backspace': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret > 0) { this.anchor = mod || e.altKey ? wordStart(text, this.caret) : this.caret - 1; this.replace(''); } return;
       case 'Delete': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret < text.length) { this.anchor = this.caret + 1; this.replace(''); } return;
-      case 'ArrowLeft': e.preventDefault(); this.move(e.altKey || mod ? wordStart(text, this.caret) : this.range() && !e.shiftKey ? Math.min(this.caret, this.anchor) : this.caret - 1, e.shiftKey); return;
-      case 'ArrowRight': e.preventDefault(); this.move(e.altKey || mod ? wordEnd(text, this.caret) : this.range() && !e.shiftKey ? Math.max(this.caret, this.anchor) : this.caret + 1, e.shiftKey); return;
-      case 'ArrowUp': e.preventDefault(); this.move(this.lineStep(-1), e.shiftKey); return;
-      case 'ArrowDown': e.preventDefault(); this.move(this.lineStep(1), e.shiftKey); return;
+      case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown': {
+        e.preventDefault();
+        const a = this.arrow(e.key);
+        if (a.kind === 'line') { this.move(this.lineStep(a.dir), e.shiftKey); return; }
+        if (a.dir < 0) this.move(e.altKey || mod ? wordStart(text, this.caret) : this.range() && !e.shiftKey ? Math.min(this.caret, this.anchor) : this.caret - 1, e.shiftKey);
+        else this.move(e.altKey || mod ? wordEnd(text, this.caret) : this.range() && !e.shiftKey ? Math.max(this.caret, this.anchor) : this.caret + 1, e.shiftKey);
+        return;
+      }
       case 'Home': e.preventDefault(); this.move(this.lineEdge(false), e.shiftKey); return;
       case 'End': e.preventDefault(); this.move(this.lineEdge(true), e.shiftKey); return;
     }
@@ -230,7 +240,12 @@ export class TextEditor {
       const pd = this.pending, s = v.toScreen({ x: pd.x, y: pd.y }), h = 12 * v.zoom;
       g.save();
       if (pd.mode === 'area' && pd.box) { const t = v.toScreen({ x: pd.x + pd.box.w, y: pd.y + pd.box.h }); g.strokeStyle = accent; g.strokeRect(Math.round(s.x) + 0.5, Math.round(s.y) + 0.5, Math.round(t.x - s.x), Math.round(t.y - s.y)); }
-      if (this.on) { g.strokeStyle = accent; g.lineWidth = 1.5; g.beginPath(); const top = pd.mode === 'area' ? s.y + 2 : s.y - h * 0.8; g.moveTo(s.x + 2, top); g.lineTo(s.x + 2, top + h); g.stroke(); }
+      if (this.on) {
+        g.strokeStyle = accent; g.lineWidth = 1.5; g.beginPath();
+        if (pd.vertical) { const x0 = pd.mode === 'area' && pd.box ? v.toScreen({ x: pd.x + pd.box.w, y: pd.y }).x - 2 : s.x + h / 2, y0 = pd.mode === 'area' ? s.y + 2 : s.y; g.moveTo(x0, y0); g.lineTo(x0 - h, y0); }
+        else { const top = pd.mode === 'area' ? s.y + 2 : s.y - h * 0.8; g.moveTo(s.x + 2, top); g.lineTo(s.x + 2, top + h); }
+        g.stroke();
+      }
       g.restore();
       return;
     }
@@ -238,17 +253,11 @@ export class TextEditor {
     if (!n) return;
     const r = this.range();
     if (r) {
-      const lay = layoutText(n);
       g.save();
       g.fillStyle = accent;
       g.globalAlpha = 0.35;
-      for (const gl of lay.glyphs) {
-        if (gl.index < r[0] || gl.index >= r[1]) continue;
-        const corners = [{ x: 0, y: -gl.size * 0.85 }, { x: gl.w, y: -gl.size * 0.85 }, { x: gl.w, y: gl.size * 0.25 }, { x: 0, y: gl.size * 0.25 }].map((q) => {
-          const ca = Math.cos(gl.angle), sa = Math.sin(gl.angle), lx = gl.x + q.x * ca - q.y * sa, ly = gl.y + q.x * sa + q.y * ca;
-          const d = n.mode === 'path' ? { x: lx, y: ly } : apply(n.xf, lx, ly);
-          return v.toScreen(d);
-        });
+      for (const quad of selectionQuads(n, r[0], r[1])) {
+        const corners = quad.map((d) => v.toScreen(d));
         g.beginPath(); corners.forEach((c, i) => (i ? g.lineTo(c.x, c.y) : g.moveTo(c.x, c.y))); g.closePath(); g.fill();
       }
       g.restore();

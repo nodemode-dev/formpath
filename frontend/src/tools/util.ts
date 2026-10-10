@@ -1,7 +1,7 @@
 import { findNode, layerOf } from '../engine/doc';
 import { apply, normRect } from '../engine/geometry';
 import { cachedPath } from '../engine/render';
-import { layoutText } from '../engine/text';
+import { layoutText, lineBaseline } from '../engine/text';
 import type { Doc, Engine, PathData, Pt, Rect, VNode } from '../engine';
 import { dashed, type ToolContext } from '../extensions/registry';
 
@@ -48,7 +48,8 @@ export function outlineNode(ctx: ToolContext, g: CanvasRenderingContext2D, doc: 
         if (x.mode === 'path' && x.path) { g.stroke(cachedPath(x.path)); return; }
         if (x.mode === 'area' && x.frame) { g.strokeRect(x.frame.x, x.frame.y, x.frame.w, x.frame.h); return; }
         g.beginPath();
-        for (const l of layoutText(x).lines) { const a = apply(x.xf, l.x, l.y), b = apply(x.xf, l.x + Math.max(1, l.width), l.y); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); }
+        const lay = layoutText(x);
+        for (const l of lay.lines) { const [p0, p1] = lineBaseline(lay, l), a = apply(x.xf, p0.x, p0.y), b = apply(x.xf, p1.x, p1.y); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); }
         g.stroke();
       } else if (x.kind === 'image') { g.save(); g.transform(...x.xf); g.lineWidth /= Math.max(1e-6, Math.hypot(x.xf[0], x.xf[1])); g.strokeRect(0, 0, x.w, x.h); g.restore(); }
       else { const b = ctx.engine.boundsOf(x); if (Number.isFinite(b.x)) g.strokeRect(b.x, b.y, b.w, b.h); }

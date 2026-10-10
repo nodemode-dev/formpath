@@ -18,6 +18,8 @@ export const VECTOR_ICONS: Record<string, string> = {
   vAreaType: S('<rect x="3.5" y="3.5" width="17" height="17" rx="1.5" stroke-dasharray="2.4 1.9"/><path d="M8.5 8.5h7M12 8.5v8M10.5 16.5h3"/>'),
   vTypePath: S('<path d="M3 19c4-10 14-10 18 0" stroke-dasharray="2 2"/><path d="M8 6h8M12 6v8"/>'),
   vTypeVertical: S('<path d="M5 5v14M5 12h14M19 9v6"/>', 1.8),
+  vAreaTypeVertical: S('<rect x="3.5" y="3.5" width="17" height="17" rx="1.5" stroke-dasharray="2.4 1.9"/><path d="M8.5 8.5v7M8.5 12h8M16.5 10.5v3"/>'),
+  vTypePathVertical: S('<path d="M5 3c10 4 10 14 0 18" stroke-dasharray="2 2"/><path d="M14 8v8M14 12h6M20 10v4"/>'),
   vLine: S('<path d="M4 20L20 4"/>'),
   vArc: S('<path d="M4 20C4 11 11 4 20 4"/>'),
   vSpiral: S('<path d="M12 12a1.5 1.5 0 0 1 3 0 3 3 0 0 1-6 0 4.5 4.5 0 0 1 9 0 6 6 0 0 1-12 0 7.5 7.5 0 0 1 15 0"/>'),
