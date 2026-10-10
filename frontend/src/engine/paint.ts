@@ -181,7 +181,7 @@ export function withFirstStroke(ap: Appearance, patch: Partial<StrokeItem>): App
 export function resolvePaint(doc: Doc, p: Paint): Paint {
   if (p.type === 'color' && p.swatch) {
     const sw = doc.swatches.find((s) => s.id === p.swatch);
-    if (sw && sw.global && sw.paint.type === 'color') return { type: 'color', color: tinted(sw.paint.color, p.tint ?? 100) };
+    if (sw && (sw.global || sw.spot) && sw.paint.type === 'color') return { type: 'color', color: tinted(sw.paint.color, p.tint ?? 100) };
   }
   if (p.type === 'gradient' && p.swatch) {
     const sw = doc.swatches.find((s) => s.id === p.swatch);

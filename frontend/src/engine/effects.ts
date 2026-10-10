@@ -8,7 +8,7 @@ import { childrenOf } from './doc';
 import { textBounds, textOutline, textEpoch } from './text';
 import { lighting, outline3d, scene3dWith, VECTOR_3D, type RGB3, type Scene, type Solid } from './threed';
 import { transformNode } from './transform';
-import type { Anchor, BlendMode, Doc, Effect, GroupNode, Mat, Paint, PathData, PathNode, Pt, Rect, StrokeItem, VNode, WidthPoint } from './types';
+import type { Anchor, BlendMode, BrushDef, Doc, Effect, GroupNode, Mat, Paint, PathData, PathNode, Pt, Rect, StrokeItem, VNode, WidthPoint } from './types';
 
 export interface EffectParam { key: string; label: string; kind: 'number' | 'boolean' | 'select' | 'color' | 'text'; min?: number; max?: number; step?: number; unit?: string; choices?: string[]; def: number | boolean | string }
 export interface EffectDef { id: string; label: string; menu: string; raster?: boolean; family?: 'photoshop'; params: EffectParam[] }
@@ -494,8 +494,13 @@ export function arrowGeometry(d: PathData, s: StrokeItem): PathData | null {
   return out.length ? out : null;
 }
 
-export function brushGeometry(doc: Doc, d: PathData, s: StrokeItem): Array<{ d: PathData; paint: StrokeItem['paint'] | null }> | null {
+export function brushGeometry(doc: Doc, d: PathData, s: StrokeItem): Array<{ d: PathData; paint: StrokeItem['paint'] | null; opacity?: number }> | null {
   const def = doc.brushes.find((b) => b.id === s.brush || b.name === s.brush);
   if (!def) return null;
-  try { return brushOutline(doc, def, d, s); } catch { return null; }
+  let m = brushCache.get(d);
+  if (!m) { m = new WeakMap(); brushCache.set(d, m); }
+  const hit = m.get(s);
+  if (hit && hit.def === def) return hit.out;
+  try { const out = brushOutline(doc, def, d, s); m.set(s, { def, out }); return out; } catch { return null; }
 }
+const brushCache = new WeakMap<PathData, WeakMap<StrokeItem, { def: BrushDef; out: ReturnType<typeof brushOutline> }>>();

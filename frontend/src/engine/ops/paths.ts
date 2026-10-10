@@ -4,6 +4,7 @@ import { anchor, bezSplit, dist, flatIndex, hasIn, hasOut, isLineSeg, pathBounds
 import { boolean, cleanup, contains, area, offsetPath, polyKnife, simplifyPath, smoothPath, toPaper, fromPaper, type BoolOp } from '../kernel';
 import { emptyAppearance, fill, NONE, solid, BLACK } from '../paint';
 import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
+import { brushGeometry } from '../effects';
 import type { Anchor, CompoundNode, Doc, FillItem, FillRule, GroupNode, Join, Paint, PathData, PathNode, Pt, StrokeItem, SubPath, VNode } from '../types';
 import type { OpResult } from './objects';
 
@@ -200,6 +201,8 @@ export function pathOperation(doc: Doc, ids: string[], op: PathOp, a: PathOpArgs
         const parts: VNode[] = [];
         if (fills.length && fills.some((f) => f.paint.type !== 'none')) parts.push(shapeNode(g.d, n, { items: fills, effects: [] }));
         for (const s of strokes) {
+          const pieces = s.brush ? brushGeometry(out, g.d, s) : null;
+          if (pieces) { for (const pc of pieces) parts.push(shapeNode(pc.d, n, { items: [fill(pc.paint ?? s.paint, s.opacity * (pc.opacity ?? 1), s.blend)], effects: [] })); continue; }
           const d = strokeRegion(g.d, g.rule, s), art = gradientStrokeArt(out, g.d, s, g.rule);
           if (art) parts.push(...gradientStrokeNodes(art, d, s));
           else if (d.length) parts.push(shapeNode(d, n, { items: [fill(s.paint, s.opacity, s.blend)], effects: [] }));

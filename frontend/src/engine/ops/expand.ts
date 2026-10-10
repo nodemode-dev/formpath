@@ -15,7 +15,7 @@ function strokeParts(doc: Doc, d: PathData, rule: FillRule, s: StrokeItem): VNod
   const it = fill(s.paint, s.opacity, s.blend);
   if (s.brush) {
     const pieces = brushGeometry(doc, d, s);
-    if (pieces) { for (const p of pieces) out.push(shape(p.d, 'nonzero', [fill(p.paint ?? s.paint, s.opacity, s.blend)])); return out; }
+    if (pieces) { for (const p of pieces) out.push(shape(p.d, 'nonzero', [fill(p.paint ?? s.paint, s.opacity * (p.opacity ?? 1), s.blend)])); return out; }
   }
   const art = gradientStrokeArt(doc, d, s, rule);
   if (art) return gradientStrokeNodes(art, strokeRegion(d, rule, s), s);

@@ -3,6 +3,7 @@ import { geomBounds } from '../../engine/bounds';
 import { anchor, toPath2D } from '../../engine/geometry';
 import { cssColor, firstStroke, parseColor, rgb, solid, stroke as makeStroke } from '../../engine/paint';
 import { BLEND_MODES, type BlendMode, type BrushDef, type Engine, type PathData, type StrokeItem } from '../../engine';
+import { BRISTLE_SHAPES } from '../../engine/types';
 import { askForm, type Field } from '../form-dialog';
 import { el, patchList, q, setChecked, setClass, setDisabled, setHidden, setText, setTitle } from '../dom';
 import { icon } from '../icons';
@@ -176,9 +177,10 @@ export class BrushesPanel {
   private readonly list = el('<div class="cv-brushp-list" role="listbox" aria-label="Brushes"></div>');
   private frame = 0;
 
-  constructor(private readonly engine: Engine) {
+  constructor(private readonly engine: Engine, private readonly libMenu: (anchor: HTMLElement) => void = () => undefined) {
     const foot = el('<div class="cv-panel-foot"></div>');
-    const mk = (name: string, label: string, run: () => void): void => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', run); foot.appendChild(b); };
+    const mk = (name: string, label: string, run: (b: HTMLButtonElement) => void): void => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', () => run(b)); foot.appendChild(b); };
+    mk('library', 'Brush Libraries menu', (b) => this.libMenu(b));
     mk('close', 'Remove Brush Stroke', () => engine.applyBrush(null));
     mk('settings', 'Options of Selected Brush', () => void this.options());
     mk('add', 'New Brush', () => void this.create());
@@ -210,9 +212,9 @@ export class BrushesPanel {
   private async create(): Promise<void> {
     const e = this.engine;
     const v = await askForm('New Brush', [
-      { kind: 'select', key: 'kind', label: 'Type', value: e.hasSelection ? 'art' : 'calligraphic', choices: [['calligraphic', 'Calligraphic Brush'], ['scatter', 'Scatter Brush'], ['art', 'Art Brush'], ['pattern', 'Pattern Brush']] },
+      { kind: 'select', key: 'kind', label: 'Type', value: e.hasSelection ? 'art' : 'calligraphic', choices: [['calligraphic', 'Calligraphic Brush'], ['scatter', 'Scatter Brush'], ['art', 'Art Brush'], ['bristle', 'Bristle Brush'], ['pattern', 'Pattern Brush']] },
       { kind: 'text', key: 'name', label: 'Name', value: `Brush ${(e.doc?.brushes.length ?? 0) + 1}` },
-      { kind: 'note', text: 'Scatter, art and pattern brushes are made from the selected artwork; its strokes become filled shapes.' },
+      { kind: 'note', text: 'Scatter, art and pattern brushes are made from the selected artwork; its strokes become filled shapes. A pattern brush takes its corner, start and end tiles from pattern swatches.' },
     ], { ok: 'Next' });
     if (!v) return;
     const kind = String(v.kind) as BrushDef['brush']['type'], o = await this.ask(kind, null);
@@ -236,11 +238,30 @@ export class BrushesPanel {
     const title = `${kind[0].toUpperCase()}${kind.slice(1)} Brush Options`;
     const colorize = { kind: 'select' as const, key: 'colorize', label: 'Colorization', value: b?.colorize ?? 'none', choices: [['none', 'None'], ['tints', 'Tints'], ['tints_shades', 'Tints and Shades'], ['hue_shift', 'Hue Shift']] as Array<readonly [string, string]> };
     const name = b ? [{ kind: 'text' as const, key: 'name', label: 'Name', value: b.name }] : [];
+    const guides = Array.isArray(cur.guides) ? cur.guides as [number, number] : null;
+    const pats = (this.engine.doc?.patterns ?? []).map((p) => [p.name, p.name] as const);
+    const tileField = (key: 'outer' | 'inner' | 'start' | 'end', label: string): Field => ({ kind: 'select', key, label, value: b && cur[key] ? 'keep' : 'none', choices: [['none', 'None'], ...(b && cur[key] ? [['keep', 'Current tile'] as const] : []), ...(b ? [['side', 'Same as side tile'] as const] : []), ...pats] });
     const fields: Field[] =
-      kind === 'calligraphic' ? [...name, { kind: 'number', key: 'angle', label: 'Angle', value: n('angle', 0), min: -180, max: 180, unit: '°' }, { kind: 'number', key: 'roundness', label: 'Roundness', value: n('roundness', 100), min: 1, max: 100, unit: '%' }, { kind: 'number', key: 'size', label: 'Size', value: n('size', 3), min: 0.1, max: 1296, unit: 'pt' }]
+      kind === 'calligraphic' ? [...name, { kind: 'number', key: 'angle', label: 'Angle', value: n('angle', 0), min: -180, max: 180, unit: '°' }, { kind: 'number', key: 'roundness', label: 'Roundness', value: n('roundness', 100), min: 1, max: 100, unit: '%' }, { kind: 'number', key: 'size', label: 'Size', value: n('size', 3), min: 0.1, max: 1296, unit: 'pt' }, { kind: 'note', text: 'Drawn with a pen tablet, the Paintbrush varies the size with pressure.' }]
       : kind === 'scatter' ? [...name, { kind: 'number', key: 'size', label: 'Size', value: n('size', 100), min: 1, max: 1000, unit: '%' }, { kind: 'number', key: 'spacing', label: 'Spacing', value: n('spacing', 100), min: 1, max: 1000, unit: '%' }, { kind: 'number', key: 'scatter', label: 'Scatter', value: n('scatter', 0), min: -1000, max: 1000, unit: '%' }, { kind: 'number', key: 'rotation', label: 'Rotation', value: n('rotation', 0), min: -360, max: 360, unit: '°' }, { kind: 'check', key: 'relative', label: 'Rotation relative to path', value: cur.relative === true }, colorize]
-      : kind === 'art' ? [...name, { kind: 'number', key: 'width', label: 'Width', value: n('width', 100), min: 1, max: 1000, unit: '%' }, { kind: 'check', key: 'stretch', label: 'Stretch to fit stroke length', value: cur.stretch !== false }, { kind: 'check', key: 'flip', label: 'Flip across', value: cur.flip === true }, colorize]
-      : [...name, { kind: 'number', key: 'spacing', label: 'Spacing', value: n('spacing', 0), min: 0, max: 1000, unit: '%' }, { kind: 'select', key: 'fit', label: 'Fit', value: typeof cur.fit === 'string' ? cur.fit : 'stretch', choices: [['stretch', 'Stretch to fit'], ['space', 'Add space to fit'], ['approximate', 'Approximate path']] }, colorize];
+      : kind === 'art' ? [...name, { kind: 'number', key: 'width', label: 'Width', value: n('width', 100), min: 1, max: 1000, unit: '%' },
+        { kind: 'select', key: 'scaleMode', label: 'Brush scale', value: cur.stretch === false ? 'proportional' : guides ? 'guides' : 'stretch', choices: [['proportional', 'Scale proportionately'], ['stretch', 'Stretch to fit stroke length'], ['guides', 'Stretch between guides']] },
+        { kind: 'number', key: 'guide1', label: 'Start guide', value: Math.round((guides?.[0] ?? 0.25) * 100), min: 0, max: 100, unit: '%' },
+        { kind: 'number', key: 'guide2', label: 'End guide', value: Math.round((guides?.[1] ?? 0.75) * 100), min: 0, max: 100, unit: '%' },
+        { kind: 'note', text: 'Between guides, only the art between the start and end guide (a share of the art’s length) stretches; the ends keep their shape.' },
+        { kind: 'check', key: 'flipAlong', label: 'Flip along', value: cur.flipAlong === true }, { kind: 'check', key: 'flip', label: 'Flip across', value: cur.flip === true }, colorize]
+      : kind === 'bristle' ? [...name,
+        { kind: 'select', key: 'shape', label: 'Shape', value: typeof cur.shape === 'string' ? cur.shape : 'round_point', choices: BRISTLE_SHAPES },
+        { kind: 'number', key: 'size', label: 'Size', value: n('size', 7), min: 0.5, max: 72, unit: 'pt' },
+        { kind: 'number', key: 'length', label: 'Bristle length', value: n('length', 100), min: 25, max: 300, unit: '%' },
+        { kind: 'number', key: 'density', label: 'Bristle density', value: n('density', 50), min: 1, max: 100, unit: '%' },
+        { kind: 'number', key: 'thickness', label: 'Bristle thickness', value: n('thickness', 50), min: 1, max: 100, unit: '%' },
+        { kind: 'number', key: 'opacity', label: 'Paint opacity', value: n('opacity', 75), min: 1, max: 100, unit: '%' },
+        { kind: 'number', key: 'stiffness', label: 'Stiffness', value: n('stiffness', 50), min: 1, max: 100, unit: '%' },
+        { kind: 'note', text: 'Each stroke is drawn as many thin, semi-transparent bristle paths; with a pen tablet the spread follows pressure. Expand turns them into paths.' }]
+      : [...name, { kind: 'number', key: 'spacing', label: 'Spacing', value: n('spacing', 0), min: 0, max: 1000, unit: '%' }, { kind: 'select', key: 'fit', label: 'Fit', value: typeof cur.fit === 'string' ? cur.fit : 'stretch', choices: [['stretch', 'Stretch to fit'], ['space', 'Add space to fit'], ['approximate', 'Approximate path']] },
+        tileField('outer', 'Outer corner tile'), tileField('inner', 'Inner corner tile'), tileField('start', 'Start tile'), tileField('end', 'End tile'),
+        { kind: 'check', key: 'flipAlong', label: 'Flip along', value: cur.flipAlong === true }, { kind: 'check', key: 'flip', label: 'Flip across', value: cur.flip === true }, colorize];
     return askForm(title, fields, { ok: b ? 'OK' : 'Create' });
   }
 
@@ -260,14 +281,16 @@ export class BrushesPanel {
     g.clearRect(0, 0, c.width, c.height);
     const ink = (getComputedStyle(document.documentElement).getPropertyValue('--text-secondary') || '#cccccc').trim(), col = parseColor(ink) ?? rgb(204, 204, 204);
     const d: PathData = [{ closed: false, pts: [anchor(8, 14, 8, 14, 40, 0), anchor(112, 10, 80, 24, 112, 10)] }];
-    const art = b.brush.type === 'calligraphic' ? null : geomBounds(doc, b.brush.art);
+    const art = b.brush.type === 'calligraphic' || b.brush.type === 'bristle' ? null : geomBounds(doc, b.brush.art);
     const h = art && Number.isFinite(art.h) && art.h > 0 ? art.h : 10;
-    const width = b.brush.type === 'calligraphic' ? 1 : b.brush.type === 'scatter' ? Math.min(2, 9 / h) : b.brush.type === 'art' ? Math.min(2, 9 / h) : Math.min(2, 7 / h);
+    const width = b.brush.type === 'calligraphic' ? 1 : b.brush.type === 'bristle' ? Math.min(1, 14 / Math.max(1, b.brush.size)) : b.brush.type === 'scatter' ? Math.min(2, 9 / h) : b.brush.type === 'art' ? Math.min(2, 9 / h) : Math.min(2, 7 / h);
     const pieces = brushGeometry({ ...doc, brushes: [b] }, d, { ...makeStroke(solid(col), width), brush: b.id }) ?? [];
     for (const piece of pieces) {
       const p = piece.paint ?? solid(col);
       g.fillStyle = p.type === 'color' ? cssColor(p.color) : ink;
+      g.globalAlpha = piece.opacity ?? 1;
       g.fill(toPath2D(piece.d), 'nonzero');
     }
+    g.globalAlpha = 1;
   }
 }

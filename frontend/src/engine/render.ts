@@ -299,7 +299,9 @@ function strokeWith(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Path
     const g = brushGeometry(rc.doc, d, s);
     if (g) {
       ctx.fillStyle = style;
-      for (const part of g) { ctx.fillStyle = part.paint ? (paintStyle(ctx, rc, part.paint, b) ?? style) : style; ctx.fill(cachedPath(part.d), 'nonzero'); }
+      const a0 = ctx.globalAlpha;
+      for (const part of g) { ctx.fillStyle = part.paint ? (paintStyle(ctx, rc, part.paint, b) ?? style) : style; ctx.globalAlpha = a0 * (part.opacity ?? 1); ctx.fill(cachedPath(part.d), 'nonzero'); }
+      ctx.globalAlpha = a0;
       ctx.restore();
       return;
     }

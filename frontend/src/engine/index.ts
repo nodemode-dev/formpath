@@ -1,5 +1,5 @@
 import { geomBounds, invalidateBounds, nodePath, selectionBounds, visualBounds } from './bounds';
-import { defaultBrushes } from './brushes';
+import { artGuides, bristleKind, defaultBrushes, TILE_KEYS } from './brushes';
 import { allNodes, ancestors, childrenOf, cloneNode, findNode, inDocOrder, insertInto, isContainer, isLocked, isVisible, layerOf, makeLayer, newDoc, newId, nodeAt, nodeLabel, pathOf, removeNodes, topObjects, topSelectable, updateNodes, walk, type IndexPath } from './doc';
 import { EFFECT_IDS, effectDef, effectDefaults, has3d, WIDTH_PROFILES } from './effects';
 import { Emitter } from './events';
@@ -25,6 +25,8 @@ import { transformNode } from './transform';
 import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, CharTouch,Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
 import { Viewport } from './viewport';
 import { styleLibrary } from './style-libraries';
+import type { SwatchLibrary } from './swatch-libraries';
+import { paintKey, tinted } from './paint';
 import { meshAddLine, meshFromMapper, meshRemoveLines, withMeshHandle, withMeshPoint, type MeshSpec } from './envelope';
 import { envelopeFrame, envelopeMapper, envelopeOutline } from './live';
 import { quadDistort } from './ops/distort';
@@ -908,15 +910,82 @@ export class Engine extends Emitter<EngineEvents> {
     this.edit('Swatch Options', (d) => {
       const sw = d.swatches.find((s) => s.id === id);
       let out: Doc = { ...d, swatches: d.swatches.map((s) => (s.id === id ? { ...s, ...patch } : s)) };
-      if (sw && sw.global && patch.paint && patch.paint.type === 'color' && sw.paint.type === 'color') {
+      if (sw && (sw.global || sw.spot) && patch.paint && patch.paint.type === 'color' && sw.paint.type === 'color') {
         const ids = allNodes(out).filter((n) => n.ap.items.some((i) => i.paint.type === 'color' && i.paint.swatch === id)).map((n) => n.id);
         const newColor = patch.paint.color;
         out = updateNodes(out, ids, (n) => ({ ...n, ap: { ...n.ap, items: n.ap.items.map((i) => (i.paint.type === 'color' && i.paint.swatch === id ? { ...i, paint: { ...i.paint, color: newColor } } : i)) } }) as VNode);
+        out = { ...out, swatches: out.swatches.map((s) => (s.paint.type === 'color' && s.paint.swatch === id ? { ...s, paint: { ...s.paint, color: newColor } } : s)) };
       }
       return out;
     });
   }
-  deleteSwatch(id: string): void { this.edit('Delete Swatch', (d) => ({ ...d, swatches: d.swatches.filter((s) => s.id !== id) })); }
+  deleteSwatch(id: string): void { this.deleteSwatches([id]); }
+  deleteSwatches(ids: string[]): void {
+    const gone = new Set(ids.filter((id) => !this.doc?.swatches.find((s) => s.id === id)?.name.startsWith('[')));
+    if (!gone.size) return;
+    this.edit(gone.size > 1 ? 'Delete Swatches' : 'Delete Swatch', (d) => ({ ...d, swatches: d.swatches.filter((s) => !gone.has(s.id)).map((s) => (s.paint.type === 'color' && s.paint.swatch && gone.has(s.paint.swatch) ? { ...s, paint: { type: 'color' as const, color: tinted(s.paint.color, s.paint.tint ?? 100) } } : s)) }));
+  }
+  addTintSwatch(parent: string, tint: number): string {
+    const sw = this.doc?.swatches.find((s) => s.id === parent);
+    if (!sw || sw.paint.type !== 'color' || !(sw.global || sw.spot)) { this.notice('Tints come from global or spot swatches: pick one first.', 'error'); return ''; }
+    const t = Math.round(Math.max(0, Math.min(100, tint)));
+    return this.addSwatch(`${sw.name} ${t}%`, { type: 'color', color: sw.paint.color, swatch: sw.id, tint: t }, false, false, sw.group);
+  }
+  swatchGroups(): string[] { const out: string[] = []; for (const s of this.doc?.swatches ?? []) if (s.group && !out.includes(s.group)) out.push(s.group); return out; }
+  groupSwatches(ids: string[], name: string): boolean {
+    const keep = new Set(ids), d0 = this.doc;
+    if (!d0 || !name.trim()) return false;
+    const picked = d0.swatches.filter((s) => keep.has(s.id) && !s.name.startsWith('['));
+    if (!picked.length) { this.notice('Select swatches to put in the group (Shift or Mod click several).', 'error'); return false; }
+    return this.edit('New Color Group', (d) => ({ ...d, swatches: [...d.swatches.filter((s) => !picked.some((p) => p.id === s.id)), ...picked.map((s) => ({ ...s, group: name.trim() }))] }));
+  }
+  moveSwatches(ids: string[], group: string | null, before: string | null = null): boolean {
+    const keep = new Set(ids);
+    if (!this.doc || !keep.size) return false;
+    return this.edit(group ? 'Move to Color Group' : 'Move out of Color Group', (d) => {
+      const moving = d.swatches.filter((s) => keep.has(s.id) && !s.name.startsWith('[')).map((s) => { const { group: _g, ...rest } = s; void _g; return group ? { ...rest, group } : rest; });
+      const rest = d.swatches.filter((s) => !moving.some((m) => m.id === s.id));
+      let at = before ? rest.findIndex((s) => s.id === before) : -1;
+      if (at < 0) { const lastIn = group ? rest.map((s) => s.group).lastIndexOf(group) : rest.map((s) => !s.group).lastIndexOf(true); at = lastIn + 1; }
+      return { ...d, swatches: [...rest.slice(0, at), ...moving, ...rest.slice(at)] };
+    });
+  }
+  renameSwatchGroup(from: string, to: string): boolean {
+    const name = to.trim();
+    if (!name || name === from || !this.doc?.swatches.some((s) => s.group === from)) return false;
+    return this.edit('Rename Color Group', (d) => ({ ...d, swatches: d.swatches.map((s) => (s.group === from ? { ...s, group: name } : s)) }));
+  }
+  ungroupSwatches(group: string, remove = false): boolean {
+    if (!this.doc?.swatches.some((s) => s.group === group)) return false;
+    return this.edit(remove ? 'Delete Color Group' : 'Ungroup Color Group', (d) => ({ ...d, swatches: remove ? d.swatches.filter((s) => s.group !== group) : d.swatches.map((s) => { if (s.group !== group) return s; const { group: _g, ...rest } = s; void _g; return rest; }) }));
+  }
+  addLibrarySwatches(lib: SwatchLibrary, only?: string[], opts: { group?: string | null } = {}): string[] {
+    if (!this.current) return [];
+    const ids: string[] = [];
+    this.edit(`Add ${lib.name} Swatches`, (d) => {
+      let swatches = [...d.swatches], patterns = [...d.patterns];
+      for (const g of lib.groups) for (const s of g.swatches) {
+        if (only && !only.includes(s.name)) continue;
+        const group = opts.group === null ? undefined : opts.group ?? (g.name || undefined);
+        const dup = swatches.find((x) => x.name === s.name && paintKey(x.paint) === paintKey(s.paint) && x.paint.type !== 'pattern');
+        if (dup) { ids.push(dup.id); continue; }
+        let paint = s.paint;
+        if (s.pattern) {
+          const had = patterns.find((p) => p.name === s.name);
+          const pid = had?.id ?? newId('pt');
+          if (!had) patterns = [...patterns, { id: pid, name: s.name, tile: s.pattern.tile, art: cloneNode(s.pattern.art), type: s.pattern.type, hs: s.pattern.hs, vs: s.pattern.vs }];
+          const existing = swatches.find((x) => x.paint.type === 'pattern' && x.paint.pattern === pid);
+          if (existing) { ids.push(existing.id); continue; }
+          paint = { type: 'pattern', pattern: pid, xf: [1, 0, 0, 1, 0, 0] };
+        }
+        const id = newId('s');
+        ids.push(id);
+        swatches = [...swatches, { id, name: s.name, paint, global: !!s.global || !!s.spot, spot: !!s.spot, ...(group ? { group } : {}) }];
+      }
+      return { ...d, swatches, patterns };
+    });
+    return ids;
+  }
   addUsedColors(): void {
     const p = this.current; if (!p) return;
     const found: Paint[] = [];
@@ -1843,6 +1912,7 @@ export class Engine extends Emitter<EngineEvents> {
     const num = (k: string, d: number): number => (typeof o[k] === 'number' && Number.isFinite(o[k]) ? o[k] as number : d);
     let brush: BrushKind;
     if (kind === 'calligraphic') brush = { type: 'calligraphic', angle: num('angle', 0), roundness: Math.max(1, Math.min(100, num('roundness', 100))), size: Math.max(0.1, num('size', 3)) };
+    else if (kind === 'bristle') brush = bristleKind(o);
     else {
       const nodes = this.targetIds(ids).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n);
       const flat = (n: VNode): VNode[] => (n.hidden ? [] : n.kind === 'group' || n.kind === 'layer' ? n.children.flatMap(flat) : expandAppearance(p.doc, n).flatMap((x) => (x.kind === 'group' ? x.children.flatMap(flat) : [x])));
@@ -1851,8 +1921,8 @@ export class Engine extends Emitter<EngineEvents> {
       const b = selectionBounds(p.doc, parts);
       const art: VNode = { id: newId('b'), kind: 'group', clip: false, opacity: 1, blend: 'normal', ap: emptyAppearance(), children: parts.map((n) => transformNode(cloneNode(n), translate(-b.x, -b.y))) };
       brush = kind === 'scatter' ? { type: 'scatter', art, size: num('size', 100), spacing: num('spacing', 100), scatter: num('scatter', 0), rotation: num('rotation', 0), relative: o.relative === true }
-        : kind === 'art' ? { type: 'art', art, stretch: o.stretch !== false, flip: o.flip === true, width: num('width', 100) }
-        : { type: 'pattern', art, spacing: num('spacing', 0), fit: (['stretch', 'space', 'approximate'].includes(String(o.fit)) ? o.fit : 'stretch') as 'stretch' };
+        : kind === 'art' ? { type: 'art', art, stretch: o.stretch !== false, flip: o.flip === true, width: num('width', 100), ...artGuides(o) }
+        : { type: 'pattern', art, spacing: num('spacing', 0), fit: (['stretch', 'space', 'approximate'].includes(String(o.fit)) ? o.fit : 'stretch') as 'stretch', flip: o.flip === true, flipAlong: o.flipAlong === true, ...this.patternTiles(o) };
     }
     const id = newId('br');
     this.edit('New Brush', (d) => ({ ...d, brushes: [...d.brushes, { id, name: name || `Brush ${d.brushes.length + 1}`, brush, colorize }] }));
@@ -1861,7 +1931,41 @@ export class Engine extends Emitter<EngineEvents> {
     return id;
   }
   editBrush(id: string, patch: { name?: string; colorize?: BrushDef['colorize']; brush?: Partial<Record<string, number | string | boolean>> }): boolean {
-    return this.edit('Brush Options', (d) => ({ ...d, brushes: d.brushes.map((b) => (b.id !== id ? b : { ...b, ...(patch.name ? { name: patch.name } : {}), ...(patch.colorize ? { colorize: patch.colorize } : {}), brush: { ...b.brush, ...(patch.brush ?? {}) } as BrushKind })) }));
+    const raw = { ...(patch.brush ?? {}) } as Record<string, number | string | boolean>, extra: Record<string, unknown> = {};
+    const cur = this.doc?.brushes.find((b) => b.id === id);
+    if (cur?.brush.type === 'pattern') { Object.assign(extra, this.patternTiles(raw, cur.brush)); for (const k of TILE_KEYS) delete raw[k]; }
+    if (cur?.brush.type === 'art' && ('guide1' in raw || 'guide2' in raw || 'scaleMode' in raw)) { Object.assign(extra, artGuides({ ...raw, guide1: raw.guide1 ?? (cur.brush.guides?.[0] ?? 0) * 100, guide2: raw.guide2 ?? (cur.brush.guides?.[1] ?? 1) * 100 })); delete raw.guide1; delete raw.guide2; delete raw.scaleMode; }
+    if (cur?.brush.type === 'bristle') { Object.assign(extra, bristleKind({ ...cur.brush, ...raw })); }
+    return this.edit('Brush Options', (d) => ({ ...d, brushes: d.brushes.map((b) => (b.id !== id ? b : { ...b, ...(patch.name ? { name: patch.name } : {}), ...(patch.colorize ? { colorize: patch.colorize } : {}), brush: { ...b.brush, ...raw, ...extra } as BrushKind })) }));
+  }
+  patternTiles(o: Record<string, unknown>, cur?: Extract<BrushKind, { type: 'pattern' }>): Partial<Record<(typeof TILE_KEYS)[number], VNode | null>> {
+    const out: Partial<Record<(typeof TILE_KEYS)[number], VNode | null>> = {};
+    for (const k of TILE_KEYS) {
+      if (!(k in o)) continue;
+      const v = String(o[k] ?? '');
+      if (!v || v === 'none') { out[k] = null; continue; }
+      if (v === 'side' && cur) { out[k] = cloneNode(cur.art); continue; }
+      if (v === 'keep' && cur) { out[k] = cur[k] ?? null; continue; }
+      const def = this.doc?.patterns.find((p) => p.id === v || p.name === v);
+      if (def) out[k] = cloneNode(def.art);
+    }
+    return out;
+  }
+  addLibraryBrushes(defs: BrushDef[]): string[] {
+    if (!this.current || !defs.length) return [];
+    const ids: string[] = [];
+    this.edit(defs.length > 1 ? 'Add Brushes' : `Add ${defs[0].name}`, (d) => {
+      let brushes = [...d.brushes];
+      for (const b of defs) {
+        const had = brushes.find((x) => x.name === b.name && x.brush.type === b.brush.type);
+        if (had) { ids.push(had.id); continue; }
+        const id = newId('br');
+        ids.push(id);
+        brushes = [...brushes, JSON.parse(JSON.stringify({ ...b, id })) as BrushDef];
+      }
+      return { ...d, brushes };
+    });
+    return ids;
   }
   deleteBrush(id: string): boolean {
     const p = this.current; if (!p) return false;
@@ -1969,7 +2073,7 @@ export class Engine extends Emitter<EngineEvents> {
       active_layer: p.activeLayer,
       selection: topObjects(d, p.selection),
       selection_bounds: this.selectionBounds() ? box(this.selectionBounds() as Rect) : null,
-      swatches: d.swatches.map((s) => ({ name: s.name, paint: paintDesc(s.paint), global: s.global || undefined, spot: s.spot || undefined })),
+      swatches: d.swatches.map((s) => ({ name: s.name, paint: paintDesc(s.paint), global: s.global || undefined, spot: s.spot || undefined, group: s.group, tint: s.paint.type === 'color' && s.paint.swatch ? s.paint.tint : undefined })),
       symbols: d.symbols.map((s) => s.name), graphic_styles: d.styles.map((s) => s.name), brushes: d.brushes.map((b) => b.name),
       documents: this.projects.map((x, i) => ({ index: i, name: x.name, active: x.id === p.id })),
     };

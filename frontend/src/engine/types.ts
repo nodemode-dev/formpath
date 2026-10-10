@@ -226,8 +226,11 @@ export interface GraphicStyle { id: string; name: string; ap: Appearance; opacit
 export type BrushKind =
   | { type: 'calligraphic'; angle: number; roundness: number; size: number }
   | { type: 'scatter'; art: VNode; size: number; spacing: number; scatter: number; rotation: number; relative: boolean }
-  | { type: 'art'; art: VNode; stretch: boolean; flip: boolean; width: number }
-  | { type: 'pattern'; art: VNode; spacing: number; fit: 'stretch' | 'space' | 'approximate' };
+  | { type: 'art'; art: VNode; stretch: boolean; flip: boolean; width: number; guides?: [number, number] | null; flipAlong?: boolean }
+  | { type: 'pattern'; art: VNode; spacing: number; fit: 'stretch' | 'space' | 'approximate'; outer?: VNode | null; inner?: VNode | null; start?: VNode | null; end?: VNode | null; flipAlong?: boolean; flip?: boolean }
+  | { type: 'bristle'; shape: BristleShape; size: number; length: number; density: number; thickness: number; opacity: number; stiffness: number };
+export type BristleShape = 'round_point' | 'flat_point' | 'round_blunt' | 'flat_blunt' | 'round_curve' | 'flat_curve' | 'round_angle' | 'flat_angle' | 'fan';
+export const BRISTLE_SHAPES: ReadonlyArray<readonly [BristleShape, string]> = [['round_point', 'Round Point'], ['flat_point', 'Flat Point'], ['round_blunt', 'Round Blunt'], ['flat_blunt', 'Flat Blunt'], ['round_curve', 'Round Curve'], ['flat_curve', 'Flat Curve'], ['round_angle', 'Round Angle'], ['flat_angle', 'Flat Angle'], ['fan', 'Fan']];
 export interface BrushDef { id: string; name: string; brush: BrushKind; colorize: 'none' | 'tints' | 'tints_shades' | 'hue_shift' }
 export interface PatternDef { id: string; name: string; tile: Rect; art: VNode; type: 'grid' | 'brick_row' | 'brick_col' | 'hex_col' | 'hex_row'; hs: number; vs: number; brick?: number; overlap?: ['left' | 'right', 'top' | 'bottom'] }
 export interface Guide { id: string; vertical: boolean; pos: number }
