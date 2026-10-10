@@ -2,6 +2,23 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.19.0 · 2026-10-10
+
+New tools: Puppet Warp, Dimension, Shaper and Intertwine. Parity is 62.5 of 76.
+
+### Added
+
+- Puppet Warp tool (J): pins on the art, drag a pin to bend while the others hold, Alt-drag to twist, Shift to select several, Delete, Expand and Show Mesh. The solve keeps each part of the art as rigid as it can; type, images and symbols are carried in an envelope.
+- Dimension tool (Shift+I): linear (horizontal, vertical, aligned), angular, radius and diameter dimensions that keep measuring when moved or scaled and relabel when the document units change, with units, precision, scale ratio, arrow style, label font and position in the options bar, and Expand.
+- Shaper tool (Shift+N): gestures become live rectangles, rotated rectangles, circles, ellipses, triangles, polygons and lines; scribbles punch out, merge or delete regions; Shaper Groups keep their source shapes, with Faces and Shapes modes, face fills and Expand.
+- Object > Intertwine > Make, Release and Edit, and the Intertwine tool (Shift+J): click an overlap to flip or cycle which object is on top, drag to draw a zone; exported with real clip paths.
+- The Measure tool shows area and perimeter for closed shapes.
+- MCP tools `puppet_warp`, `add_dimension`, `shaper` and `intertwine`. 72 tools.
+
+### Changed
+
+- Options bar drop-downs have a fixed width, so changing a value no longer shifts the bar.
+
 ## 0.18.0 · 2026-10-10
 
 Type depth. Every type row is Full; parity is 58.5 of 76.
