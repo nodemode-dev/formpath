@@ -193,8 +193,10 @@ export interface TextNode extends NodeBase {
 }
 
 export interface ImageWarp { rows: number; cols: number; pts: Pt[]; smooth: boolean }
-export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; trace?: Record<string, number | string | boolean>; warp?: ImageWarp }
-export interface SymbolNode extends NodeBase { kind: 'symbol'; symbol: string; xf: Mat; tint?: { color: Color; amount: number } }
+export interface ImageLink { path?: string; handle?: string; name: string; size?: number; mtime?: number }
+export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; linked?: ImageLink; trace?: Record<string, number | string | boolean>; warp?: ImageWarp }
+export interface SymbolPart { ap?: Appearance; opacity?: number; blend?: BlendMode }
+export interface SymbolNode extends NodeBase { kind: 'symbol'; symbol: string; xf: Mat; tint?: { color: Color; amount: number }; parts?: Record<string, SymbolPart> }
 
 export interface BlendSpec { spacing: 'smooth' | 'steps' | 'distance'; steps: number; distance: number; alignToPath: boolean; spine: PathData | null }
 export interface BlendNode extends NodeBase { kind: 'blend'; children: VNode[]; spec: BlendSpec }
@@ -221,7 +223,8 @@ export type ContainerNode = LayerNode | GroupNode | CompoundNode | BlendNode | E
 
 export interface Artboard { id: string; name: string; x: number; y: number; w: number; h: number; bg?: Color | null }
 export interface Swatch { id: string; name: string; paint: Paint; global: boolean; spot: boolean; group?: string }
-export interface SymbolDef { id: string; name: string; art: VNode; reg: Pt }
+export interface SymbolSlice { x1: number; y1: number; x2: number; y2: number }
+export interface SymbolDef { id: string; name: string; art: VNode; reg: Pt; type?: 'static' | 'dynamic'; slice?: SymbolSlice | null }
 export interface GraphicStyle { id: string; name: string; ap: Appearance; opacity: number; blend: BlendMode }
 export type BrushKind =
   | { type: 'calligraphic'; angle: number; roundness: number; size: number }
@@ -263,6 +266,7 @@ export interface Doc {
   dataSet?: number;
   persp?: PerspGrid;
   perspView?: PerspView;
+  linkPreviews?: boolean;
 }
 
 export type VariableKind = 'text' | 'image' | 'visibility' | 'graph';

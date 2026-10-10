@@ -4,6 +4,7 @@ import { geomBounds } from './bounds';
 import { hex, mixColor } from './paint';
 import { arrange } from './ops/objects';
 import { mapNodeColors } from './ops/recolor';
+import { findPart, isDynamic, partsApplied, slicedArt, xfScale } from './symbols';
 import type { Color, Doc, GraphicStyle, Pt, SymbolNode, VNode } from './types';
 
 export type SymbolismOp = 'shift' | 'scrunch' | 'size' | 'spin' | 'stain' | 'screen' | 'style';
@@ -24,22 +25,48 @@ export interface SymbolismArgs {
 }
 
 const tintCache = new WeakMap<VNode, Map<string, VNode>>();
+const partCache = new WeakMap<object, { base: VNode; out: VNode }>();
+const sliceCache = new WeakMap<VNode, Map<string, VNode>>();
+
+const memo = (cache: WeakMap<VNode, Map<string, VNode>>, art: VNode, key: string, make: () => VNode): VNode => {
+  let m = cache.get(art);
+  if (!m) { m = new Map(); cache.set(art, m); }
+  let out = m.get(key);
+  if (!out) { out = make(); m.set(key, out); if (m.size > 96) m.delete(m.keys().next().value as string); }
+  return out;
+};
+
+export function partArt(doc: Doc, n: SymbolNode): VNode | null {
+  const s = doc.symbols.find((x) => x.id === n.symbol);
+  if (!s) return null;
+  if (!isDynamic(s) || !n.parts || !Object.keys(n.parts).length) return s.art;
+  const c = partCache.get(n.parts);
+  if (c && c.base === s.art) return c.out;
+  const out = partsApplied(s.art, n.parts);
+  partCache.set(n.parts, { base: s.art, out });
+  return out;
+}
 
 export function instanceArt(doc: Doc, n: SymbolNode): VNode | null {
   const s = doc.symbols.find((x) => x.id === n.symbol);
-  if (!s) return null;
+  let art = partArt(doc, n);
+  if (!s || !art) return null;
   const t = n.tint;
-  if (!t || t.amount <= 0) return s.art;
-  const key = `${hex(t.color)}:${t.amount.toFixed(3)}`;
-  let m = tintCache.get(s.art);
-  if (!m) { m = new Map(); tintCache.set(s.art, m); }
-  let art = m.get(key);
-  if (!art) {
-    art = mapNodeColors(s.art, (c) => mixColor(c, t.color, t.amount));
-    m.set(key, art);
-    if (m.size > 96) m.delete(m.keys().next().value as string);
+  if (t && t.amount > 0) { const base = art; art = memo(tintCache, base, `${hex(t.color)}:${t.amount.toFixed(3)}`, () => mapNodeColors(base, (c) => mixColor(c, t.color, t.amount))); }
+  const sl = s.slice;
+  if (sl) {
+    const { sx, sy } = xfScale(n.xf);
+    if (Math.abs(sx - 1) > 1e-4 || Math.abs(sy - 1) > 1e-4) { const base = art; art = memo(sliceCache, base, `${sl.x1},${sl.y1},${sl.x2},${sl.y2}:${sx.toFixed(4)}:${sy.toFixed(4)}`, () => slicedArt(doc, base, sl, sx, sy)); }
   }
   return art;
+}
+
+export function withPartEdit(doc: Doc, n: SymbolNode, part: string, fn: (n: VNode) => VNode): SymbolNode {
+  const art = partArt(doc, n), cur = art ? findPart(art, part) : null;
+  if (!cur) return n;
+  const r = fn(cur);
+  if (r === cur) return n;
+  return { ...n, parts: { ...(n.parts ?? {}), [part]: { ap: r.ap, opacity: r.opacity, blend: r.blend } } };
 }
 
 export function bakedInstance(doc: Doc, n: SymbolNode): VNode | null {

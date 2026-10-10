@@ -3,6 +3,7 @@ import { has3d, threeDFaces } from './effects';
 import { filterReach } from './filters';
 import { emptyRect, inflate, isEmptyRect, pathBounds, transformRect, unionRect } from './geometry';
 import { liveChildren } from './live';
+import { instanceArt } from './symbolism';
 import { textBounds } from './text';
 import type { Doc, Effect, PathData, Rect, StrokeItem, VNode } from './types';
 
@@ -33,8 +34,8 @@ function computeGeom(doc: Doc, n: VNode): Rect {
     case 'text': return textBounds(n);
     case 'image': return n.warp ? n.warp.pts.reduce<Rect>((r, p) => unionRect(r, { x: p.x, y: p.y, w: 0, h: 0 }), emptyRect()) : transformRect({ x: 0, y: 0, w: n.w, h: n.h }, n.xf);
     case 'symbol': {
-      const s = doc.symbols.find((x) => x.id === n.symbol);
-      return s ? transformRect(geomBounds(doc, s.art), n.xf) : transformRect({ x: -10, y: -10, w: 20, h: 20 }, n.xf);
+      const art = instanceArt(doc, n);
+      return art ? transformRect(geomBounds(doc, art), n.xf) : transformRect({ x: -10, y: -10, w: 20, h: 20 }, n.xf);
     }
     case 'mesh': return n.points.reduce((r, p) => unionRect(r, { x: p.x, y: p.y, w: 0, h: 0 }), emptyRect());
     case 'group': {

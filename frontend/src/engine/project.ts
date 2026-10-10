@@ -1,6 +1,7 @@
 import { History } from './history';
 import type { PatternSession } from './pattern';
 import { perspViewOf } from './perspective';
+import type { SymbolSession } from './symbols';
 import type { Doc, PerspView } from './types';
 import { Viewport } from './viewport';
 
@@ -16,12 +17,14 @@ export class Project {
   isolation: string | null = null;
   layerTarget: string | null = null;
   patternEdit: PatternSession | null = null;
+  symbolEdit: SymbolSession | null = null;
   activeArtboard = 0;
   persp: PerspView;
   readonly history: History;
   readonly viewport = new Viewport();
   readonly assets = new Map<string, Blob>();
   readonly bitmaps = new Map<string, ImageBitmap | HTMLImageElement>();
+  readonly previews = new Map<string, Blob>();
 
   constructor(id: string, doc: Doc, name: string) {
     this.id = id;

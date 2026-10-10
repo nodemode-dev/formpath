@@ -7,7 +7,8 @@ import { intertwineHit } from './intertwine';
 import { shaperRegionAt } from './shaper';
 import { cachedPath, clipGeometry } from './render';
 import { glyphCenter, layoutText, lineRect } from './text';
-import type { Doc, PathData, Pt, Rect, VNode } from './types';
+import { instanceArt } from './symbolism';
+import type { Doc, PathData, Pt, Rect, SymbolNode, VNode } from './types';
 
 let hctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
 function ctx(): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D {
@@ -51,7 +52,7 @@ function leafHit(doc: Doc, n: VNode, p: Pt, o: HitOpts): Hit['part'] | null {
       if (n.warp) { const w = n.warp, W = w.cols + 1; for (let j = 0; j < w.rows; j++) for (let i = 0; i < w.cols; i++) if (pointInPolygon(p, [w.pts[j * W + i], w.pts[j * W + i + 1], w.pts[(j + 1) * W + i + 1], w.pts[(j + 1) * W + i]]) !== 0) return 'image'; return null; }
       const q = apply(invert(n.xf), p.x, p.y); return q.x >= 0 && q.y >= 0 && q.x <= n.w && q.y <= n.h ? 'image' : null;
     }
-    case 'symbol': { const s = doc.symbols.find((x) => x.id === n.symbol); if (!s) return null; const q = apply(invert(n.xf), p.x, p.y); return deepHit(doc, [s.art], q, { ...o, tol: o.tol / Math.max(1e-6, Math.hypot(n.xf[0], n.xf[1])) }, []) ? 'fill' : null; }
+    case 'symbol': return symbolPartHit(doc, n, p, o) ? 'fill' : null;
     case 'mesh': return rectContains(geomBounds(doc, n), p) ? 'fill' : null;
     default: return null;
   }
@@ -101,6 +102,13 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
 }
 
 export function hitTest(doc: Doc, p: Pt, o: HitOpts): Hit | null { return deepHit(doc, doc.layers, p, o, []); }
+
+export function symbolPartHit(doc: Doc, n: SymbolNode, p: Pt, o: HitOpts): string | null {
+  const art = instanceArt(doc, n);
+  if (!art) return null;
+  const q = apply(invert(n.xf), p.x, p.y);
+  return deepHit(doc, [art], q, { ...o, tol: o.tol / Math.max(1e-6, Math.hypot(n.xf[0], n.xf[1])) }, [])?.id ?? null;
+}
 
 function pathTouchesRect(d: PathData, r: Rect, filled: boolean, rule: CanvasFillRule): boolean {
   for (const sp of d) {

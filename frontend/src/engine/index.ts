@@ -19,7 +19,10 @@ import { intersections, splitAtOffsets } from './kernel';
 import { edgePaths, faceContains, interiorOf, liveFaceNodes, liveFaces, type LiveFace } from './livepaint';
 import { artChildren, sessionGeometry, type PatternGeometry, type PatternSession } from './pattern';
 import { Project } from './project';
-import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
+import { applySymbolism, bakedInstance, partArt, withPartEdit, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
+import { defaultSlice, findPart, isDynamic, registrationPoint, sessionArt, sessionStart, type SymbolRegistration, type SymbolSession } from './symbols';
+import { symbolPartHit } from './hit';
+import type { ImageLink, ImageNode, SymbolDef } from './types';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans, touchSpans } from './text';
 import { transformNode } from './transform';
 import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, CharTouch,Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
@@ -169,7 +172,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (this.dragBase) this.cancelDrag();
     try {
       const r = fn(p.doc, p);
-      const next = reflow('layers' in r ? r : r.doc), sel = 'layers' in r ? undefined : r.select;
+      const next = this.syncSymbolEdit(p, reflow('layers' in r ? r : r.doc)), sel = 'layers' in r ? undefined : r.select;
       if (next === p.doc && sel === undefined) return false;
       p.doc = next;
       if (sel) p.selection = new Set(sel);
@@ -189,6 +192,8 @@ export class Engine extends Emitter<EngineEvents> {
     if (!findNode(p.doc, p.activeLayer) || layerOf(p.doc, p.activeLayer)?.id !== p.activeLayer) p.activeLayer = p.doc.layers[p.doc.layers.length - 1]?.id ?? '';
     if (p.isolation && !findNode(p.doc, p.isolation)) p.isolation = null;
     if (p.patternEdit && !findNode(p.doc, p.patternEdit.group)) { p.patternEdit = null; if (p.isolation) p.isolation = null; }
+    if (p.symbolEdit && !findNode(p.doc, p.symbolEdit.group)) { p.symbolEdit = null; if (p.isolation) p.isolation = null; }
+    if (this.symbolPart && !p.selection.has(this.symbolPart.instance)) this.symbolPart = null;
   }
 
   beginGesture(): void { if (this.gestureDepth++ === 0) this.gestureEdits = 0; }
@@ -224,7 +229,7 @@ export class Engine extends Emitter<EngineEvents> {
     }
   }
   beginDrag(name: string): void { const p = this.current; if (!p) return; this.dragBase = p.doc; this.dragName = name; this.dragXf = null; }
-  dragTo(doc: Doc): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = reflow(doc); invalidateBounds(); this.emit('render', null); }
+  dragTo(doc: Doc): void { const p = this.current; if (!p || !this.dragBase) return; p.doc = this.syncSymbolEdit(p, reflow(doc)); invalidateBounds(); this.emit('render', null); }
   reflowAll(): void { for (const p of this.projects) { if (p.id === this.currentId && this.dragBase) continue; const d = reflow(p.doc); if (d !== p.doc) p.doc = d; } this.refresh(); }
   get dragging(): boolean { return this.dragBase !== null; }
   get dragOrigin(): Doc | null { return this.dragBase; }
@@ -297,6 +302,7 @@ export class Engine extends Emitter<EngineEvents> {
       else s.add(id);
     }
     p.selection = s;
+    this.symbolPart = null;
     for (const id of [...p.anchors.keys()]) if (!s.has(id)) p.anchors.delete(id);
     const first = valid[valid.length - 1];
     if (first) { const l = layerOf(p.doc, first); if (l) p.activeLayer = l.id; }
@@ -504,6 +510,8 @@ export class Engine extends Emitter<EngineEvents> {
 
   applyToSelection(name: string, fn: (n: VNode) => VNode, ids?: string[]): boolean {
     const p = this.current; if (!p) return false;
+    const sp = ids ? null : this.activeSymbolPart();
+    if (sp) return this.edit(name, (d) => updateNodes(d, [sp.instance], (n) => (n.kind === 'symbol' ? withPartEdit(d, n, sp.part, fn) : n)));
     const targets = this.targetIds(ids);
     if (!targets.length) return false;
     return this.edit(name, (d) => updateNodes(d, targets, fn));
@@ -764,6 +772,7 @@ export class Engine extends Emitter<EngineEvents> {
   isolate(id: string | null): void {
     const p = this.current; if (!p) return;
     if (p.patternEdit) { if (id === null) this.exitPatternEdit(true); return; }
+    if (p.symbolEdit) { if (id === null) this.exitSymbolEdit(true); return; }
     const n = id ? findNode(p.doc, id) : null;
     p.isolation = n && (isContainer(n) && n.kind !== 'layer' && n.kind !== 'compound') ? id : null;
     p.selection.clear();
@@ -1040,18 +1049,21 @@ export class Engine extends Emitter<EngineEvents> {
     return st.id;
   }
 
-  makeSymbol(name: string, ids?: string[]): string {
+  private symbolArtOf(nodes: VNode[], reg: Pt): VNode {
+    return nodes.length === 1 ? transformNode(cloneNode(nodes[0]), translate(-reg.x, -reg.y)) : { id: newId('g'), kind: 'group', clip: false, opacity: 1, blend: 'normal', ap: emptyAppearance(), children: nodes.map((n) => transformNode(cloneNode(n), translate(-reg.x, -reg.y))) };
+  }
+  makeSymbol(name: string, ids?: string[], o: { type?: 'static' | 'dynamic'; reg?: SymbolRegistration; slice?: boolean } = {}): string {
     const p = this.current; if (!p) return '';
     const t = this.targetIds(ids);
     const nodes = t.map((id) => findNode(p.doc, id) as VNode).filter(Boolean);
     if (!nodes.length) return '';
     const b = selectionBounds(p.doc, nodes);
-    const reg = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-    const art: VNode = nodes.length === 1 ? transformNode(cloneNode(nodes[0]), translate(-reg.x, -reg.y)) : { id: newId('g'), kind: 'group', clip: false, opacity: 1, blend: 'normal', ap: emptyAppearance(), children: nodes.map((n) => transformNode(cloneNode(n), translate(-reg.x, -reg.y))) };
-    const sid = newId('y');
+    const reg = registrationPoint(b, o.reg ?? 'c');
+    const art = this.symbolArtOf(nodes, reg);
+    const sid = newId('y'), slice = o.slice ? defaultSlice(geomBounds(p.doc, art)) : null;
     const inst = { id: newId('i'), kind: 'symbol' as const, symbol: sid, xf: [1, 0, 0, 1, reg.x, reg.y] as Mat, opacity: 1, blend: 'normal' as BlendMode, ap: emptyAppearance() };
     this.edit('New Symbol', (d) => {
-      const withSym = { ...d, symbols: [...d.symbols, { id: sid, name, art, reg: { x: 0, y: 0 } }] };
+      const withSym = { ...d, symbols: [...d.symbols, { id: sid, name, art, reg: { x: 0, y: 0 }, type: o.type ?? 'dynamic', ...(slice ? { slice } : {}) }] };
       const last = t[t.length - 1];
       const lp = pathOf(withSym, last) as IndexPath;
       let out = removeNodes(withSym, t.filter((x) => x !== last));
@@ -1066,6 +1078,166 @@ export class Engine extends Emitter<EngineEvents> {
     const sym = this.doc?.symbols.find((s) => s.id === symbolId || s.name === symbolId);
     if (!sym) return '';
     return this.addNodes('Place Symbol Instance', [{ id: newId('i'), kind: 'symbol', symbol: sym.id, xf: [scale, 0, 0, scale, at.x, at.y], opacity: 1, blend: 'normal', ap: emptyAppearance() }])[0] ?? '';
+  }
+  symbolDef(key?: string | null): SymbolDef | null {
+    const d = this.doc, k = key ?? this.currentSymbol;
+    return d && k ? d.symbols.find((s) => s.id === k || s.name === k) ?? null : null;
+  }
+  selectedInstances(ids?: string[]): Array<VNode & { kind: 'symbol' }> {
+    const p = this.current;
+    return p ? this.targetIds(ids).map((id) => findNode(p.doc, id)).filter((n): n is VNode & { kind: 'symbol' } => n?.kind === 'symbol') : [];
+  }
+  addLibrarySymbols(list: Array<{ name: string; art: VNode; type?: 'static' | 'dynamic'; slice?: SymbolDef['slice'] }>): string[] {
+    const p = this.current; if (!p || !list.length) return [];
+    const ids: string[] = [], add: SymbolDef[] = [];
+    for (const s of list) {
+      const have = p.doc.symbols.find((x) => x.name === s.name) ?? add.find((x) => x.name === s.name);
+      if (have) { ids.push(have.id); continue; }
+      const def: SymbolDef = { id: newId('y'), name: s.name, art: cloneNode(s.art), reg: { x: 0, y: 0 }, type: s.type ?? 'dynamic', ...(s.slice ? { slice: s.slice } : {}) };
+      add.push(def); ids.push(def.id);
+    }
+    if (add.length) this.edit(add.length === 1 ? `Add Symbol ${add[0].name}` : 'Add Symbols', (d) => ({ ...d, symbols: [...d.symbols, ...add] }));
+    this.currentSymbol = ids[ids.length - 1] ?? this.currentSymbol;
+    this.emit('options', null);
+    return ids;
+  }
+  duplicateSymbol(key?: string | null): string {
+    const s = this.symbolDef(key);
+    if (!s || !this.doc) return '';
+    const names = new Set(this.doc.symbols.map((x) => x.name));
+    let name = `${s.name} copy`, k = 2;
+    while (names.has(name)) name = `${s.name} copy ${k++}`;
+    const def: SymbolDef = { ...s, id: newId('y'), name, art: cloneNode(s.art) };
+    this.edit('Duplicate Symbol', (d) => ({ ...d, symbols: [...d.symbols, def] }));
+    this.currentSymbol = def.id;
+    this.emit('options', null);
+    return def.id;
+  }
+  redefineSymbol(key?: string | null, ids?: string[]): boolean {
+    const p = this.current, s = this.symbolDef(key);
+    if (!p || !s) return false;
+    const t = this.targetIds(ids).filter((id) => { const n = findNode(p.doc, id); return !!n && !(n.kind === 'symbol' && n.symbol === s.id); });
+    const nodes = t.map((id) => findNode(p.doc, id) as VNode).filter(Boolean);
+    if (!nodes.length) { this.notice('Select the artwork that should become the symbol.'); return false; }
+    const b = selectionBounds(p.doc, nodes), reg = registrationPoint(b, 'c'), art = this.symbolArtOf(nodes, reg);
+    const inst: VNode = { id: newId('i'), kind: 'symbol', symbol: s.id, xf: [1, 0, 0, 1, reg.x, reg.y], opacity: 1, blend: 'normal', ap: emptyAppearance() };
+    const slice = s.slice ? defaultSlice(geomBounds(p.doc, art)) : s.slice;
+    return this.edit('Redefine Symbol', (d) => {
+      const withSym = { ...d, symbols: d.symbols.map((x) => (x.id === s.id ? { ...x, art, ...(slice !== undefined ? { slice } : {}) } : x)) };
+      const last = t[t.length - 1];
+      let out = removeNodes(withSym, t.filter((x) => x !== last));
+      out = updateNodes(out, [last], () => inst);
+      out = updateNodes(out, allNodes(out).filter((n) => n.kind === 'symbol' && n.symbol === s.id && n.parts).map((n) => n.id), (n) => (n.kind === 'symbol' ? { ...n, parts: undefined } : n));
+      return { doc: out, select: [inst.id] };
+    });
+  }
+  replaceSymbol(key: string, ids?: string[]): number {
+    const s = this.symbolDef(key), insts = this.selectedInstances(ids);
+    if (!s || !insts.length) return 0;
+    this.edit('Replace Symbol', (d) => updateNodes(d, insts.map((n) => n.id), (n) => (n.kind === 'symbol' ? { ...n, symbol: s.id, parts: undefined } : n)));
+    return insts.length;
+  }
+  setSymbolOptions(key: string, o: { name?: string; type?: 'static' | 'dynamic'; slice?: SymbolDef['slice'] | boolean }): boolean {
+    const p = this.current, s = this.symbolDef(key);
+    if (!p || !s) return false;
+    const name = o.name?.trim();
+    const slice = o.slice === true ? s.slice ?? defaultSlice(geomBounds(p.doc, s.art)) : o.slice === false ? null : o.slice;
+    return this.edit('Symbol Options', (d) => ({ ...d, symbols: d.symbols.map((x) => (x.id === s.id ? { ...x, ...(name ? { name } : {}), ...(o.type ? { type: o.type } : {}), ...(slice !== undefined ? { slice } : {}) } : x)) }));
+  }
+  resetSymbolParts(ids?: string[]): number {
+    const insts = this.selectedInstances(ids).filter((n) => n.parts);
+    if (!insts.length) return 0;
+    this.edit('Reset Symbol Overrides', (d) => updateNodes(d, insts.map((n) => n.id), (n) => (n.kind === 'symbol' ? { ...n, parts: undefined } : n)));
+    return insts.length;
+  }
+  symbolPart: { instance: string; part: string } | null = null;
+  activeSymbolPart(): { instance: string; part: string } | null {
+    const p = this.current, sp = this.symbolPart;
+    if (!p || !sp || p.selection.size !== 1 || !p.selection.has(sp.instance)) return null;
+    const n = findNode(p.doc, sp.instance);
+    return n?.kind === 'symbol' && isDynamic(p.doc.symbols.find((s) => s.id === n.symbol)) ? sp : null;
+  }
+  pickSymbolPart(id: string, at: Pt, tol: number): string | null {
+    const p = this.current, n = p ? findNode(p.doc, id) : null;
+    if (!p || n?.kind !== 'symbol' || !isDynamic(p.doc.symbols.find((s) => s.id === n.symbol))) return null;
+    const part = symbolPartHit(p.doc, n, at, { tol, outline: this.view.outline });
+    this.symbolPart = part ? { instance: id, part } : null;
+    this.emit('overlay', null); this.emit('options', null);
+    return part;
+  }
+  setSymbolPart(instance: string, part: string, patch: { fill?: Paint; stroke?: Paint; strokeWidth?: number; opacity?: number }): boolean {
+    const p = this.current, n = p ? findNode(p.doc, instance) : null;
+    if (!p || n?.kind !== 'symbol') return false;
+    const art = partArt(p.doc, n);
+    if (!art || !findPart(art, part)) return false;
+    return this.edit('Symbol Override', (d) => updateNodes(d, [instance], (x) => (x.kind === 'symbol' ? withPartEdit(d, x, part, (c) => {
+      let ap = c.ap;
+      if (patch.fill) ap = withFirstFill(ap, patch.fill);
+      if (patch.stroke || patch.strokeWidth !== undefined) ap = withFirstStroke(ap, { ...(patch.stroke ? { paint: patch.stroke } : {}), ...(patch.strokeWidth !== undefined ? { width: patch.strokeWidth } : {}) });
+      return { ...c, ap, ...(patch.opacity !== undefined ? { opacity: patch.opacity } : {}) } as VNode;
+    }) : x)));
+  }
+  get symbolSession(): SymbolSession | null { return this.current?.symbolEdit ?? null; }
+  private syncSymbolEdit(p: Project, doc: Doc): Doc {
+    const s = p.symbolEdit;
+    if (!s) return doc;
+    const g = findNode(doc, s.group);
+    if (!g || g.kind !== 'group') return doc;
+    const art = sessionArt(g, s), def = doc.symbols.find((x) => x.id === s.symbol);
+    if (!def || def.art === art) return doc;
+    return { ...doc, symbols: doc.symbols.map((x) => (x.id === s.symbol ? { ...x, art } : x)) };
+  }
+  enterSymbolEdit(key?: string | null, instanceId?: string | null): boolean {
+    const p = this.current, def = this.symbolDef(key);
+    if (!p || !def) { this.notice('Pick a symbol in the Symbols panel first.'); return false; }
+    if (p.patternEdit) this.exitPatternEdit(true);
+    if (p.symbolEdit) this.exitSymbolEdit(true);
+    const inst = instanceId ? findNode(p.doc, instanceId) : null, onInst = inst?.kind === 'symbol' && inst.symbol === def.id ? inst : null;
+    const v = p.viewport, origin = onInst ? { x: onInst.xf[4], y: onInst.xf[5] } : v.toDoc(v.centerX, v.height / 2);
+    const { kids, shell, plain, ids } = sessionStart(def, origin);
+    const g: GroupNode = { id: newId('g'), kind: 'group', name: `Symbol: ${def.name}`, clip: false, children: kids, opacity: 1, blend: 'normal', ap: emptyAppearance() };
+    const mark = p.history.mark(), before = [...p.selection];
+    const session: SymbolSession = { symbol: def.id, group: g.id, instance: onInst?.id ?? null, hidden: !!onInst?.hidden, origin, shell, plain, mark, before, ids };
+    const ok = this.edit('Edit Symbol', (d) => {
+      const ip = onInst ? pathOf(d, onInst.id) : null;
+      const at = ip ? { parent: ip.slice(0, -1), index: ip[ip.length - 1] + 1 } : this.insertionPoint(d, p, { layer: p.activeLayer });
+      let out = insertInto(d, at.parent, at.index, [g]);
+      if (onInst) out = updateNodes(out, [onInst.id], (n) => ({ ...n, hidden: true }));
+      return { doc: out, select: [] };
+    });
+    if (!ok) return false;
+    p.symbolEdit = session;
+    p.isolation = g.id;
+    this.currentSymbol = def.id;
+    this.emit('selection', null); this.emit('render', null); this.emit('overlay', null); this.emit('options', null);
+    return true;
+  }
+  exitSymbolEdit(save = true): boolean {
+    const p = this.current, s = p?.symbolEdit;
+    if (!p || !s) return false;
+    const g = findNode(p.doc, s.group);
+    if (save && g?.kind === 'group' && !g.children.length) { this.notice('A symbol needs some art: undo the deletion or cancel the edit.', 'error'); return false; }
+    p.symbolEdit = null;
+    p.isolation = null;
+    if (!save || g?.kind !== 'group') {
+      const st = p.history.rewind(s.mark);
+      if (st) this.restore(p, st.doc, s.before); else this.refresh();
+      this.emit('history', null);
+      return false;
+    }
+    const art = sessionArt(g, s);
+    this.edit('Edit Symbol', (d) => {
+      let out = removeNodes(d, [s.group]);
+      out = { ...out, symbols: out.symbols.map((x) => (x.id === s.symbol ? { ...x, art } : x)) };
+      if (s.instance) out = updateNodes(out, [s.instance], (n) => ({ ...n, hidden: s.hidden || undefined }));
+      return { doc: out, select: s.instance && findNode(out, s.instance) ? [s.instance] : s.before };
+    });
+    if (p.history.squash(s.mark)) this.emit('history', null);
+    return true;
+  }
+  setSymbolSlice(key: string, slice: SymbolDef['slice']): boolean {
+    const s = this.symbolDef(key);
+    return !!s && this.edit('9-Slice Scaling Guides', (d) => ({ ...d, symbols: d.symbols.map((x) => (x.id === s.id ? { ...x, slice } : x)) }));
   }
   symbolism(args: SymbolismArgs, ids?: string[]): number {
     const t = this.targetIds(ids);
@@ -2020,11 +2192,31 @@ export class Engine extends Emitter<EngineEvents> {
     });
   }
 
-  addImage(key: string, blob: Blob, w: number, h: number, at: Pt, width?: number, link?: string): string {
+  setImageSource(name: string, ids: string[], src: { key: string; mime: string; w: number; h: number } | null, linked: ImageLink | null | undefined): boolean {
+    const p = this.current; if (!p) return false;
+    const t = ids.filter((id) => findNode(p.doc, id)?.kind === 'image');
+    if (!t.length) return false;
+    return this.edit(name, (d) => {
+      const out = updateNodes(d, t, (n) => {
+        if (n.kind !== 'image') return n;
+        let next: ImageNode = n;
+        if (src) {
+          const sx = n.w / src.w, sy = n.h / src.h;
+          next = { ...next, src: src.key, w: src.w, h: src.h, xf: [n.xf[0] * sx, n.xf[1] * sx, n.xf[2] * sy, n.xf[3] * sy, n.xf[4], n.xf[5]] };
+        }
+        if (linked === null) { const { linked: _l, link: _n, ...rest } = next; void _n; next = { ...rest, name: rest.name ?? _l?.name } as ImageNode; }
+        else if (linked) next = { ...next, linked, link: linked.name };
+        return next;
+      });
+      return src ? { ...out, images: { ...out.images, [src.key]: { mime: src.mime, w: src.w, h: src.h } } } : out;
+    });
+  }
+  setLinkPreviews(on: boolean): void { this.edit(on ? 'Keep Previews of Linked Images' : 'Drop Previews of Linked Images', (d) => ({ ...d, linkPreviews: on })); }
+  addImage(key: string, blob: Blob, w: number, h: number, at: Pt, width?: number, link?: string, linked?: ImageLink): string {
     const p = this.current; if (!p) return '';
     p.assets.set(key, blob);
     const s = width ? width / w : 1;
-    const node: VNode = { id: newId('im'), kind: 'image', src: key, w, h, xf: [s, 0, 0, s, at.x, at.y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(link ? { link } : {}) };
+    const node: VNode = { id: newId('im'), kind: 'image', src: key, w, h, xf: [s, 0, 0, s, at.x, at.y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(link ? { link } : {}), ...(linked ? { linked, link: linked.name } : {}) };
     this.edit('Place', (d) => ({ ...d, images: { ...d.images, [key]: { mime: blob.type || 'image/png', w, h } } }));
     return this.addNodes('Place', [node])[0] ?? '';
   }
@@ -2052,8 +2244,13 @@ export class Engine extends Emitter<EngineEvents> {
       }
       if (n.kind === 'path') { out.anchors = n.d.reduce((a, sp) => a + sp.pts.length, 0); out.closed = n.d.every((sp) => sp.closed); if (n.live) out.shape = n.live.kind; }
       if (n.kind === 'text') { out.text = plainText(n).slice(0, 400); out.mode = n.mode; const st = n.spans[0]?.style; if (st) { out.font = `${st.font} ${st.style}`; out.size = st.size; out.color = paintDesc(st.fill); } }
-      if (n.kind === 'symbol') out.symbol = d.symbols.find((x) => x.id === n.symbol)?.name;
-      if (n.kind === 'image') out.pixels = `${n.w}x${n.h}`;
+      if (n.kind === 'symbol') {
+        const s = d.symbols.find((x) => x.id === n.symbol);
+        out.symbol = s?.name;
+        if (s?.type === 'dynamic') { const parts: string[] = []; walk([s.art], (x) => { if (!childrenOf(x) || x.kind === 'compound') parts.push(`${x.id} ${nodeLabel(x)}`); }); out.parts = parts.slice(0, 40); if (n.parts) out.overrides = Object.keys(n.parts); }
+        if (s?.slice) out.nine_slice = true;
+      }
+      if (n.kind === 'image') { out.pixels = `${n.w}x${n.h}`; if (n.linked) out.link = n.linked.path ?? n.linked.name; }
       if (n.ap.effects.length) out.effects = n.ap.effects.map((e) => e.id);
       if (n.ap.items.length > 2) out.appearance_items = n.ap.items.length;
       if (n.kind === 'group' && n.clip) out.clipping = true;
