@@ -26,6 +26,8 @@ export interface Prefs {
   checkerSize: CheckerSize;
   checkerColors: CheckerColors;
   narrowCollapse: boolean;
+  newMaskClip: boolean;
+  newMaskInvert: boolean;
 }
 
 export const UNIT_CHOICES: ReadonlyArray<readonly [Units, string]> = [['pt', 'Points'], ['px', 'Pixels'], ['in', 'Inches'], ['mm', 'Millimeters'], ['cm', 'Centimeters'], ['pc', 'Picas']];
@@ -38,7 +40,7 @@ export const RECOVERY_CHOICES: ReadonlyArray<readonly [string, string]> = [['10'
 export const DEFAULT_PREFS: Prefs = {
   shortcuts: {}, restoreSession: true, agentsAllowed: false, nodemodeUrl: 'http://localhost:8000', historyStates: 200, recoverySeconds: 20, autoShowHome: true,
   zoomWheel: false, keyIncrement: 1, snapTolerance: 4, units: 'pt', scaleStrokes: true, previewBounds: false, gridInBack: true, gridSpacing: 72, gridSubdivisions: 8,
-  guideColor: '', gridColor: '', checkerSize: 'medium', checkerColors: 'light', narrowCollapse: true,
+  guideColor: '', gridColor: '', checkerSize: 'medium', checkerColors: 'light', narrowCollapse: true, newMaskClip: true, newMaskInvert: false,
 };
 
 const KEY = 'formpth.prefs';
@@ -71,6 +73,8 @@ export function loadPrefs(): Prefs {
       checkerSize: CHECKER_SIZES.some(([k]) => k === r.checkerSize) ? r.checkerSize as CheckerSize : 'medium',
       checkerColors: CHECKER_COLORS.some(([k]) => k === r.checkerColors) ? r.checkerColors as CheckerColors : 'light',
       narrowCollapse: bool(r.narrowCollapse, true),
+      newMaskClip: bool(r.newMaskClip, true),
+      newMaskInvert: bool(r.newMaskInvert, false),
     };
   } catch { return { ...DEFAULT_PREFS }; }
 }
@@ -80,6 +84,7 @@ export function savePrefs(p: Prefs): void { try { localStorage.setItem(KEY, JSON
 export function applyPrefs(engine: Engine, p: Prefs): void {
   History.limit = p.historyStates;
   engine.view = { ...engine.view, scaleStrokes: p.scaleStrokes, previewBounds: p.previewBounds };
+  engine.maskDefaults = { clip: p.newMaskClip, invert: p.newMaskInvert };
   engine.emit('options', null);
   engine.emit('overlay', null);
 }

@@ -192,7 +192,7 @@
 .cv-strokep-dash .cv-num { padding: 0 4px; }
 .cv-strokep-dash .cv-num input { width: 100%; text-align: center; }
 .cv-strokep-dash[hidden] { display: none; }
-.cv-transp-mask { display: flex; gap: 12px; }
+.cv-transp-mask { display: flex; flex-wrap: wrap; column-gap: 12px; }
 .cv-transp-mask[hidden] { display: none; }
 .cv-attrp .cv-kit-row { flex-wrap: nowrap; }
 .cv-attrp .cv-kit-row > .cv-seg { flex: none; }

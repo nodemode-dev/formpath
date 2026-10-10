@@ -4,9 +4,9 @@ import { anchor, toPath2D } from '../../engine/geometry';
 import { cssColor, firstStroke, parseColor, rgb, solid, stroke as makeStroke } from '../../engine/paint';
 import { BLEND_MODES, type BlendMode, type BrushDef, type Engine, type PathData, type StrokeItem } from '../../engine';
 import { askForm, type Field } from '../form-dialog';
-import { el, patchList, q, setClass, setHidden, setText, setTitle } from '../dom';
+import { el, patchList, q, setChecked, setClass, setDisabled, setHidden, setText, setTitle } from '../dom';
 import { icon } from '../icons';
-import { check, numField, row, section, seg, selectCtl, slider } from './kit';
+import { check, numField, row, section, seg, selectCtl, slider, type Ctl } from './kit';
 
 function currentStroke(e: Engine): StrokeItem {
   for (const n of e.selected()) {
@@ -111,8 +111,11 @@ export class TransparencyPanel {
   private readonly makeBtn: HTMLButtonElement;
   private readonly clip;
   private readonly invert;
+  private readonly disable;
+  private readonly link;
   private readonly isolate;
   private readonly knockout;
+  private readonly koShape;
   private readonly maskRow = el('<div class="cv-transp-mask"></div>');
 
   constructor(private readonly engine: Engine) {
@@ -122,10 +125,13 @@ export class TransparencyPanel {
     this.makeBtn.addEventListener('click', () => { if (engine.selected().some((n) => n.mask)) engine.releaseOpacityMask(); else engine.makeOpacityMask(); });
     this.clip = check('Clip', (on) => engine.setOpacityMask({ clip: on }));
     this.invert = check('Invert Mask', (on) => engine.setOpacityMask({ invert: on }));
+    this.disable = check('Disable', (on) => engine.setOpacityMask({ disabled: on }));
+    this.link = check('Link', (on) => engine.setOpacityMask({ linked: on }));
     this.isolate = check('Isolate Blending', (on) => engine.setObjectProps({ isolate: on }));
-    this.knockout = check('Knockout Group', (on) => engine.setObjectProps({ knockout: on }));
-    this.maskRow.append(this.clip.el, this.invert.el);
-    this.body.append(this.blend.el, this.opacity.el, row(this.makeBtn), this.maskRow, this.isolate.el, this.knockout.el);
+    this.knockout = triCheck('Knockout Group', (v) => engine.setObjectProps({ knockout: v }));
+    this.koShape = check('Opacity and Mask Define Knockout Shape', (on) => engine.setObjectProps({ knockoutShape: on }));
+    this.maskRow.append(this.clip.el, this.invert.el, this.disable.el, this.link.el);
+    this.body.append(this.blend.el, this.opacity.el, row(this.makeBtn), this.maskRow, this.isolate.el, this.knockout.el, this.koShape.el);
     for (const k of ['selection', 'doc', 'active'] as const) engine.on(k, () => this.queue());
     this.sync();
   }
@@ -136,15 +142,33 @@ export class TransparencyPanel {
     const n = this.engine.selected()[0], has = !!n;
     this.blend.set(n?.blend ?? 'normal');
     this.opacity.set(Math.round((n?.opacity ?? 1) * 100));
-    for (const c of [this.blend, this.opacity, this.isolate, this.knockout]) c.enable(has);
+    for (const c of [this.blend, this.opacity, this.isolate, this.knockout, this.koShape]) c.enable(has);
     setText(this.makeBtn, n?.mask ? 'Release' : 'Make Mask');
     this.makeBtn.disabled = !has;
     setHidden(this.maskRow, !n?.mask);
     this.clip.set(!!n?.mask?.clip);
     this.invert.set(!!n?.mask?.invert);
+    this.disable.set(!!n?.mask?.disabled);
+    this.link.set(n?.mask ? n.mask.linked : true);
     this.isolate.set(!!n?.isolate);
-    this.knockout.set(!!n?.knockout);
+    this.knockout.set(n?.knockout ?? false);
+    this.koShape.set(!!n?.knockoutShape);
   }
+}
+
+function triCheck(label: string, change: (v: boolean | 'inherit') => void): Ctl<boolean | 'inherit'> {
+  const n = el('<label class="cv-check"><input type="checkbox"><span></span></label>');
+  setText(q(n, 'span'), label);
+  const c = q<HTMLInputElement>(n, 'input');
+  let cur: boolean | 'inherit' = false;
+  const show = (v: boolean | 'inherit'): void => {
+    cur = v;
+    setChecked(c, v === true);
+    if (c.indeterminate !== (v === 'inherit')) c.indeterminate = v === 'inherit';
+    setTitle(n, v === 'inherit' ? `${label}: inherit from the enclosing group` : `${label}: ${v ? 'on' : 'off'}`);
+  };
+  c.addEventListener('change', () => { const next = cur === false ? true : cur === true ? 'inherit' : false; show(next); change(next); });
+  return { el: n, set: show, enable: (on) => setDisabled(c, !on) };
 }
 
 export class BrushesPanel {
