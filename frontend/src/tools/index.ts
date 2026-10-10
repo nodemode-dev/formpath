@@ -7,6 +7,7 @@ import './puppet';
 import './dimension';
 import './paint';
 import './shaper';
+import './perspective';
 import './symbolism';
 import './graph';
 import './type';

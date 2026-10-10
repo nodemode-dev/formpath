@@ -1,6 +1,7 @@
 import { rotateAbout } from '../engine/geometry';
 import { transformNode } from '../engine/transform';
-import type { Engine, PathData, Pt, VNode } from '../engine';
+import type { Engine, Mat, PathData, Pt, VNode } from '../engine';
+import { attachPlace, planeAt, snapPlane } from '../engine/perspective';
 import { registerTool, toolHost, type OptionSpec } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { dragRect, fmt, hud, inView, layerColor, unitLabel } from './util';
@@ -9,8 +10,8 @@ import { cachedPath } from '../engine/render';
 export const pendingShape: { kind: string; at: Pt } = { kind: 'rectangle', at: { x: 0, y: 0 } };
 
 type Kind = 'rectangle' | 'rounded_rectangle' | 'ellipse' | 'polygon' | 'star' | 'flare' | 'line' | 'arc' | 'spiral' | 'rect_grid' | 'polar_grid';
-interface State { on: boolean; start: Pt; cur: Pt; shift: boolean; alt: boolean; preview: VNode | null }
-const S: State = { on: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, shift: false, alt: false, preview: null };
+interface State { on: boolean; start: Pt; cur: Pt; shift: boolean; alt: boolean; preview: VNode | null; plane: Engine['perspActive'] }
+const S: State = { on: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, shift: false, alt: false, preview: null, plane: null };
 
 const radial = new Set<Kind>(['polygon', 'star', 'flare', 'spiral']);
 const linear = new Set<Kind>(['line', 'arc']);
@@ -35,6 +36,22 @@ function build(e: Engine, kind: Kind, a: Pt, b: Pt, square: boolean, center: boo
   if (kind === 'rect_grid') return e.gridGroup('rectangular', r.x, r.y, r.w, r.h, e.options.gridRows, e.options.gridCols);
   if (kind === 'polar_grid') return e.gridGroup('polar', r.x, r.y, r.w, r.h, e.options.gridRows, e.options.gridCols);
   return e.shapePath(kind, r.x, r.y, r.w, r.h);
+}
+
+type OnPlane = NonNullable<Engine['perspActive']>;
+const I: Mat = [1, 0, 0, 1, 0, 0];
+
+function planePt(e: Engine, pl: OnPlane, p: Pt, zoom: number): Pt | null {
+  const q = planeAt(pl.grid, pl.plane, pl.off, p);
+  return q && e.perspView.snap ? snapPlane(pl.grid, pl.plane, pl.off, q, 6 / zoom) : q;
+}
+
+function buildOn(e: Engine, pl: OnPlane | null, kind: Kind, a: Pt, b: Pt, square: boolean, center: boolean, zoom: number): VNode | null {
+  if (!pl) return build(e, kind, a, b, square, center);
+  const pa = planePt(e, pl, a, zoom), pb = planePt(e, pl, b, zoom), d = e.doc;
+  if (!pa || !pb || !d) return null;
+  const n = build(e, kind, pa, pb, square, center);
+  return n ? attachPlace(d, n, pl.grid, { plane: pl.plane, off: pl.off }, I) : null;
 }
 
 function geometry(n: VNode): PathData[] {
@@ -63,11 +80,11 @@ function shapeTool(id: string, label: string, iconName: string, group: string, o
     hint: () => hint,
     cursor: () => CURSORS.cross,
     options: (e) => [{ kind: 'title', text: label }, ...shapeOptions(kind, e)],
-    down: (ctx, p) => { S.on = true; S.start = ctx.snap(p.doc).p; S.cur = S.start; S.preview = null; },
+    down: (ctx, p) => { S.on = true; S.plane = ctx.engine.perspActive; S.start = S.plane ? p.doc : ctx.snap(p.doc).p; S.cur = S.start; S.preview = null; },
     move: (ctx, p) => {
       if (!S.on) return;
-      S.cur = ctx.snap(p.doc, undefined, { from: S.start }).p; S.shift = p.shift; S.alt = p.alt;
-      S.preview = build(ctx.engine, kind, S.start, S.cur, p.shift, p.alt);
+      S.cur = S.plane ? p.doc : ctx.snap(p.doc, undefined, { from: S.start }).p; S.shift = p.shift; S.alt = p.alt;
+      S.preview = buildOn(ctx.engine, S.plane, kind, S.start, S.cur, p.shift, p.alt, ctx.view().zoom);
       ctx.redraw();
     },
     up: (ctx, p) => {
@@ -77,8 +94,8 @@ function shapeTool(id: string, label: string, iconName: string, group: string, o
       const moved = Math.hypot(p.doc.x - S.start.x, p.doc.y - S.start.y) * z > 3;
       S.preview = null;
       if (!moved) { pendingShape.kind = kind; pendingShape.at = S.start; toolHost.run('shape-dialog'); ctx.redraw(); return; }
-      const n = build(e, kind, S.start, S.cur, p.shift, p.alt);
-      if (n) e.addNodes(label.replace(/ Tool$/, ''), [n]);
+      const n = buildOn(e, S.plane, kind, S.start, S.cur, p.shift, p.alt, z);
+      if (n) e.addNodes(label.replace(/ Tool$/, '') + (S.plane ? ' in Perspective' : ''), [n]);
       ctx.redraw();
     },
     cancel: (ctx) => { S.on = false; S.preview = null; ctx.redraw(); },
@@ -92,7 +109,7 @@ function shapeTool(id: string, label: string, iconName: string, group: string, o
       else if (kind === 'rounded_rectangle') en.update({ cornerRadius: Math.max(0, en.options.cornerRadius + d) });
       else if (kind === 'spiral') en.update({ spiralSegments: Math.max(2, en.options.spiralSegments + d) });
       else return false;
-      S.preview = build(en, kind, S.start, S.cur, S.shift, S.alt);
+      S.preview = buildOn(en, S.plane, kind, S.start, S.cur, S.shift, S.alt, ctx.view().zoom);
       ctx.redraw();
       return true;
     },

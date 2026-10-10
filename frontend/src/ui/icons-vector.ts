@@ -98,6 +98,7 @@ export const VECTOR_ICONS: Record<string, string> = {
   vRotateView: S('<path d="M8 11V5a1.5 1.5 0 0 1 3 0v5M11 10V4a1.5 1.5 0 0 1 3 0v6M14 10V6a1.5 1.5 0 0 1 3 0v7c0 4-2.5 8-7 8-3 0-4.5-1.5-6-4l-2-3.5a1.5 1.5 0 0 1 2.6-1.5L8 14V11"/><path d="M18 3a5 5 0 0 1 3 4M21 3v4h-4" />', 1.2),
   vZoom: S('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/>'),
   vPerspective: S('<path d="M2 20L12 6l10 14M2 20h20M7 20l5-14M17 20L12 6M5 15.7h14M8 11.5h8"/>', 1.2),
+  vPerspSelect: S('<path d="M2.5 21.5l4.5-5.5h14l-4.5 5.5zM9.5 16l-2 5.5M14.5 16l-2 5.5" stroke-width="1.1"/><path d="M8 2.5v11l2.9-2.7 2.1 4.6 1.9-.9-2.1-4.5h4z"/>', 1.2),
 
   pfUnite: F('<path d="M2.5 5h7V2.5h12V14h-8v2h-11z"/>'),
   pfMinusFront: F('<path d="M2.5 5h7v9h4v2h-11z"/><path d="M9.5 2.5h12V14h-12z" fill-opacity=".25"/>'),
