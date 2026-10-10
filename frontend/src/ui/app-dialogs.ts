@@ -10,6 +10,7 @@ import { CHECKER_COLORS, CHECKER_SIZES, loadPrefs, RECOVERY_CHOICES, savePrefs, 
 import { readChoice, setAccent, setIntensity, setTheme, themeSwatchesHtml, THEMES } from './themes';
 import { toast } from './toast';
 import { ARTBOARD_PRESETS } from '../tools/view';
+import { DXF_UNITS, type DxfUnit } from '../io/dxf';
 
 const UNIT_K: Record<Units, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
 
@@ -85,7 +86,7 @@ export class OpenDialog extends Dialog {
   private readonly list = el('<div class="cv-list" role="listbox" aria-label="Saved projects"></div>');
   private readonly empty = el('<div class="cv-list-empty" hidden>No saved projects yet.</div>');
   private readonly status = el('<p class="cv-note">Projects saved in the formpth library.</p>');
-  private readonly fileInput = el<HTMLInputElement>('<input type="file" accept=".fpth,.svg,.svgz,.pdf,.ai,.png,.jpg,.jpeg,.webp,.gif" multiple hidden>');
+  private readonly fileInput = el<HTMLInputElement>('<input type="file" accept=".fpth,.svg,.svgz,.pdf,.ai,.eps,.epsf,.ps,.dxf,.dwg,.png,.jpg,.jpeg,.webp,.gif" multiple hidden>');
   private readonly openBtn: HTMLButtonElement;
   private readonly deleteBtn: HTMLButtonElement;
   private items: LibraryItem[] = [];
@@ -94,8 +95,8 @@ export class OpenDialog extends Dialog {
   constructor(private readonly actions: OpenActions) {
     super('Open', 520);
     this.body.append(this.status, this.list, this.empty);
-    const r = el(`<div class="cv-welcome-actions"><button class="cv-btn" type="button">${icon('upload', 14)}From disk (.fpth, .svg, .pdf, images)</button></div>`);
-    this.body.append(r, this.fileInput);
+    const r = el(`<div class="cv-welcome-actions"><button class="cv-btn" type="button">${icon('upload', 14)}From disk (.fpth, .svg, .pdf, .ai, .eps, .dxf, images)</button></div>`);
+    this.body.append(r, el('<p class="cv-note">DWG is a closed binary format that formpth does not read. Save the drawing as DXF in your CAD program and open the DXF.</p>'), this.fileInput);
     q(r, 'button').addEventListener('click', () => this.fileInput.click());
     this.deleteBtn = this.button('Delete', 'danger', () => void this.deleteSelected());
     this.button('Cancel', 'ghost', () => this.close());
@@ -160,6 +161,7 @@ export class SettingsDialog extends Dialog {
   private readonly llmUrl = el<HTMLInputElement>('<input class="cv-input" type="url" spellcheck="false" placeholder="http://localhost:11434/v1" aria-label="Language model address">');
   private readonly llmModel = el<HTMLInputElement>('<input class="cv-input" type="text" spellcheck="false" list="cv-llm-models" placeholder="llama3.2" aria-label="Language model">');
   private readonly llmModels = el('<datalist id="cv-llm-models"></datalist>');
+  private readonly llmVision = el<HTMLInputElement>('<input type="checkbox" aria-label="The model reads images">');
   private readonly llmKey = el<HTMLInputElement>('<input class="cv-input" type="password" autocomplete="off" aria-label="Language model key">');
   private readonly llmNote = el('<p class="cv-note" role="status">Any OpenAI-compatible service: Ollama (http://localhost:11434/v1) or LM Studio (http://localhost:1234/v1) on this computer, or OpenAI, OpenRouter and others with a key. The engine keeps the key in your system password store and never shows it.</p>');
   private readonly mcpNote = el('<p class="cv-note" role="status"></p>');
@@ -213,7 +215,7 @@ export class SettingsDialog extends Dialog {
     nm.addEventListener('change', () => { if (/^https?:\/\/./.test(nm.value.trim())) this.change({ nodemodeUrl: nm.value.trim() }); });
     this.ctl.nodemodeUrl = nm;
     add('Plugins & Agents', row('Allow outside agents (MCP)', agents), this.mcpNote,
-      el('<h3 class="cv-prefs-sub">Language model (Assistant)</h3>'), row('Address', this.llmUrl), row('Model', this.llmModel, this.llmModels), row('API key', this.llmKey), llmButtons, this.llmNote,
+      el('<h3 class="cv-prefs-sub">Language model (Assistant)</h3>'), row('Address', this.llmUrl), row('Model', this.llmModel, this.llmModels), row('API key', this.llmKey), row('The model reads images', this.llmVision), llmButtons, this.llmNote,
       el('<h3 class="cv-prefs-sub">NodeMode</h3>'), row('NodeMode address', nm));
     const wrap = el('<div class="cv-prefs"></div>');
     wrap.append(this.nav, pages);
@@ -279,10 +281,11 @@ export class SettingsDialog extends Dialog {
     if (document.activeElement !== this.llmModel) this.llmModel.value = s.model;
     this.llmKey.value = '';
     this.llmKey.placeholder = s.hasKey ? 'Saved (type to replace)' : 'Optional for a service on this computer';
+    this.llmVision.checked = !!s.vision;
   }
 
   private async saveLlm(forget: boolean): Promise<void> {
-    try { const s = await api.llmSave(this.llmUrl.value.trim(), this.llmModel.value.trim(), forget ? null : this.llmKey.value.trim() || null, forget); this.llmKey.value = ''; setText(this.llmNote, forget ? 'Key forgotten.' : `Saved: ${s.model} at ${s.baseUrl}.`); }
+    try { const s = await api.llmSave(this.llmUrl.value.trim(), this.llmModel.value.trim(), forget ? null : this.llmKey.value.trim() || null, forget, this.llmVision.checked); this.llmKey.value = ''; setText(this.llmNote, forget ? 'Key forgotten.' : `Saved: ${s.model} at ${s.baseUrl}.`); }
     catch (err) { setText(this.llmNote, err instanceof Error ? err.message : 'Could not save.'); }
   }
 
@@ -368,11 +371,18 @@ export class AboutDialog extends Dialog {
   }
 }
 
-export type ExportFormat = 'svg' | 'pdf' | 'png' | 'jpg' | 'webp';
-export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean }
+export type ExportFormat = 'svg' | 'pdf' | 'png' | 'jpg' | 'webp' | 'eps' | 'dxf';
+export interface CadChoice { version: 'R12' | '2000'; units: DxfUnit; scale: number; text: 'text' | 'outlines'; lineweights: boolean }
+export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; cmyk?: boolean; cad?: CadChoice }
 
 export class ExportDialog extends Dialog {
-  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)']]);
+  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)']]);
+  private readonly epsColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
+  private readonly cadVersion = selectOf([['2000', 'AutoCAD 2000 (splines, fills, lineweights)'], ['R12', 'AutoCAD R12 (polylines only)']]);
+  private readonly cadUnits = selectOf(DXF_UNITS);
+  private readonly cadScale = numberInput(0.0001, 100000, 0.0001);
+  private readonly cadText = selectOf([['text', 'Text objects'], ['outlines', 'Outlines']]);
+  private readonly cadWeights = el<HTMLInputElement>('<input type="checkbox">');
   private readonly scope = selectOf([['artboard', 'Active artboard'], ['all', 'All artboards'], ['art', 'All art (trimmed)'], ['selection', 'Selection']]);
   private readonly scale = selectOf([['0.5', '0.5x (36 ppi)'], ['1', '1x (72 ppi)'], ['2', '2x (144 ppi)'], ['3', '3x'], ['4', '4x'], ['4.1667', '300 ppi']]);
   private readonly quality = numberInput(1, 100);
@@ -392,6 +402,15 @@ export class ExportDialog extends Dialog {
     this.rows.transparent = row('Transparent background', this.transparent);
     this.rows.outline = row('Convert type to outlines', this.outline);
     this.rows.preserve = row('Preserve formpth editing (reopens fully editable)', this.preserve);
+    this.rows.epsColor = row('Color', this.epsColor);
+    this.rows.cadVersion = row('Version', this.cadVersion);
+    this.rows.cadUnits = row('Units', this.cadUnits);
+    this.rows.cadScale = row('Drawing scale', this.cadScale);
+    this.cadScale.title = 'Drawing units per unit of art: 100 writes a 1:100 drawing at full size';
+    this.rows.cadText = row('Type as', this.cadText);
+    this.rows.cadWeights = row('Scale lineweights', this.cadWeights);
+    this.cadUnits.value = 'mm';
+    this.cadScale.value = '1';
     this.body.append(...Object.values(this.rows));
     this.format.addEventListener('change', () => this.sync());
     this.button('Cancel', 'ghost', () => this.close());
@@ -400,8 +419,9 @@ export class ExportDialog extends Dialog {
     this.quality.value = '92';
   }
 
-  ask(format: ExportFormat, artboard: number, hasSelection: boolean): Promise<ExportChoice | null> {
+  ask(format: ExportFormat, artboard: number, hasSelection: boolean, cmyk = false): Promise<ExportChoice | null> {
     this.format.value = format;
+    this.epsColor.value = cmyk ? 'cmyk' : 'rgb';
     this.artboard = artboard;
     (this.scope.querySelector('option[value="selection"]') as HTMLOptionElement).disabled = !hasSelection;
     if (this.scope.value === 'selection' && !hasSelection) this.scope.value = 'artboard';
@@ -415,11 +435,14 @@ export class ExportDialog extends Dialog {
     setHidden(this.rows.quality, !(f === 'jpg' || f === 'webp'));
     setHidden(this.rows.transparent, !(f === 'png' || f === 'webp'));
     setHidden(this.rows.outline, f !== 'svg');
-    setHidden(this.rows.preserve, !(f === 'svg' || f === 'pdf'));
+    setHidden(this.rows.preserve, !(f === 'svg' || f === 'pdf' || f === 'eps'));
+    setHidden(this.rows.epsColor, f !== 'eps');
+    for (const k of ['cadVersion', 'cadUnits', 'cadScale', 'cadText', 'cadWeights']) setHidden(this.rows[k], f !== 'dxf');
   }
 
   private value(): ExportChoice {
-    return { format: this.format.value as ExportFormat, scope: this.scope.value as ExportChoice['scope'], artboard: this.artboard, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked };
+    const cad: CadChoice = { version: this.cadVersion.value === 'R12' ? 'R12' : '2000', units: this.cadUnits.value as DxfUnit, scale: Math.max(1e-4, Number(this.cadScale.value) || 1), text: this.cadText.value === 'outlines' ? 'outlines' : 'text', lineweights: this.cadWeights.checked };
+    return { format: this.format.value as ExportFormat, scope: this.scope.value as ExportChoice['scope'], artboard: this.artboard, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, cmyk: this.epsColor.value === 'cmyk', cad };
   }
 }
 

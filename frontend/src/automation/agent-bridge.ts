@@ -32,18 +32,22 @@ import type { GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphTyp
 import { api } from '../io/api';
 import { attachPlace, gridOf, leafPlaneBounds, planeLocalRect, presetGrid, vanishing } from '../engine/perspective';
 import type { BrushDef, Doc, PerspPlane } from '../engine/types';
+import { DXF_UNITS, type DxfImportOptions, type DxfUnit } from '../io/dxf';
+import type { CadChoice } from '../ui/app-dialogs';
+import { modelState, PATTERN_PRESETS, patternVariations, shapeFillVariations } from '../io/generative';
+import { rankFonts, recognize, retypeNode, sourceFromImage, sourceFromOutlines } from '../io/retype';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
 export interface AgentDeps {
   ask(title: string, text: string): Promise<boolean>;
   note(text: string): void;
   allow(): void;
-  openFile(file: File): Promise<void>;
-  placeFile(file: File, at: Pt | null, width: number | null): Promise<string | null>;
+  openFile(file: File, dxf?: Partial<DxfImportOptions> | null): Promise<void>;
+  placeFile(file: File, at: Pt | null, width: number | null, dxf?: Partial<DxfImportOptions> | null): Promise<string | null>;
   placeLinked?(path: string, at: Pt | null, width: number | null): Promise<string | null>;
   links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
   projectBlob(): Promise<Blob | null>;
-  exportBlob(format: 'svg' | 'pdf' | 'png' | 'jpeg' | 'webp', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean }): Promise<Blob | null>;
+  exportBlob(format: 'svg' | 'pdf' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
   image(scope: string, artboard: number | undefined, maxSize: number, outline: boolean): Promise<Blob | null>;
   svg(scope: string, artboard: number | undefined, ids: string[] | undefined): Promise<string>;
   outlines(ids?: string[]): Promise<boolean>;
@@ -467,6 +471,76 @@ export class AgentBridge {
     return fail('action is list, play or batch.');
   }
 
+  private async shapeFillTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    const e = this.engine, st = await modelState();
+    if (!st.ready) return fail(st.message);
+    const n = has('id') ? this.node(a.id) : e.selected().find((x) => x.kind === 'path' || x.kind === 'compound');
+    if (!n || (n.kind !== 'path' && n.kind !== 'compound')) return fail('Pass id of a closed path or compound path (or select one) to fill.');
+    const d = n.kind === 'path' ? n.d : n.children.flatMap((c) => c.d);
+    if (!d.some((s) => s.closed)) return fail('The path is open: Generative Shape Fill fills closed shapes.');
+    const fillC = n.ap.items.find((i) => i.kind === 'fill' && i.paint.type === 'color');
+    const detail = { low: 1, medium: 2, high: 3 }[str('detail', 'medium')] ?? 2;
+    const res = await shapeFillVariations({ d, rule: n.rule, color: fillC && fillC.paint.type === 'color' ? fillC.paint.color : null }, { prompt: str('prompt'), strength: num('shape_strength', 50), detail, variations: Math.round(num('variations', 1)) });
+    const ok = res.map((r, i) => (r.art ? i : -1)).filter((i) => i >= 0);
+    if (!ok.length) return fail(`The model gave no usable art: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
+    const pick = has('pick') && ok.includes(Math.round(num('pick', 0))) ? Math.round(num('pick', 0)) : ok[0];
+    const art = res[pick].art as VNode;
+    const id = e.replaceWithClip(n.id, art.kind === 'group' && !art.clip ? art.children : [art], 'Generative Shape Fill', 'Generative Shape Fill');
+    if (!id) return fail('Could not place the art.');
+    return text(`Filled ${n.id} with variation ${pick} of ${res.length} (${st.model}); the art is a clipping group ${id} whose last child is the original shape. get_image shows it.`, { id, shape: n.id, variations: res.map((r, i) => ({ index: i, ok: !!r.art, error: r.error })), picked: pick });
+  }
+
+  private async patternsTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    const e = this.engine, st = await modelState();
+    if (!st.ready) return fail(st.message);
+    let colors: Color[] = [];
+    if (Array.isArray(a.colors)) colors = a.colors.map((c) => parseColor(String(c))).filter((c): c is Color => !!c).slice(0, 12);
+    else if (has('preset')) {
+      const p = str('preset');
+      if (p === 'document') colors = (e.doc?.swatches ?? []).flatMap((s) => (s.paint.type === 'color' && !s.name.startsWith('[') ? [s.paint.color] : [])).slice(0, 12);
+      else { const hit = PATTERN_PRESETS.find(([id]) => id === p); if (!hit) return fail(`preset is one of ${PATTERN_PRESETS.map(([id]) => id).join(', ')}, document.`); colors = hit[2].map((h) => parseColor(h)).filter((c): c is Color => !!c); }
+    }
+    const res = await patternVariations({ prompt: str('prompt'), colors, density: num('density', 3), variations: Math.round(num('variations', 2)), tile: num('tile_size', 96) });
+    const good = res.filter((r) => r.art);
+    if (!good.length) return fail(`The model gave no usable tile: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
+    const base = (str('name') || str('prompt') || 'Generated Pattern').replace(/\s+/g, ' ').slice(0, 32);
+    const fillIds = a.fill_selection === true ? (this.ids(a) ?? e.selectedIds()) : [];
+    const ids = e.addPatternSwatches(good.map((r, i) => ({ name: `${base} ${i + 1}`, tile: r.tile, art: r.art as VNode })), fillIds);
+    const defs = (e.doc?.patterns ?? []).filter((p) => ids.includes(p.id));
+    return text(`Saved ${ids.length} pattern swatch${ids.length === 1 ? '' : 'es'}: ${defs.map((p) => p.name).join(', ')}${fillIds.length ? '; filled the selection with the first' : ''}. Paint with set_paint using the swatch name.`, { patterns: defs.map((p) => ({ id: p.id, name: p.name })), errors: res.map((r) => r.error).filter(Boolean) });
+  }
+
+  private async retypeTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    const e = this.engine, p = e.current;
+    if (!p) return fail('No document is open.');
+    const nodes = (this.ids(a) ?? e.selectedIds()).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n);
+    const img = nodes.find((n) => n.kind === 'image');
+    const reg = a.region && typeof a.region === 'object' ? a.region as Record<string, unknown> : null;
+    const region = reg && [reg.x, reg.y, reg.width, reg.height].every((v) => typeof v === 'number') ? { x: reg.x as number, y: reg.y as number, w: reg.width as number, h: reg.height as number } : null;
+    const outl = nodes.filter((n) => n.kind === 'path' || n.kind === 'compound' || (n.kind === 'group' && !n.clip));
+    if (!img && !outl.length) return fail('Pass ids of outlined type (paths, compound paths or their group) or of a placed image, or select them.');
+    const src = img ? await sourceFromImage(p, img, region) : await sourceFromOutlines(p, outl);
+    const st = await modelState();
+    let known = has('text') && str('text').trim() ? { text: str('text').trim(), description: '' } : null;
+    if (!known && st.ready && st.vision) known = await recognize(src, async (prompt, image) => (await api.llmGenerate('', prompt, { image, temperature: 0, maxTokens: 400 })).text).catch(() => null);
+    if (!known && img) return fail(st.ready && st.vision ? 'The model could not read text in the image: pass text.' : 'Reading text in an image needs a model that reads images (Preferences > Plugins, The model reads images). Pass text with the words instead.');
+    const r = await rankFonts(src, known, () => undefined);
+    const list = r.matches.map((m, i) => ({ index: i, family: m.family, style: m.style, score: Math.round(m.score * 100) }));
+    if (a.apply !== true) return text(`Read "${r.text}". Top matches: ${list.map((m) => `${m.index} ${m.family} ${m.style} (${m.score}%)`).join(', ')}. Call retype again with apply true and pick (or font and style) to make live text.`, { text: r.text, matches: list, recognized_by: known ? (has('text') ? 'given' : 'model') : 'shapes' });
+    const fam = str('font'), sty = str('style');
+    const m = fam ? r.matches.find((x) => x.family === fam && (!sty || x.style === sty)) ?? { family: fam, style: sty || 'Regular', score: 0, text: r.text } : r.matches[Math.max(0, Math.min(r.matches.length - 1, Math.round(num('pick', 0))))];
+    if (!m) return fail('No font matched.');
+    await this.deps.ensureFace?.(m.family, m.style);
+    const node = await retypeNode(src, m, has('text') ? str('text') : r.text);
+    const id = e.replaceWithText(src.ids, node, !!img && a.keep_image !== false);
+    return id ? text(`Set "${r.text}" as live ${m.family} ${m.style} (id ${id}).`, { id, family: m.family, style: m.style, matches: list }) : fail('Could not place the text.');
+  }
+
+  private dxfArgs(a: Record<string, unknown>, place: boolean): Partial<DxfImportOptions> {
+    const u = typeof a.units === 'string' && DXF_UNITS.some(([x]) => x === a.units) ? a.units as DxfUnit : undefined;
+    return { units: u, scale: typeof a.drawing_scale === 'number' && a.drawing_scale > 0 ? a.drawing_scale : undefined, layout: typeof a.layout === 'string' ? a.layout : undefined, merge: typeof a.merge_layers === 'boolean' ? a.merge_layers : place, fit: a.fit_artboard === true ? 'artboard' : undefined };
+  }
+
   async run(name: string, a: Record<string, unknown>): Promise<McpResult> {
     const e = this.engine;
     const num = (k: string, d: number): number => (typeof a[k] === 'number' && Number.isFinite(a[k]) ? a[k] as number : d);
@@ -483,7 +557,7 @@ export class AgentBridge {
       }
       if (name === '__open') {
         const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
-        await this.deps.openFile(file);
+        await this.deps.openFile(file, this.dxfArgs(a, false));
         const q = e.current;
         return q ? text(`Opened ${file.name} as ${q.name}: ${q.doc.artboards.length} artboard(s), ${q.doc.layers.length} layer(s).`, { name: q.name }) : fail(`Could not open ${file.name}.`);
       }
@@ -506,6 +580,9 @@ export class AgentBridge {
         case 'graph': return this.graphTool(a, num, str, has);
         case 'perspective': return this.perspectiveTool(a, num, str, has);
         case 'variables': return await this.variablesTool(a, num, str, has);
+        case 'generative_shape_fill': return await this.shapeFillTool(a, num, str, has);
+        case 'generate_patterns': return await this.patternsTool(a, num, str, has);
+        case 'retype': return await this.retypeTool(a, num, str, has);
         case 'get_document': { const d = e.describe(Math.max(1, Math.min(32, Math.round(num('depth', 8))))); return text(JSON.stringify(d), d); }
         case 'get_image': {
           const blob = await this.deps.image(str('scope', 'artboard'), has('artboard') ? Math.round(num('artboard', 0)) : undefined, Math.max(64, Math.min(2048, Math.round(num('max_size', 1024)))), a.outline === true);
@@ -520,13 +597,16 @@ export class AgentBridge {
             return id ? text(`Placed ${str('name')} linked to ${str('path')} (id ${id}); the links tool reports when the file changes.`, { id, linked: true }) : fail(`Could not place ${str('name')}.`);
           }
           const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
-          const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null);
+          const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null, this.dxfArgs(a, true));
           return id ? text(`Placed ${file.name} (id ${id}).`, { id }) : fail(`Could not place ${file.name}.`);
         }
         case '__project': { const blob = await this.deps.projectBlob(); return blob ? text('Packed the project.', { data: await b64(blob) }) : fail('Could not pack the project: is the engine running (./formpth boot)?'); }
         case '__export': {
-          const fmt = str('format') as 'svg' | 'pdf' | 'png' | 'jpeg' | 'webp';
-          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, scale: Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true });
+          const fmt = str('format') as 'svg' | 'pdf' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf';
+          const units = str('units', 'mm') as DxfUnit;
+          if (fmt === 'dxf' && !DXF_UNITS.some(([u]) => u === units)) return fail(`units must be one of ${DXF_UNITS.map(([u]) => u).join(', ')}.`);
+          const cad: CadChoice = { version: str('dxf_version', '2000') === 'R12' ? 'R12' : '2000', units, scale: Math.max(1e-4, num('drawing_scale', 1)), text: a.outline_text === true ? 'outlines' : 'text', lineweights: a.scale_lineweights === true };
+          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, scale: Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
           return blob ? text(`Exported ${fmt.toUpperCase()}.`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {

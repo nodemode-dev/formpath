@@ -1,5 +1,5 @@
 import { AgentBridge, regionOf } from './automation/agent-bridge';
-import { Engine, type Color, type Doc, type ExportAsset, type ImageNode, type Pt, type TraceView, type Units, type VNode } from './engine';
+import { Engine, type Color, type Doc, type ExportAsset, type ImageNode, type Pt, type Rect, type TraceView, type Units, type VNode } from './engine';
 import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc';
 import { EFFECTS } from './engine/effects';
 import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
@@ -12,6 +12,9 @@ import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
 import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
 import { exportPdf, readPdfNative } from './io/pdf';
+import { DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
+import { exportEps, readEpsNative } from './io/eps';
+import { readEpsVector } from './io/ps-read';
 import { readPdfVector } from './io/pdf-read';
 import { docFromManifest, serialize } from './io/project-io';
 import { canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
@@ -74,6 +77,7 @@ import { FindFontDialog } from './ui/panels/find-font';
 import { ColorGuidePanel } from './ui/panels/color-guide';
 import { PatternOptionsPanel } from './ui/panels/pattern-options';
 import { ImageTracePanel } from './ui/panels/image-trace';
+import { PatternGenPanel, RetypePanel, ShapeFillPanel } from './ui/panels/generative';
 import { AssetExportPanel } from './ui/panels/asset-export';
 import { GraphDataWindow } from './ui/panels/graph-data';
 import { VariablesPanel } from './ui/panels/variables';
@@ -141,7 +145,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group', 'swatch-library': 'color-group', 'brush-library': 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', 'symbol-library': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group', 'swatch-library': 'color-group', 'brush-library': 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', 'symbol-library': 'symbols-group', 'shape-fill': 'symbols-group', 'generate-patterns': 'symbols-group', retype: 'type-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -197,6 +201,7 @@ export function startApp(): void {
   const stylesP = new GraphicStylesPanel(engine);
   const symbolsP = new SymbolsPanel(engine, (c) => { commands.run(c); }, { library: (a) => openLibMenu(a, symbolLibItems()), panel: (a) => openLibMenu(a, ['symbol-edit', 'symbol-exit', '-', 'symbol-duplicate', 'symbol-redefine', 'symbol-replace', 'symbol-reset', '-', 'symbol-options', 'new-symbol', 'break-symbol', 'symbol-delete', '-', 'sym-lib-other', 'sym-lib-save']) }), artboardsP = new ArtboardsPanel(engine);
   const symbolLibP = new SymbolLibraryPanel(engine, (a) => openLibMenu(a, symbolLibItems()));
+  const shapeFillP = new ShapeFillPanel(engine), patternGenP = new PatternGenPanel(engine), retypeP = new RetypePanel(engine, ensureFace);
   const relinkInput = el<HTMLInputElement>('<input type="file" accept="image/*" hidden>');
   document.body.appendChild(relinkInput);
   let relinkIds: string[] = [];
@@ -229,11 +234,11 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }, { id: 'swatch-library', label: 'Swatch Library', body: swatchLibP.body }], 'Color');
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }, { id: 'brush-library', label: 'Brush Library', body: brushLibP.body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
-  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }], 'Symbols');
+  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }, { id: 'shape-fill', label: 'Generative Shape Fill', body: shapeFillP.body }, { id: 'generate-patterns', label: 'Generate Patterns', body: patternGenP.body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'variables', label: 'Variables', body: variablesP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
-  new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }, { id: 'tabs', label: 'Tabs', body: tabsP.body }], 'Type');
+  new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }, { id: 'tabs', label: 'Tabs', body: tabsP.body }, { id: 'retype', label: 'Retype', body: retypeP.body }], 'Type');
   const dock = new Dock(dockHost, sideHost);
   const propsShown = (): boolean => stored('formpth.propsCol') !== 'hidden';
   const sideOpen = (): boolean => propsShown() && dock.sideShown() > 0;
@@ -332,11 +337,44 @@ export function startApp(): void {
 
   async function imageSize(blob: Blob): Promise<{ w: number; h: number }> { const b = await createImageBitmap(blob); const s = { w: b.width, h: b.height }; b.close(); return s; }
 
-  async function openFiles(files: File[]): Promise<void> {
+  async function dxfOptions(file: DxfFile, given: Partial<DxfImportOptions> | null): Promise<DxfImportOptions | null> {
+    const guess: DxfUnit = file.units !== 'unitless' ? file.units : file.metric ? 'mm' : 'in';
+    const base: DxfImportOptions = { units: guess, scale: 1, layout: 'Model', merge: false, fit: 'actual' };
+    if (given) return { ...base, ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)) } as DxfImportOptions;
+    const v = await askForm('DXF Import Options', [
+      { kind: 'note', text: `AutoCAD ${file.version ? `drawing (${file.version})` : 'drawing'}, ${file.layers.size} layer${file.layers.size === 1 ? '' : 's'}${file.units === 'unitless' ? ', no units saved in the file' : ''}.` },
+      { kind: 'select', key: 'layout', label: 'Layout', value: 'Model', choices: file.layouts.map((l) => [l, l === 'Model' ? 'Model space' : l] as const) },
+      { kind: 'select', key: 'fit', label: 'Scale', value: 'actual', choices: [['actual', 'Use the drawing units'], ['artboard', 'Fit to a Letter artboard']] },
+      { kind: 'select', key: 'units', label: 'One drawing unit is', value: guess, choices: DXF_UNITS },
+      { kind: 'number', key: 'scale', label: 'Scale factor', value: 1, min: 0.0001, max: 100000, step: 0.1 },
+      { kind: 'check', key: 'merge', label: 'Merge all layers into one', value: false },
+    ], { ok: 'Open' });
+    if (!v) return null;
+    return { units: String(v.units) as DxfUnit, scale: Math.max(1e-4, Number(v.scale) || 1), layout: String(v.layout), merge: v.merge === true, fit: v.fit === 'artboard' ? 'artboard' : 'actual' };
+  }
+
+  async function readForeign(f: File, dxf: Partial<DxfImportOptions> | null): Promise<{ doc: Doc; assets: Map<string, Blob>; title: string; note: string } | null> {
+    const lower = f.name.toLowerCase(), title = f.name.replace(/\.[^.]+$/, '');
+    if (lower.endsWith('.dwg')) throw new Error('DWG is a closed binary format that formpth does not read. Save the drawing as DXF in your CAD program, then open the DXF.');
+    if (lower.endsWith('.dxf')) {
+      const file = parseDxf(await f.text());
+      const o = await dxfOptions(file, dxf);
+      if (!o) return null;
+      const r = dxfToDoc(file, o, title);
+      return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
+    }
+    const data = await f.arrayBuffer(), native = readEpsNative(data);
+    if (native) return { doc: docFromManifest(native.manifest), assets: native.assets, title, note: '' };
+    const r = readEpsVector(data, title);
+    return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name} by running its PostScript: paths, fills, strokes, clipping, gradients and text.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
+  }
+
+  async function openFiles(files: File[], dxf: Partial<DxfImportOptions> | null = null): Promise<void> {
     await engine.task(async () => {
       for (const f of files) {
         try {
           const lower = f.name.toLowerCase();
+          if (/\.(dxf|dwg|eps|epsf|ps)$/.test(lower)) { const r = await readForeign(f, dxf); if (r) { adopt(r.doc, r.title, r.assets); if (r.note) toast(r.note); } continue; }
           if (lower.endsWith('.fpth')) await openFpth(await f.arrayBuffer(), f.name);
           else if (lower.endsWith('.ase')) await openLibraryFile(f, 'swatch');
           else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, clipping, type and images; filters and masks it cannot match are left out.`); }
@@ -360,12 +398,14 @@ export function startApp(): void {
     });
   }
 
-  async function placeFile(f: File, at: Pt | null, width: number | null): Promise<string | null> {
+  async function placeFile(f: File, at: Pt | null, width: number | null, dxf: Partial<DxfImportOptions> | null = null): Promise<string | null> {
     const p = engine.current;
-    if (!p) { await openFiles([f]); const opened = engine.current as { doc: Doc } | null; return opened?.doc.layers[0]?.children[0]?.id ?? null; }
+    if (!p) { await openFiles([f], dxf); const opened = engine.current as { doc: Doc } | null; return opened?.doc.layers[0]?.children[0]?.id ?? null; }
     const v = p.viewport, center = v.toDoc(v.centerX, v.height / 2);
-    if (/\.svgz?$/i.test(f.name) || f.type === 'image/svg+xml') {
-      const r = await importSvg(await svgText(f), f.name);
+    const foreign = /\.(dxf|dwg|eps|epsf|ps)$/i.test(f.name);
+    if (foreign || /\.svgz?$/i.test(f.name) || f.type === 'image/svg+xml') {
+      const r = foreign ? await readForeign(f, dxf) : await importSvg(await svgText(f), f.name);
+      if (!r) return null;
       const kids = r.doc.layers.flatMap((l) => l.children);
       if (!kids.length) return null;
       for (const [k, b] of r.assets) p.assets.set(k, b);
@@ -589,6 +629,22 @@ export function startApp(): void {
       return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
     }
     if (c.format === 'pdf') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : [ab], preserve: c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION });
+    if (c.format === 'eps') {
+      const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
+      if (scope === 'all' && p.doc.artboards.length > 1) {
+        const files: Array<{ name: string; blob: Blob }> = [];
+        for (const a of p.doc.artboards) files.push({ name: `${p.name}-${a.name}.eps`.replace(/[\\/:*?"<>|]+/g, '-'), blob: await one(a, `${p.name} ${a.name}`) });
+        return zipFiles(files);
+      }
+      const r = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : exportRegion(p, ab);
+      return r ? one(r, p.name) : null;
+    }
+    if (c.format === 'dxf') {
+      const cad = c.cad ?? { version: '2000', units: 'mm', scale: 1, text: 'text', lineweights: false };
+      const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
+      if (!region) return null;
+      return exportDxf(p, { region, ...cad, ids: scope === 'selection' ? engine.targetIds() : undefined }, async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n); });
+    }
     const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
     if (!region) return null;
     const only = scope === 'selection' ? engine.targetIds().map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n) : undefined;
@@ -600,14 +656,15 @@ export function startApp(): void {
   async function exportAs(format: ExportChoice['format']): Promise<void> {
     const p = engine.current;
     if (!p) return;
-    const c = await exportDialog.ask(format, p.activeArtboard, engine.hasSelection);
+    const c = await exportDialog.ask(format, p.activeArtboard, engine.hasSelection, p.doc.colorMode === 'cmyk');
     if (!c) return;
     await engine.task(async () => {
       try {
         const blob = await exportBlob(c);
         if (!blob) { toast('There is nothing to export there.', 'error'); return; }
         const suffix = c.scope === 'artboard' && p.doc.artboards.length > 1 ? `-${p.doc.artboards[c.artboard]?.name ?? ''}` : '';
-        await deliver(blob, `${p.name}${suffix}.${c.format}`.replace(/[\\/:*?"<>|]+/g, '-'));
+        const ext = c.format === 'eps' && c.scope === 'all' && p.doc.artboards.length > 1 ? 'zip' : c.format;
+        await deliver(blob, `${p.name}${suffix}.${ext}`.replace(/[\\/:*?"<>|]+/g, '-'));
       } catch (err) { toast(message(err), 'error'); }
     });
   }
@@ -716,7 +773,7 @@ export function startApp(): void {
   const about = new AboutDialog();
   const help = new HelpDialog();
   const agentConfirm = new AgentConfirmDialog();
-  const placeInput = el<HTMLInputElement>('<input type="file" accept="image/*,.svg,.svgz" multiple hidden>');
+  const placeInput = el<HTMLInputElement>('<input type="file" accept="image/*,.svg,.svgz,.eps,.epsf,.dxf,.dwg" multiple hidden>');
   document.body.appendChild(placeInput);
   placeInput.addEventListener('change', () => { const fs = Array.from(placeInput.files ?? []); placeInput.value = ''; void engine.task(async () => { for (const f of fs) { try { await placeFile(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } }); });
 
@@ -725,12 +782,12 @@ export function startApp(): void {
     ask: (title, text) => agentConfirm.ask(title, text),
     note: (t) => status.setEngine(t),
     allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpth:agents', { detail: true })); },
-    openFile: (f) => openFiles([f]),
-    placeFile,
+    openFile: (f, dxf) => openFiles([f], dxf ?? { merge: false }),
+    placeFile: (f, at, w, dxf) => placeFile(f, at, w, dxf ?? { merge: true }),
     placeLinked: async (path, at, width) => placeLinked(await links.readPath(path), at, width),
     links: (a) => linkTool(a),
     projectBlob: projectZip,
-    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' }); },
+    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' || format === 'eps', cmyk: o.cmyk, cad: o.cad }); },
     image: async (scope, artboard, maxSize, outline) => {
       const p = engine.current;
       if (!p) return null;
@@ -1064,6 +1121,8 @@ export function startApp(): void {
     { id: 'export-png', label: 'PNG...', enabled: has, run: () => void exportAs('png') },
     { id: 'export-jpg', label: 'JPEG...', enabled: has, run: () => void exportAs('jpg') },
     { id: 'export-webp', label: 'WebP...', enabled: has, run: () => void exportAs('webp') },
+    { id: 'export-eps', label: 'EPS...', enabled: has, run: () => void exportAs('eps') },
+    { id: 'export-dxf', label: 'AutoCAD Interchange (DXF)...', enabled: has, run: () => void exportAs('dxf') },
     { id: 'print', label: 'Print...', keys: ['Mod+P'], enabled: has, run: () => void engine.task(async () => { const p = engine.current; if (!p) return; const b = await exportPdf(p, { artboards: p.doc.artboards.map((_, i) => i), preserve: false, ppi: 300, version: VERSION }); const url = URL.createObjectURL(b); const w = window.open(url, '_blank'); if (!w) await deliver(b, `${p.name}.pdf`); window.setTimeout(() => URL.revokeObjectURL(url), 120000); }) },
     { id: 'document-setup', label: 'Document Setup...', keys: ['Alt+Mod+P'], enabled: has, run: () => void documentSetup() },
     { id: 'mode-rgb', label: 'RGB Color', enabled: has, checked: () => engine.doc?.colorMode === 'rgb', run: () => engine.documentSetup({ colorMode: 'rgb' }) },
@@ -1126,6 +1185,9 @@ export function startApp(): void {
     { id: 'clean-up', label: 'Clean Up', enabled: has, run: () => engine.pathOp('clean_up', {}, allNodes(engine.doc as Doc).filter((n) => n.kind !== 'layer').map((n) => n.id)) },
     { id: 'close-path', label: 'Close Path', enabled: sel, run: () => engine.pathOp('close') },
     { id: 'make-pattern', label: 'Make Pattern', enabled: () => sel() && !engine.patternSession, run: () => { if (engine.enterPatternEdit(null)) showPanel('pattern-options'); } },
+    { id: 'generate-patterns', label: 'Generate Patterns...', enabled: has, run: () => showPanel('generate-patterns') },
+    { id: 'generative-shape-fill', label: 'Shape Fill...', enabled: has, run: () => showPanel('shape-fill') },
+    { id: 'retype', label: 'Retype...', enabled: has, run: () => showPanel('retype') },
     { id: 'edit-pattern', label: 'Edit Pattern', enabled: () => !!selectedPattern() && !engine.patternSession, run: () => { const id = selectedPattern(); if (id && engine.enterPatternEdit(id)) showPanel('pattern-options'); } },
     { id: 'pattern-done', label: 'Exit Pattern Editing Mode', enabled: () => !!engine.patternSession, run: () => { if (engine.exitPatternEdit(true)) toast('The pattern is in the Swatches panel.'); } },
     { id: 'pattern-copy', label: 'Save Pattern as a Copy', enabled: () => !!engine.patternSession, run: () => { if (engine.exitPatternEdit(true, true)) toast('The copy is in the Swatches panel.'); } },
@@ -1360,7 +1422,7 @@ export function startApp(): void {
   }
 
   const menus: MenuDef[] = [
-    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
+    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
     { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'clear', '-', 'find-replace', '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'reset-bounding-box'] },
@@ -1369,7 +1431,8 @@ export function startApp(): void {
       'group', 'ungroup', 'isolate', '-', 'lock', 'unlock-all', 'hide', 'show-all', '-', 'expand-object', 'expand-appearance', 'rasterize', 'create-mesh', '-',
       { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
       { label: 'Shape', items: ['expand-shape', 'shaper-expand'] },
-      { label: 'Pattern', items: ['make-pattern', 'edit-pattern'] },
+      { label: 'Pattern', items: ['make-pattern', 'edit-pattern', '-', 'generate-patterns'] },
+      { label: 'Generative', items: ['generative-shape-fill'] },
       { label: 'Repeat', items: ['repeat-radial', 'repeat-grid', 'repeat-mirror', '-', 'release-live', 'repeat-options'] },
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'envelope-options', 'expand-object', '-', 'envelope-edit-contents', 'envelope-edit-envelope', '-', 'envelope-reset-warp', 'envelope-reset-mesh'] },
@@ -1385,7 +1448,7 @@ export function startApp(): void {
       { label: 'Opacity Mask', items: ['opacity-mask', 'release-opacity-mask', 'disable-opacity-mask', 'unlink-opacity-mask', '-', 'new-mask-clip', 'new-mask-invert'] },
       { label: 'Symbol', items: ['new-symbol', 'symbol-edit', 'symbol-exit', '-', 'symbol-redefine', 'symbol-duplicate', 'symbol-replace', 'symbol-reset', '-', 'break-symbol', 'symbol-options'] },
       { label: 'Artboards', items: ['artboards-from-selection', 'artboards-rearrange', 'artboard-fit-art', 'artboard-fit-selection', '-', 'artboard-options'] }] },
-    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
+    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', 'retype', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
