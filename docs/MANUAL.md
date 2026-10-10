@@ -49,7 +49,8 @@ ask it questions.
 ## Selecting
 
 - Selection tool (V): click to select an object, Shift-click to add or remove, drag a marquee. The bounding box
-  scales (Shift keeps proportions, Alt scales from the centre) and rotates from just outside a corner. Dragging
+  scales (Shift keeps proportions, Alt scales from the centre) and rotates from just outside a corner; after a
+  rotation it stays turned with the object until Object > Transform > Reset Bounding Box. Dragging
   moves; Alt-drag copies; arrow keys nudge by the keyboard increment (Shift ten times as far). Ctrl-click (Cmd-click
   on macOS) again on the same spot to select the object behind, and again to go further back.
 - Double-click a group to isolate it: everything else dims and new art goes inside the group. Escape or the Exit
@@ -92,8 +93,16 @@ ask it questions.
 
 - Rotate (R), Reflect (O), Scale (S) and Shear: click to set the origin, then drag; Alt-drag copies; double-click the
   tool or press Enter for a dialog with exact values (and Copy).
-- Free Transform (E) scales, rotates and shears from the box; hold Ctrl (Command on a Mac) on a corner to distort
-  it freely. Reshape moves selected points with their neighbours.
+- Free Transform (E) scales and rotates from the box, and Ctrl (Command on a Mac) on a side handle shears. A small
+  widget beside the selection (and the options bar) picks the mode: Free Transform, Perspective Distort (drag a
+  corner along its edge; the other corner on that edge moves the opposite way, so the box becomes a symmetric
+  trapezoid) or Free Distort (drag any corner anywhere); Constrain keeps proportions and holds a distorted corner
+  to one axis. Without changing mode, Ctrl on a corner distorts freely and Ctrl+Alt+Shift (Command+Option+Shift)
+  distorts in perspective. Distortions are true perspective maps that bend curves where they need to; type, images
+  and symbols go into an envelope mesh so the type stays editable. Reshape moves selected points with their
+  neighbours.
+- After a rotation the bounding box turns with the object, and its handles scale along the object's own sides.
+  Object > Transform > Reset Bounding Box squares it to the page again.
 - Object > Transform: Transform Again (Ctrl+D), Move, Rotate, Reflect, Scale, Shear and Transform Each (each object
   about its own centre, with random variation if you like).
 - The Transform panel and Properties type exact X, Y, W, H, rotation and shear, from the reference point you pick
@@ -281,7 +290,17 @@ ask it questions.
 - Blends (W or Object > Blend): smooth colour, a number of steps, or a distance, along a straight spine or a path you
   choose with Replace Spine.
 - Repeats: radial, grid and mirror, editable in Repeat Options until released or expanded.
-- Envelope Distort: warp presets, a mesh, or the top object's shape.
+- Envelope Distort (Object > Envelope Distort): Make with Warp (the 15 warp presets), Make with Mesh (rows and
+  columns) or Make with Top Object pours the selection, type and images included, into a shape. With the Direct
+  Selection tool, drag a mesh point or one of its handles (Shift turns the opposite handle with it); with the Mesh
+  tool, click inside to add a row and column there and Alt-click a point to remove its lines. A warp or top-object
+  envelope becomes a mesh the first time a point moves; Reset with Mesh (keeping the shape or not) and Reset with
+  Warp replace the shape on purpose. Edit Contents shows the art inside undistorted so you can select it, move it
+  or edit the type; the envelope follows, and Edit Envelope goes back. Envelope Options sets Fidelity (how closely
+  curves follow the mesh), Distort Appearance (strokes and effects bend too), Distort Linear Gradients, Distort
+  Pattern Fills and Anti-Alias for images. Release gives back the art and the envelope shape; Expand makes plain
+  paths (type becomes outlines, images keep their distortion). SVG and PDF export draw distorted images as pixels
+  at the document's raster resolution.
 - Symbols: Object > Symbol > New Symbol stores art in the Symbols panel; instances update when the symbol changes;
   Break Link makes an instance ordinary art. The Symbol Sprayer (Shift+S) sprays instances into a symbol set, and
   the symbolism tools in its flyout change the instances under the brush: Shifter pushes them (Shift-click and

@@ -36,6 +36,7 @@ frontend/
     │   ├── paint.ts            colours, paints, gradients, appearance items, parsing
     │   ├── effects.ts          effect catalogue and evaluation
     │   ├── live.ts             live shapes, blends, repeats, envelopes
+    │   ├── envelope.ts         envelope meshes, homographies, adaptive curve mapping
     │   ├── mesh.ts             gradient mesh
     │   ├── brushes.ts          calligraphic, scatter, art, pattern brushes
     │   ├── text.ts             type layout, styles, caret and index math
@@ -55,6 +56,7 @@ frontend/
     │       ├── expand.ts       expand appearance and live objects
     │       ├── text-styles.ts  character and paragraph styles: apply, redefine, delete
     │       ├── live-shapes.ts  editing live shapes after drawing
+    │       ├── distort.ts      Free Distort and Perspective Distort of nodes
     │       └── recolor.ts      colour maps for Recolor and Edit Colors
     ├── extensions/
     │   └── registry.ts         Tool, ToolContext, OptionSpec, registerTool, toolHost
@@ -104,6 +106,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/viewport.ts
 - src/engine/effects.ts
 - src/engine/live.ts
+- src/engine/envelope.ts
+- src/engine/transform.ts
 - src/engine/snap.ts
 - src/engine/render.ts
 - src/engine/filters.ts
@@ -119,6 +123,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/bounds.ts
 - src/engine/ops/objects.ts
 - src/engine/ops/expand.ts
+- src/engine/ops/distort.ts
 - src/engine/style-libraries.ts
 - src/engine/stroke-gradient.ts
 - src/extensions/registry.ts
@@ -308,6 +313,13 @@ The loop claims a secret from the engine before its first poll and sends it with
 
 New optional parameters only: `set_stroke` `gradient_mode` (within, along, across) fails with advice when no target has a linear or radial gradient stroke; `set_object` takes `isolate`, `knockout` (on, off, inherit, mapped to true, false, 'inherit') and `knockout_shape`, and says when none of the targets is a group or layer, since knockout only acts there. The new `opacity_mask` tool makes (topmost object in document order is the mask, whatever order the ids come in), releases, or sets clip, invert, disabled and linked, answering with each mask's settings; make also applies any of those settings it is given in the same step.
 
+### src/automation/agent-bridge.ts · envelope editing and distort
+- refers-to: src/automation/agent-bridge.ts :: envelopeAction, transform case; backend/app/routers/mcp.py :: envelope, transform
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+New optional parameters and enum values only. `envelope` gains info (points row-major with their handle ends, kind, options, editing mode), move_point (point or row and column; x, y or dx, dy; handle right, left, down or up moves that handle's end; mirror), add_mesh_line, delete_mesh_point, reset_mesh (maintain_shape), reset_warp, options (fidelity, distort_appearance, distort_gradients, distort_patterns, anti_alias), edit_contents and edit_envelope; the envelope is found from ids or the selection, including a child selected in Edit Contents. For a warp or top-object envelope, info shows the 4 by 4 mesh it turns into, so point indices from info stay valid for move_point. `transform` gains corners (Free Distort onto four points), perspective (pull the top corners in by that many points) and reset_bounding_box; when combined with another transform the reset is squashed into the same step.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture
@@ -337,6 +349,13 @@ A new project is fitted to the last stage size the stage reported. Before, the f
 - logged: v0.17.0 · 2026-10-08
 
 `setStrokeGradientMode` changes only the mode of first strokes that already hold a linear or radial gradient (through groups and type, like the other paint edits) in one step, also updates the stroke paint new art gets, and returns false when no target has such a stroke, which the agent tool turns into advice. A global gradient swatch now keeps the stroke's own mode, like its angle. `maskDefaults` is what Make Mask starts with; the app loads it from preferences. `hex` now rounds and clamps: a colour mixed by `gradientAt` has fractional channels, and the SVG writer wrote them as invalid hex (`#ff.8...`), which browsers paint black; this already broke midpoint stops in exported gradients.
+
+### src/engine/index.ts · bounding box frame, envelope editing and distort
+- refers-to: src/engine/index.ts :: selectionFrame, resetBoundingBox, envelopeOf, selectedEnvelopes, setEnvelopeOptions, envelopeContents, envelopeMesh, resetEnvelope, editEnvelopeMesh, moveEnvelopePoint, addEnvelopeMeshLine, removeEnvelopeMeshLines, distortTargets, distort, selectInRect, releaseLive; src/engine/doc.ts :: topSelectable; src/engine/hit.ts :: deepHit
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+selectionFrame is the bounding box the stage draws and the tools drag: when every top selected object shares one bbox angle it is the union of their bounds measured in the turned frame (cached per node), with its corners turned back to the page; otherwise the plain selection bounds. Reset Bounding Box only drops bbox, one step. Edit Contents is stored on the envelope (editContents) rather than in the project, like Illustrator, so it survives save and undo: hit testing and marquee selection then go into the raw children, topSelectable stops below the envelope, and the selection becomes the children; Edit Envelope clears it and selects the envelope. Every envelope point edit goes through editEnvelopeMesh, which turns a warp or top-object envelope into a 4 by 4 mesh sampled from its current shape the first time, and pins the stored frame to the current contents box. Release now gives back the envelope's real outline (the mesh boundary, the warped box or the top shape) instead of the unwarped box.
 
 ## src/engine/history.ts
 
@@ -381,6 +400,49 @@ Every style works in a unit box (u and v from -1 to 1, swapped for vertical orie
 
 Each subpath's anchors are placed by their fraction of its length; each side is cut at the other side's fractions, so both end up with the same anchors at the same fractions. Straight segments are cut as straight lines with retracted handles, so a blend between polygons stays straight. Closed shapes are turned to the same winding and the second is rotated so its first anchor sits at the same angle from its centroid as the first's. Smooth Color picks the step count from the CIE76 difference between the two solid fills (one step per 1.15, between 1 and 220), and 24 when either fill is not a solid colour.
 
+### src/engine/live.ts · envelope content
+- refers-to: src/engine/live.ts :: liveChildren, envelopeFrame, envelopeMapper, envelopeContent, warpNode, envelopeOutline, envelopeGrid
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+The envelope maps the bounding box of its contents as they are now (envelopeFrame), not the stored frame, so editing the type in Edit Contents re-fits it the way Illustrator does; the stored frame is the fallback for empty or flat contents. warpNode turns the contents into derived nodes: paths go through mapPathAdaptive at the fidelity's tolerance; type becomes one filled path per run of the same fill and stroke from textOutlineRuns (the type node itself stays in children, so it stays editable); an image gets a derived warp grid of its corners mapped through the envelope, 6 to 32 cells across by fidelity; symbols bake to their art; nested blends, repeats and envelopes map their own derived output. Distort Appearance expands strokes and effects first so they bend; without it the paths bend and the appearance is applied after. Distort Linear Gradients maps the gradient's end points through the envelope; Distort Pattern Fills multiplies the pattern by the envelope's local affine at the art's centre. Both are first-order approximations because a canvas gradient or pattern cannot follow a curved map. Envelope output is cached per node with the font epoch and the symbols array, since type outlines depend on loaded fonts.
+
+### src/engine/live.ts · bilinear mesh
+- refers-to: src/engine/live.ts :: bilinear (removed)
+- kind: removed-code
+- logged: v0.17.0 · 2026-10-08
+
+The mesh envelope used to map through straight bilinear cells:
+
+    function bilinear(pts, rows, cols, u, v) { cell (cu, cv) from u * cols and v * rows; mix the four corners by (fu, fv) }
+
+It is replaced by meshMapper in envelope.ts, Coons patches with handles and knots, which equals the bilinear map while no handle has moved.
+
+## src/engine/envelope.ts
+
+### src/engine/envelope.ts · mesh model
+- refers-to: src/engine/envelope.ts :: meshHandles, meshKnots, meshSampler, meshMapper, meshFromMapper, mapMeshSpec, meshAddLine, meshRemoveLines; src/engine/types.ts :: EnvelopeSpec, EnvelopeOptions
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+A mesh envelope is rows by columns of points in document space, row-major, with optional handles h (four relative vectors per point: toward the next column, the previous column, the next row, the previous row, the same order as a gradient mesh point) and optional knots u and v (where each column and row sits in the contents' unit box). Without h every handle is a third of the way to its neighbour, so a fresh mesh is the old bilinear grid; without knots the lines are evenly spaced. Each cell is a Coons patch of its four cubic edges. Knots exist so that adding a line with the Mesh tool does not move the art: the new line is inserted at the clicked parameter and every new point is sampled from the old surface, with handles from its derivative times a third of the knot step; handles toward unchanged neighbours are kept exactly. meshFromMapper samples any map (a warp, a top-object shape, a homography) into a mesh the same way, which is how a warp or top-object envelope becomes editable and how Reset with Mesh keeps the shape. Old files have no h, u or v and open unchanged.
+
+### src/engine/envelope.ts · homography and adaptive mapping
+- refers-to: src/engine/envelope.ts :: homography, applyH, isAffineH, mapPathAdaptive, localAffine, segsToSub
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+homography builds the 3 by 3 projective map from one quadrilateral to another as square-to-quad of the target times the adjugate of square-to-quad of the source (Heckbert's closed form; the affine case when both second differences vanish). mapPathAdaptive maps each cubic by its end points and by first-order handles (the map's directional derivative along each handle, from a forward difference of 1e-4 of the handle), checks the mapped curve against the true image at t = 0.5, 0.25 and 0.75 and halves the segment until the error is under the tolerance or seven levels deep. Derivative handles keep joins smooth where an anchor was smooth, which mapping the control points directly does not. With keepLines (projective maps) straight segments stay straight, which is exact; otherwise a straight segment is mapped as a cubic with thirds handles so it can bend, and a mapped piece whose handles still lie on the chord at thirds is written back as a line. fidelityTol turns Envelope Options fidelity 0 to 100 into a tolerance from 1.28 to 0.04 points (50 gives about 0.23).
+
+## src/engine/transform.ts
+
+### src/engine/transform.ts · bounding box angle and envelopes
+- refers-to: src/engine/transform.ts :: boxAngle, transformNode; src/engine/types.ts :: NodeBase.bbox
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+bbox is the angle in degrees (y down, so positive turns clockwise on screen) of an object's bounding box. transformNode maps the box's x axis through the matrix and keeps the result folded into minus 45 to 45, since a box turned 90 degrees is the same box; under 0.01 degrees the field is dropped, so moves and plain scales never add it and old files open unchanged. A scale along a turned box is R S R^-1, which maps the axis onto itself, so the angle survives it. An envelope moved or scaled along the page axes moves its contents, frame and mesh together as before. Under any other matrix (rotation, reflection, shear) its contents and frame stay put and only the envelope shape is mapped (a warp or top-object envelope first becomes a 6 by 6 mesh), because the contents are mapped through their own axis-aligned box; Coons patches are affine invariant, so the result is exact. This makes transform.ts import live.ts, which imports transform.ts: the cycle is only used inside functions, never at module load.
+
 ## src/engine/snap.ts
 
 ### src/engine/snap.ts · targets and matching
@@ -419,6 +481,13 @@ Vector effects on an item already changed its geometry (`itemGeometry`). Raster 
 - logged: v0.17.0 · 2026-10-08
 
 `knockout` is now true, false or 'inherit' (old files hold true or nothing, which still read as on and off); 'inherit' takes the enclosing group's effective setting, carried down in `RenderContext.knockout`. A group or layer that knocks out always gets its own layer, and its children are composited one by one: each is drawn into a scratch canvas the size of its visual bounds, its coverage is erased from the group's buffer (destination-out) and then it is drawn over (source-over). Coverage is the child drawn at opacity 1 and without its opacity mask (a memoised variant node so the child's caches still hit), which gives the PDF knockout result for an isolated group: earlier siblings vanish under a later one and the later one keeps its own opacity. With Opacity and Mask Define Knockout Shape (`knockoutShape`) the child as drawn is its own coverage, so it knocks out in proportion to its opacity, which in a normal-mode group equals ordinary compositing. Knockout groups are isolated: a child with a blend mode blends with the group's own pixels, not the art under the group.
+
+### src/engine/render.ts · warped images
+- refers-to: src/engine/render.ts :: drawWarpedImage, triangleMat; src/engine/types.ts :: ImageWarp; src/engine/bounds.ts :: computeGeom; src/engine/hit.ts :: leafHit; src/engine/transform.ts :: transformNode
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+An image with warp (derived inside an envelope, or kept after Expand) is drawn cell by cell: each cell is two triangles, each clipped to its destination grown by 0.7 device pixels from its centroid so neighbours overlap without seams, with the affine that takes the source triangle to it, drawing only the cell's slice of the bitmap plus one source pixel. Anti-Alias off turns image smoothing off. Bounds are the grid's points, hit testing is point in any cell, and transforms move the grid with the image. Outline view draws the grid's boundary.
 
 ### src/engine/render.ts · gradient strokes
 - refers-to: src/engine/render.ts :: strokeWith, strokeShape, gradientStroke
@@ -541,6 +610,13 @@ Area type is laid out in cells: the frame less its inset is split into rows by `
 - logged: v0.15.0 · 2026-10-07
 
 Builds type outlines synchronously from the shaping layer's loaded fonts, glyph by glyph in the layout's positions, and returns null until every face is loaded (the loader bumps the font epoch, so callers that cache on it retry). Glyph contours from the font arrive without close commands, so every subpath is marked closed; 3D needs closed contours for its caps.
+
+### src/engine/text.ts · textOutlineRuns
+- refers-to: src/engine/text.ts :: textOutlineRuns; src/engine/live.ts :: warpNode
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+The same glyph outlines as textOutline, grouped into runs of consecutive glyphs with the same fill, stroke and stroke weight, so type inside an envelope keeps its colours when it is drawn as distorted paths. Null until the fonts are loaded; the envelope then draws the type undistorted and retries on the next font epoch.
 
 ### src/engine/text.ts · layout
 - refers-to: src/engine/text.ts :: layoutText, caretAt, indexAt
@@ -697,6 +773,16 @@ let d = strokeToPath(g.d, s.width, s.cap, s.join, s.miter);
 if (s.align !== 'center' && g.d.every((sp) => sp.closed)) d = s.align === 'inside' ? boolean(d, g.d, 'intersect', 'nonzero', g.rule) : boolean(d, g.d, 'subtract', 'nonzero', g.rule);
 ```
 
+## src/engine/ops/distort.ts
+
+### src/engine/ops/distort.ts · Free Distort and Perspective Distort
+- refers-to: src/engine/ops/distort.ts :: distortNode, quadDistort; src/engine/index.ts :: Engine.distortTargets, Engine.distort
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Both distortions are the homography from the bounding box's four corners (turned with the box) to the dragged quadrilateral. Paths, compound paths, blend keys and spines map through mapPathAdaptive with straight lines kept straight (exact under a projective map) and curves split until they follow it within about 2e-4 of the box size; gradient end points that are set map too. Gradient meshes map their points and handles. An envelope maps its mesh (a warp or top-object envelope becomes a 6 by 6 mesh first). Type, images and symbols cannot carry a projective map in an affine xf, so each goes into a new envelope whose mesh samples the homography: 1 by 1 when the map is affine (exact), 4 by 4 otherwise (within a fraction of a point at ordinary sizes). The envelope ids for a drag are made once and reused on every move, so the preview does not churn ids and the selection follows the new envelopes on commit.
+- Free Transform's distortions used to be bilinear on anchors only, with type and images fitted by an affine; see the removed-code entry under src/tools/transform.ts.
+
 ## src/engine/style-libraries.ts
 
 ### src/engine/style-libraries.ts · STYLE_LIBRARIES
@@ -789,6 +875,13 @@ View > Snap to Pixel rounds the result of every other snap: points land on whole
 
 Clicking the out port of selected area type loads its text, as in Illustrator: the cursor turns into the loaded-text cursor, a click on a closed path or another text frame threads into it, a click on empty canvas makes a frame the size of the source, and a drag makes one the size of the drag. The new frame and the link are one gesture, so one undo removes both. Escape or another tool drops the loaded text. The port sits on the right edge 10 px above the corner, the same place `Stage.drawTextPorts` draws it.
 
+### src/tools/select.ts · turned bounding box and envelope points
+- refers-to: src/tools/select.ts :: frameHandles, handleAt, beginTransform, dragTransform, EP, envelopePointHit, envelopeDown, envelopeMove, envelopeUp, envelopeOverlay
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Handles come from Engine.selectionFrame's corners, so after a rotation they sit on the turned box and the rotate zone is outside its polygon. A scale handle works in the box's own frame: the pointer and the box go into that frame, the old axis scale is computed there, and the matrix applied is turn back times scale times turn, so a turned rectangle stretches along its sides and keeps its angle. With an envelope selected (and not in Edit Contents), the Direct Selection tool and the Mesh tool share EP: its mesh points draw as squares, the clicked point shows its handles, a point drags with snapping (Shift constrains to 45 degrees), a handle drags its end (Shift turns the opposite handle with it). Each drag is one undo step; a warp envelope becomes a mesh on the first one.
+
 ## src/tools/pen.ts
 
 ### src/tools/pen.ts · shortcuts
@@ -831,6 +924,23 @@ The stroke outline unites with every overlapping shape of the same fill (`uniteA
 - logged: v0.9.0 · 2026-10-07
 
 Ctrl or Command on a corner switches to free distort: anchors are mapped bilinearly from the original box to the dragged quadrilateral.
+- Superseded in v0.17.0 by the entries below: the map is now a homography and curves are subdivided.
+
+### src/tools/transform.ts · Free Transform modes
+- refers-to: src/tools/transform.ts :: FT, ftMode, distortQuad, shearDrag, freeTransform; src/engine/index.ts :: ToolOptions.ftMode, ToolOptions.ftConstrain
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+The mode and Constrain live in the tool options (ftMode, ftConstrain, both optional so saved preferences need nothing new), so the on-canvas widget in the stage, the options bar and the tool read one value. In Free Transform mode the handles scale and rotate, Ctrl or Command on a side handle shears along the box's side, Ctrl on a corner free distorts and Ctrl+Alt+Shift on a corner perspective distorts. In the two distort modes only corners respond. Perspective works in the box's frame: the drag's larger component, along the box's width or its height, picks the edge; the dragged corner moves along that edge by that amount and its partner on the edge (corner index xor 1 across, 3 minus index down) moves the opposite way. Free Distort moves the corner freely and snaps it; with Constrain or Shift the corner keeps to the box axis it moves along most. Each drag previews with dragTo from the drag origin and commits once.
+
+### src/tools/transform.ts · bilinear free distort
+- refers-to: src/tools/transform.ts :: bilinear (removed)
+- kind: removed-code
+- logged: v0.17.0 · 2026-10-08
+
+    function bilinear(r, q) { u, v from p in r; top = lerp(q0, q1, u), bottom = lerp(q3, q2, u); return lerp(top, bottom, v) }
+
+It mapped only anchors and handles, so long curves and straight sides did not follow the quadrilateral, and type and images were fitted with an affine through three corners. Free Transform now calls Engine.distortTargets (ops/distort.ts).
 
 ## src/tools/paint.ts
 
@@ -854,6 +964,13 @@ Freeform points live in document coordinates inside the gradient, so each object
 - logged: v0.12.0 · 2026-10-07
 
 Mesh handles are offsets from their point, so moving a point leaves them as they are; the old drag added the move to the offsets too and bent every line through a moved point twice as far. Clicking a point selects it for the tool (kept in `M.sel`, not in the document selection, which stays the mesh object); its four handles show as knobs and drag on their own, and the options bar gains Point colour and Opacity for it, which merge into one undo step while a slider moves. Lines are drawn as the real Bezier edges. A click inside adds lines in the fill colour and selects the new point; Shift keeps the colour already there. Alt-click removes the row and column lines through a point (an edge point loses only the line across the mesh), and the neighbouring handles are reset to a third of the new span so the patch stays smooth.
+
+### src/tools/paint.ts · Mesh tool on envelopes
+- refers-to: src/tools/paint.ts :: mesh tool down; src/tools/select.ts :: envelopeDown; src/engine/envelope.ts :: meshAddLine, meshRemoveLines
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+On a selected envelope the Mesh tool drags its points and handles like Direct Selection, a click anywhere inside the envelope's outline (not only on art) adds a row and column through that place without moving the art, and Alt-click on a point removes its lines. A click on an unselected envelope selects it first, so a stray click does not add lines.
 
 ## src/tools/symbolism.ts
 
@@ -951,6 +1068,13 @@ SVG filter primitives cannot express the Effect Gallery effects, so an object ca
 
 SVG has no knockout, so a knockout group's children are each masked by the inverse of what comes later: a chain of `<g id="kosN">` in defs holds each later child at opacity 1 without its mask plus a `<use>` of the next link, and child i gets a luminance mask of a white rect with the chain from i + 1 drawn through a filter that turns every colour black and keeps alpha. One chain per group keeps the file linear in the number of children. Children with Opacity and Mask Define Knockout Shape are left out of the chain because in an isolated normal-mode group their knockout equals ordinary compositing. The mask and filter regions are the group's visual bounds. A gradient stroke is a `<g>` with the stroke's opacity and blend mode holding the pieces under a clip path of `strokeRegion`, plus the arrowheads; translucent stops add a mask of the grey pieces.
 
+### src/io/svg.ts · warped images
+- refers-to: src/io/svg.ts :: SvgWriter.baked
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+SVG cannot draw an image through a curved map, and a triangle-per-cell clip tree leaves hairline seams in every renderer, so an image with a warp grid is baked to a PNG at the document's raster resolution, like Effect Gallery effects. Type and paths inside envelopes stay vector because the envelope's derived output is already paths.
+
 ## src/io/pdf.ts
 
 ### src/io/pdf.ts · group and layer items
@@ -998,6 +1122,13 @@ const bytes = new Uint8Array(await (await fetch(`data:application/octet-stream;b
 - logged: v0.9.0 · 2026-10-07
 
 TypeScript 7 types `Uint8Array` as possibly backed by a SharedArrayBuffer, which `Blob` does not accept; the casts to `Uint8Array<ArrayBuffer>` are safe because every array here is created locally.
+
+### src/io/pdf.ts · warped images
+- refers-to: src/io/pdf.ts :: PdfWriter.needsRaster
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+An image with a warp grid is rasterised at the export ppi through the same renderer as the canvas, for the reason given under src/io/svg.ts; the rest of an envelope stays vector.
 
 ## src/io/pdf-read.ts
 
@@ -1136,6 +1267,13 @@ Mesh edges came from `n.outline`, which mesh nodes do not have; they now use the
 - logged: v0.10.0 · 2026-10-07
 
 Selected area type shows an in port at its top left and an out port at its bottom right, and so does every other frame of its thread. A filled triangle marks a port that is threaded; a red plus on the out port marks overflow, in the `--danger` token through `StagePaint.danger`. Thread lines join an out port to the next in port when View > Show Text Threads is on (`ViewFlags.threads`). The overflow mark used to live in the text editor's overlay, so it showed only while typing; it moved here. The frame outline now goes through the node's `xf`, which it ignored before, so a moved or rotated text box outlined its original place; a frame with a `framePath` outlines that shape.
+
+### src/ui/stage.ts · Free Transform widget, turned box and envelope outlines
+- refers-to: src/ui/stage.ts :: ftWidget, ftButtons, syncFtWidget, drawSelection, drawFrame, traceEdges; src/styles/formpth.css :: .cv-ft-widget
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+The widget is built once in the constructor (Constrain, then Free Transform, Perspective Distort and Free Distort, icons from icons-vector) and synced on every overlay frame: shown only with the Free Transform tool and a selection, placed beside the selection's top-left through CSS variables in a transform (so moving it is no layout shift), clamped inside the stage and below the rulers, with a fixed 34 px width so placing it never measures the DOM. Its buttons stop pointerdown from reaching the canvas. The selection box is drawn from Engine.selectionFrame, as a turned polygon with eight handles when the box has an angle. An envelope's selection outline is its mesh lines (or the warped box grid, or the top shape), cached per node; in Edit Contents it is a dashed contents box with the raw contents' edges.
 
 ## src/ui/text-editor.ts
 
