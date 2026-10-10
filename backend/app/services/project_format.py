@@ -37,7 +37,7 @@ def _walk(nodes: list, files: set[str], seen: set[str], depth: int) -> int:
             src = node.get("src")
             if not isinstance(src, str) or not safe_name(src):
                 raise ProjectError("An image path is unsafe.")
-            if src not in files:
+            if src not in files and not isinstance(node.get("linked"), dict):
                 raise ProjectError(f"The image {src} is missing from the project.")
         for key in ("children", "content"):
             child = node.get(key)

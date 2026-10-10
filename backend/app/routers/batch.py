@@ -2,6 +2,7 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Request, Response, UploadFile
 
@@ -104,8 +105,28 @@ async def files_list(request: Request) -> Response:
         folder = _folder(body.get("folder"), False)
     except ValueError as exc:
         return _refuse(422, str(exc))
-    files = [{"name": p.name, "path": str(p), "size": p.stat().st_size} for p in sorted(folder.iterdir(), key=lambda q: q.name.lower()) if p.is_file() and p.suffix.lower() in kinds and not p.name.startswith(".")]
-    return _json({"folder": str(folder), "files": files})
+    entries = sorted(folder.iterdir(), key=lambda q: q.name.lower())
+    files = [{"name": p.name, "path": str(p), "size": p.stat().st_size, "mtime": int(p.stat().st_mtime * 1000)} for p in entries if p.is_file() and p.suffix.lower() in kinds and not p.name.startswith(".")]
+    dirs = [p.name for p in entries if p.is_dir() and not p.name.startswith(".")] if body.get("dirs") else []
+    return _json({"folder": str(folder), "parent": str(folder.parent) if folder.parent != folder else "", "files": files, "dirs": dirs})
+
+
+@router.post("/api/files/stat")
+async def files_stat(request: Request) -> Response:
+    if not _app_origin(request):
+        return _refuse(403, "Only the formpth window can check files.")
+    raw = (await _body(request)).get("paths")
+    if not isinstance(raw, list) or len(raw) > 2000:
+        return _refuse(422, "Give up to 2000 absolute paths.")
+    out = []
+    for item in raw:
+        path = Path(os.path.expanduser(str(item or "").strip()))
+        try:
+            st = path.stat() if path.is_absolute() and path.is_file() else None
+        except OSError:
+            st = None
+        out.append({"path": str(item), "exists": st is not None, "size": st.st_size if st else 0, "mtime": int(st.st_mtime * 1000) if st else 0})
+    return _json({"files": out})
 
 
 @router.post("/api/files/read")
@@ -120,9 +141,10 @@ async def files_read(request: Request) -> Response:
         return _refuse(422, f"{path.name}: formpth reads {', '.join(sorted(READABLE))} here.")
     if not path.is_file():
         return _refuse(404, f"There is no file at {path}.")
-    if path.stat().st_size > MAX:
+    st = path.stat()
+    if st.st_size > MAX:
         return _refuse(413, f"{path.name} is larger than 512 MiB.")
-    return Response(content=path.read_bytes(), media_type="application/octet-stream", headers={"Cache-Control": "no-store", "X-Formpth-Name": path.name})
+    return Response(content=path.read_bytes(), media_type="application/octet-stream", headers={"Cache-Control": "no-store", "X-Formpth-Name": quote(path.name), "X-Formpth-Path": quote(str(path)), "X-Formpth-Size": str(st.st_size), "X-Formpth-Mtime": str(int(st.st_mtime * 1000))})
 
 
 @router.post("/api/files/write")
