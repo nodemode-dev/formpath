@@ -185,3 +185,10 @@ Scans the system font folders for macOS, Windows and Linux once and caches the l
 - logged: v0.13.0 · 2026-10-07
 
 On Linux the `dir` entries of fontconfig's configuration are added to the standard folders, so fonts a distribution installs outside `/usr/share/fonts` (TeX Live's OpenType fonts, for instance) are listed as the desktop lists them. Relative entries are skipped, since the home folders are already scanned, and folders inside a scanned folder are not added twice.
+
+### app/services/fonts.py · variable fonts
+- refers-to: app/services/fonts.py :: _has_table, _members, _scan, listing, find
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+Each listed face now carries `variable`, true when its table directory has an `fvar` table, so the Character panel can mark and filter variable families without downloading them; the field is new and optional, so older clients ignore it. A variable family is listed by its files (Lora Regular and Lora Italic) while the window asks for named instances (Lora SemiBold, Lora Bold Italic), which match no file's style. `find` used to fall back to the family's Regular for any unknown style, which sent italic instances to the upright file; it now keeps to faces of the same slant (italic or oblique against upright), prefers variable files and then the plain Regular or Italic. Static families resolve as before, except that an unknown italic style now finds the family's Italic instead of its Regular.

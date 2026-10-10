@@ -240,13 +240,40 @@ ask it questions.
   previous column. Type > Type Orientation switches selected type between Horizontal and Vertical. Vertical type
   draws, outlines, and exports to SVG and PDF the way it shows on the canvas; use a font that has the CJK glyphs,
   such as Noto Sans CJK, so outlines and PDF carry every character.
-- Character panel: font family and style, size, leading, kerning, tracking, scale, baseline shift, case, and the fonts
-  installed on your computer when the engine runs. Paragraph panel: alignment, indents, space before and after,
-  and the area type columns, gutter and inset. Type > Area Type Options sets the frame's width and height, rows and
+- Character panel: font family and style, size, leading, kerning, tracking, scale, baseline shift, character
+  rotation, case, and the fonts installed on your computer when the engine runs. Kerning Auto uses the font's
+  kerning pairs; Optical spaces each pair from the shapes of the two letters, so it also evens out fonts without
+  kerning. Paragraph panel: the seven alignments, indents, space before and after, Hyphenate, Bullets and Numbering
+  (a bullet character, or numbers as 1, 01, a, A, i or I from a starting number; a negative first-line indent makes a
+  hanging list), and the area type columns, gutter and inset. Type > Area Type Options sets the frame's width and height, rows and
   row gutter, columns and column gutter, inset spacing, the first baseline (Ascent, Cap Height, Leading, x Height,
   Em Box Height, Fixed or Legacy, with a Min distance from the top) and whether text flows by rows or by columns.
   Glyphs shows a font's characters to insert; with a character selected in type, the row above the grid shows its
   alternates, and clicking one sets that character in it.
+- Variable fonts: installed variable fonts show "(Variable)" in the Character panel's font list, and Variable fonts
+  only narrows the list to them. With one chosen, the style list adds the font's named instances (Medium, SemiBold
+  and so on), and a Variable Font section at the foot of the panel gives a slider and value for each axis the font
+  has: Weight, Width, Slant, Italic, Optical size, and custom axes by name and tag. The canvas, Create Outlines and
+  PDF draw the glyphs at those settings; SVG keeps the type live with font-variation-settings (and the matching
+  weight, width and slant), and writes outlines for custom axes that a viewer cannot set.
+- Hyphenation and justification: Hyphenate breaks words at line ends in area type. Paragraph > Hyphenation (or Type >
+  Hyphenation) sets Words longer than, After first, Before last, Hyphen limit (lines in a row, 0 for no limit),
+  Hyphenation zone (for unjustified type, the gap at a line's end below which no word is broken) and Hyphenate
+  capitalized words. formpth breaks English words with its own syllable rules (prefixes and suffixes, consonant
+  clusters, double letters), not a dictionary, so unusual words can break in places a dictionary would not.
+  Justification sets word spacing, letter spacing and glyph scaling as minimum, desired and maximum percentages
+  and how a line holding a single word is set. Desired values apply to every alignment; justified lines may
+  squeeze to the minimums to fit more and stretch up to the maximums (word spacing past its maximum when nothing
+  else is left).
+- Tabs (Window > Tabs or Type > Tabs): choose left, centre, right or decimal, then click the ruler to add a stop at
+  that distance from the frame's left edge; drag a stop to move it or down off the ruler to remove it. X, Leader
+  (characters repeated across the gap, such as a dot) and Align On (the character a decimal tab lines up) edit the
+  picked stop. Without stops, tabs advance to every 36 points.
+- Touch Type (Shift+T, in the Type tool's flyout): click a character to put a box around it. Drag inside the box to
+  move the character, a corner to scale it proportionally, the top or bottom handle to scale it vertically, a side
+  handle to scale it horizontally, and the dot above the box to rotate it; arrow keys nudge it (Shift for 10 points).
+  The options bar shows and sets its X, Y, H, V and rotation, and Reset clears it. The type stays editable: the
+  character keeps its transform while you type around it, and outlines, SVG and PDF show it.
 - Type on a path: select it with the Selection or Direct Selection tool to see three brackets. Drag the start or end
   bracket to change where the type begins and ends along the path; drag the centre bracket along the path to move
   the type, or across the path to flip it to the other side. Type > Type on a Path chooses the effect: Rainbow

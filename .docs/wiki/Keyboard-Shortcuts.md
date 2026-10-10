@@ -12,7 +12,7 @@ Ctrl stands for Command on a Mac. Help > Keyboard Shortcuts in the app lists eve
 | Rotate, Reflect, Scale, Free Transform, Width, Warp | R, O, S, E, Shift+W, Shift+R |
 | Eyedropper, Gradient, Mesh, Live Paint, Live Paint Selection, Shape Builder, Blend | I, G, U, K, Shift+L, Shift+M, W |
 | Symbol Sprayer, Artboard | Shift+S, Shift+O |
-| Type | T |
+| Type, Touch Type | T, Shift+T |
 | Hand, Rotate View, Zoom | H (or hold Space), Shift+H, Z |
 
 | Commands | Key |

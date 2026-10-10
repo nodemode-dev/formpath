@@ -41,6 +41,7 @@ frontend/
     │   ├── brushes.ts          calligraphic, scatter, art, pattern brushes
     │   ├── text.ts             type layout, styles, caret and index math
     │   ├── flow.ts             reflow: text wrap shapes and threaded stories
+    │   ├── hyphen.ts           English hyphenation points, hyphenation and justification defaults
     │   ├── harmony.ts          colour harmony rules and variations
     │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
     │   ├── pattern.ts          tile lattices and the pattern editing session
@@ -115,6 +116,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/kernel.ts
 - src/engine/ops/recolor.ts
 - src/engine/text.ts
+- src/engine/hyphen.ts
 - src/engine/flow.ts
 - src/engine/symbolism.ts
 - src/engine/livepaint.ts
@@ -256,6 +258,13 @@ Attributes joins the Stroke group (Window > Attributes comes from `TAB_HOMES`). 
 - logged: v0.17.0 · 2026-10-08
 
 New optional parameters only. `set_text` validates the enumerations and refuses path options on type that is not on a path and area options on type that is not area type before changing anything, then writes every node-level option (orientation, path and area options) in one `setTextNode` edit, so each call adds one history step for them. `upright_latin` is a character attribute and honours `start` and `end`.
+
+### src/automation/agent-bridge.ts · set_text type depth
+- refers-to: src/automation/agent-bridge.ts :: set_text (kerning, axes, rotation, touch, hyphenate, hyphenation, justification, tabs, list); backend/app/routers/mcp.py :: set_text
+- kind: explainer
+- logged: v0.18.0 · 2026-10-08
+
+New optional parameters, beside the old ones. `kerning`, `axes` and `rotation` join the one character edit (so they honour `start` and `end`); `axes` are read against the font's fvar through `variationOf`, clamped to each axis's range, and axes the font lacks are dropped with a note in the result (a static font keeps them, which does nothing, and the result says so). The paragraph options (`align`, `hyphenate`, `hyphenation`, `justification`, `tabs`, `list`) are gathered into one `setParaStyle`, so they are one history step; `hyphenation` alone turns hyphenation on. `touch` is its own `setCharTouch` step on one character and merges given fields into the character's current transform; `reset` clears it. `align` gained justify_center, justify_right and justify_all.
 
 ### src/automation/agent-bridge.ts · add_text default colour
 - refers-to: src/automation/agent-bridge.ts :: run, case add_text
@@ -632,6 +641,39 @@ Point type lays out lines from the baseline at the node's origin; area type wrap
 
 Line breaking and line placement used to run in two passes, breaking every paragraph at the column width before any line had a y. Text wrap makes the width depend on y, so `layoutLines` now places a line first, asks `slots` which horizontal runs of the column are free in that line's band (ascent to descent), and breaks into each run in turn, so type can sit on both sides of a wrap object. A band with no run wide enough (one and a half times the type size) moves the line down by its leading. The break rules are unchanged: break after a space, tab or hyphen, keep a trailing space on the line, split a word only when it alone is wider than the run. A wrap shape with `invert` keeps only the run inside the shape, measured at both edges of the band so a line never pokes out of a curve; area type in a non-rectangular shape uses that for its own `framePath`.
 
+### src/engine/text.ts · hyphenation, justification, tabs and lists in the line breaker
+- refers-to: src/engine/text.ts :: layoutLines (measure, tabAt, cum, cumS, hy, extra, gx), listMarker, plainSt, isLetter, spaceW, DEFAULT_TAB; src/engine/types.ts :: ParaStyle.hyph, ParaStyle.tabs, ParaStyle.just, ParaStyle.list, Glyph.syn
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+`ParaStyle.hyphenate` used to be a stored flag nothing read. The breaker now keeps the width (`cum`) and the shrinkable width (`cumS`) before every item of the line; when a letter overflows, the word around it is handed to `allowedBreaks` and the latest break whose prefix plus a hyphen fits is taken, subject to the hyphen limit (consecutive hyphenated lines in the paragraph) and, for unjustified type, the hyphenation zone (no break when the line already ends within the zone of the margin). It runs only in area type, as in Illustrator, and the hyphen is a synthetic glyph (`syn`) placed after the line, so the text never changes; selection skips synthetic glyphs and the caret math still works because they carry the index of the following character.
+Justification: without `ParaStyle.just` the old rule holds (justified lines spread the slack over spaces), so documents made before are unchanged. With it, the desired word spacing, letter spacing (a percent of the space width, as InDesign and Illustrator define it) and glyph scaling apply to every line of every alignment; a justified line counts as fitting when its width less the room down to the minimums fits, and the slack is taken from or given to word spaces first, then letter gaps, then glyph scaling (one factor per line, drawn through the glyph's `t`), with any slack left after the maximums going to the word spaces. A justified line with no spaces follows Single Word Justification.
+Tabs: a tab's advance now depends on where it starts: to the next stop after that point (positions from the frame's left edge, the cell's for columns, the origin for point type), with right, centre and decimal stops pulling the following text back by its width, half of it or its width up to the decimal character (right-aligned when there is none). Past the last stop, or with no stops, tabs advance to the next multiple of 36 points, Illustrator's default; before this a tab was as wide as the canvas measured the tab character, so older documents with tabs now line up on that grid. Leaders are synthetic glyphs repeated across the gap, aligned to its end.
+Bullets and numbering: every non-empty paragraph of a text object with `ParaStyle.list` gets a marker of synthetic glyphs at the first-line indent, and its first line starts at the larger of the left indent and the marker's end plus half an em, so a negative first-line indent makes a hanging list. Numbers count the object's non-empty paragraphs from `start` in decimal, zero-padded, letters or roman numerals. Markers and leaders use the paragraph's first style with no Touch Type, rotation or position (`plainSt`).
+
+### src/engine/text.ts · optical kerning
+- refers-to: src/engine/text.ts :: opticalKern, profileOf, meanGap, refGaps, profiles, advance; src/io/fonts.ts :: installShaping (shape)
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+Optical kerning used to be metric kerning under another name. Each glyph's outline is cut by 24 horizontal bands from the cap height to the baseline; a band's left and right ink edges form the glyph's side profiles, and a band without ink takes the nearest edge within three bands, so a crossbar or a bowl's top still counts against the neighbour. For a pair, the gap in every band where both glyphs have an edge is measured, each gap is capped at the narrowest gap plus 0.18 em (a deep open counter does not count for more than that), and the mean is compared with the same mean for "nn" in that face: the kern is 55 percent of the difference, never closing the narrowest gap below 30 percent of the "nn" gap, and kept between -0.2 and +0.1 em. Profiles are cached per face (family, style and variable axes) and character and cleared with the font epoch. Until the font is parsed the pair falls back to metric kerning. Shaped spans no longer add GPOS kerning under Optical; only Auto does.
+
+### src/engine/text.ts · character rotation and Touch Type
+- refers-to: src/engine/text.ts :: charTransform, withT, glyphMat, glyphBaseMat, touchMap, caretAt, indexAt, selectionQuads, insertText, cleanTouch, touchSpans, charStyleAt, glyphShape; src/engine/types.ts :: CharStyle.rotate, CharStyle.touch, CharTouch, Glyph.t
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+A glyph may carry `t`, a local transform applied after its base matrix (`glyphBaseMat`), so `glyphMat` and therefore the canvas, `textOutline`, `outlineText`, SVG, PDF, bounds and hit tests all draw the same moved glyph without each knowing why. `charTransform` builds it from the style: scale (Touch Type's percentages times the line's glyph scaling) about the glyph origin, rotation (character rotation plus Touch Type's, counter-clockwise positive) about the scaled cell's centre, then Touch Type's offset in the glyph's own frame. Advances are not changed, so moving one character never reflows the rest, which is how Illustrator's Touch Type behaves on screen. Touch Type lives on the character's style, so it rides with the character through every edit; `insertText` drops it from the style of newly typed characters so they do not inherit a neighbour's move. The caret and selection map through `touchMap` (the glyph's transform relative to its untouched place), and `indexAt` hits touched glyphs first.
+
+## src/engine/hyphen.ts
+
+### src/engine/hyphen.ts · rule-based English hyphenation
+- refers-to: src/engine/hyphen.ts :: hyphenPoints, allowedBreaks, syllableBreaks, units, silentTail, PREFIXES, SUFFIXES, ONSETS, DEFAULT_HYPH, DEFAULT_JUST
+- kind: explainer
+- logged: v0.18.0 · 2026-10-08
+
+Not Liang's patterns: the TeX US English pattern list could not be added as data with a clear licence here, so this is a compact syllable splitter written for formpth. A word is read as units (consonant digraphs such as ch, th, ck and qu, vowel teams such as ea, ou, oy), a final silent e and a silent -ed or -es stop counting as vowels (but a consonant plus -le does), and between two vowel nuclei the consonants split: one consonant goes with the next syllable (except x and ck), doubled letters split between them, otherwise the longest tail that is an allowed onset (a consonant plus l or r, tw, dw) starts the next syllable and the rest stays, and a final consonant plus -le keeps the consonant. Adjacent vowels split unless one is a team or a glide (i after t, c, s, g or x as in -tion; u after g or q). Common prefixes (un, dis, mis, non, over, under, inter, trans, super, anti) and suffixes (-tion, -sion, -ment, -ness, -less, -ful, -ship, -ing, -able, -ible and a few more) force a break and the suffix is never split. It gets most everyday words to acceptable breaks (hy-phe-na-tion, in-for-ma-tion, chil-dren, lit-tle, jump-ing, run-ning) and errs on words whose syllables depend on pronunciation; a dictionary would fix that. `allowedBreaks` applies Words Longer Than, After First, Before Last and Hyphenate Capitalized Words.
+
 ## src/engine/flow.ts
 
 ### src/engine/flow.ts · reflow
@@ -997,6 +1039,13 @@ The Vertical Type tool used to set a flag after the type was made, as a second h
 
 Choosing a type tool with nothing selected sets the fill to black and the stroke to none, as Illustrator does. Without it, type set after drawing shapes took their white fill and vanished on a white artboard.
 
+### src/tools/type.ts · Touch Type
+- refers-to: src/tools/type.ts :: touchType, TT, touchGlyph, touchHandles, touchPick, glyphUnder, touchFrom, touchOptions; src/engine/index.ts :: setCharTouch; src/engine/text.ts :: touchSpans, cleanTouch
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+Shift+T, in the type flyout. A click finds the nearest non-space glyph of the type under the pointer (or of selected type) within three screen pixels of its cell and starts a move at once, as Illustrator does. The box is the glyph's cell through its full matrix; handles are the four corners (proportional), the top and bottom middles (vertical), the side middles (horizontal) and a dot 14 px above the top (rotate). Gestures work in the glyph's untouched frame (`B`, the text matrix times `glyphBaseMat`): scaling is the ratio of the pointer's distance from the cell's centre (along the turned axis for one direction), and the offset is corrected so the centre stays put, since `charTransform` scales about the glyph origin; rotation is the change of angle about the centre. Drags preview with `beginDrag` and `dragTo` and commit as one Touch Type step; arrow keys nudge one or ten points in document space (converted into the glyph's frame) as a step each; Escape drops the picked character. The options bar shows the picked character and its X, Y, H, V and rotation, all editable, and Reset. Leaving the tool keeps the transforms; the type tools still edit the text.
+
 ## src/tools/view.ts
 
 ### src/tools/view.ts · Artboard tool
@@ -1074,6 +1123,13 @@ SVG has no knockout, so a knockout group's children are each masked by the inver
 - logged: v0.17.0 · 2026-10-08
 
 SVG cannot draw an image through a curved map, and a triangle-per-cell clip tree leaves hairline seams in every renderer, so an image with a warp grid is baked to a PNG at the document's raster resolution, like Effect Gallery effects. Type and paths inside envelopes stay vector because the envelope's derived output is already paths.
+
+### src/io/svg.ts · variable axes, touched glyphs and synthetic glyphs
+- refers-to: src/io/svg.ts :: Writer.text (css, face, outlineOnly, one, glyphRuns, loose)
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+Live type keeps its axes as `font-variation-settings`, and because Chromium ignores that property for installed fonts while honouring the matching font properties, `wght` is also written as `font-weight`, `wdth` as `font-stretch` and `slnt` as an oblique `font-style`; a run with any other axis (optical size or a custom axis), which no font property can carry, is written as outlines of the glyphs the canvas drew. A glyph with a transform (`t`: Touch Type, character rotation or justification glyph scaling) cannot sit in a `tspan`, so it is written on its own after the line's runs: its outline when the font is loaded, otherwise a `text` element with its full matrix, inside a `g` with the type's transform (the surrounding `text` is closed and reopened around it). Hyphens, list markers and tab leaders are glyphs of the layout, so they export as characters in the runs.
 
 ## src/io/pdf.ts
 
@@ -1205,6 +1261,13 @@ Canvas 2D has no `font-feature-settings`, so a span that asks for OpenType featu
 - logged: v0.13.0 · 2026-10-07
 
 opentype.js reads GSUB but applies only single, alternate and ligature lookups, so `calt`, `clig` and `rlig` run through a small GSUB interpreter over the parsed tables: single (both formats), alternate (first choice), ligature, and contextual and chaining contextual lookups in all three formats (glyph sequences, class sequences, coverage sequences), whose records call nested lookups at positions inside the match. Lookups run in lookup list order, one pass each, as the specification orders them; lookup flags (skip marks) are not honoured, which Latin text seldom needs. With it, JetBrains Mono's code ligatures and Inter's arrows and case-aware hyphens appear. A per-character glyph alternate is `CharStyle.alt`, a glyph id applied when its span shapes to a single glyph; the Glyphs panel lists the base glyph and every glyph that `aalt`, `salt`, `swsh`, the stylistic sets, character variants, small caps and similar features map it to, drawn from the font's outlines because most alternates have no code point. Picking one styles just the selected character. SVG text cannot name a glyph id, so an alternate shows in SVG only when type is outlined; the canvas, Create Outlines and PDF draw it. The panel learns about caret moves through the editor's redraw hook and compares a key before doing any work, so the caret blink costs one string comparison.
+
+### src/io/fonts.ts · variable fonts
+- refers-to: src/io/fonts.ts :: variedGlyph, infoOf, variationOf, isVariableFamily, instanceStyles, stylesOf, fontFor (byFile), outlineText, installShaping (shape, outline); src/engine/text.ts :: hasAxes, axesKey, items; src/engine/types.ts :: CharStyle.axes; backend/app/services/fonts.py :: _has_table, find
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+Canvas 2D cannot set font variations (`ctx.font` has no font-variation-settings and the browser ignores them for local fonts), so a span with `CharStyle.axes` goes through the shaping path like a span with OpenType features and draws each glyph's own outline. opentype.js 2.0 applies gvar and CFF2 blends through `font.variation.getTransform(gid, coords)`, which returns the varied glyph in font units with y up (hence the flip and 1/unitsPerEm) and its HVAR advance; it also writes the varied advance back onto the shared default glyph, so `variedGlyph` restores `advanceWidth` and `leftSideBearing` from the `_` copies opentype keeps. Varied outlines and advances are cached per font, glyph and `axesKey`, the same PathData the canvas, `textOutline`, `outlineText` (Create Outlines, PDF) and SVG outlines use, so all of them match. A font without HVAR keeps its default advances (gvar phantom points are not read). Glyph positioning (GPOS kerning) is not varied. `variationOf` reads fvar: axes with their ranges and names (registered tags by their English names, custom axes as name and tag) and named instances, whose names join `stylesOf` for the family once its file is parsed; a picked instance sets its coordinates as the span's axes. The fonts service marks variable files (an fvar table), the Character panel labels and filters them, and `fontFor` shares one parse per font file because every instance style of a variable family resolves to the same file. No variable face ships with formpth (the @fontsource packages here are static builds); installed variable fonts come through the fonts service.
 
 ## src/io/trace.ts
 
@@ -1447,6 +1510,13 @@ Knockout Group is a native checkbox cycled off, on, inherit (shown as the indete
 Browsers report "ResizeObserver loop completed with undelivered notifications" as a window error when a layout settles over two frames, for example when a hidden panel group is shown. Nothing failed, so the log ignores it instead of showing the error toast.
 
 ## src/ui/panels/type.ts
+
+### src/ui/panels/type.ts · variable axes, paragraph options and the Tabs panel
+- refers-to: src/ui/panels/type.ts :: CharacterPanel (rotate, varOnly, axesBox, axesList, axisCtl, varInfo, varKey), ParagraphPanel (listKind, bullet, numFmt, numStart), hyphenationDialog, justificationDialog, TabsPanel, BULLETS, NUMBER_FORMATS, TAB_ICONS; src/app.ts :: tabs (TAB_HOMES, type-group), hyphenation-options, justification-options
+- kind: rationale
+- logged: v0.18.0 · 2026-10-08
+
+The Character panel's Variable Font section sits at the foot of the panel so that showing it never moves the controls above; its sliders are keyed rows (`patchList`) per axis tag and range, created with their value and updated in place, and each drag is one gesture (one undo step). The panel asks `variationOf` once per family and style key and requeues when it answers. Picking a style that is a named instance also sets that instance's coordinates; any other style clears the axes. Variable fonts only filters the family list but always keeps the current family so the select never shows a blank. Rotation sits beside Baseline. The Paragraph panel adds the three missing justify icons (icons-vector `vJustify*`), Hyphenation and Justification buttons that open `previewEdit` dialogs (live preview, one undo step, also Type > Hyphenation and Type > Justification), and Bullets and Numbering, whose bullet, format and start controls are always present and only enabled for the kind in use, so nothing appears or disappears. The Tabs panel (Window > Tabs, Type > Tabs) is a ruler as wide as the area type frame (288 points for point type) with a tick every 36 points; stops are keyed buttons positioned by a CSS variable. A click on empty ruler adds a stop of the chosen alignment as one Paragraph step; dragging a stop previews with `beginDrag` and commits once, and dropping it more than 24 px below the ruler removes it. Stops keep their stored order (layout sorts them) so a dragged stop keeps its key.
 
 ### src/ui/panels/type.ts · type option dialogs
 - refers-to: src/ui/panels/type.ts :: areaTypeOptionsDialog, pathTypeOptionsDialog, CharacterPanel.upright; src/app.ts :: area-type-options, type-on-path-options, type-path-*, type-orientation-*
