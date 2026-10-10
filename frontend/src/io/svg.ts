@@ -10,7 +10,7 @@ import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
 import { clipGeometry, docArtBounds, gradientGeom, knockoutShape, knocksOut, renderNode } from '../engine/render';
 import { gradientStrokeArt, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
-import { layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
+import { glyphBox, glyphMat, glyphOutline, layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
 import { BLEND_MODES, type AppearanceItem, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
 import { outlineText } from './fonts';
 import { docFromManifest, serialize } from './project-io';
@@ -239,11 +239,26 @@ class Writer {
       flush();
       return parts.join('');
     };
-    if (n.mode === 'path' && n.path) {
-      const pid = this.id('tp');
-      this.defs.push(`<path id="${pid}" d="${this.d(n.path)}"/>`);
-      const st = n.spans[0]?.style ?? DEFAULT_CHAR;
-      return `<text font-family="${esc(st.font)}" font-size="${num(st.size)}" fill="${this.paint(st.fill, b).v}"><textPath href="#${pid}" startOffset="${num((n.pathStart ?? 0) * 100)}%">${esc(n.spans.map((s) => s.text).join('').replace(/\n/g, ' '))}</textPath></text>`;
+    if (n.mode === 'path' || lay.vertical) {
+      const parts: string[] = [], pr = this.o.precision;
+      for (const g of lay.glyphs) {
+        if (g.ch === ' ' || g.ch === '\t') continue;
+        const st = g.style, m = mul(glyphMat(g), [st.hscale / 100, 0, 0, st.vscale / 100, 0, 0]), f = this.paint(st.fill, b);
+        const stroked = st.stroke.type !== 'none' && st.strokeWidth > 0, sv = stroked ? this.paint(st.stroke, b).v : '';
+        const shape = g.gid !== undefined ? glyphOutline(st, g.gid) : null;
+        if (shape) parts.push(`<path d="${this.d(transformPath(shape, mul(m, [g.size, 0, 0, g.size, 0, 0])))}" fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}/>`);
+        else {
+          const { weight, italic } = weightOf(st.style), deco = g.up ? '' : [st.underline ? 'underline' : '', st.strike ? 'line-through' : ''].filter(Boolean).join(' ');
+          parts.push(`<text transform="${mat(m, pr)}" font-family="${esc(st.font)}" font-size="${num(g.size)}"${weight !== 400 ? ` font-weight="${weight}"` : ''}${italic ? ' font-style="italic"' : ''} fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}${deco ? ` text-decoration="${deco}"` : ''}>${esc(g.ch)}</text>`);
+        }
+        if (g.up && (st.underline || st.strike)) {
+          const bx = glyphBox(g), t = Math.max(0.5, g.size * 0.06), gm = mat(glyphMat(g), pr);
+          if (st.underline) parts.push(`<rect transform="${gm}" x="${num(bx.x + bx.w - t)}" y="${num(bx.y)}" width="${num(t)}" height="${num(bx.h)}" fill="${f.v}"/>`);
+          if (st.strike) parts.push(`<rect transform="${gm}" x="${num(bx.x + bx.w / 2 - t / 2)}" y="${num(bx.y)}" width="${num(t)}" height="${num(bx.h)}" fill="${f.v}"/>`);
+        }
+      }
+      const xf = n.mode === 'path' || (n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5]) ? '' : ` transform="${mat(n.xf, pr)}"`;
+      return `<g${xf} style="font-kerning:none">${parts.join('')}</g>`;
     }
     for (const l of lay.lines) if (l.glyphs.length) runs.push(glyphRuns(l.glyphs));
     const xf = n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5] ? '' : ` transform="${mat(n.xf, this.o.precision)}"`;

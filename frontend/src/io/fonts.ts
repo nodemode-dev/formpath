@@ -1,6 +1,6 @@
 import { parse, type Font, type PathCommand } from 'opentype.js';
-import { anchor, mul, rotateAbout, transformPath } from '../engine/geometry';
-import { fontsChanged, layoutText, setShaping, weightOf } from '../engine/text';
+import { anchor, mul, transformPath } from '../engine/geometry';
+import { fontsChanged, glyphMat, layoutText, setShaping, weightOf } from '../engine/text';
 import type { Anchor, CharStyle, Mat, PathData, SubPath, TextNode } from '../engine';
 import { api, type FontInfo } from './api';
 
@@ -61,6 +61,8 @@ export function stylesOf(family: string): string[] {
 }
 
 const parsed = new Map<string, Promise<Font | null>>();
+const rawData = new WeakMap<Font, ArrayBuffer>();
+const keep = (buf: ArrayBuffer): Font => { const f = parse(buf); rawData.set(f, buf); return f; };
 export function fontFor(family: string, style: string): Promise<Font | null> {
   const key = `${family}|${style}`;
   let p = parsed.get(key);
@@ -68,10 +70,10 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
     p = (async () => {
       try {
         const load = bundledLoader(family, style);
-        if (load) { const url = await load(); return parse(await (await fetch(url)).arrayBuffer()); }
+        if (load) { const url = await load(); return keep(await (await fetch(url)).arrayBuffer()); }
         const hit = await api.findFont(family, style);
         if (!hit) return null;
-        return parse(await api.fontFile(hit.id));
+        return keep(await api.fontFile(hit.id));
       } catch { return null; }
     })();
     parsed.set(key, p);
@@ -116,7 +118,7 @@ export async function outlineText(n: TextNode): Promise<PathData | null> {
     const font = await fontFor(g.style.font, g.style.style);
     if (!font) return null;
     const glyph = g.gid !== undefined ? font.glyphs.get(g.gid) : font.charToGlyph(g.ch);
-    const local: Mat = mul([1, 0, 0, 1, g.x, g.y], mul(g.angle ? rotateAbout((g.angle * 180) / Math.PI, 0, 0) : [1, 0, 0, 1, 0, 0], [g.style.hscale / 100, 0, 0, g.style.vscale / 100, 0, 0]));
+    const local: Mat = mul(glyphMat(g), [g.style.hscale / 100, 0, 0, g.style.vscale / 100, 0, 0]);
     const m = n.mode === 'path' ? local : mul(n.xf, local);
     out.push(...commandsToPath(glyph.getPath(0, 0, g.size).commands, m));
   }
@@ -135,13 +137,15 @@ function fontNow(st: CharStyle): Font | null {
 
 interface Subs { single: Map<number, number>; ligs: Map<number, Array<{ rest: number[]; by: number }>> }
 const subsCache = new WeakMap<Font, Map<string, Subs>>();
-function subsOf(font: Font, tag: string): Subs {
+const CJK_SCRIPTS = ['DFLT', 'hani', 'kana', 'hang', 'latn'];
+function subsOf(font: Font, tag: string, scripts: string[] = ['latn', 'DFLT']): Subs {
   let m = subsCache.get(font);
   if (!m) { m = new Map(); subsCache.set(font, m); }
-  const hit = m.get(tag);
+  const ck = scripts.length === 2 && scripts[0] === 'latn' ? tag : `${tag}|${scripts.join(',')}`;
+  const hit = m.get(ck);
   if (hit) return hit;
   const s: Subs = { single: new Map(), ligs: new Map() };
-  for (const script of ['latn', 'DFLT']) {
+  for (const script of scripts) {
     try {
       for (const r of font.substitution.getSingle(tag, script)) if (!s.single.has(r.sub)) s.single.set(r.sub, r.by);
       for (const r of font.substitution.getAlternates(tag, script)) if (!s.single.has(r.sub) && r.by.length) s.single.set(r.sub, r.by[0]);
@@ -153,8 +157,55 @@ function subsOf(font: Font, tag: string): Subs {
     } catch { continue; }
   }
   for (const list of s.ligs.values()) list.sort((a, b) => b.rest.length - a.rest.length);
-  m.set(tag, s);
+  m.set(ck, s);
   return s;
+}
+
+interface VMetrics { upm: number; long: number; adv: DataView | null; vmtx: number; vorg: Map<number, number> | null; vorgDefault: number }
+const vmetricsCache = new WeakMap<Font, VMetrics>();
+function vmetricsOf(font: Font): VMetrics {
+  const hit = vmetricsCache.get(font);
+  if (hit) return hit;
+  const upm = font.unitsPerEm || 1000;
+  const out: VMetrics = { upm, long: 0, adv: null, vmtx: 0, vorg: null, vorgDefault: upm * 0.88 };
+  const buf = rawData.get(font);
+  if (buf && buf.byteLength > 12) {
+    try {
+      const dv = new DataView(buf), sig = dv.getUint32(0);
+      if (sig === 0x00010000 || sig === 0x4f54544f || sig === 0x74727565) {
+        const tables = new Map<string, { off: number; len: number }>();
+        for (let i = 0, n = dv.getUint16(4); i < n; i++) {
+          const r = 12 + i * 16, tag = String.fromCharCode(dv.getUint8(r), dv.getUint8(r + 1), dv.getUint8(r + 2), dv.getUint8(r + 3));
+          tables.set(tag, { off: dv.getUint32(r + 8), len: dv.getUint32(r + 12) });
+        }
+        const vhea = tables.get('vhea'), vmtx = tables.get('vmtx'), vorg = tables.get('VORG');
+        if (vhea && vmtx) { out.long = dv.getUint16(vhea.off + 34); out.adv = dv; out.vmtx = vmtx.off; }
+        if (vorg) {
+          out.vorgDefault = dv.getInt16(vorg.off + 4);
+          const m = new Map<number, number>();
+          for (let i = 0, n = dv.getUint16(vorg.off + 6); i < n; i++) m.set(dv.getUint16(vorg.off + 8 + i * 4), dv.getInt16(vorg.off + 10 + i * 4));
+          out.vorg = m;
+        }
+      }
+    } catch { out.adv = null; }
+  }
+  vmetricsCache.set(font, out);
+  return out;
+}
+function verticalMetrics(font: Font, gid: number): { vadv: number; vorg: number } {
+  const v = vmetricsOf(font);
+  let vadv = 1, org = v.vorg ? v.vorg.get(gid) ?? v.vorgDefault : null;
+  if (v.adv && v.long > 0) {
+    const i = Math.min(gid, v.long - 1);
+    vadv = v.adv.getUint16(v.vmtx + i * 4) / v.upm;
+    if (org === null) {
+      const tsb = gid < v.long ? v.adv.getInt16(v.vmtx + gid * 4 + 2) : v.adv.getInt16(v.vmtx + v.long * 4 + (gid - v.long) * 2);
+      const g = font.glyphs.get(gid) as unknown as { yMax?: number; getBoundingBox?: () => { y2: number } };
+      const yMax = g?.yMax ?? (g?.getBoundingBox ? g.getBoundingBox().y2 : undefined);
+      org = yMax !== undefined && Number.isFinite(yMax) ? yMax + tsb : v.vorgDefault;
+    }
+  }
+  return { vadv, vorg: (org ?? v.vorgDefault) / v.upm };
 }
 
 interface G { gid: number; chars: number; ch: string }
@@ -270,8 +321,8 @@ function gsubFeature(font: Font, tag: string, gs: G[]): G[] {
   for (const li of lookups) for (let i = 0; i < out.length;) { let n = 0; try { n = applyLookup(gsub, li, out, i); } catch { n = 0; } i += Math.max(1, n); }
   return out;
 }
-function single(font: Font, tag: string, gs: G[], only?: (i: number) => boolean): G[] {
-  const s = subsOf(font, tag).single;
+function single(font: Font, tag: string, gs: G[], only?: (i: number) => boolean, scripts?: string[]): G[] {
+  const s = subsOf(font, tag, scripts).single;
   return s.size ? gs.map((g, i) => (s.has(g.gid) && (!only || only(i)) ? { ...g, gid: s.get(g.gid) as number } : g)) : gs;
 }
 function ligate(font: Font, tag: string, gs: G[]): G[] {
@@ -304,21 +355,38 @@ export const OT_ORDER = ['frac', 'ordn', 'ccmp', 'rlig', 'liga', 'clig', 'calt',
 
 const outlines = new WeakMap<Font, Map<number, PathData>>();
 
+function featureGlyphs(font: Font, st: CharStyle, text: string, features: string[]): G[] {
+  let gs: G[] = Array.from(text, (ch) => ({ gid: font.charToGlyph(ch).index, chars: ch.length, ch }));
+  const want = new Set(features);
+  for (const tag of [...OT_ORDER, ...features.filter((f) => !OT_ORDER.includes(f))]) {
+    if (!want.has(tag)) continue;
+    if (tag === 'frac') gs = fractions(font, gs);
+    else if (tag === 'calt' || tag === 'clig' || tag === 'rlig') gs = gsubFeature(font, tag, gs);
+    else if (tag === 'ordn') gs = single(font, 'ordn', gs, (i) => { let k = i - 1; while (k >= 0 && /[a-z]/i.test(gs[k].ch)) k--; return k >= 0 && isDigit(gs[k].ch) && /[a-z]/i.test(gs[i].ch); });
+    else gs = single(font, tag, ligate(font, tag, gs));
+  }
+  if (st.alt !== undefined && gs.length === 1 && font.glyphs.get(st.alt)) gs = [{ ...gs[0], gid: st.alt }];
+  return gs;
+}
+
 export function installShaping(): void {
   setShaping({
+    vertical: (st, text, features) => {
+      const font = fontNow(st);
+      if (!font) return null;
+      const gs = featureGlyphs(font, st, text, features), vs = single(font, 'vert', gs, undefined, CJK_SCRIPTS), upm = font.unitsPerEm || 1000;
+      return vs.map((g, i) => { const vm = verticalMetrics(font, g.gid); return { gid: g.gid, chars: g.chars, adv: (font.glyphs.get(g.gid)?.advanceWidth ?? 0) / upm, vadv: vm.vadv, vorg: vm.vorg, sub: g.gid !== gs[i].gid }; });
+    },
+    metrics: (st) => {
+      const font = fontNow(st);
+      if (!font) return null;
+      const upm = font.unitsPerEm || 1000, os2 = font.tables.os2 as { sCapHeight?: number; sxHeight?: number } | undefined;
+      return { cap: os2?.sCapHeight ? os2.sCapHeight / upm : 0.7, x: os2?.sxHeight ? os2.sxHeight / upm : 0.5, ascender: (font.ascender || upm * 0.8) / upm };
+    },
     shape: (st, text, features) => {
       const font = fontNow(st);
       if (!font) return null;
-      let gs: G[] = Array.from(text, (ch) => ({ gid: font.charToGlyph(ch).index, chars: ch.length, ch }));
-      const want = new Set(features);
-      for (const tag of [...OT_ORDER, ...features.filter((f) => !OT_ORDER.includes(f))]) {
-        if (!want.has(tag)) continue;
-        if (tag === 'frac') gs = fractions(font, gs);
-        else if (tag === 'calt' || tag === 'clig' || tag === 'rlig') gs = gsubFeature(font, tag, gs);
-        else if (tag === 'ordn') gs = single(font, 'ordn', gs, (i) => { let k = i - 1; while (k >= 0 && /[a-z]/i.test(gs[k].ch)) k--; return k >= 0 && isDigit(gs[k].ch) && /[a-z]/i.test(gs[i].ch); });
-        else gs = single(font, tag, ligate(font, tag, gs));
-      }
-      if (st.alt !== undefined && gs.length === 1 && font.glyphs.get(st.alt)) gs = [{ ...gs[0], gid: st.alt }];
+      const gs = featureGlyphs(font, st, text, features);
       const upm = font.unitsPerEm || 1000;
       return gs.map((g, i) => {
         let adv = (font.glyphs.get(g.gid)?.advanceWidth ?? 0) / upm;
