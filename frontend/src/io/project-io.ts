@@ -9,7 +9,7 @@ export interface Manifest extends Record<string, unknown> { format: string; vers
 
 export function serialize(p: Project, app = 'formpth'): { manifest: Manifest; files: FilePart[] } {
   const d = p.doc;
-  const document: Record<string, unknown> = { ...d, artboards: d.artboards.map((a) => ({ ...a, rect: [a.x, a.y, a.w, a.h] })) };
+  const document: Record<string, unknown> = { ...d, artboards: d.artboards.map((a) => ({ ...a, rect: [a.x, a.y, a.w, a.h] })), perspView: p.persp };
   const files: FilePart[] = [];
   for (const key of Object.keys(d.images)) { const blob = p.assets.get(key); if (blob) files.push({ name: key, blob }); }
   return { manifest: { format: FORMAT, version: FORMAT_VERSION, app, document, view: { activeArtboard: p.activeArtboard, activeLayer: p.activeLayer } }, files };
