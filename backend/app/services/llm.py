@@ -63,10 +63,10 @@ def _key() -> str | None:
 
 def status() -> dict:
     s = _settings()
-    return {"configured": bool(s.get("baseUrl") and s.get("model")), "baseUrl": s.get("baseUrl", ""), "model": s.get("model", ""), "hasKey": bool(_key()), "store": secrets.where()["store"]}
+    return {"configured": bool(s.get("baseUrl") and s.get("model")), "baseUrl": s.get("baseUrl", ""), "model": s.get("model", ""), "hasKey": bool(_key()), "store": secrets.where()["store"], "vision": bool(s.get("vision"))}
 
 
-def save(base_url: str, model: str, key: str | None = None, forget_key: bool = False) -> dict:
+def save(base_url: str, model: str, key: str | None = None, forget_key: bool = False, vision: bool | None = None) -> dict:
     parsed = urllib.parse.urlparse(base_url.strip())
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise LlmError("The address must be an http:// or https:// address, such as http://localhost:11434/v1 for Ollama.", 422)
@@ -75,6 +75,8 @@ def save(base_url: str, model: str, key: str | None = None, forget_key: bool = F
         raise LlmError("Name the model to use.", 422)
     s = _settings()
     s["baseUrl"], s["model"] = base_url.strip().rstrip("/"), model
+    if vision is not None:
+        s["vision"] = bool(vision)
     if key is not None and key.strip() and not forget_key and (len(key.strip()) > 512 or any(c.isspace() for c in key.strip())):
         raise LlmError("That does not look like an API key.", 422)
     _write(s)
@@ -117,6 +119,28 @@ def chat(messages: list, tools: list) -> dict:
     calls = [c for c in (message.get("tool_calls") or []) if isinstance(c, dict) and isinstance(c.get("function"), dict)]
     return {"content": message.get("content") or "", "tool_calls": [{"id": str(c.get("id") or f"call_{i}"), "name": str(c["function"].get("name") or ""),
             "arguments": str(c["function"].get("arguments") or "{}")} for i, c in enumerate(calls)]}
+
+
+def generate(system: str, prompt: str, image: str | None = None, temperature: float = 0.8, max_tokens: int = 6000) -> dict:
+    s = _settings()
+    prompt, system = (prompt or "").strip(), (system or "").strip()
+    if not prompt:
+        raise LlmError("Nothing to ask the model.", 400)
+    if image is not None:
+        if not s.get("vision"):
+            raise LlmError("The configured model is not marked as reading images. Turn on 'The model reads images' in Preferences > Plugins if it does.", 428)
+        if not isinstance(image, str) or not image.startswith("data:image/") or len(image) > 8_000_000:
+            raise LlmError("The image must be a PNG or JPEG data URL under 6 MB.", 400)
+    content = [{"type": "text", "text": prompt[:12000]}, {"type": "image_url", "image_url": {"url": image}}] if image else prompt[:12000]
+    temperature = float(temperature) if isinstance(temperature, (int, float)) else 0.8
+    max_tokens = int(max_tokens) if isinstance(max_tokens, (int, float)) else 6000
+    body = {"model": s.get("model"), "temperature": max(0.0, min(1.5, temperature)), "max_tokens": max(64, min(16000, max_tokens)),
+            "messages": [*([{"role": "system", "content": system[:12000]}] if system else []), {"role": "user", "content": content}]}
+    choices = _call("/chat/completions", body, timeout=240).get("choices") or []
+    text = str(((choices[0] if choices else {}).get("message") or {}).get("content") or "")
+    if not text.strip():
+        raise LlmError("The model answered with nothing.", 502)
+    return {"text": text[:400000], "model": s.get("model", "")}
 
 
 def models() -> list[str]:

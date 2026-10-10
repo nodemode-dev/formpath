@@ -20,8 +20,19 @@ def status() -> dict:
 
 
 @router.post("/settings")
-def settings(base_url: str = Form(...), model: str = Form(...), key: str | None = Form(None), forget_key: bool = Form(False)) -> dict:
-    return _run(llm.save, base_url, model, key, forget_key)
+def settings(base_url: str = Form(...), model: str = Form(...), key: str | None = Form(None), forget_key: bool = Form(False), vision: bool | None = Form(None)) -> dict:
+    return _run(llm.save, base_url, model, key, forget_key, vision)
+
+
+@router.post("/generate")
+async def generate(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except ValueError as exc:
+        raise HTTPException(400, "Send the request as JSON.") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send the request as a JSON object.")
+    return await run_in_threadpool(_run, llm.generate, str(body.get("system") or ""), str(body.get("prompt") or ""), body.get("image"), body.get("temperature", 0.8), body.get("max_tokens", 6000))
 
 
 @router.get("/models")
