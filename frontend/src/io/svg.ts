@@ -8,7 +8,8 @@ import { meshQuads } from '../engine/mesh';
 import { latticeCopies, patternLattice } from '../engine/pattern';
 import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
-import { clipGeometry, docArtBounds, gradientGeom, renderNode } from '../engine/render';
+import { clipGeometry, docArtBounds, gradientGeom, knockoutShape, knocksOut, renderNode } from '../engine/render';
+import { gradientStrokeArt, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import { layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
 import { BLEND_MODES, type AppearanceItem, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
 import { outlineText } from './fonts';
@@ -30,6 +31,7 @@ class Writer {
   private n = 0;
   private gradients = new Map<string, string>();
   private symbols = new Map<string, string>();
+  private ko = false;
   constructor(private readonly p: Project, private readonly o: SvgOptions, private readonly images: Map<string, string>, private readonly outlines: Map<string, PathData>) {}
   get doc(): Doc { return this.p.doc; }
   id(prefix: string): string { this.n++; return `${prefix}${this.n}`; }
@@ -154,6 +156,8 @@ class Writer {
       const parts = brushGeometry(this.doc, id, it);
       if (parts) { for (const part of parts) out.push(`<path d="${this.d(part.d)}" fill="${part.paint ? this.paint(part.paint, b).v : pt.v}"${blend}/>`); return; }
     }
+    const art = gradientStrokeArt(this.doc, id, it, rule === 'evenodd' ? 'evenodd' : 'nonzero');
+    if (art) { out.push(this.gradientStroke(art, strokeRegion(id, rule === 'evenodd' ? 'evenodd' : 'nonzero', it), it, b, blend)); return; }
     const closed = id.every((sp) => sp.closed);
     if ((it.profile && it.profile.length) || (it.align !== 'center' && closed)) {
       const outline = it.profile && it.profile.length ? strokeOutline(id, it) : null;
@@ -166,6 +170,48 @@ class Writer {
     } else out.push(`<path d="${this.d(id)}" ${this.strokeAttrs(it, b)}${blend}/>`);
     const arrows = arrowGeometry(id, it);
     if (arrows) out.push(`<path d="${this.d(arrows)}" fill="${pt.v}"/>`);
+  }
+
+  kids(n: VNode, list: VNode[]): string {
+    const prev = this.ko, ko = knocksOut(n, prev);
+    this.ko = ko;
+    const out = ko ? this.knockout(list) : list.map((c) => this.node(c)).join('');
+    this.ko = prev;
+    return out;
+  }
+
+  knockout(list: VNode[]): string {
+    const vis = list.filter((c) => !c.hidden), art = vis.map((c) => this.node(c));
+    if (vis.length < 2) return art.join('');
+    const r = inflateRect(vis.reduce((acc, c) => unionRect(acc, visualBounds(this.doc, c)), emptyRect()), 4);
+    const region = `x="${num(r.x)}" y="${num(r.y)}" width="${num(r.w)}" height="${num(r.h)}"`, ink = this.id('ink');
+    this.defs.push(`<filter id="${ink}" filterUnits="userSpaceOnUse" ${region} color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0"/></filter>`);
+    const union: Array<string | undefined> = [];
+    let next: string | undefined;
+    for (let k = vis.length - 1; k >= 1; k--) {
+      if (!vis[k].knockoutShape) {
+        const id = this.id('kos');
+        this.defs.push(`<g id="${id}">${this.node(knockoutShape(vis[k]))}${next ? `<use href="#${next}"/>` : ''}</g>`);
+        next = id;
+      }
+      union[k] = next;
+    }
+    return vis.map((_, i) => {
+      if (!union[i + 1] || !art[i]) return art[i];
+      const mid = this.id('ko');
+      this.defs.push(`<mask id="${mid}" maskUnits="userSpaceOnUse" ${region} color-interpolation="sRGB"><rect ${region} fill="#fff"/><g filter="url(#${ink})"><use href="#${union[i + 1]}"/></g></mask>`);
+      return `<g mask="url(#${mid})">${art[i]}</g>`;
+    }).join('');
+  }
+
+  gradientStroke(art: GradientStrokeArt, region: PathData, s: StrokeItem, b: Rect, blend: string): string {
+    const fills = (list: StrokePiece[]): string => list.map((p) => `<path d="${this.d(p.d)}" fill="${this.paint(p.paint, b).v}"/>`).join('');
+    const cid = this.id('clip');
+    this.defs.push(`<clipPath id="${cid}"><path d="${this.d(region)}"/></clipPath>`);
+    let mask = '';
+    if (art.alpha) { const mid = this.id('mask'); this.defs.push(`<mask id="${mid}" maskUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000"><g clip-path="url(#${cid})">${fills(art.alpha)}</g></mask>`); mask = ` mask="url(#${mid})"`; }
+    const body = `<g clip-path="url(#${cid})"${mask}>${fills(art.pieces)}</g>${fills(art.arrows)}`;
+    return `<g data-name="Gradient Stroke"${s.opacity < 1 ? ` opacity="${num(s.opacity)}"` : ''}${blend}>${body}</g>`;
   }
 
   text(n: TextNode): string {
@@ -231,12 +277,12 @@ class Writer {
         if (n.clip && n.children.length > 1) {
           const clipper = n.children[n.children.length - 1], geo = clipGeometry(clipper), cid = this.id('clip');
           if (geo) this.defs.push(`<clipPath id="${cid}"><path d="${this.d(geo.d)}"${geo.rule === 'evenodd' ? ' clip-rule="evenodd"' : ''}/></clipPath>`);
-          const body = n.children.slice(0, -1).map((c) => this.node(c)).join('');
+          const body = this.kids(n, n.children.slice(0, -1));
           const strokes = geo ? this.shape({ ...clipper, ap: { ...clipper.ap, items: clipper.ap.items.filter((i) => i.kind === 'stroke') } }, geo.d, geo.rule) : '';
           const inner = `<g${geo ? ` clip-path="url(#${cid})"` : ''}>${body}</g>${strokes}`;
           return n.kind === 'layer' ? `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}">${inner}</g>` : this.wrap(n, inner);
         }
-        const body = (n.kind === 'group' && n.livePaint ? liveFaceNodes(n).map((f) => this.node(f)).join('') : '') + n.children.map((c) => this.node(c)).join('');
+        const body = n.kind === 'group' && n.livePaint ? liveFaceNodes(n).map((f) => this.node(f)).join('') + n.children.map((c) => this.node(c)).join('') : this.kids(n, n.children);
         let extra = '';
         if (n.ap.items.length) { const geo: PathData = []; const collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); }; collect(n); if (geo.length) extra = this.shape(n, geo, 'nonzero'); }
         if (n.kind === 'layer') { const fx = rasterEffects(n); return `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}"${n.opacity < 1 ? ` opacity="${num(n.opacity)}"` : ''}${n.blend !== 'normal' ? ` style="mix-blend-mode:${BLEND_CSS.get(n.blend) ?? 'normal'}"` : ''}${fx.length ? ` filter="url(#${this.filter(fx)})"` : ''}>${body}${extra}</g>`; }

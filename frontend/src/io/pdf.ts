@@ -1,13 +1,14 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf } from '../engine/doc';
 import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, threeDFaces } from '../engine/effects';
-import { inflate, isEmptyRect, isLineSeg, segments } from '../engine/geometry';
+import { inflate, isEmptyRect, isLineSeg, pathBounds, segments, unionRect } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { instanceArt } from '../engine/symbolism';
 import { gradientAt, resolvePaint, toCmyk, toRgb } from '../engine/paint';
-import { clipGeometry, gradientGeom } from '../engine/render';
-import type { BlendMode, Color, Doc, Gradient, Mat, Paint, PathData, Project, Rect, StrokeItem, VNode } from '../engine';
+import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
+import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
+import type { BlendMode, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, Project, Rect, StrokeItem, VNode } from '../engine';
 import { outlineText } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
@@ -76,10 +77,10 @@ class Painter {
     return `${f(v.r / 255)} ${f(v.g / 255)} ${f(v.b / 255)} ${stroke ? 'RG' : 'rg'}`;
   }
 
-  extGState(alpha: number, stroke: boolean, blend: BlendMode = 'normal'): string {
-    const key = `${f(alpha)}|${stroke}|${blend}`;
+  extGState(alpha: number, stroke: boolean, blend: BlendMode = 'normal', ais = false): string {
+    const key = `${f(alpha)}|${stroke}|${blend}|${ais}`;
     let id = this.gs.get(key);
-    if (!id) { id = this.pdf.add(`<< /Type /ExtGState ${stroke ? `/CA ${f(alpha)}` : `/ca ${f(alpha)}`}${BM[blend] ? ` /BM /${BM[blend]}` : ''} >>`); this.gs.set(key, id); }
+    if (!id) { id = this.pdf.add(`<< /Type /ExtGState ${stroke ? `/CA ${f(alpha)}` : `/ca ${f(alpha)}`}${BM[blend] ? ` /BM /${BM[blend]}` : ''}${ais ? ' /AIS true' : ''} >>`); this.gs.set(key, id); }
     return `/GS${id} gs`;
   }
 
@@ -119,7 +120,20 @@ class Painter {
   needsRaster(n: VNode): boolean {
     if (rasterEffects(n).length || (n.mask && !n.mask.disabled) || n.kind === 'mesh') return true;
     if (n.kind === 'text' && !this.outlines.has(n.id)) return true;
-    return n.ap.items.some((i) => i.visible && (i.paint.type === 'pattern' || (i.paint.type === 'gradient' && i.paint.gradient.kind === 'freeform') || rasterEffectsOf(i.effects).length > 0));
+    return n.ap.items.some((i) => i.visible && (i.paint.type === 'pattern' || (i.paint.type === 'gradient' && i.paint.gradient.kind === 'freeform') || rasterEffectsOf(i.effects).length > 0 || (i.kind === 'stroke' && !!strokeGradient(this.doc, i)?.stops.some((s) => s.opacity < 1))));
+  }
+
+  gradientStroke(art: GradientStrokeArt, d: PathData, rule: FillRule, s: StrokeItem, b: Rect, page: Mat): string {
+    const region = strokeRegion(d, rule, s);
+    const fills = (list: StrokePiece[], m: Mat): string => list.map((p) => { const c = this.paint(p.paint, false, b, m); return c ? `${c}\n${this.path(p.d)}\nf` : ''; }).filter(Boolean).join('\n');
+    const body = (m: Mat): string => (region.length ? `q\n${this.path(region)}\nW n\n${fills(art.pieces, m)}\nQ` : '');
+    const solo = s.opacity >= 1 && s.blend === 'normal', gsx = solo ? '' : this.extGState(s.opacity, false, s.blend);
+    const arrows = art.arrows.length ? `q ${gsx}\n${fills(art.arrows, page)}\nQ` : '';
+    if (solo) return [body(page), arrows].filter(Boolean).join('\n');
+    const r = inflate(pathBounds(region), 2);
+    const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(r.x)} ${f(r.y)} ${f(r.x + r.w)} ${f(r.y + r.h)}] /Group << /Type /Group /S /Transparency /I true >> /Resources ${RES} 0 R >>`, new TextEncoder().encode(body([1, 0, 0, 1, 0, 0])));
+    this.xobjects.set(this.name('F'), id);
+    return [`q ${gsx} /Im${id} Do Q`, arrows].filter(Boolean).join('\n');
   }
 
   shape(n: VNode, d: PathData, rule: string, page: Mat): string {
@@ -134,6 +148,8 @@ class Painter {
         continue;
       }
       if (it.width <= 0) continue;
+      const art = gradientStrokeArt(this.doc, id, it, rule === 'evenodd' ? 'evenodd' : 'nonzero');
+      if (art) { out.push(this.gradientStroke(art, id, rule === 'evenodd' ? 'evenodd' : 'nonzero', it, b, page)); continue; }
       const c = this.paint(it.paint, true, b, page), cf = this.paint(it.paint, false, b, page);
       if (!c || !cf) continue;
       const gsx = it.opacity < 1 || it.blend !== 'normal' ? `${this.extGState(it.opacity, true, it.blend)} ${this.extGState(it.opacity, false, it.blend)}` : '';
@@ -187,30 +203,64 @@ class Painter {
     const g = c.getContext('2d') as CanvasRenderingContext2D;
     const id = await this.rgba(g.getImageData(0, 0, c.width, c.height));
     this.xobjects.set(this.name('R'), id);
-    return `q ${f(b.w)} 0 0 ${f(-b.h)} ${f(b.x)} ${f(b.y + b.h)} cm /Im${id} Do Q`;
+    return `q ${this.ko ? `${this.extGState(1, false, 'normal', true)} ` : ''}${f(b.w)} 0 0 ${f(-b.h)} ${f(b.x)} ${f(b.y + b.h)} cm /Im${id} Do Q`;
   }
 
-  async group(n: VNode, body: string): Promise<string> {
+  async group(n: VNode, body: string, knockout = false, ais = false): Promise<string> {
     const b = inflate(visualBounds(this.doc, n), 2);
     const content = await deflate(new TextEncoder().encode(body));
-    const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true >> /Resources ${RES} 0 R /Filter /FlateDecode >>`, content);
+    const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true${knockout ? ' /K true' : ''} >> /Resources ${RES} 0 R /Filter /FlateDecode >>`, content);
     this.xobjects.set(this.name('F'), id);
-    return `q ${this.extGState(n.opacity, false, n.blend)} ${this.extGState(n.opacity, true, n.blend)} /Im${id} Do Q`;
+    return `q ${this.extGState(n.opacity, false, n.blend, ais)} ${this.extGState(n.opacity, true, n.blend, ais)} /Im${id} Do Q`;
   }
+
+  private ko = false;
 
   async node(n: VNode, page: Mat): Promise<string> {
     if (n.hidden) return '';
     if (n.kind === 'layer' && (n.printable === false || n.template)) return '';
     if (this.needsRaster(n)) return this.rasterize(n);
-    const kids = childrenOf(n), asForm = (n.opacity < 1 || n.blend !== 'normal') && (!!kids || n.ap.items.filter((i) => i.visible).length > 1);
+    const inKo = this.ko, ko = knocksOut(n, inKo), ais = inKo && !!n.knockoutShape;
+    const kids = childrenOf(n), multi = !!kids || n.ap.items.filter((i) => i.visible).length > 1 || n.ap.items.some((i) => i.visible && i.kind === 'stroke' && (!!i.brush || !!strokeGradient(this.doc, i))) || (n.kind === 'text' && n.spans.some((s) => s.style.stroke.type !== 'none' && s.style.strokeWidth > 0));
+    const asForm = ((n.opacity < 1 || n.blend !== 'normal') && multi) || ko || (inKo && multi);
+    this.ko = n.kind === 'group' || n.kind === 'layer' ? ko : false;
     const body = await this.body(n, asForm ? [1, 0, 0, 1, 0, 0] : page);
+    this.ko = inKo;
     if (!body) return '';
-    if (asForm) return this.group(n, body);
-    if (n.opacity < 1 || n.blend !== 'normal') return `q ${this.extGState(n.opacity, false, n.blend)} ${this.extGState(n.opacity, true, n.blend)}\n${body}\nQ`;
+    if (asForm) return this.group(n, body, ko && !(kids ?? []).some((c) => c.knockoutShape), ais);
+    if (n.opacity < 1 || n.blend !== 'normal' || ais) return `q ${this.extGState(n.opacity, false, n.blend, ais)} ${this.extGState(n.opacity, true, n.blend, ais)}\n${body}\nQ`;
     return body;
   }
 
   private async children(list: VNode[], page: Mat): Promise<string> { const out: string[] = []; for (const c of list) out.push(await this.node(c, page)); return out.filter(Boolean).join('\n'); }
+
+  private invert = 0;
+
+  private async kids(list: VNode[], page: Mat): Promise<string> {
+    if (!this.ko) return this.children(list, page);
+    const vis = list.filter((c) => !c.hidden), parts: string[] = [];
+    for (const c of vis) parts.push(await this.node(c, page));
+    if (!this.invert) this.invert = this.pdf.add('<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>');
+    const union: Array<number | undefined> = [];
+    const b = inflate(vis.reduce((r: Rect | null, c) => { const vb = visualBounds(this.doc, c); return isEmptyRect(vb) ? r : r ? unionRect(r, vb) : vb; }, null) ?? { x: 0, y: 0, w: 1, h: 1 }, 2);
+    let next: number | undefined;
+    for (let k = vis.length - 1; k >= 1; k--) {
+      if (!vis[k].knockoutShape) {
+        const body = `${await this.node(knockoutShape(vis[k]), [1, 0, 0, 1, 0, 0])}${next ? `\n/Im${next} Do` : ''}`;
+        next = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true >> /Resources ${RES} 0 R /Filter /FlateDecode >>`, await deflate(new TextEncoder().encode(body)));
+        this.xobjects.set(this.name('U'), next);
+      }
+      union[k] = next;
+    }
+    return vis.map((_, i) => {
+      const u = union[i + 1];
+      if (!u || !parts[i]) return parts[i];
+      const key = `ko${u}`;
+      let gs = this.gs.get(key);
+      if (!gs) { gs = this.pdf.add(`<< /Type /ExtGState /SMask << /Type /Mask /S /Alpha /G ${u} 0 R /TR ${this.invert} 0 R >> >>`); this.gs.set(key, gs); }
+      return `q /GS${gs} gs\n${parts[i]}\nQ`;
+    }).filter(Boolean).join('\n');
+  }
 
   async body(n: VNode, page: Mat): Promise<string> {
     const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(this.doc, n) : null;
@@ -219,12 +269,12 @@ class Painter {
       case 'layer': case 'group': {
         if (n.clip && n.children.length > 1) {
           const clipper = n.children[n.children.length - 1], geo = clipGeometry(clipper);
-          const inner = await this.children(n.children.slice(0, -1), page);
+          const inner = await this.kids(n.children.slice(0, -1), page);
           const strokes = geo ? this.shape({ ...clipper, ap: { ...clipper.ap, items: clipper.ap.items.filter((i) => i.kind === 'stroke') } }, geo.d, geo.rule, page) : '';
           return `q\n${geo ? `${this.path(geo.d)}\n${geo.rule === 'evenodd' ? 'W*' : 'W'} n\n` : ''}${inner}\nQ\n${strokes}`;
         }
         if (n.kind === 'group' && n.livePaint) return this.children([...liveFaceNodes(n), ...n.children], page);
-        const inner = await this.children(n.children, page);
+        const inner = await this.kids(n.children, page);
         if (!n.ap.items.length) return inner;
         const geo: PathData = [], collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); };
         collect(n);
