@@ -143,6 +143,8 @@ export class PropertiesPanel {
     const out: Array<[string, string]> = [];
     if (s.length > 1) out.push(['Group', 'group'], ['Make Clipping Mask', 'make-clip'], ['Unite', 'pf-unite'], ['Minus Front', 'pf-minus_front'], ['Intersect', 'pf-intersect'], ['Exclude', 'pf-exclude'], ['Make Blend', 'blend-make'], ['Make Compound Path', 'compound-make']);
     else if (n.kind === 'group' && n.livePaint) out.push(['Gap Options', 'live-paint-gap'], ['Expand', 'live-paint-expand'], ['Release', 'live-paint-release']);
+    else if (n.kind === 'group' && n.intertwine) out.push(['Edit Intertwine', 'intertwine-edit'], ['Expand', 'expand-object'], ['Release', 'intertwine-release']);
+    else if (n.kind === 'group' && n.shaper) out.push(['Edit Faces', 'tool-shaper'], ['Expand', 'shaper-expand'], ['Ungroup', 'ungroup']);
     else if (n.kind === 'group' && n.trace) out.push(['Image Trace Options', 'panel-image-trace'], ['Expand', 'trace-expand'], ['Release', 'trace-release']);
     else if (n.kind === 'group') out.push(['Ungroup', 'ungroup'], ['Isolate Group', 'isolate'], ...(n.clip ? [['Release Clipping Mask', 'release-clip'] as [string, string]] : []));
     else if (n.kind === 'text') out.push(['Create Outlines', 'create-outlines'], ['Edit Text', 'edit-text'], [n.mode === 'area' ? 'Convert to Point Type' : 'Convert to Area Type', 'toggle-area-type']);

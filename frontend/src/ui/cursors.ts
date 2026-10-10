@@ -35,6 +35,8 @@ export const CURSORS = {
   bucket: svg('<path d="M5 12 L12 5 L19 12 L12 19 Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/><path d="M19 12 C21 15 21 17 20 18 C19 19 18 18 18 16 Z" fill="#000"/>', 20, 19, 'crosshair'),
   scissors: svg('<circle cx="6" cy="17" r="3" fill="#fff" stroke="#000" stroke-width="1.2"/><circle cx="18" cy="17" r="3" fill="#fff" stroke="#000" stroke-width="1.2"/><path d="M8 15 L16 3 M16 15 L8 3" stroke="#000" stroke-width="1.6"/>', 12, 9, 'crosshair'),
   knife: svg('<path d="M4 20 L18 4 L20 6 L8 20 Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>', 4, 20, 'crosshair'),
+  shaper: svg('<path d="M3 21 L4.5 16 L14 6.5 L17.5 10 L8 19.5 Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/><rect x="15" y="1.5" width="5" height="5" fill="#fff" stroke="#000" stroke-width="1.1"/><circle cx="20" cy="15" r="2.6" fill="#fff" stroke="#000" stroke-width="1.1"/>', 3, 21, 'crosshair'),
+  intertwine: svg(`<path d="${ARROW}" fill="#000" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><circle cx="16" cy="17" r="3" fill="none" stroke="#000" stroke-width="2.6"/><circle cx="20" cy="17" r="3" fill="none" stroke="#000" stroke-width="2.6"/><circle cx="16" cy="17" r="3" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M17 14.2 A3 3 0 1 1 17 19.8" fill="none" stroke="#fff" stroke-width="1.1"/>`, 4, 2),
   cross: 'crosshair',
   loadedText: svg('<rect x="4" y="5" width="13" height="15" fill="#fff" stroke="#000" stroke-width="1.2"/><path d="M6.5 9 h8 M6.5 12 h8 M6.5 15 h5" stroke="#000" stroke-width="1.4"/><path d="M1 1 v6 M1 1 h6" stroke="#000" stroke-width="1.6"/>', 1, 1, 'crosshair'),
   type: 'text',
