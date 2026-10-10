@@ -7,6 +7,7 @@ import { paintCss } from '../rail';
 import { numField, selectCtl, seg, slider, type Ctl } from './kit';
 import { FF } from '../../tools/paint';
 import { toolHost } from '../../extensions/registry';
+import { collectColors } from '../../engine/ops/recolor';
 
 type Model = 'gray' | 'rgb' | 'hsb' | 'cmyk' | 'web';
 const CH: Record<Model, Array<[string, number, number]>> = {
@@ -157,32 +158,102 @@ export class SwatchesPanel {
   readonly body = el('<div class="cv-kit-page cv-swatchp"></div>');
   private readonly grid = el('<div class="cv-swatch-grid cv-swatchp-grid" role="listbox" aria-label="Swatches"></div>');
   private kind: 'all' | 'color' | 'gradient' | 'pattern' = 'all';
-  private picked: string | null = null;
+  private picked = new Set<string>();
+  private pickedGroup: string | null = null;
   private frame = 0;
 
-  constructor(private readonly engine: Engine, private readonly pickColor: (c: Color) => Promise<Color | null>) {
+  constructor(private readonly engine: Engine, private readonly pickColor: (c: Color) => Promise<Color | null>, private readonly libMenu: (anchor: HTMLElement) => void = () => undefined) {
     const head = el('<div class="cv-kit-row cv-swatchp-head"></div>');
     const kinds = seg([{ id: 'all', label: 'All' }, { id: 'color', label: 'Colors' }, { id: 'gradient', label: 'Gradients' }, { id: 'pattern', label: 'Patterns' }], (id) => { this.kind = id as typeof this.kind; kinds.set(id); this.sync(); }, 'cv-seg-small');
     kinds.set('all');
     head.appendChild(kinds.el);
     const foot = el('<div class="cv-panel-foot cv-swatchp-foot"></div>');
-    const mk = (name: string, label: string, run: () => void): HTMLButtonElement => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', run); foot.appendChild(b); return b; };
+    const mk = (name: string, label: string, run: (b: HTMLButtonElement) => void): HTMLButtonElement => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', () => run(b)); foot.appendChild(b); return b; };
+    mk('library', 'Swatch Libraries menu', (b) => this.libMenu(b));
     mk('sparkle', 'Add Used Colors', () => engine.addUsedColors());
+    mk('folder', 'New Color Group from the selected swatches', () => void this.newGroup());
     mk('add', 'New Swatch from the active Fill or Stroke', () => void this.newSwatch());
-    mk('delete', 'Delete Swatch', () => { if (this.picked) { engine.deleteSwatch(this.picked); this.picked = null; } });
+    mk('delete', 'Delete Swatch or Color Group', () => {
+      if (this.pickedGroup) { engine.ungroupSwatches(this.pickedGroup, true); this.pickedGroup = null; return; }
+      if (this.picked.size) { engine.deleteSwatches([...this.picked]); this.picked.clear(); }
+    });
     this.grid.addEventListener('click', (ev) => {
+      const h = (ev.target as HTMLElement).closest<HTMLElement>('.cv-sw-group');
+      if (h) { this.pickedGroup = h.dataset.group ?? null; this.picked = new Set((engine.doc?.swatches ?? []).filter((s) => s.group === this.pickedGroup).map((s) => s.id)); this.sync(); return; }
       const t = (ev.target as HTMLElement).closest<HTMLElement>('.cv-sw-tile');
       const sw = t ? engine.doc?.swatches.find((s) => s.id === t.dataset.key) : null;
       if (!sw) return;
-      this.picked = sw.id;
+      this.pickedGroup = null;
+      if (ev.shiftKey || ev.metaKey || ev.ctrlKey) { if (this.picked.has(sw.id)) this.picked.delete(sw.id); else this.picked.add(sw.id); this.sync(); return; }
+      this.picked = new Set([sw.id]);
       this.sync();
-      if (sw.name === '[Registration]') { engine.setActivePaint(solid(cmyk(100, 100, 100, 100))); return; }
-      engine.setActivePaint(sw.global && sw.paint.type === 'color' ? { type: 'color', color: sw.paint.color, swatch: sw.id, tint: 100 } : sw.global && sw.paint.type === 'gradient' ? { ...sw.paint, swatch: sw.id } : sw.paint);
+      if (sw.name === '[Registration]') { engine.setActivePaint({ type: 'color', color: cmyk(100, 100, 100, 100), swatch: sw.id, tint: 100 }); return; }
+      engine.setActivePaint(swatchPaint(sw));
     });
-    this.grid.addEventListener('dblclick', (ev) => { const t = (ev.target as HTMLElement).closest<HTMLElement>('.cv-sw-tile'); if (t?.dataset.key) void this.edit(t.dataset.key); });
+    this.grid.addEventListener('dblclick', (ev) => {
+      const h = (ev.target as HTMLElement).closest<HTMLElement>('.cv-sw-group');
+      if (h?.dataset.group) { void this.renameGroup(h.dataset.group); return; }
+      const t = (ev.target as HTMLElement).closest<HTMLElement>('.cv-sw-tile'); if (t?.dataset.key) void this.edit(t.dataset.key);
+    });
+    this.bindDrag();
     this.body.append(head, this.grid, foot);
     for (const k of ['doc', 'active', 'projects'] as const) engine.on(k, () => this.queue());
     this.sync();
+  }
+
+  private bindDrag(): void {
+    let dragging: string[] = [];
+    const target = (ev: DragEvent): HTMLElement | null => (ev.target as HTMLElement).closest<HTMLElement>('.cv-sw-group, .cv-sw-tile') ?? (ev.target === this.grid ? this.grid : null);
+    let over: HTMLElement | null = null;
+    const mark = (n: HTMLElement | null): void => { if (over === n) return; if (over) setClass(over, 'is-drop', false); over = n; if (n) setClass(n, 'is-drop', true); };
+    this.grid.addEventListener('dragstart', (ev) => {
+      const t = (ev.target as HTMLElement).closest<HTMLElement>('.cv-sw-tile');
+      if (!t?.dataset.key) return;
+      dragging = this.picked.has(t.dataset.key) ? [...this.picked] : [t.dataset.key];
+      ev.dataTransfer?.setData('text/plain', dragging.join(','));
+      if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+    });
+    this.grid.addEventListener('dragover', (ev) => { if (!dragging.length) return; ev.preventDefault(); const t = target(ev); mark(t && t.dataset.key && dragging.includes(t.dataset.key) ? null : t); });
+    this.grid.addEventListener('dragleave', (ev) => { if (ev.target === this.grid) mark(null); });
+    this.grid.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      const t = target(ev), ids = dragging;
+      mark(null);
+      dragging = [];
+      if (!ids.length || !t) return;
+      if (t.classList.contains('cv-sw-group')) { this.engine.moveSwatches(ids, t.dataset.group ?? null); return; }
+      if (t === this.grid) { this.engine.moveSwatches(ids, null); return; }
+      if (t.dataset.key && !ids.includes(t.dataset.key)) { const sw = this.engine.doc?.swatches.find((s) => s.id === t.dataset.key); this.engine.moveSwatches(ids, sw?.group ?? null, t.dataset.key); }
+    });
+    this.grid.addEventListener('dragend', () => { dragging = []; mark(null); });
+  }
+
+  private async newGroup(): Promise<void> {
+    const e = this.engine, ids = [...this.picked];
+    const sel = ids.length ? ids : [];
+    const n = e.swatchGroups().length + 1;
+    const v = await askForm('New Color Group', [
+      { kind: 'text', key: 'name', label: 'Name', value: `Color Group ${n}` },
+      { kind: 'select', key: 'from', label: 'Create from', value: sel.length ? 'swatches' : 'art', choices: [['swatches', 'Selected swatches'], ['art', 'Selected artwork']] },
+    ], { ok: 'OK' });
+    if (!v) return;
+    const name = String(v.name).trim() || `Color Group ${n}`;
+    if (v.from === 'art') {
+      const cols = collectColors(e.selected()).slice(0, 40);
+      if (!cols.length) { e.notice('Select artwork with solid colours to make a group from it.', 'error'); return; }
+      e.beginGesture();
+      cols.forEach((c) => e.addSwatch(hex(c).toUpperCase(), solid(c), false, false, name));
+      e.endGesture();
+      return;
+    }
+    if (e.groupSwatches(sel, name)) { this.pickedGroup = name; this.queue(); }
+  }
+
+  private async renameGroup(group: string): Promise<void> {
+    const v = await askForm('Color Group Options', [{ kind: 'text', key: 'name', label: 'Name', value: group }, { kind: 'check', key: 'ungroup', label: 'Ungroup (keep the swatches)', value: false }]);
+    if (!v) return;
+    if (v.ungroup) { this.engine.ungroupSwatches(group); this.pickedGroup = null; return; }
+    if (this.engine.renameSwatchGroup(group, String(v.name))) this.pickedGroup = String(v.name).trim();
   }
 
   private queue(): void { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.sync(); }); }
@@ -190,51 +261,87 @@ export class SwatchesPanel {
   private async newSwatch(): Promise<void> {
     const e = this.engine, p = activePaint(e);
     if (p.type === 'none') return;
+    if (p.type === 'color' && p.swatch && (p.tint ?? 100) < 100) { e.addTintSwatch(p.swatch, p.tint ?? 100); return; }
     const v = await askForm('New Swatch', [
       { kind: 'text', key: 'name', label: 'Name', value: p.type === 'color' ? hex(p.color).toUpperCase() : p.type === 'gradient' ? 'New Gradient' : 'New Pattern' },
-      { kind: 'check', key: 'global', label: 'Global (edits update every object that uses it)', value: false },
-      { kind: 'check', key: 'spot', label: 'Spot color', value: false },
+      { kind: 'select', key: 'type', label: 'Color type', value: 'process', choices: [['process', 'Process color'], ['global', 'Global process color (edits update every object that uses it)'], ['spot', 'Spot color (its own plate in PDF)']] },
+      ...(this.pickedGroup ? [{ kind: 'note' as const, text: `The swatch goes into ${this.pickedGroup}.` }] : []),
     ], { ok: 'Add' });
     if (!v) return;
-    e.addSwatch(String(v.name) || 'Swatch', { ...p, ...(p.type === 'color' ? { swatch: undefined, tint: undefined } : {}) } as Paint, !!v.global, !!v.spot);
+    v.global = v.type === 'global';
+    v.spot = v.type === 'spot';
+    e.addSwatch(String(v.name) || 'Swatch', { ...p, ...(p.type === 'color' ? { swatch: undefined, tint: undefined } : {}) } as Paint, !!v.global || !!v.spot, !!v.spot, this.pickedGroup ?? undefined);
   }
 
   private async edit(id: string): Promise<void> {
     const e = this.engine, sw = e.doc?.swatches.find((s) => s.id === id);
     if (!sw || sw.name.startsWith('[')) return;
     if (sw.paint.type === 'pattern') { if (e.enterPatternEdit(sw.paint.pattern)) toolHost.run('panel-pattern-options'); return; }
+    if (sw.paint.type === 'color' && sw.paint.swatch) {
+      const parent = e.doc?.swatches.find((s) => s.id === (sw.paint as { swatch: string }).swatch);
+      const t = await askForm('Tint Swatch Options', [{ kind: 'text', key: 'name', label: 'Name', value: sw.name }, { kind: 'number', key: 'tint', label: `Tint of ${parent?.name ?? 'its swatch'}`, value: sw.paint.tint ?? 100, min: 0, max: 100, unit: '%' }]);
+      if (t) e.editSwatch(id, { name: String(t.name) || sw.name, paint: { ...sw.paint, tint: Math.round(Number(t.tint)) } });
+      return;
+    }
     const v = await askForm('Swatch Options', [
       { kind: 'text', key: 'name', label: 'Name', value: sw.name },
-      ...(sw.paint.type === 'color' ? [{ kind: 'color' as const, key: 'color', label: 'Color', value: hex(sw.paint.color) }] : []),
-      { kind: 'check', key: 'global', label: 'Global', value: sw.global },
-      { kind: 'check', key: 'spot', label: 'Spot color', value: sw.spot },
+      ...(sw.paint.type === 'color' ? [{ kind: 'color' as const, key: 'color', label: 'Color', value: hex(sw.paint.color) }, { kind: 'select' as const, key: 'mode', label: 'Color mode', value: sw.paint.color.kind === 'cmyk' ? 'cmyk' : 'rgb', choices: [['rgb', 'RGB'], ['cmyk', 'CMYK']] as Array<readonly [string, string]> }] : []),
+      { kind: 'select', key: 'type', label: 'Color type', value: sw.spot ? 'spot' : sw.global ? 'global' : 'process', choices: [['process', 'Process color'], ['global', 'Global process color'], ['spot', 'Spot color']] },
+      { kind: 'note', text: 'Global and spot swatches stay linked: editing them recolours every use, and their tints follow. Spot colours print on their own plate in PDF.' },
     ]);
     if (!v) return;
+    v.global = v.type !== 'process';
+    v.spot = v.type === 'spot';
     let paint = sw.paint;
-    if (sw.paint.type === 'color' && v.color !== hex(sw.paint.color)) {
-      const parsed = parseColor(String(v.color));
-      if (parsed) paint = { type: 'color', color: sw.paint.color.kind === 'cmyk' ? toCmyk(parsed) : parsed };
+    if (sw.paint.type === 'color' && (v.color !== hex(sw.paint.color) || v.mode !== (sw.paint.color.kind === 'cmyk' ? 'cmyk' : 'rgb'))) {
+      const parsed = v.color !== hex(sw.paint.color) ? parseColor(String(v.color)) : sw.paint.color;
+      if (parsed) paint = { type: 'color', color: v.mode === 'cmyk' ? toCmyk(parsed) : parsed.kind === 'cmyk' ? rgb(toRgb(parsed).r, toRgb(parsed).g, toRgb(parsed).b) : parsed };
     }
     e.editSwatch(id, { name: String(v.name) || sw.name, paint, global: !!v.global, spot: !!v.spot });
   }
 
   private sync(): void {
     const doc = this.engine.doc;
-    const list = (doc?.swatches ?? []).filter((s) => this.kind === 'all' || (this.kind === 'color' ? s.paint.type === 'color' || s.paint.type === 'none' : s.paint.type === this.kind));
-    patchList<Swatch>(this.grid, list, {
-      key: (s) => s.id,
-      create: (s) => { const b = el('<button class="cv-sw-tile" type="button" role="option"></button>'); this.fill(b, s); return b; },
-      update: (b, s) => this.fill(b, s),
+    const all = doc?.swatches ?? [];
+    const list = all.filter((s) => this.kind === 'all' || (this.kind === 'color' ? s.paint.type === 'color' || s.paint.type === 'none' : s.paint.type === this.kind));
+    for (const id of [...this.picked]) if (!all.some((s) => s.id === id)) this.picked.delete(id);
+    if (this.pickedGroup && !all.some((s) => s.group === this.pickedGroup)) this.pickedGroup = null;
+    const rows: Array<{ k: string; s?: Swatch; g?: string }> = list.filter((s) => !s.group).map((s) => ({ k: s.id, s }));
+    const groups: string[] = [];
+    for (const s of all) if (s.group && !groups.includes(s.group)) groups.push(s.group);
+    for (const g of groups) { rows.push({ k: `group:${g}`, g }); for (const s of list) if (s.group === g) rows.push({ k: s.id, s }); }
+    patchList(this.grid, rows, {
+      key: (r) => r.k,
+      create: (r) => {
+        if (r.g !== undefined) { const h = el(`<div class="cv-sw-group" role="option" draggable="false">${icon('folder', 14)}<span class="cv-sw-group-name"></span></div>`); this.head(h, r.g); return h; }
+        const b = el('<button class="cv-sw-tile" type="button" role="option" draggable="true"></button>'); if (r.s) this.fill(b, r.s); return b;
+      },
+      update: (n, r) => { if (r.g !== undefined) this.head(n, r.g); else if (r.s) this.fill(n, r.s); },
     });
   }
 
-  private fill(b: HTMLElement, s: Swatch): void {
-    setStyleVar(b, '--paint', s.name === '[Registration]' ? 'repeating-linear-gradient(45deg, #000 0 2px, #fff 2px 4px)' : paintCss(s.paint, this.engine));
-    setTitle(b, `${s.name}${s.global ? ' · global' : ''}${s.spot ? ' · spot' : ''}`);
-    setClass(b, 'is-global', s.global);
-    setClass(b, 'is-spot', s.spot);
-    setClass(b, 'is-picked', s.id === this.picked);
+  private head(h: HTMLElement, g: string): void {
+    h.dataset.group = g;
+    setText(q(h, '.cv-sw-group-name'), g);
+    setTitle(h, `${g} · color group (double-click to rename or ungroup; drop swatches here to add them)`);
+    setClass(h, 'is-picked', this.pickedGroup === g);
   }
+
+  private fill(b: HTMLElement, s: Swatch): void {
+    const tint = s.paint.type === 'color' && !!s.paint.swatch;
+    setStyleVar(b, '--paint', s.name === '[Registration]' ? 'repeating-linear-gradient(45deg, #000 0 2px, #fff 2px 4px)' : paintCss(s.paint, this.engine));
+    setTitle(b, `${s.name}${s.spot ? ' · spot' : s.global ? ' · global process' : s.paint.type === 'color' && !s.name.startsWith('[') ? ' · process' : ''}${tint ? ' · tint' : ''}`);
+    setClass(b, 'is-global', s.global && !s.spot);
+    setClass(b, 'is-spot', s.spot);
+    setClass(b, 'is-tint', tint);
+    setClass(b, 'is-picked', this.picked.has(s.id));
+  }
+}
+
+export function swatchPaint(sw: Swatch): Paint {
+  if ((sw.global || sw.spot) && sw.paint.type === 'color') return { type: 'color', color: sw.paint.color, swatch: sw.id, tint: 100 };
+  if (sw.global && sw.paint.type === 'gradient') return { ...sw.paint, swatch: sw.id };
+  return sw.paint;
 }
 
 export class GradientPanel {

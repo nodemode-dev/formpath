@@ -4,6 +4,8 @@ import type { Color, Engine } from '../../engine';
 import { el, setStyleVar, setTitle } from '../dom';
 import { icon } from '../icons';
 import { seg, selectCtl } from './kit';
+import { libraryColors, SWATCH_LIBRARIES } from '../../engine/swatch-libraries';
+import { nearestFn } from '../../engine/ops/recolor';
 
 const ROWS = 5, STEPS = 3, COLS = STEPS * 2 + 1;
 
@@ -20,7 +22,11 @@ export class ColorGuidePanel {
   private frame = 0;
   private groups = 0;
 
+  private limit: Color[] = [];
+  private readonly limitCtl;
+
   constructor(private readonly engine: Engine) {
+    this.limitCtl = selectCtl('Limit to', [['', 'No library'], ...SWATCH_LIBRARIES.filter((l) => libraryColors(l).length).map((l) => [l.id, l.name] as const)], (v) => { const l = SWATCH_LIBRARIES.find((x) => x.id === v); this.limit = l ? libraryColors(l) : []; this.sync(); });
     this.rule = selectCtl('', HARMONY_RULES, (v) => { this.ruleId = v as HarmonyRule; this.sync(); });
     this.vary = seg([{ id: 'tints_shades', label: 'Shades' }, { id: 'warm_cool', label: 'Warmth' }, { id: 'vivid_muted', label: 'Vividness' }], (id) => { this.kind = id as Variation; this.sync(); });
     for (let i = 0; i < ROWS; i++) this.strip.appendChild(this.cell(`h${i}`));
@@ -31,7 +37,7 @@ export class ColorGuidePanel {
     save.addEventListener('click', () => this.saveGroup());
     const foot = el('<div class="cv-panel-foot"></div>');
     foot.appendChild(save);
-    this.body.append(top, this.strip, this.vary.el, this.grid, foot);
+    this.body.append(top, this.strip, this.vary.el, this.grid, this.limitCtl.el, foot);
     this.base.addEventListener('click', () => { const c = this.active(); if (c) { this.baseColor = c; this.sync(); } });
     const pick = (ev: Event): void => { const n = (ev.target as HTMLElement).closest<HTMLElement>('.cv-guidep-cell'); const c = n?.dataset.hex; if (c) { const v = rgb(parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)); engine.setActivePaint(solid(v)); } };
     this.strip.addEventListener('click', pick);
@@ -47,7 +53,8 @@ export class ColorGuidePanel {
 
   private queue(): void { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.sync(); }); }
 
-  private colors(): Color[] { return harmonyColors(this.baseColor, this.ruleId); }
+  private fit(c: Color): Color { return this.limit.length ? nearestFn(this.limit)(c) : c; }
+  private colors(): Color[] { return harmonyColors(this.baseColor, this.ruleId).map((c) => this.fit(c)); }
 
   private sync(): void {
     const h = this.colors();
@@ -57,7 +64,7 @@ export class ColorGuidePanel {
     this.vary.set(this.kind);
     const paint = (n: Element | null, c: Color): void => { if (!(n instanceof HTMLElement)) return; const x = hex(c); this.shown.add(x); setStyleVar(n, '--sw', x); n.dataset.hex = x; setTitle(n, x); };
     h.forEach((c, i) => paint(this.strip.children[i] ?? null, c));
-    h.forEach((c, r) => variations(c, this.kind, STEPS).forEach((v, k) => paint(this.grid.children[r * COLS + k] ?? null, v)));
+    h.forEach((c, r) => variations(c, this.kind, STEPS).forEach((v, k) => paint(this.grid.children[r * COLS + k] ?? null, this.fit(v))));
   }
 
   private saveGroup(): void {

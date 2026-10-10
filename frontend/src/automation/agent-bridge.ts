@@ -4,7 +4,9 @@ import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES } from '../engine/effe
 import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
 import { ROTATION_PRESETS } from '../engine/threed';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
-import { collectColors, mapFn, nearestFn, RECOLOR, recolorDoc } from '../engine/ops/recolor';
+import { collectColors, fitRowsToPalette, mapFn, nearestFn, oklab, RECOLOR, recolorDoc, reduceRows, rowReference, rowsFn } from '../engine/ops/recolor';
+import { libraryColors, swatchLibrary, SWATCH_LIBRARIES, type SwatchLibrary } from '../engine/swatch-libraries';
+import { brushLibrary, BRUSH_LIBRARIES, type BrushLibrary } from '../engine/brush-libraries';
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
 import { charStyleAt, DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
 import { DEFAULT_HYPH, DEFAULT_JUST } from '../engine/hyphen';
@@ -27,7 +29,7 @@ import { VERSION } from '../version';
 import type { GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from '../engine/types';
 import { api } from '../io/api';
 import { attachPlace, gridOf, leafPlaneBounds, planeLocalRect, presetGrid, vanishing } from '../engine/perspective';
-import type { Doc, PerspPlane } from '../engine/types';
+import type { BrushDef, Doc, PerspPlane } from '../engine/types';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
 export interface AgentDeps {
@@ -43,6 +45,7 @@ export interface AgentDeps {
   outlines(ids?: string[]): Promise<boolean>;
   trace(id: string, o: Record<string, unknown>): Promise<string | null>;
   ensureFace?(family: string, style: string): Promise<void>;
+  userLibraries?(): { swatches: SwatchLibrary[]; brushes: BrushLibrary[] };
 }
 
 const text = (t: string, data?: Record<string, unknown>): McpResult => ({ content: [{ type: 'text', text: t }], ...(data ? { structuredContent: data } : {}) });
@@ -649,7 +652,58 @@ export class AgentBridge {
           }
           return text('Updated the appearance.');
         }
-        case 'add_swatch': { const pt = this.paint(a.color, 'color'); const id = e.addSwatch(str('name') || 'Swatch', pt, a.global === true, a.spot === true, str('group') || undefined); return text(`Added the swatch ${str('name')} (id ${id}).`, { id }); }
+        case 'add_swatch': {
+          if (has('tint_of')) {
+            const parent = p.doc.swatches.find((s) => s.name === str('tint_of') || s.id === str('tint_of'));
+            if (!parent) return fail(`No swatch called ${str('tint_of')}: see the swatches in get_document.`);
+            const id = e.addTintSwatch(parent.id, num('tint', 50));
+            if (!id) return fail(`${parent.name} is a process swatch; tints come from global or spot swatches (add_swatch with global or spot true).`);
+            if (has('name')) e.editSwatch(id, { name: str('name') });
+            return text(`Added the tint swatch ${has('name') ? str('name') : `${parent.name} ${Math.round(num('tint', 50))}%`} (id ${id}).`, { id });
+          }
+          if (!has('color')) return fail('Give color, or tint_of with tint.');
+          const pt = this.paint(a.color, 'color'); const id = e.addSwatch(str('name') || 'Swatch', pt, a.global === true || a.spot === true, a.spot === true, str('group') || undefined); return text(`Added the swatch ${str('name')} (id ${id}).`, { id });
+        }
+        case 'swatch_library': {
+          const libs = [...SWATCH_LIBRARIES, ...(this.deps.userLibraries?.().swatches ?? [])];
+          if (str('action', 'list') === 'list') { const list = libs.map((l) => ({ id: l.id, name: l.name, folder: l.user ? 'User Defined' : l.folder ?? '', groups: l.groups.map((g) => ({ name: g.name, swatches: g.swatches.map((s) => s.name) })) })); return text(list.map((l) => `${l.id} (${l.folder ? `${l.folder} > ` : ''}${l.name}): ${l.groups.map((g) => `${g.name || 'ungrouped'} [${g.swatches.length}]`).join(', ')}`).join('\n'), { libraries: list }); }
+          const lib = swatchLibrary(str('library'), libs.filter((l) => l.user));
+          if (!lib) return fail(`library is one of ${libs.map((l) => l.id).join(', ')}.`);
+          const groups = has('group') ? lib.groups.filter((g) => g.name.toLowerCase() === str('group').toLowerCase()) : lib.groups;
+          if (!groups.length) return fail(`${lib.name} has the groups ${lib.groups.map((g) => g.name).join(', ')}.`);
+          const names = Array.isArray(a.names) ? a.names.map(String) : undefined;
+          const ids = e.addLibrarySwatches({ ...lib, groups }, names);
+          if (!ids.length) return fail(`None of those names are in ${lib.name}.`);
+          const targets = this.ids(a, 'apply_to'), first = e.doc?.swatches.find((s) => s.id === ids[0]);
+          if (targets?.length && first) e.setFill(first.global || first.spot ? (first.paint.type === 'color' ? { type: 'color', color: first.paint.color, swatch: first.id, tint: 100 } : first.paint) : first.paint, targets);
+          return text(`Loaded ${ids.length} swatch${ids.length === 1 ? '' : 'es'} from ${lib.name}${targets?.length && first ? `; filled ${targets.length} object(s) with ${first.name}` : ''}.`, { ids });
+        }
+        case 'swatch_group': {
+          const act = str('action', 'list'), name = str('name');
+          const find = (k: string) => p.doc.swatches.find((s) => s.id === k || s.name === k);
+          if (act === 'list') { const list = e.swatchGroups().map((g) => ({ name: g, swatches: p.doc.swatches.filter((s) => s.group === g).map((s) => s.name) })); return text(list.length ? list.map((g) => `${g.name}: ${g.swatches.join(', ')}`).join('\n') : 'No colour groups yet.', { groups: list }); }
+          if (act === 'make') {
+            if (!name) return fail('Give the group a name.');
+            if (Array.isArray(a.colors) && a.colors.length) {
+              const cols = a.colors.map((c) => parseColor(String(c))).filter((c): c is Color => !!c);
+              if (!cols.length) return fail('colors must be #rrggbb, rgb(), cmyk() or gray().');
+              e.beginGesture(); try { cols.forEach((c) => e.addSwatch(hex(c).toUpperCase(), solid(c), false, false, name)); } finally { e.endGesture(); }
+              return text(`Made ${name} with ${cols.length} new swatches.`);
+            }
+            const sw = (Array.isArray(a.swatches) ? a.swatches.map(String) : []).map(find).filter((s): s is NonNullable<typeof s> => !!s);
+            if (!sw.length) return fail('Give swatches (names or ids from get_document) or colors.');
+            return e.groupSwatches(sw.map((s) => s.id), name) ? text(`Made the colour group ${name} with ${sw.length} swatches.`) : fail('Nothing changed.');
+          }
+          if (act === 'move') {
+            const sw = (Array.isArray(a.swatches) ? a.swatches.map(String) : []).map(find).filter((s): s is NonNullable<typeof s> => !!s);
+            if (!sw.length) return fail('Give swatches by name or id.');
+            return e.moveSwatches(sw.map((s) => s.id), !name || name === 'none' ? null : name) ? text(`Moved ${sw.length} swatch(es) ${!name || name === 'none' ? 'out of their groups' : `into ${name}`}.`) : fail('Nothing changed.');
+          }
+          if (!e.swatchGroups().includes(name)) return fail(`No colour group called ${name}; the groups are ${e.swatchGroups().join(', ') || 'none'}.`);
+          if (act === 'rename') return e.renameSwatchGroup(name, str('new_name')) ? text(`Renamed ${name} to ${str('new_name')}.`) : fail('Give new_name.');
+          if (act === 'ungroup' || act === 'delete') { e.ungroupSwatches(name, act === 'delete'); return text(act === 'delete' ? `Deleted ${name} and its swatches.` : `Ungrouped ${name}.`); }
+          return fail('action is list, make, move, rename, ungroup or delete.');
+        }
         case 'graphic_style': {
           const act = str('action');
           if (act === 'list') { const list = p.doc.styles.map((s) => ({ id: s.id, name: s.name })); return text(list.map((s) => `${s.id}: ${s.name}`).join('\n'), { styles: list }); }
@@ -919,8 +973,43 @@ export class AgentBridge {
         }
         case 'apply_brush': {
           if (a.list === true) { const list = p.doc.brushes.map((b) => ({ id: b.id, name: b.name, type: b.brush.type })); return text(list.map((b) => `${b.name} (${b.type})`).join('\n'), { brushes: list }); }
+          if (has('library')) {
+            const lib = brushLibrary(str('library'), this.deps.userLibraries?.().brushes ?? []), b = lib?.brushes.find((x) => x.name.toLowerCase() === str('brush').toLowerCase());
+            if (!lib) return fail(`library is one of ${[...BRUSH_LIBRARIES, ...(this.deps.userLibraries?.().brushes ?? [])].map((l) => l.id).join(', ')}.`);
+            if (!b) return fail(`${lib.name} has ${lib.brushes.map((x) => x.name).join(', ')}.`);
+            const [id] = e.addLibraryBrushes([{ ...b, id: 'l' }]);
+            return e.applyBrush(id, this.ids(a)) ? text(`Applied ${b.name} from ${lib.name}.`, { id }) : fail('Select or pass objects with a stroke.');
+          }
           const ok = e.applyBrush(has('brush') && str('brush') !== 'none' ? str('brush') : null, this.ids(a));
           return ok ? text('Applied the brush.') : fail('Nothing changed.');
+        }
+        case 'new_brush': {
+          const kind = str('kind') as BrushDef['brush']['type'];
+          if (!['calligraphic', 'scatter', 'art', 'pattern', 'bristle'].includes(kind)) return fail('kind is calligraphic, scatter, art, pattern or bristle.');
+          const o: Record<string, number | string | boolean> = {};
+          for (const k of ['angle', 'roundness', 'size', 'spacing', 'scatter', 'rotation', 'width', 'length', 'density', 'thickness', 'stiffness']) if (typeof a[k] === 'number') o[k] = a[k] as number;
+          if (typeof a.paint_opacity === 'number') o.opacity = a.paint_opacity;
+          for (const k of ['relative', 'flip']) if (typeof a[k] === 'boolean') o[k] = a[k] as boolean;
+          if (typeof a.flip_along === 'boolean') o.flipAlong = a.flip_along;
+          for (const k of ['fit', 'shape', 'outer', 'inner', 'start', 'end']) if (typeof a[k] === 'string') o[k] = a[k] as string;
+          if (kind === 'pattern') for (const k of ['outer', 'inner', 'start', 'end']) if (typeof o[k] === 'string' && o[k] !== 'none' && !p.doc.patterns.some((x) => x.name === o[k] || x.id === o[k])) return fail(`${k} must name a pattern swatch (make_pattern makes one from art); the patterns are ${p.doc.patterns.map((x) => x.name).join(', ') || 'none'}.`);
+          if (kind === 'art') { if (typeof a.scale_mode === 'string') o.scaleMode = a.scale_mode; if (Array.isArray(a.guides) && a.guides.length === 2) { o.guide1 = Number(a.guides[0]); o.guide2 = Number(a.guides[1]); if (!o.scaleMode) o.scaleMode = 'guides'; } }
+          if ((kind === 'scatter' || kind === 'art' || kind === 'pattern') && !(this.ids(a) ?? e.selectedIds()).length) return fail(`A ${kind} brush is made from art: pass ids of filled or stroked paths.`);
+          const id = e.newBrush(str('name') || `${kind[0].toUpperCase()}${kind.slice(1)} Brush`, kind, o, (str('colorize', 'none') as BrushDef['colorize']), this.ids(a));
+          if (!id) return fail('The brush was not made: pass ids of paths for its art.');
+          const targets = this.ids(a, 'apply_to');
+          if (targets?.length) e.applyBrush(id, targets);
+          return text(`Made the ${kind} brush ${str('name') || id}${targets?.length ? ` and applied it to ${targets.length} object(s)` : ''}.`, { id });
+        }
+        case 'brush_library': {
+          const libs = [...BRUSH_LIBRARIES, ...(this.deps.userLibraries?.().brushes ?? [])];
+          if (str('action', 'list') === 'list') { const list = libs.map((l) => ({ id: l.id, name: l.name, user: !!l.user, brushes: l.brushes.map((b) => ({ name: b.name, type: b.brush.type })) })); return text(list.map((l) => `${l.id} (${l.name}): ${l.brushes.map((b) => `${b.name} [${b.type}]`).join(', ')}`).join('\n'), { libraries: list }); }
+          const lib = brushLibrary(str('library'), libs.filter((l) => l.user));
+          if (!lib) return fail(`library is one of ${libs.map((l) => l.id).join(', ')}.`);
+          const names = Array.isArray(a.names) ? a.names.map((x) => String(x).toLowerCase()) : null, pick = lib.brushes.filter((b) => !names || names.includes(b.name.toLowerCase()));
+          if (!pick.length) return fail(`${lib.name} has ${lib.brushes.map((b) => b.name).join(', ')}.`);
+          const ids = e.addLibraryBrushes(pick.map((b, i) => ({ ...b, id: `l${i}` })));
+          return text(`Loaded ${ids.length} brush${ids.length === 1 ? '' : 'es'} from ${lib.name}: ${pick.map((b) => b.name).join(', ')}.`, { ids });
         }
         case 'image_trace': {
           const target = has('id') ? this.node(a.id) : e.selected().find((n) => n.kind === 'image' || (n.kind === 'group' && !!n.trace));
@@ -1056,8 +1145,31 @@ export class AgentBridge {
           return text(`Made the pattern ${str('name')} (swatch added).`, { id });
         }
         case 'recolor': {
-          const ids = this.ids(a) ?? e.targetIds(), act = str('action', has('map') ? 'map' : has('palette') ? 'palette' : 'invert');
+          const ids = this.ids(a) ?? e.targetIds(), act = str('action', has('map') ? 'map' : has('palette') ? 'palette' : has('harmony') ? 'harmony' : has('group') ? 'group' : has('colors') ? 'reduce' : 'invert');
           let fn;
+          if (act === 'reduce' || act === 'group' || act === 'harmony') {
+            const cols = collectColors(ids.map((id) => findNode(p.doc, id) as VNode).filter(Boolean));
+            if (!cols.length) return fail('Those objects have no solid or gradient colours.');
+            let rows = has('colors') ? reduceRows(cols, Math.max(1, Math.round(num('colors', cols.length)))) : cols.map((c) => ({ from: [c], to: c, on: true }));
+            if (act === 'group') {
+              const g = str('group'), userLibs = this.deps.userLibraries?.().swatches ?? [];
+              const [lid, ...rest] = g.split(':'), lib = swatchLibrary(lid, userLibs);
+              const pal = p.doc.swatches.some((s) => s.group === g) ? p.doc.swatches.filter((s) => s.group === g && s.paint.type === 'color').map((s) => (s.paint as { color: Color }).color) : lib ? libraryColors(lib, rest.length ? rest.join(':') : undefined) : [];
+              if (!pal.length) return fail(`group is a colour group of the document (${e.swatchGroups().join(', ') || 'none yet'}) or a swatch library id (${[...SWATCH_LIBRARIES, ...userLibs].map((l) => l.id).join(', ')}), optionally library:group.`);
+              rows = fitRowsToPalette(rows, pal);
+            }
+            if (act === 'harmony') {
+              const base = has('base') ? parseColor(str('base')) : rowReference(cols);
+              if (!base) return fail('base is a colour such as #e8261d.');
+              if (!has('colors') && rows.length > 5) rows = reduceRows(cols, 5);
+              rows = fitRowsToPalette(rows, harmonyColors(base, (str('harmony') || 'complementary') as HarmonyRule));
+            }
+            const preserve = a.preserve_tints !== false && (has('colors') || act !== 'harmony');
+            const before = cols.map(hex);
+            e.edit('Recolor Artwork', (d) => recolorDoc(d, ids, rowsFn(rows, preserve)));
+            const out = rows.map((r) => ({ from: r.from.map(hex), to: hex(r.to) })).sort((x, y) => oklab(parseColor(y.to) ?? BLACK)[0] - oklab(parseColor(x.to) ?? BLACK)[0]);
+            return text(`Recoloured ${before.length} colour${before.length === 1 ? '' : 's'} into ${rows.length}: ${out.map((r) => r.to).join(' ')}.`, { colors_before: before, rows: out });
+          }
           if (act === 'map') { const m = new Map<string, Color>(); for (const [k, v] of Object.entries((a.map ?? {}) as Record<string, string>)) { const from = parseColor(k), to = parseColor(String(v)); if (from && to) m.set(hex(from), to); } fn = mapFn(m); }
           else if (act === 'palette') { const pal = (Array.isArray(a.palette) ? a.palette : []).map((c) => parseColor(String(c))).filter((c): c is Color => !!c); if (!pal.length) return fail('Give palette colours.'); fn = nearestFn(pal); }
           else if (RECOLOR[act]) fn = RECOLOR[act](num('amount', 0));

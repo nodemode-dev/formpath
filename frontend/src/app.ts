@@ -5,8 +5,8 @@ import { EFFECTS } from './engine/effects';
 import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
 import { transformNodes } from './engine/ops/objects';
 import { pathOperation } from './engine/ops/paths';
-import { collectColors, mapFn, RECOLOR, recolorDoc } from './engine/ops/recolor';
-import { hex, parseColor, solid, defaultGradient, NONE } from './engine/paint';
+import { RECOLOR, recolorDoc } from './engine/ops/recolor';
+import { hex, solid, defaultGradient, NONE } from './engine/paint';
 import { fontsChanged, plainText } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
@@ -47,6 +47,13 @@ import { envelopeOptions } from './engine/envelope';
 import { AgentConfirmDialog } from './ui/panels/agent-confirm';
 import { AssistantPanel } from './ui/panels/assistant';
 import { ColorPanel, GradientPanel, SwatchesPanel } from './ui/panels/color';
+import { BrushLibraryPanel, keepUserBrushLibrary, keepUserSwatchLibrary, SwatchLibraryPanel, userBrushLibraries, userSwatchLibraries } from './ui/panels/libraries';
+import { RecolorDialog } from './ui/panels/recolor';
+import { libraryFromDoc, SWATCH_LIBRARIES, type SwatchLibrary } from './engine/swatch-libraries';
+import { BRUSH_LIBRARIES, type BrushLibrary } from './engine/brush-libraries';
+import { readAse, writeAse } from './io/ase';
+import { newDoc as blankDoc } from './engine/doc';
+import { Project } from './engine/project';
 import { ColorPicker } from './ui/panels/color-picker';
 import { HelpDialog } from './ui/panels/help';
 import { HistoryPanel, InfoPanel, NavigatorPanel } from './ui/panels/navigator';
@@ -130,7 +137,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group',appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group', 'swatch-library': 'color-group', 'brush-library': 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -175,8 +182,12 @@ export function startApp(): void {
   const pickColor = (c: Color): Promise<Color | null> => picker.pick(c);
 
   const dockHost = q(root, '.cv-layers'), sideHost = q(root, '.cv-props-col');
-  const colorP = new ColorPanel(engine), swatchesP = new SwatchesPanel(engine, pickColor), gradientP = new GradientPanel(engine, pickColor);
-  const strokeP = new StrokePanel(engine), transP = new TransparencyPanel(engine), brushesP = new BrushesPanel(engine);
+  const libMenu = new PopupMenu(commands, null, true);
+  const openLibMenu = (anchor: HTMLElement, items: MenuItem[]): void => { libMenu.setItems(items); const r = anchor.getBoundingClientRect(); libMenu.openAt(r.left, r.top - 8); };
+  const colorP = new ColorPanel(engine), swatchesP = new SwatchesPanel(engine, pickColor, (a) => openLibMenu(a, swatchLibItems())), gradientP = new GradientPanel(engine, pickColor);
+  const strokeP = new StrokePanel(engine), transP = new TransparencyPanel(engine), brushesP = new BrushesPanel(engine, (a) => openLibMenu(a, brushLibItems()));
+  const swatchLibP = new SwatchLibraryPanel(engine, (a) => openLibMenu(a, swatchLibItems())), brushLibP = new BrushLibraryPanel(engine, (a) => openLibMenu(a, brushLibItems()));
+  const recolorD = new RecolorDialog(engine, { pickColor: (c, live) => picker.pick(c, live), stagePoint: (x, y) => stage.docPoint(x, y), userLibraries: userSwatchLibraries });
   const effectsMenu = new PopupMenu(commands, null, true);
   const appearanceP = new AppearancePanel(engine, pickColor, (anchor) => { effectsMenu.setItems(effectItems()); const r = anchor.getBoundingClientRect(); effectsMenu.openAt(r.left, r.top - 8); });
   const stylesP = new GraphicStylesPanel(engine);
@@ -205,8 +216,8 @@ export function startApp(): void {
   const variablesP = new VariablesPanel(engine, { deliver: (b, n) => deliver(b, n), version: VERSION, desktop: () => !!caps?.desktop });
   let graphDesign: GraphDesignDialog | null = null;
   void historyP; void navP;
-  new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }], 'Color');
-  new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }], 'Stroke');
+  new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }, { id: 'swatch-library', label: 'Swatch Library', body: swatchLibP.body }], 'Color');
+  new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }, { id: 'brush-library', label: 'Brush Library', body: brushLibP.body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
   new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'variables', label: 'Variables', body: variablesP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
@@ -318,6 +329,7 @@ export function startApp(): void {
         try {
           const lower = f.name.toLowerCase();
           if (lower.endsWith('.fpth')) await openFpth(await f.arrayBuffer(), f.name);
+          else if (lower.endsWith('.ase')) await openLibraryFile(f, 'swatch');
           else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, clipping, type and images; filters and masks it cannot match are left out.`); }
           else if (lower.endsWith('.pdf') || lower.endsWith('.ai')) {
             const data = await f.arrayBuffer(), title = f.name.replace(/\.(pdf|ai)$/i, '');
@@ -530,6 +542,7 @@ export function startApp(): void {
   placeInput.addEventListener('change', () => { const fs = Array.from(placeInput.files ?? []); placeInput.value = ''; void engine.task(async () => { for (const f of fs) { try { await placeFile(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } }); });
 
   const agents = new AgentBridge(engine, {
+    userLibraries: () => ({ swatches: userSwatchLibraries(), brushes: userBrushLibraries() }),
     ask: (title, text) => agentConfirm.ask(title, text),
     note: (t) => status.setEngine(t),
     allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpth:agents', { detail: true })); },
@@ -683,22 +696,80 @@ export function startApp(): void {
 
   async function recolorDialog(): Promise<void> {
     if (!sel()) return;
-    const ids = engine.targetIds(), p = engine.current;
+    await recolorD.run();
+  }
+
+  const libInput = el<HTMLInputElement>('<input type="file" accept=".ase,.fpth" hidden>');
+  document.body.appendChild(libInput);
+  let libKind: 'swatch' | 'brush' = 'swatch';
+  libInput.addEventListener('change', () => { const f = libInput.files?.[0]; libInput.value = ''; if (f) void openLibraryFile(f, libKind); });
+
+  async function libraryDoc(f: File): Promise<Doc> {
+    const files = await unzip(await f.arrayBuffer());
+    const mk = [...files.keys()].find((k) => /(^|\/)manifest\.json$/.test(k));
+    if (!mk) throw new Error(`${f.name} is not a formpth project.`);
+    return docFromManifest(JSON.parse(new TextDecoder().decode(files.get(mk))) as Record<string, unknown>);
+  }
+
+  async function openLibraryFile(f: File, kind: 'swatch' | 'brush'): Promise<void> {
+    try {
+      const name = f.name.replace(/\.(ase|fpth)$/i, '');
+      if (kind === 'brush') {
+        if (!/\.fpth$/i.test(f.name)) throw new Error('Brush libraries are formpth projects (.fpth).');
+        const d = await libraryDoc(f);
+        if (!d.brushes.length) throw new Error(`${f.name} holds no brushes.`);
+        showBrushLib({ id: `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: d.brushes.map(({ id: _id, ...b }) => { void _id; return b; }), user: true });
+        return;
+      }
+      const lib = /\.ase$/i.test(f.name) ? readAse(await f.arrayBuffer(), f.name) : libraryFromDoc(await libraryDoc(f), name, `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`);
+      if (!lib.groups.length) throw new Error(`${f.name} holds no swatches.`);
+      showSwatchLib(lib);
+    } catch (err) { toast(message(err), 'error'); }
+  }
+
+  function showSwatchLib(lib: SwatchLibrary): void { showPanel('swatch-library'); swatchLibP.show(lib); }
+  function showBrushLib(lib: BrushLibrary): void { showPanel('brush-library'); brushLibP.show(lib); }
+
+  async function libraryProject(name: string, part: Partial<Doc>): Promise<Blob> {
+    const d: Doc = { ...blankDoc(612, 792, { title: name }), ...part };
+    const { manifest, files } = serialize(new Project(newId('lib'), d, name));
+    return zipFiles([{ name: 'manifest.json', blob: new Blob([JSON.stringify(manifest)], { type: 'application/json' }) }, ...files.map((x) => ({ name: `images/${x.name}`, blob: x.blob }))]);
+  }
+
+  async function saveSwatchLibrary(format: 'ase' | 'fpth'): Promise<void> {
+    const p = engine.current;
     if (!p) return;
-    const colors = collectColors(ids.map((id) => findNode(p.doc, id) as VNode)).slice(0, 16);
-    if (!colors.length) { toast('The selection has no colours to recolour.'); return; }
-    await previewEdit(engine, 'Recolor Artwork', [
-      { kind: 'note', text: 'Each current colour is listed with its new colour. Hue, saturation and brightness shift every colour at once.' },
-      ...colors.map((c, i) => ({ kind: 'color' as const, key: `c${i}`, label: hex(c).toUpperCase(), value: hex(c) })),
-      { kind: 'number', key: 'hue', label: 'Hue shift', value: 0, min: -180, max: 180, unit: '°' },
-      { kind: 'number', key: 'sat', label: 'Saturation', value: 0, min: -100, max: 100, unit: '%' },
-      { kind: 'number', key: 'bri', label: 'Brightness', value: 0, min: -100, max: 100, unit: '%' },
-    ], (origin, v) => {
-      const map = new Map<string, Color>();
-      colors.forEach((c, i) => { const to = parseColor(String(v[`c${i}`])); if (to && hex(to) !== hex(c)) map.set(hex(c), c.kind === 'cmyk' ? to : to); });
-      const base = mapFn(map), hue = RECOLOR.hue(Number(v.hue)), satF = RECOLOR.saturate(Number(v.sat)), bri = RECOLOR.brightness(Number(v.bri));
-      return recolorDoc(origin, ids, (c) => { let x = base(c); if (Number(v.hue)) x = hue(x); if (Number(v.sat)) x = satF(x); if (Number(v.bri)) x = bri(x); return x; });
-    });
+    const v = await askForm(format === 'ase' ? 'Save Swatch Library as ASE' : 'Save Swatch Library as formpth', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Swatches` }, { kind: 'note', text: format === 'ase' ? 'ASE keeps solid colours (process, global and spot) and their groups; gradients and patterns are left out. The library also appears under User Defined.' : 'A formpth project holding the swatches, groups, gradients and patterns. The library also appears under User Defined.' }], { ok: 'Save' });
+    if (!v) return;
+    const name = String(v.name).trim() || 'Swatches', lib = libraryFromDoc(p.doc, name);
+    if (!lib.groups.length) { toast('The document has no swatches to save.', 'error'); return; }
+    keepUserSwatchLibrary(lib);
+    if (format === 'ase') { const { blob, skipped } = writeAse(lib); await deliver(blob, `${name}.ase`); if (skipped) toast(`${skipped} gradient or pattern swatch${skipped === 1 ? '' : 'es'} left out of the ASE file.`); }
+    else await deliver(await libraryProject(name, { swatches: p.doc.swatches, patterns: p.doc.patterns }), `${name}.fpth`);
+  }
+
+  async function saveBrushLibrary(): Promise<void> {
+    const p = engine.current;
+    if (!p || !p.doc.brushes.length) { toast('The document has no brushes to save.', 'error'); return; }
+    const v = await askForm('Save Brushes', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Brushes` }, { kind: 'note', text: 'Saves the document’s brushes as a formpth project to open later with Open Brush Library; it also appears under User Defined.' }], { ok: 'Save' });
+    if (!v) return;
+    const name = String(v.name).trim() || 'Brushes';
+    keepUserBrushLibrary({ id: `user_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: p.doc.brushes.map(({ id: _id, ...b }) => { void _id; return b; }) });
+    await deliver(await libraryProject(name, { brushes: p.doc.brushes }), `${name}.fpth`);
+  }
+
+  const LIB_FOLDERS = [...new Set(SWATCH_LIBRARIES.map((l) => l.folder ?? 'Other'))];
+  function swatchLibItems(): MenuItem[] {
+    const users = userSwatchLibraries();
+    return [
+      ...LIB_FOLDERS.map((f): MenuItem => { const libs = SWATCH_LIBRARIES.filter((l) => (l.folder ?? 'Other') === f); return libs.length === 1 && libs[0].name === f ? `sw-lib-${libs[0].id}` : { label: f, items: libs.map((l) => `sw-lib-${l.id}`) }; }),
+      '-', { label: 'User Defined', items: users.length ? users.slice(0, 12).map((_, i) => `sw-user-${i}`) : ['sw-user-none'] },
+      '-', 'sw-lib-other', 'sw-lib-save-ase', 'sw-lib-save-fpth',
+    ];
+  }
+  function brushLibItems(): MenuItem[] {
+    const users = userBrushLibraries();
+    return [...BRUSH_LIBRARIES.map((l) => `br-lib-${l.id}`), '-', { label: 'User Defined', items: users.length ? users.slice(0, 12).map((_, i) => `br-user-${i}`) : ['br-user-none'] }, '-', 'br-lib-other', 'br-lib-save'];
   }
 
   async function rasterizeSel(): Promise<void> {
@@ -990,6 +1061,17 @@ export function startApp(): void {
     ...Object.keys(TAB_HOMES).map((tab) => ({ id: `panel-${tab}`, label: tab.replace(/-/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase()), run: () => showPanel(tab) })).filter((c) => !['panel-character', 'panel-paragraph', 'panel-glyphs', 'panel-three-d'].includes(c.id)),
     { id: 'panel-properties-col', label: 'Properties Column', checked: () => propsShown(), run: () => { store('formpth.propsCol', propsShown() ? 'hidden' : 'shown'); syncPropsCol(); } },
     ...STYLE_LIBRARIES.map((l) => ({ id: `gs-lib-${l.id}`, label: l.name, run: () => { showPanel('graphic-styles'); stylesP.showLibrary(l.id); } })),
+    ...SWATCH_LIBRARIES.map((l) => ({ id: `sw-lib-${l.id}`, label: l.name, run: () => showSwatchLib(l) })),
+    ...Array.from({ length: 12 }, (_, i) => ({ id: `sw-user-${i}`, label: () => userSwatchLibraries()[i]?.name ?? '', enabled: () => !!userSwatchLibraries()[i], run: () => { const l = userSwatchLibraries()[i]; if (l) showSwatchLib(l); } })),
+    { id: 'sw-user-none', label: 'No saved libraries yet', enabled: () => false, run: () => undefined },
+    { id: 'sw-lib-other', label: 'Other Library...', run: () => { libKind = 'swatch'; libInput.accept = '.ase,.fpth'; libInput.click(); } },
+    { id: 'sw-lib-save-ase', label: 'Save Swatch Library as ASE...', enabled: has, run: () => void saveSwatchLibrary('ase') },
+    { id: 'sw-lib-save-fpth', label: 'Save Swatch Library as formpth...', enabled: has, run: () => void saveSwatchLibrary('fpth') },
+    ...BRUSH_LIBRARIES.map((l) => ({ id: `br-lib-${l.id}`, label: l.name, run: () => showBrushLib(l) })),
+    ...Array.from({ length: 12 }, (_, i) => ({ id: `br-user-${i}`, label: () => userBrushLibraries()[i]?.name ?? '', enabled: () => !!userBrushLibraries()[i], run: () => { const l = userBrushLibraries()[i]; if (l) showBrushLib(l); } })),
+    { id: 'br-user-none', label: 'No saved libraries yet', enabled: () => false, run: () => undefined },
+    { id: 'br-lib-other', label: 'Open Brush Library...', run: () => { libKind = 'brush'; libInput.accept = '.fpth'; libInput.click(); } },
+    { id: 'br-lib-save', label: 'Save Brushes...', enabled: has, run: () => void saveBrushLibrary() },
     { id: 'reset-panels', label: 'Reset Essentials', run: () => { dock.reset(); PanelGroup.resetStates(); PanelGroup.resetHomes(TAB_HOMES); store('formpth.propsCol', 'shown'); syncPropsCol(); } },
     { id: 'help', label: 'formpth Help', keys: ['F1'], run: () => help.show() },
     { id: 'copy-error-log', label: 'Copy Error Log', run: () => { void navigator.clipboard?.writeText(errorLog.text()); toast('Copied the error log.'); } },
@@ -1063,7 +1145,7 @@ export function startApp(): void {
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: () => ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);
