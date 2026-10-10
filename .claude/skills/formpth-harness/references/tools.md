@@ -424,7 +424,7 @@ Moves the objects to the top of a layer.
 
 ## transform
 
-Transforms the objects: move by dx, dy or to x, y; rotate by degrees; scale in percent (uniform or per axis); reflect; shear in degrees; set width or height; about an origin; as copies; or each about its own centre.
+Transforms the objects: move by dx, dy or to x, y; rotate by degrees; scale in percent (uniform or per axis); reflect; shear in degrees; set width or height; about an origin; as copies; or each about its own centre. corners distorts the bounding box onto four points in perspective (Free Distort; type, images and symbols go into an envelope mesh), perspective pulls the top corners in (or out, if negative) by that many points for a symmetric Perspective Distort, and reset_bounding_box squares a rotated bounding box to the page again.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `dx`: number
@@ -435,6 +435,9 @@ Transforms the objects: move by dx, dy or to x, y; rotate by degrees; scale in p
 - `scale`: number
 - `scale_x`: number
 - `scale_y`: number
+- `corners`: array; Free Distort: where the bounding box's top-left, top-right, bottom-right and bottom-left corners go, as [x, y] in document points.
+- `perspective`: number; Perspective Distort: move the top corners toward each other by this many points each (negative spreads them).
+- `reset_bounding_box`: boolean
 - `width`: number
 - `height`: number
 - `reflect`: string (horizontal | vertical)
@@ -552,10 +555,10 @@ Blends between the selected objects (shape and colour), or releases or expands a
 
 ## envelope
 
-Envelope Distort: warp the objects with one of the 15 warp styles, a mesh grid, or the topmost object's shape; or release or expand an envelope.
+Envelope Distort: warp the objects with one of the 15 warp styles, a mesh grid of rows by columns, or the topmost object's shape; or release or expand an envelope. On an envelope: info lists its mesh points (row-major, index = row * (columns + 1) + column) with their handles; move_point moves a mesh point (x, y or dx, dy) or, with handle, one of its handle ends to x, y; add_mesh_line adds a row and column through x, y; delete_mesh_point removes the lines through a point; reset_mesh and reset_warp replace the shape (a warp or top-object envelope turns into a mesh the first time a point moves); options sets fidelity, distort_appearance, distort_gradients, distort_patterns and anti_alias; edit_contents and edit_envelope switch between editing the art inside and the envelope. get_image shows the result.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
-- `action`: string (warp | mesh | top_object | release | expand); required
+- `action`: string (warp | mesh | top_object | release | expand | info | move_point | add_mesh_line | delete_mesh_point | reset_mesh | reset_warp | options | edit_contents | edit_envelope); required
 - `style`: string (arc | arc_lower | arc_upper | arch | bulge | shell_lower | shell_upper | flag | wave | fish | rise | fisheye | inflate | squeeze | twist)
 - `bend`: number; default 50
 - `horizontal`: number; default 0
@@ -563,6 +566,21 @@ Envelope Distort: warp the objects with one of the 15 warp styles, a mesh grid, 
 - `vertical_orientation`: boolean; default false
 - `rows`: integer; default 4
 - `columns`: integer; default 4
+- `point`: integer; move_point and delete_mesh_point: the mesh point index from info (or give row and column).
+- `row`: integer; Mesh row of the point, 0 at the top.
+- `column`: integer; Mesh column of the point, 0 at the left.
+- `x`: number; Document points: the new position for move_point, or the place for add_mesh_line.
+- `y`: number
+- `dx`: number; move_point: move by this much instead of to x, y.
+- `dy`: number
+- `handle`: string (right | left | down | up); move_point: move this handle's end to x, y (or by dx, dy) instead of the point.
+- `mirror`: boolean; default false; move_point with handle: turn the opposite handle to stay in line.
+- `maintain_shape`: boolean; default true; reset_mesh: keep the current envelope shape in the new mesh.
+- `fidelity`: number; options: how closely the art follows the envelope (50 by default).
+- `distort_appearance`: boolean; options: distort strokes and effects with the shape.
+- `distort_gradients`: boolean; options: distort linear gradient fills.
+- `distort_patterns`: boolean; options: distort pattern fills.
+- `anti_alias`: boolean; options: smooth images drawn through the envelope.
 
 ## repeat
 

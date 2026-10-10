@@ -12,6 +12,7 @@ import { liveParams, type LivePatch } from '../engine/ops/live-shapes';
 import { transformNode } from '../engine/transform';
 import { interiorOf, liveFaceNodes, liveFaces } from '../engine/livepaint';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
+import { envelopeOptions, meshHandles } from '../engine/envelope';
 import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
 import { api } from '../io/api';
@@ -88,6 +89,52 @@ export class AgentBridge {
         } else if (status !== 204) await sleep(2000);
       } catch { await sleep(2000); }
     }
+  }
+
+  private envelopeAction(act: string, a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): McpResult {
+    const e = this.engine, doc = e.doc;
+    const env = doc ? (this.ids(a) ?? e.selectedIds()).map((id) => e.envelopeOf(id)).find((x) => !!x) ?? null : null;
+    if (!doc || !env) return fail('Select an envelope (or pass its id in ids); make one with action warp, mesh or top_object.');
+    const s = e.envelopeMesh(doc, env), H = meshHandles(s), w = s.cols + 1, sides = ['right', 'left', 'down', 'up'];
+    const pick = (): number => {
+      const idx = has('point') ? Math.round(num('point', -1)) : has('row') && has('column') ? Math.round(num('row', 0)) * w + Math.round(num('column', 0)) : -1;
+      if (idx < 0 || idx >= s.points.length || (has('column') && num('column', 0) > s.cols) || (has('row') && num('row', 0) > s.rows)) throw new ToolError(`Give point (0 to ${s.points.length - 1}) or row (0 to ${s.rows}) and column (0 to ${s.cols}); envelope info lists them.`);
+      return idx;
+    };
+    const after = (msg: string): McpResult => { const n = e.envelopeOf(env.id), m = n && e.doc ? e.envelopeMesh(e.doc, n) : null; return text(`${msg} get_image shows it.`, { id: env.id, rows: m?.rows ?? null, columns: m?.cols ?? null, selection: e.selectedIds() }); };
+    switch (act) {
+      case 'info': {
+        const o = envelopeOptions(env.opts);
+        return text(`Envelope ${env.id}: ${env.spec.kind === 'mesh' ? 'mesh' : env.spec.kind === 'warp' ? `warp (${env.spec.style}); moving a point turns it into this mesh` : 'top object; moving a point turns it into this mesh'}, ${s.rows} rows by ${s.cols} columns, ${s.points.length} points; editing the ${env.editContents ? 'contents' : 'envelope'}.`, {
+          id: env.id, kind: env.spec.kind, rows: s.rows, columns: s.cols, editing: env.editContents ? 'contents' : 'envelope',
+          options: { fidelity: o.fidelity, distort_appearance: o.appearance, distort_gradients: o.gradients, distort_patterns: o.patterns, anti_alias: o.antiAlias },
+          points: s.points.map((q, i) => ({ point: i, row: Math.floor(i / w), column: i % w, x: r2(q.x), y: r2(q.y), handles: Object.fromEntries(H[i].map((h, k) => [sides[k], Math.hypot(h.x, h.y) > 1e-6 ? [r2(q.x + h.x), r2(q.y + h.y)] : null])) })),
+        });
+      }
+      case 'move_point': {
+        const idx = pick(), hi = has('handle') ? sides.indexOf(str('handle')) : -1, P = s.points[idx];
+        if (hi >= 0 && Math.hypot(H[idx][hi].x, H[idx][hi].y) < 1e-6) throw new ToolError(`Point ${idx} has no ${str('handle')} handle (it is on that edge of the mesh).`);
+        const base = hi >= 0 ? { x: P.x + H[idx][hi].x, y: P.y + H[idx][hi].y } : P;
+        const to = has('x') || has('y') ? { x: num('x', base.x), y: num('y', base.y) } : { x: base.x + num('dx', 0), y: base.y + num('dy', 0) };
+        return e.moveEnvelopePoint(env.id, idx, to, hi, a.mirror === true) ? after(`Moved ${hi >= 0 ? `the ${str('handle')} handle of ` : ''}point ${idx} to ${r2(to.x)}, ${r2(to.y)}.`) : fail('Nothing changed.');
+      }
+      case 'add_mesh_line': {
+        if (!has('x') || !has('y')) throw new ToolError('add_mesh_line needs x and y inside the envelope.');
+        const idx = e.addEnvelopeMeshLine(env.id, { x: num('x', 0), y: num('y', 0) }, 1e6);
+        return idx >= 0 ? after(`Added mesh lines through point ${idx}.`) : fail('Nothing changed: that place is already on a mesh point.');
+      }
+      case 'delete_mesh_point': return e.removeEnvelopeMeshLines(env.id, pick()) ? after('Removed the mesh lines through that point.') : fail('Nothing changed: points on the outer edge of the mesh cannot be removed.');
+      case 'reset_mesh': return e.resetEnvelope({ kind: 'mesh', rows: num('rows', 4), cols: num('columns', 4), keepShape: a.maintain_shape !== false }, [env.id]) ? after('Reset the envelope with a mesh.') : fail('Nothing changed.');
+      case 'reset_warp': return e.resetEnvelope({ kind: 'warp', style: str('style', 'arc'), bend: num('bend', 50), h: num('horizontal', 0), v: num('vertical', 0), vertical: a.vertical_orientation === true }, [env.id]) ? after('Reset the envelope with a warp.') : fail('Nothing changed.');
+      case 'options': {
+        const patch = { ...(has('fidelity') ? { fidelity: Math.max(0, Math.min(100, num('fidelity', 50))) } : {}), ...(has('distort_appearance') ? { appearance: a.distort_appearance === true } : {}), ...(has('distort_gradients') ? { gradients: a.distort_gradients === true } : {}), ...(has('distort_patterns') ? { patterns: a.distort_patterns === true } : {}), ...(has('anti_alias') ? { antiAlias: a.anti_alias === true } : {}) };
+        if (!Object.keys(patch).length) throw new ToolError('options takes fidelity, distort_appearance, distort_gradients, distort_patterns or anti_alias.');
+        return e.setEnvelopeOptions(patch, [env.id]) ? after('Changed the envelope options.') : fail('Nothing changed.');
+      }
+      case 'edit_contents': return e.envelopeContents(true, [env.id]) ? text(`Editing the contents of ${env.id}: the selection is the art inside (ids ${e.selectedIds().join(', ')}); set_text, transform and the rest change it, and the envelope follows. Call edit_envelope when done.`, { id: env.id, selection: e.selectedIds() }) : fail('Nothing changed.');
+      case 'edit_envelope': return e.envelopeContents(false, [env.id]) ? text(`Editing the envelope ${env.id} again.`, { id: env.id, selection: e.selectedIds() }) : fail('Nothing changed.');
+    }
+    return fail('Unknown envelope action.');
   }
 
   private ids(a: Record<string, unknown>, key = 'ids'): string[] | undefined {
@@ -440,6 +487,28 @@ export class AgentBridge {
           const ids = this.ids(a) ?? e.targetIds();
           const b = selectionBounds(p.doc, ids.map((id) => findNode(p.doc, id) as VNode));
           if (isEmptyRect(b)) return fail('Those objects have no bounds.');
+          if (has('corners') || has('perspective')) {
+            const fr = e.selectionFrame(ids);
+            if (!fr) return fail('Those objects have no bounds.');
+            let to: Pt[];
+            if (has('corners')) {
+              const c = a.corners;
+              if (!Array.isArray(c) || c.length !== 4 || !c.every((q) => Array.isArray(q) && q.length === 2 && q.every((v) => typeof v === 'number' && Number.isFinite(v)))) throw new ToolError('corners takes four [x, y] pairs: top-left, top-right, bottom-right, bottom-left.');
+              to = (c as number[][]).map((q) => ({ x: q[0], y: q[1] }));
+            } else {
+              const k = num('perspective', 0), c = fr.corners, l = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y) || 1, ux = (c[1].x - c[0].x) / l, uy = (c[1].y - c[0].y) / l;
+              if (Math.abs(k) * 2 >= l) throw new ToolError(`perspective must be less than half the width (${r2(l / 2)} points).`);
+              to = [{ x: c[0].x + ux * k, y: c[0].y + uy * k }, { x: c[1].x - ux * k, y: c[1].y - uy * k }, c[2], c[3]];
+            }
+            e.beginStep();
+            const ok = e.distort(to, ids, has('corners') ? 'Free Distort' : 'Perspective Distort');
+            if (ok && a.reset_bounding_box === true) e.resetBoundingBox(e.selectedIds());
+            e.endStep();
+            return ok ? text(`Distorted; bounds now ${JSON.stringify(box(e.selectionBounds(false)))}. Type, images and symbols are in envelope meshes (envelope info lists their points).`, { selection: e.selectedIds(), bounds: box(e.selectionBounds(false)) }) : fail('Nothing changed.');
+          }
+          if (a.reset_bounding_box === true && !['dx', 'dy', 'x', 'y', 'rotate', 'scale', 'scale_x', 'scale_y', 'width', 'height', 'reflect', 'shear'].some(has)) {
+            return e.resetBoundingBox(ids) ? text('Reset the bounding box to the page.', { selection: e.selectedIds(), bounds: box(e.selectionBounds(false)) }) : fail('Nothing changed: the bounding box is already square to the page.');
+          }
           const make = (bb: Rect): Mat => {
             const o = this.origin(a, bb);
             let m: Mat = [1, 0, 0, 1, 0, 0];
@@ -454,7 +523,10 @@ export class AgentBridge {
             return m;
           };
           if (has('scale_strokes')) e.setView({ scaleStrokes: a.scale_strokes === true });
+          e.beginStep();
           const ok = a.each === true ? e.transformEach(make, { copy: a.copy === true, ids }) : e.transform(make(b), { copy: a.copy === true, ids });
+          if (ok && a.reset_bounding_box === true) e.resetBoundingBox(e.selectedIds());
+          e.endStep();
           return ok ? text(`Transformed; bounds now ${JSON.stringify(box(e.selectionBounds(false)))}.`, { selection: e.selectedIds(), bounds: box(e.selectionBounds(false)) }) : fail('Nothing changed.');
         }
         case 'align': { const ok = e.align(str('action') as 'left', (str('to', 'selection') as 'selection'), has('key') ? String(this.node(a.key).id) : null, has('spacing') ? num('spacing', 0) : null, this.ids(a)); return ok ? text('Aligned.') : fail('Nothing moved: align needs two or more objects, or to: artboard.'); }
@@ -518,6 +590,7 @@ export class AgentBridge {
           const act = str('action');
           if (act === 'release') return e.releaseLive(this.ids(a)) ? text('Released the envelope.') : fail('Select an envelope.');
           if (act === 'expand') return e.expand('object', this.ids(a)) ? text('Expanded the envelope.') : fail('Select an envelope.');
+          if (['info', 'move_point', 'add_mesh_line', 'delete_mesh_point', 'reset_mesh', 'reset_warp', 'options', 'edit_contents', 'edit_envelope'].includes(act)) return this.envelopeAction(act, a, num, str, has);
           const ok = act === 'top_object' ? e.makeEnvelope('top', this.ids(a)) : act === 'mesh' ? e.makeEnvelope({ kind: 'mesh', rows: Math.max(1, Math.round(num('rows', 2))), cols: Math.max(1, Math.round(num('columns', 2))), points: [] }, this.ids(a)) : e.makeEnvelope({ kind: 'warp', style: str('style', 'arc'), bend: num('bend', 50), h: num('horizontal', 0), v: num('vertical', 0), vertical: a.vertical_orientation === true }, this.ids(a));
           return ok ? text(`Made an envelope (id ${e.selectedIds()[0]}).`, { id: e.selectedIds()[0] }) : fail('Nothing changed: top_object needs the shape on top of the art.');
         }
