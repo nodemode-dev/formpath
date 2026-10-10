@@ -139,7 +139,12 @@ ask it questions.
   when edited; spot swatches carry a dot. New swatches come from the active paint.
 - Gradient panel and Gradient tool (G): linear and radial gradients with any number of stops and midpoints; drag a
   stop off the bar to remove it, click under the bar to add one. The Gradient tool drags the direction on the art
-  and shows its annotator. Strokes take gradients within, along or across.
+  and shows its annotator. Strokes take gradients within, along or across: with the stroke active (X), the Within,
+  Along and Across buttons under the ramp choose how. Within paints the gradient over the object's box; Along runs it
+  from the path's start to its end, round every curve and corner (a closed path wraps back to its start point);
+  Across runs it from one edge of the stroke to the other. Along and Across follow dashes, caps, corners, alignment
+  and width profiles, and look the same on screen, in SVG and PDF, and after Expand Appearance or Outline Stroke,
+  which turn them into a clipped group of gradient-filled pieces.
 - Freeform gradients: choose Freeform in the Gradient panel; colour points appear over the selected object. With the
   Gradient tool, click inside the object to add a point, drag a point to move it, drag the square on its dashed ring
   to spread it, and press Delete to remove it; the panel sets the selected point's colour and spread. Lines mode joins
@@ -163,7 +168,15 @@ ask it questions.
 - Stroke panel: weight, caps, corners, miter limit, alignment (center, inside, outside), dashes and gaps, arrowheads
   for start and end, and width profiles.
 - Transparency panel: blend mode (all 16), opacity, opacity masks (Make Mask uses the topmost selected object;
-  Clip and Invert Mask), isolate blending and knockout group.
+  Clip, Invert Mask, Disable turns the mask off without removing it, Link keeps it moving with the art), isolate
+  blending and knockout group. Object > Opacity Mask also has Disable and Unlink, and New Opacity Masks Are Clipping
+  and New Opacity Masks Are Inverted set what Make Mask starts with (remembered between sessions).
+- Knockout Group has three states: click to cycle on, inherit (a dash: take the setting of the enclosing group) and
+  off. In a knockout group each object shows against what is under the group, not against the objects below it in
+  the group, so three overlapping 50 percent circles show only the top one where they overlap. Opacity and Mask
+  Define Knockout Shape, on an object inside the group, makes it knock out only as much as it is opaque. Knockout
+  groups render the same on screen, in SVG (masks) and in PDF (a knockout transparency group, drawn with soft masks
+  so viewers that ignore knockout show it too).
 - Appearance panel: every fill, stroke and effect on an object, top to bottom. Add another fill or stroke, hide
   items, click an effect's name to edit it (the dialog previews as you change it), Clear Appearance, Reduce to Basic
   Appearance. Click a fill or stroke row to target it: Add New Effect, and any effect chosen from the Effect menu

@@ -44,6 +44,7 @@ frontend/
     │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
     │   ├── pattern.ts          tile lattices and the pattern editing session
     │   ├── style-libraries.ts  built-in graphic style libraries
+    │   ├── stroke-gradient.ts  gradients along and across strokes as clipped pieces, stroke regions
     │   ├── livepaint.ts        Live Paint faces, gap closing and face paint
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
@@ -119,6 +120,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/ops/objects.ts
 - src/engine/ops/expand.ts
 - src/engine/style-libraries.ts
+- src/engine/stroke-gradient.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
 - src/tools/pen.ts
@@ -150,6 +152,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/color-guide.ts
 - src/ui/panels/color-picker.ts
 - src/ui/panels/navigator.ts
+- src/ui/panels/stroke.ts
 - src/ui/panels/type.ts
 - src/ui/panels/text-styles.ts
 - src/ui/panels/asset-export.ts
@@ -193,6 +196,13 @@ Runs before any stylesheet so the saved theme profile and accent are on the root
 Ports 5230 (dev) and 5231 (preview) and 8230 (engine) so formpth runs beside formvis (5190, 8190). `host: false` keeps the dev server on localhost only; `strictPort` fails loudly instead of drifting.
 
 ## src/app.ts
+
+### src/app.ts · opacity mask commands
+- refers-to: src/app.ts :: commands disable-opacity-mask, unlink-opacity-mask, new-mask-clip, new-mask-invert, Object > Opacity Mask; src/ui/prefs.ts :: Prefs.newMaskClip, newMaskInvert, applyPrefs
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Disable and Unlink toggle (their labels read Enable and Link when the selection's mask is already off or unlinked). New Opacity Masks Are Clipping and Inverted are checked commands stored in preferences, so they survive a restart; `applyPrefs` copies them to `Engine.maskDefaults`. There is no Transparency panel menu (panel groups share one menu button across their tabs), so they live in Object > Opacity Mask.
 
 ### src/app.ts · send-nodemode command
 - refers-to: src/app.ts :: commands, id send-nodemode
@@ -284,6 +294,13 @@ The loop claims a secret from the engine before its first poll and sends it with
 
 `attributes` checks that the objects have a fill rule at all before setting one (text and images have none), reverses through `pathOp('reverse')` so it is the same command as the menu, and answers with each object's rule from `fillRuleOf`. `apply_effect` with `item` checks every target has that item and refuses 3D effects (`isItemEffect`) with a message that says to drop `item`; the engine's `addEffect` does the work. `graphic_style` resolves libraries by id or name through `styleLibrary`; `apply` with `library` goes through `useLibraryStyle`, which adds the style and applies it in one history step.
 
+### src/automation/agent-bridge.ts · gradient stroke mode, knockout and opacity masks
+- refers-to: src/automation/agent-bridge.ts :: run cases set_stroke gradient_mode, set_object isolate knockout knockout_shape, opacity_mask; backend/app/routers/mcp.py :: TOOLS
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+New optional parameters only: `set_stroke` `gradient_mode` (within, along, across) fails with advice when no target has a linear or radial gradient stroke; `set_object` takes `isolate`, `knockout` (on, off, inherit, mapped to true, false, 'inherit') and `knockout_shape`, and says when none of the targets is a group or layer, since knockout only acts there. The new `opacity_mask` tool makes (topmost object in document order is the mask, whatever order the ids come in), releases, or sets clip, invert, disabled and linked, answering with each mask's settings; make also applies any of those settings it is given in the same step.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture
@@ -306,6 +323,13 @@ A new project is fitted to the last stage size the stage reported. Before, the f
 - logged: v0.17.0 · 2026-10-08
 
 `setFillRule` is one edit that leaves the selection alone (going through `run` would have selected the paths inside a selected group) and does nothing when every target already has the rule. A targeted layer is `Project.layerTarget`: `targetLayer` selects the layer's objects, as the Layers target always did, and then marks the layer so `appearanceTarget` returns it; any other `select` clears the mark, and panels pass the layer's id to the edits so the change lands on the layer, not its objects. A graphic style link is the `style` id on a node, but it only counts while the node still looks like the style (`styleLinked` compares the appearance, and opacity and blend for non-type objects), so editing an object by hand ends the link without every appearance edit having to clear it. Redefine updates the style and every object still linked, makes the source object linked, and unlinks objects that had drifted, all in one step. New Graphic Style now links its source object, as in Illustrator. `useLibraryStyle` adds a library style unless the document already has one of that name, and applies it, in one edit. `Project.layerTarget` is session state and is never saved.
+
+### src/engine/index.ts · gradient stroke mode and new mask defaults
+- refers-to: src/engine/index.ts :: setStrokeGradientMode, maskDefaults, makeOpacityMask, setObjectProps; src/engine/paint.ts :: resolvePaint, describePaint, hex
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`setStrokeGradientMode` changes only the mode of first strokes that already hold a linear or radial gradient (through groups and type, like the other paint edits) in one step, also updates the stroke paint new art gets, and returns false when no target has such a stroke, which the agent tool turns into advice. A global gradient swatch now keeps the stroke's own mode, like its angle. `maskDefaults` is what Make Mask starts with; the app loads it from preferences. `hex` now rounds and clamps: a colour mixed by `gradientAt` has fractional channels, and the SVG writer wrote them as invalid hex (`#ff.8...`), which browsers paint black; this already broke midpoint stops in exported gradients.
 
 ## src/engine/history.ts
 
@@ -382,6 +406,20 @@ A layer with an Effect Gallery filter is rendered whole, not clipped to the canv
 
 Vector effects on an item already changed its geometry (`itemGeometry`). Raster effects on an item (drop shadow, glows, feather, Gaussian Blur, the Effect Gallery) now draw that item alone into a `withLayer` sized to its geometry plus its stroke reach, run the effects there, and composite the result with the item's own opacity and blend mode; inside the layer the item is drawn `solo` (full opacity, normal blend) so those are applied once. Gallery filters on an item are cached like a node's, keyed by a token per geometry and item (`itemKey`), because one item object is shared by every object a graphic style was applied to. `rasterEffectsOf(effects)` is the list form `rasterEffects(n)` now calls. Layers draw their own fills and strokes over their children, as groups did.
 
+### src/engine/render.ts · knockout groups
+- refers-to: src/engine/render.ts :: knocksOut, knockoutShape, drawKnockout, drawKids, needsLayer, RenderContext.knockout; src/engine/types.ts :: NodeBase.knockout, knockoutShape
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`knockout` is now true, false or 'inherit' (old files hold true or nothing, which still read as on and off); 'inherit' takes the enclosing group's effective setting, carried down in `RenderContext.knockout`. A group or layer that knocks out always gets its own layer, and its children are composited one by one: each is drawn into a scratch canvas the size of its visual bounds, its coverage is erased from the group's buffer (destination-out) and then it is drawn over (source-over). Coverage is the child drawn at opacity 1 and without its opacity mask (a memoised variant node so the child's caches still hit), which gives the PDF knockout result for an isolated group: earlier siblings vanish under a later one and the later one keeps its own opacity. With Opacity and Mask Define Knockout Shape (`knockoutShape`) the child as drawn is its own coverage, so it knocks out in proportion to its opacity, which in a normal-mode group equals ordinary compositing. Knockout groups are isolated: a child with a blend mode blends with the group's own pixels, not the art under the group.
+
+### src/engine/render.ts · gradient strokes
+- refers-to: src/engine/render.ts :: strokeWith, strokeShape, gradientStroke
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+`strokeShape` is the stroke geometry part of `strokeWith`, split out so a gradient stroke can draw its pieces into a layer and keep only what the same native stroke would cover (destination-in with the stroke drawn on a second canvas: drawing it straight onto the layer under an inside or outside clip would leave pixels outside the clip). The layer carries the stroke's opacity and blend mode; arrowheads are drawn after it like before.
+
 ## src/engine/filters.ts
 
 ### src/engine/filters.ts · model
@@ -436,6 +474,13 @@ A straight segment is a cubic whose handles sit on its ends, so its points are n
 - logged: v0.9.0 · 2026-10-07
 
 paper.js (MIT) does booleans, intersections, offset and simplify on real curves. It runs headless on a detached project; the document model stays formpth's and nothing else imports paper.
+
+### src/engine/kernel.ts · stroke outlines keep their corners
+- refers-to: src/engine/kernel.ts :: strokeToPath, simplifyKeepingCorners
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+The outline of a curved stroke is built from flattened offsets and then fitted back to curves. paper's `simplify` fitted straight across corners, so a butt end came out as a bulge about a tenth of the width deep and miter tips were rounded, visibly in Expand Appearance, Outline Stroke and now the clip of gradient strokes in SVG and PDF. The outline is now cut at every vertex that turns more than 0.45 radians (butt ends, square caps, miter tips, inner join points) and each run between corners is simplified on its own, so corners stay sharp and the curves between them stay curves. A closed outline with no such corner is simplified whole as before.
 
 ## src/engine/ops/recolor.ts
 
@@ -590,6 +635,26 @@ Paths and compound paths are targets; a path whose parent is a compound path (pi
 
 Expand Appearance bakes an item's vector effects into the piece it makes, as before, and now keeps its raster effects live on that piece (on the shape itself, or on a group of the stroke's pieces), where they used to be dropped.
 
+### src/engine/ops/expand.ts · shared stroke region and gradient strokes
+- refers-to: src/engine/ops/expand.ts :: strokeParts; src/engine/ops/paths.ts :: pathOperation outline_stroke; src/engine/stroke-gradient.ts :: strokeRegion, dashPath, gradientStrokeNodes
+- kind: removed-code
+- logged: v0.17.0 · 2026-10-08
+
+The stroke outline code (profile, dashes, alignment) moved to `strokeRegion` in `stroke-gradient.ts` so the exporters share it, and `dashPath` moved with it unchanged. A stroke with an Along or Across gradient expands to a clipping group of gradient-filled pieces (with an opacity mask for translucent stops) and its arrowheads, under a group with the stroke's opacity and blend mode. Outline Stroke now uses `strokeRegion` too: it used to ignore dashes and width profiles and gave inside and outside strokes half their width, because it intersected a stroke of the full width centred on the path instead of twice the width.
+
+```ts
+let outline: PathData;
+if (s.profile && s.profile.length) outline = strokeOutline(d, s);
+else {
+  const dashed = s.dash.length ? dashPath(d, s.dash, s.dashOffset) : d;
+  outline = strokeToPath(dashed, s.width * (s.align === 'center' ? 1 : 2), s.cap, s.join, s.miter);
+  if (s.align !== 'center' && d.every((sp) => sp.closed)) outline = s.align === 'inside' ? boolean(outline, d, 'intersect', 'nonzero', rule) : boolean(outline, d, 'subtract', 'nonzero', rule);
+}
+// Outline Stroke, ops/paths.ts:
+let d = strokeToPath(g.d, s.width, s.cap, s.join, s.miter);
+if (s.align !== 'center' && g.d.every((sp) => sp.closed)) d = s.align === 'inside' ? boolean(d, g.d, 'intersect', 'nonzero', g.rule) : boolean(d, g.d, 'subtract', 'nonzero', g.rule);
+```
+
 ## src/engine/style-libraries.ts
 
 ### src/engine/style-libraries.ts · STYLE_LIBRARIES
@@ -598,6 +663,22 @@ Expand Appearance bakes an item's vector effects into the piece it makes, as bef
 - logged: v0.17.0 · 2026-10-08
 
 Five libraries generated in code, every style built only from things formpth renders and exports: Shadows and Glows (drop shadows, a long shadow made with a Transform effect of 40 copies on the lower fill only, glows, a neon stroke blurred under sharp ones, feather), Buttons (gradients, round corners, a gloss fill inset with Offset Path, inner glows), Outlines (sticker strokes, offset and inset strokes, stitched dashes, roughened ink, zig zag), Textures (Effect Gallery grain, watercolor, halftone, mosaic, stained glass and texturizer on the fill only, so strokes stay crisp) and Scribbles (scribble fills and crosshatch, pencil-sketch strokes). Many use effects on one fill or stroke, which is what makes them more than a fill and a stroke. Effects are built from their defaults (`effectDefaults`) with a few overrides, so a parameter added later gets its default. `styleLibrary` matches an id or a name, with spaces, dashes and underscores alike.
+
+## src/engine/stroke-gradient.ts
+
+### src/engine/stroke-gradient.ts · Along and Across as clipped pieces
+- refers-to: src/engine/stroke-gradient.ts :: strokeGradient, gradientStrokeArt, buildArt, wedge, subStops, strokeRegion, gradientStrokeNodes
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+A gradient stroke whose `strokeMode` is along or across becomes art made of filled pieces, built once per stroke item and subpath list and reused while neither changes. Each subpath is flattened (tolerance a thirtieth of the half width, 0.05 to 0.35 pt); every flat segment gets a rectangle along its own normal from the stroke's band (half width each side, the profile's left and right width at that point, or the full width on the inside or outside for an aligned stroke, the side found by testing a point just off the first segment against the fill rule) plus a margin, and every corner gets a wedge on its outer side: a kite to the miter tip when the join is a miter within the limit, otherwise a fan of circumscribed arc points. Along paints each rectangle with a linear gradient from its start to its end holding the stops of that stretch of the length (stops with a midpoint are sampled in eighths) and each wedge with the colour at that corner; Across paints each rectangle with the gradient from one edge of its band to the other at its middle, and each wedge with a radial gradient from the corner sampled in sixteen steps. Rectangles overlap the next piece by up to a quarter of the half width and are drawn in path order, so every join is covered by the later piece and no background shows through anti-aliased edges. A closed subpath in Along mode puts the seam between end and start colour on the bisector of its first corner and splits that wedge in two. The pieces are clipped to the true stroke: on canvas by the native stroke (dashes, caps, joins and alignment exactly as Within), and in SVG, PDF, Expand Appearance and Outline Stroke by `strokeRegion`, the outlined stroke the expand code already made, now shared. Arrowheads are filled separately with the first and last piece's gradient.
+
+### src/engine/stroke-gradient.ts · translucent stops
+- refers-to: src/engine/stroke-gradient.ts :: GradientStrokeArt.alpha, opaqueStops, alphaStops; src/engine/render.ts :: gradientStroke; src/io/svg.ts :: Writer.gradientStroke; src/io/pdf.ts :: Painter.needsRaster
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+Overlapping pieces would double a translucent stop where they overlap. When any stop is translucent the pieces carry the colours fully opaque and a second set of the same pieces carries the opacity as grey, and the grey set becomes a luminance mask: `withLayer`'s mask on canvas, a `<mask>` in SVG, an opacity mask on the expanded group. PDF has no cheap equivalent in the vector writer, so an object with such a stroke is rasterised there, as objects with opacity masks already are.
 
 ## src/extensions/registry.ts
 
@@ -800,6 +881,13 @@ SVG filter primitives cannot express the Effect Gallery effects, so an object ca
 
 `shape` writes each item through `item` and, when the item has raster effects, wraps just that item's elements in a `<g filter>` built by the same `filter` as objects use, so a shadow on a stroke stays on the stroke. An Effect Gallery filter on any item bakes the whole object to an image, as one on the object does. Layers now write their own fills and strokes over their children, and their blend mode and raster effects on the layer `<g>`; a layer with a gallery effect is baked inside its `<g id>` so it still opens as a layer. The outside-stroke mask now honours even-odd.
 
+### src/io/svg.ts · knockout groups and gradient strokes
+- refers-to: src/io/svg.ts :: Writer.kids, Writer.knockout, Writer.gradientStroke, Writer.ko
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+SVG has no knockout, so a knockout group's children are each masked by the inverse of what comes later: a chain of `<g id="kosN">` in defs holds each later child at opacity 1 without its mask plus a `<use>` of the next link, and child i gets a luminance mask of a white rect with the chain from i + 1 drawn through a filter that turns every colour black and keeps alpha. One chain per group keeps the file linear in the number of children. Children with Opacity and Mask Define Knockout Shape are left out of the chain because in an isolated normal-mode group their knockout equals ordinary compositing. The mask and filter regions are the group's visual bounds. A gradient stroke is a `<g>` with the stroke's opacity and blend mode holding the pieces under a clip path of `strokeRegion`, plus the arrowheads; translucent stops add a mask of the grey pieces.
+
 ## src/io/pdf.ts
 
 ### src/io/pdf.ts · group and layer items
@@ -808,6 +896,20 @@ SVG filter primitives cannot express the Effect Gallery effects, so an object ca
 - logged: v0.17.0 · 2026-10-08
 
 Groups and layers draw their own fills and strokes over their children; the PDF writer skipped them, so a group stroke was on screen and in SVG but not in PDF. An object whose items carry raster effects is rasterised at the document's resolution, like one with raster effects of its own.
+
+### src/io/pdf.ts · knockout groups
+- refers-to: src/io/pdf.ts :: Painter.node, group, kids, rasterize, extGState ais, invert
+- kind: rationale
+- logged: v0.17.0 · 2026-10-08
+
+A knockout group is always a transparency group form XObject with `/K true`, and each child with more than one painting operation is its own form so it knocks out as one object, as on canvas. `/K` alone was not enough: poppler's Splash renderer (pdftoppm) and PDFium (Chrome's viewer) ignore it and drew the group as an ordinary one; only poppler's Cairo backend honoured it. So the writer also builds the knockout out of soft masks, which every viewer tested supports: each child but the last is drawn under an `/S /Alpha` soft mask whose group is a chain of forms holding the later children at opacity 1, with a transfer function 1 minus x, so it shows only where nothing later covers it. With `/K` honoured the result is the same, since the masked areas are already empty. Children with Opacity and Mask Define Knockout Shape are left out of the masks and drawn with `/AIS true`; because Cairo ignores `/AIS` and then knocked them out fully, `/K` is only written when no child sets that option (without `/K`, the masks give the right picture). The mask forms all take the whole group's box: Splash leaves a soft mask at zero outside its group's BBox instead of applying the transfer function, which hid parts of children. A rasterised child in a knockout group is drawn with `/AIS true` so its image's soft mask counts as shape; its opacity then also counts as shape, a small difference from canvas for semi-transparent rasterised children.
+
+### src/io/pdf.ts · gradient strokes
+- refers-to: src/io/pdf.ts :: Painter.gradientStroke, Painter.shape, node multi
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Along and Across strokes are the pieces filled with shading patterns inside a clip of `strokeRegion`; with stroke opacity or a blend mode they go in an uncompressed form XObject drawn with that ExtGState so overlapping pieces do not darken, and arrowheads are filled after it. An object with such a stroke (or a brush stroke) counts as several painting operations, so node opacity on it also makes a form. Translucent stops rasterise the object (see stroke-gradient.ts).
 
 ### src/io/pdf.ts · patterns inside form XObjects
 - refers-to: src/io/pdf.ts :: Painter.pattern
@@ -1112,6 +1214,13 @@ Rows store their action in `dataset.action`. `dataset.key` belongs to `patchList
 - logged: v0.12.0 · 2026-10-07
 
 New Brush asks the type and name, then the type's options, the same dialog Brush Options uses. Scatter, art and pattern brushes take the selected artwork: groups are flattened and every stroke is expanded into filled shapes first, because the brush engine draws filled pieces only, then the art moves to the origin. New brushes keep the art's own colours (colorization None), as Illustrator does. Deleting a brush that is in use leaves those strokes as plain strokes. The panel draws each brush along the same S-curve through the real brush geometry instead of a sketch of its type, at a stroke weight that fits its art in the row; a row redraws only when its brush's definition changes (`data-sig`).
+
+### src/ui/panels/stroke.ts · Transparency panel knockout and mask controls
+- refers-to: src/ui/panels/stroke.ts :: TransparencyPanel, triCheck; src/styles/formpth.css :: .cv-transp-mask
+- kind: explainer
+- logged: v0.17.0 · 2026-10-08
+
+Knockout Group is a native checkbox cycled off, on, inherit (shown as the indeterminate dash, with a title saying which) and back to off, as Illustrator's three-state box; every state change is one Knockout step. Opacity and Mask Define Knockout Shape sits under it. The mask row gained Disable and Link beside Clip and Invert Mask and wraps onto a second line; it is still built once and only hidden. All values are patched with the guarded setters, including `indeterminate`.
 
 ## src/ui/errors.ts
 
