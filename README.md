@@ -13,7 +13,7 @@
 
 formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, type that outlines to paths, symbols and the symbolism tools, blends, repeats, Live Paint, gradient meshes, pattern editing and live image trace. It saves its own `.fpth` projects, reads and writes SVG and PDF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 68 tools.
 
-**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 25,600 lines of TypeScript, 1,600 of CSS, 2,100 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
+**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 26,400 lines of TypeScript, 1,600 of CSS, 2,100 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
 
 ## Highlights
 
@@ -115,7 +115,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 56 of 76 rows against Illustrator 30 (49 Full, 14 Partial, 13 None), 73.7 percent. Not built yet: Puppet Warp, Shaper, the Perspective Grid, Dimension, graphs, Intertwine, variable fonts, Touch Type, variables, EPS and DXF, and three generative rows. See `docs/PARITY.md`.
+- **Parity.** 58.5 of 76 rows against Illustrator 30 (52 Full, 13 Partial, 11 None), 77.0 percent. Not built yet: Puppet Warp, Shaper, the Perspective Grid, Dimension, graphs, Intertwine, variables, EPS and DXF, and three generative rows. See `docs/PARITY.md`.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors

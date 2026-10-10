@@ -12,9 +12,9 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list.
 
-## Score at v0.17.0
+## Score at v0.18.0
 
-**56 of 76 scored rows, 73.7 percent:** 49 Full, 14 Partial, 13 None. The tally is at the end.
+**58.5 of 76 scored rows, 77.0 percent:** 52 Full, 13 Partial, 11 None. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -98,18 +98,18 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | 3D and Materials | Partial | Extrude & Bevel (depth, cap, classic and rounded bevels), Revolve (angle, offset, either edge), Inflate and Plane as live effects on paths, compound paths, type and groups; position presets, X, Y and Z rotation and perspective, Inflate included; plastic, matte, metal, wireframe and flat materials; light direction, intensity, ambient, highlight and shading colour; Map Art (a symbol on the front face of an Extrude or Plane, scaled, offset and shaded with the surface); shadows behind or below with distance, softness and opacity; the 3D and Materials panel; vector faces in SVG and PDF; Expand Appearance to shaded paths. Not built: ray-traced rendering, more than one light, and Substance materials |
 | Effect Gallery raster filters | Full | The Effect Gallery with live thumbnails, options and preview; 55 Photoshop effects (Artistic 15, Blur 2 beside Gaussian Blur, Brush Strokes 8, Distort 3, Pixelate 4, Sketch 14, Stylize 1, Texture 6, Video 2) as live effects in the Appearance panel; the Rasterize effect and Document Raster Effects Settings; PDF and SVG export them at the document's raster resolution |
 
-## Type · 5.5 of 8
+## Type · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Point and area type | Full | Point and area type typed on the canvas with a caret, selection, IME and clipboard; area type rows, columns, gutter, inset and first baseline; area type in any closed shape flows inside the shape; Vertical Type and Vertical Area Type set in columns right to left with upright and rotated glyphs, a vertical caret, Type Orientation, and the same layout in outlines, SVG and PDF |
 | Type on a path | Full | Type and Vertical Type on any path, including live shapes; on-canvas start, end and centre brackets; Type on a Path Options with Rainbow, Skew, 3D Ribbon, Stair Step and Gravity, alignment to the path, spacing and Flip |
-| Character and paragraph with styles | Partial | Missing: hyphenation in line breaking, tabs, justification settings, character rotation and optical kerning from outlines. Built: Character and Paragraph panels; Character Styles and Paragraph Styles panels with new from selection, apply to a range or an object, redefine, delete, rename, override marks and the Normal styles |
+| Character and paragraph with styles | Full | Character panel with character rotation and optical kerning measured from glyph outlines; Paragraph panel with hyphenation in line breaking (words longer than, after first, before last, limit, zone, capitalized words; a rule-based English splitter, not a dictionary), Justification settings (word and letter spacing, glyph scaling, single word justification) and Bullets and Numbering; a Tabs panel with left, centre, right and decimal stops and leaders; Character Styles and Paragraph Styles panels with new from selection, apply to a range or an object, redefine, delete, rename, override marks and the Normal styles |
 | Threading and text wrap | Full | Threaded Text Create, Release Selection and Remove Threading; in and out ports, overflow marks, thread lines, loaded text from the out port into a click, a drag or a closed path; Text Wrap Make, Release and Options with offset and invert, around any object above the type in its layer |
 | OpenType and glyphs | Full | Ligatures, contextual alternates, discretionary ligatures, swash, stylistic alternates and sets, titling, ordinals, fractions, slashed zero, case forms, four figure styles and four positions, shaped from the font through its GSUB lookups (contextual and chaining included) and drawn as its glyphs on the canvas, in outlines and PDF; Find Font; the Glyphs panel inserts any glyph and offers the alternates of the selected character |
 | Create Outlines | Full | Glyph outlines through opentype.js, per glyph (shaped glyphs included), as compound paths in their colours |
-| Variable fonts | None | No font variation axes in the type model, panels or renderer |
-| Touch Type tool | None | No Touch Type tool and no per-character transforms |
+| Variable fonts | Full | Variable faces marked and filterable in the font menu, named instances as styles, a slider per fvar axis; glyphs drawn at the axes (gvar, CFF2, HVAR) on the canvas, in Create Outlines and PDF; SVG keeps `font-variation-settings`. GPOS kerning is not varied by the axes |
+| Touch Type tool | Full | Touch Type (Shift+T) moves, scales and rotates single characters with a box and handles, arrow nudges and options-bar values; the text stays live and the transforms follow their characters through editing, outlines, SVG and PDF |
 
 ## Generative AI · 1 of 5
 
@@ -158,20 +158,19 @@ formpth has no generative model of its own. The Assistant panel drives the MCP t
 | Paths and Pathfinder | 7 | 8 |
 | Paint and colour | 7 | 8 |
 | Effects and live objects | 8 | 10 |
-| Type | 5.5 | 8 |
+| Type | 8 | 8 |
 | Generative AI | 1 | 5 |
 | Files, colour and output | 6.5 | 11 |
-| **Total** | **56** | **76** |
+| **Total** | **58.5** | **76** |
 
-49 rows Full, 14 Partial, 13 None: 73.7 percent.
+52 rows Full, 13 Partial, 11 None: 77.0 percent.
 
 ## Next to close
 
 In release order:
 
-1. v0.18.0, type depth: variable fonts, Touch Type, hyphenation, tabs, justification, character rotation and optical kerning.
-2. v0.19.0: Puppet Warp, the Dimension tool, Intertwine and the Shaper tool.
-3. v0.20.0: graphs, variables and data merge, and Actions with Batch.
-4. v0.21.0: the Perspective Grid.
-5. v0.22.0: swatch libraries and Separation spaces, the Recolor colour wheel, the Bristle brush and brush libraries, symbol editing and libraries, full-resolution Image Trace, and linked images.
-6. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
+1. v0.19.0: Puppet Warp, the Dimension tool, Intertwine and the Shaper tool.
+2. v0.20.0: graphs, variables and data merge, and Actions with Batch.
+3. v0.21.0: the Perspective Grid.
+4. v0.22.0: swatch libraries and Separation spaces, the Recolor colour wheel, the Bristle brush and brush libraries, symbol editing and libraries, full-resolution Image Trace, and linked images.
+5. v0.23.0: DXF and EPS, and Generative Shape Fill, Text to Pattern and Retype on the person's configured model.
