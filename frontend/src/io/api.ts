@@ -54,6 +54,13 @@ export const api = {
   async fetchAsset(url: string): Promise<Blob> { return (await request(url.replace(/^\/api/, ''))).blob(); },
   async exportFile(blob: Blob, name: string): Promise<string> { return (await json<{ path: string }>(await request('/io/export', { method: 'POST', body: form({ name }, [{ name, blob }], 'file') }))).path; },
 
+  async actionSets(): Promise<{ folder: string; sets: Array<{ file: string; set: unknown }> }> { return json(await request('/actions/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })); },
+  async saveActionSet(name: string, set: unknown): Promise<{ path: string }> { return json(await request('/actions/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, set }) })); },
+  async deleteActionSet(name: string): Promise<void> { await request('/actions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }); },
+  async listFolder(folder: string, kinds: string[]): Promise<{ folder: string; files: Array<{ name: string; path: string; size: number }> }> { return json(await request('/files/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder, kinds }) })); },
+  async readFile(path: string): Promise<Blob> { return (await request('/files/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) })).blob(); },
+  async writeFile(folder: string, name: string, blob: Blob): Promise<string> { return (await json<{ path: string }>(await request('/files/write', { method: 'POST', body: form({ folder, name }, [{ name, blob }], 'file') }))).path; },
+
   async fonts(): Promise<FontInfo[]> { try { return await json<FontInfo[]>(await request('/fonts')); } catch { return []; } },
   async findFont(family: string, style: string): Promise<FontInfo | null> { try { return await json<FontInfo>(await request(`/fonts/find?family=${encodeURIComponent(family)}&style=${encodeURIComponent(style)}`)); } catch { return null; } },
   async fontFile(id: string): Promise<ArrayBuffer> { return (await request(`/fonts/file/${encodeURIComponent(id)}`)).arrayBuffer(); },

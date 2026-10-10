@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.core import config
-from app.routers import fonts, io, llm, mcp, nodemode, plugins, projects, system
+from app.routers import batch, fonts, io, llm, mcp, nodemode, plugins, projects, system
 from app.services import sessions
 
 
@@ -25,6 +25,7 @@ app.include_router(llm.router)
 app.include_router(mcp.router)
 app.include_router(plugins.router)
 app.include_router(nodemode.router)
+app.include_router(batch.router)
 
 _dist = config.dist_dir()
 if _dist is not None:
