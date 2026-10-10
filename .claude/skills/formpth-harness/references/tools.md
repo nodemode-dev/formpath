@@ -14,7 +14,8 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`, `shaper`
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `new_brush`, `brush_library`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
-- Type: `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
+- Type: `retype`, `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
+- Generative: `generative_shape_fill`, `generate_patterns`
 - Graphs and data: `graph`, `variables`
 - Commands: `actions`, `list_commands`, `run_command`
 - History: `undo`, `redo`
@@ -69,9 +70,14 @@ Opens a new document with one or more artboards.
 
 ## open_file
 
-Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, or an image (PNG, JPEG, WebP, GIF) as a new document.
+Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF) as a new document. DWG is not supported: save it as DXF first.
 
 - `path`: string; required
+- `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); DXF only: what one drawing unit is; default the file's own units, else mm for metric drawings and in otherwise.
+- `drawing_scale`: number; default 1; DXF only: multiplies the drawing (0.01 opens a 1:100 plan at one hundredth size).
+- `layout`: string; default "Model"; DXF only: Model, or the name of a paper space layout.
+- `merge_layers`: boolean; default false; DXF only: put every DXF layer into one layer.
+- `fit_artboard`: boolean; default false; DXF only: scale the drawing to fit a Letter artboard instead of using its units.
 
 ## save_project
 
@@ -81,7 +87,7 @@ Saves the document as a formpth project (.fpth) at an absolute path; everything 
 
 ## export_file
 
-Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .png, .jpg or .webp.
+Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .png, .jpg or .webp.
 
 - `path`: string; required
 - `scope`: string (artboard | document | selection | all_artboards); default "artboard"
@@ -89,7 +95,12 @@ Exports the art to an absolute path; the extension chooses the format: .svg, .pd
 - `scale`: number; default 1
 - `quality`: number; default 0.92
 - `transparent`: boolean; default false
-- `outline_text`: boolean; default false
+- `outline_text`: boolean; default false; SVG and DXF: type as outlines (DXF writes TEXT otherwise).
+- `color`: string (rgb | cmyk); EPS only: colour model; default the document's colour mode.
+- `dxf_version`: string (2000 | R12); default "2000"; DXF only: 2000 writes splines, solid hatches for fills, true colours and lineweights; R12 writes polylines with arcs.
+- `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); default "mm"; DXF only: the drawing units.
+- `drawing_scale`: number; default 1; DXF only: drawing units per unit of art (100 writes a 1:100 drawing at full size).
+- `scale_lineweights`: boolean; default false; DXF only: scale lineweights with drawing_scale.
 
 ## switch_document
 
@@ -100,7 +111,7 @@ Makes another open document the active one, by its index or name from get_docume
 
 ## place_image
 
-Places an image file (absolute path: PNG, JPEG, WebP, GIF or SVG) into the document at x, y, embedded; width scales it in proportion. With link true (raster images only) the image stays linked to its file: formpth reads it again when it changes (see the links tool).
+Places an image file (absolute path: PNG, JPEG, WebP, GIF, or SVG, EPS and DXF as editable vector groups) into the document at x, y, embedded; width scales it in proportion. With link true (raster images only) the image stays linked to its file: formpth reads it again when it changes (see the links tool).
 
 - `path`: string; required
 - `x`: number
@@ -845,6 +856,50 @@ Makes a pattern swatch from the objects, tiled as a grid, brick or hex, and opti
 - `h_spacing`: number
 - `v_spacing`: number
 - `apply_to`: array; Object ids from get_document; the selection when left out.
+
+## generative_shape_fill
+
+Generative Shape Fill: asks the language model set for the Assistant (Preferences > Plugins) for vector art that fills a closed path, imports it as editable paths, fits it to the shape and clips it there. The result is a clipping group whose last child is the original shape. Fails with a clear message when no model is set.
+
+- `id`: string; A closed path or compound path; the selection when left out.
+- `prompt`: string; What to draw; optional.
+- `shape_strength`: number; default 50; How closely the art follows the outline: 100 takes its silhouette, 0 composes freely and only crops.
+- `detail`: string (low | medium | high); default "medium"
+- `variations`: integer; default 1; How many to ask for; one is applied.
+- `pick`: integer; Which variation to apply; default the first that worked.
+
+Note: reaches outside this computer.
+
+## generate_patterns
+
+Text to Pattern: asks the language model set for the Assistant for seamless vector pattern tiles from a prompt and saves each as a pattern swatch made by formpth's pattern engine (editable with edit_pattern). Fails with a clear message when no model is set.
+
+- `prompt`: string; required
+- `colors`: array; Up to 12 colours (#rrggbb and the like); the tiles use only these.
+- `preset`: string (any | warm | cool | pastel | earth | vivid | mono | forest | ocean | document); A colour preset when colors is left out; document takes the document's colour swatches.
+- `density`: integer; default 3; 1 very sparse to 5 packed.
+- `variations`: integer; default 2
+- `tile_size`: number; default 96; Tile width and height in points.
+- `name`: string; Base name of the swatches.
+- `fill_selection`: boolean; default false; Fill the objects in ids (or the selection) with the first pattern.
+- `ids`: array; Object ids from get_document; the selection when left out.
+
+Note: reaches outside this computer.
+
+## retype
+
+Retype: identifies the font of outlined type or of text in a placed image and lists the 10 closest installed fonts, compared by rendering the text in each and measuring shape overlap. A model that reads images (set in Preferences > Plugins) reads the text first; without one, outlined type is read by matching letter shapes and for images text must be given. apply true replaces the outlines (or covers the image) with live text in the chosen font, sized and placed to match.
+
+- `ids`: array; Object ids from get_document; the selection when left out.
+- `text`: string; The words, when known; skips reading them.
+- `region`: object; Images only: the part to read, in document points.
+- `apply`: boolean; default false
+- `pick`: integer; default 0; Which listed match to apply.
+- `font`: string; Apply this installed family instead of a listed match.
+- `style`: string
+- `keep_image`: boolean; default true; Images: keep the image under the new text.
+
+Note: reaches outside this computer.
 
 ## edit_pattern
 
