@@ -2,10 +2,8 @@ import { docArtBounds, renderDocument } from '../../engine/render';
 import { emptyRect, isEmptyRect, unionRect } from '../../engine/geometry';
 import { firstFill, firstStroke, describePaint } from '../../engine/paint';
 import type { Engine, Pt } from '../../engine';
-import type { Commands } from '../commands';
-import { el, patchList, q, setClass, setText, setTitle } from '../dom';
+import { el, patchList, q, setClass, setText } from '../dom';
 import { icon } from '../icons';
-import { askForm } from '../form-dialog';
 
 const UNIT: Record<string, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
 
@@ -104,9 +102,14 @@ export class HistoryPanel {
   private readonly rows: HTMLElement;
   private frame = 0;
 
-  constructor(private readonly engine: Engine) {
+  constructor(private readonly engine: Engine, options?: () => void) {
     this.rows = q(this.body, '.cv-history-list');
     this.rows.addEventListener('click', (e) => { const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-history-row'); if (r) engine.jumpHistory(Number(r.dataset.index)); });
+    const foot = el('<div class="cv-panel-foot"></div>');
+    const mk = (ic: string, label: string, run: () => void): void => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(ic, 16)}</button>`); b.addEventListener('click', run); foot.appendChild(b); };
+    mk('newFile', 'New Document from the current state', () => { engine.newDocumentFromState(); });
+    if (options) mk('settings', 'History Options (undo steps kept)', options);
+    this.body.appendChild(foot);
     for (const ev of ['history', 'projects', 'active'] as const) engine.on(ev, () => this.queue());
     this.sync();
   }
@@ -134,72 +137,3 @@ export class HistoryPanel {
   }
 }
 
-export interface Action { id: string; name: string; steps: Array<{ id: string; label: string }> }
-const ACTIONS_KEY = 'formpth.actions';
-
-export class ActionsPanel {
-  readonly body = el('<div class="cv-kit-page cv-actp"><div class="cv-actp-list" role="listbox" aria-label="Actions"></div></div>');
-  private readonly list: HTMLElement;
-  private actions: Action[] = [];
-  private picked: string | null = null;
-  private recording: string | null = null;
-  private readonly recBtn: HTMLButtonElement;
-
-  constructor(private readonly commands: Commands, private readonly notify: (t: string) => void) {
-    try { const v = JSON.parse(localStorage.getItem(ACTIONS_KEY) ?? '[]'); if (Array.isArray(v)) this.actions = v.filter((a) => a && typeof a.id === 'string' && Array.isArray(a.steps)); } catch { }
-    if (!this.actions.length) this.actions = [{ id: 'a-default', name: 'Outline and expand', steps: [{ id: 'outline-stroke', label: 'Outline Stroke' }, { id: 'expand-appearance', label: 'Expand Appearance' }] }];
-    this.list = q(this.body, '.cv-actp-list');
-    const foot = el('<div class="cv-panel-foot"></div>');
-    const mk = (name: string, label: string, run: () => void): HTMLButtonElement => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', run); foot.appendChild(b); return b; };
-    mk('close', 'Stop Recording', () => { this.recording = null; this.sync(); });
-    this.recBtn = mk('success', 'Begin Recording into the chosen action', () => { if (!this.picked) return; this.recording = this.picked; this.sync(); this.notify('Recording: run commands from the menus and they are added to the action.'); });
-    mk('play', 'Play the chosen action', () => this.play());
-    mk('add', 'New Action', () => void (async () => { const v = await askForm('New Action', [{ kind: 'text', key: 'name', label: 'Name', value: `Action ${this.actions.length + 1}` }], { ok: 'Record' }); if (!v) return; const a: Action = { id: `a${Date.now().toString(36)}`, name: String(v.name) || 'Action', steps: [] }; this.actions.push(a); this.picked = a.id; this.recording = a.id; this.save(); this.sync(); })());
-    mk('delete', 'Delete the chosen action', () => { this.actions = this.actions.filter((a) => a.id !== this.picked); this.picked = null; this.save(); this.sync(); });
-    this.list.addEventListener('click', (e) => { const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-actp-row'); if (r?.dataset.action) { this.picked = r.dataset.action; this.sync(); } });
-    this.list.addEventListener('dblclick', () => this.play());
-    this.body.appendChild(foot);
-    commands.onRun = (c) => {
-      if (!this.recording || /^(undo|redo|zoom|fit|actual|panel-|toggle-|screen-|help|about|settings|shortcuts|play-action)/.test(c.id)) return;
-      const a = this.actions.find((x) => x.id === this.recording);
-      if (!a) return;
-      a.steps.push({ id: c.id, label: commands.label(c).replace(/\.\.\.$/, '') });
-      this.save(); this.sync();
-    };
-    this.sync();
-  }
-
-  play(id = this.picked): void {
-    const a = this.actions.find((x) => x.id === id);
-    if (!a) return;
-    const was = this.recording;
-    this.recording = null;
-    let n = 0;
-    for (const s of a.steps) if (this.commands.run(s.id)) n++;
-    this.recording = was;
-    this.notify(`Played ${a.name}: ${n} of ${a.steps.length} steps ran.`);
-  }
-
-  list_(): Action[] { return this.actions; }
-
-  private save(): void { try { localStorage.setItem(ACTIONS_KEY, JSON.stringify(this.actions)); } catch { } }
-
-  private sync(): void {
-    const rows = this.actions.flatMap((a) => [{ key: a.id, label: a.name, step: false, a }, ...a.steps.map((s, i) => ({ key: `${a.id}:${i}`, label: s.label, step: true, a }))]);
-    patchList(this.list, rows, {
-      key: (r) => r.key,
-      create: (r) => { const n = el('<div class="cv-actp-row" role="option"><span class="cv-actp-label"></span></div>'); this.fill(n, r); return n; },
-      update: (n, r) => this.fill(n, r),
-    });
-    setClass(this.recBtn, 'is-active', !!this.recording);
-  }
-
-  private fill(n: HTMLElement, r: { key: string; label: string; step: boolean; a: Action }): void {
-    n.dataset.action = r.a.id;
-    setText(q(n, '.cv-actp-label'), r.label);
-    setClass(n, 'is-step', r.step);
-    setClass(n, 'is-picked', !r.step && r.a.id === this.picked);
-    setClass(n, 'is-recording', !r.step && r.a.id === this.recording);
-    setTitle(n, r.step ? '' : `${r.a.steps.length} steps · double-click to play`);
-  }
-}

@@ -41,6 +41,8 @@ export function formatKeys(combo: string): string {
 export class Commands {
 
   onRun: ((cmd: Command) => void) | null = null;
+  onBefore: ((cmd: Command) => void) | null = null;
+  onAfter: ((cmd: Command) => void) | null = null;
   private readonly map = new Map<string, Command>();
   private readonly byKey = new Map<string, Command>();
   private readonly defaults = new Map<string, string[]>();
@@ -92,7 +94,8 @@ export class Commands {
   run(id: string): boolean {
     const cmd = this.map.get(id);
     if (!cmd || !this.enabled(cmd)) return false;
-    cmd.run();
+    this.onBefore?.(cmd);
+    try { cmd.run(); } finally { this.onAfter?.(cmd); }
     this.onRun?.(cmd);
     return true;
   }

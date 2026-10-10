@@ -49,7 +49,8 @@ import { AssistantPanel } from './ui/panels/assistant';
 import { ColorPanel, GradientPanel, SwatchesPanel } from './ui/panels/color';
 import { ColorPicker } from './ui/panels/color-picker';
 import { HelpDialog } from './ui/panels/help';
-import { ActionsPanel, HistoryPanel, InfoPanel, NavigatorPanel } from './ui/panels/navigator';
+import { HistoryPanel, InfoPanel, NavigatorPanel } from './ui/panels/navigator';
+import { ActionsPanel } from './ui/panels/actions';
 import { PluginsDialog } from './ui/panels/plugins-dialog';
 import { effectDialog, previewEdit } from './ui/panels/preview-edit';
 import { EffectGallery } from './ui/panels/effect-gallery';
@@ -63,6 +64,10 @@ import { ColorGuidePanel } from './ui/panels/color-guide';
 import { PatternOptionsPanel } from './ui/panels/pattern-options';
 import { ImageTracePanel } from './ui/panels/image-trace';
 import { AssetExportPanel } from './ui/panels/asset-export';
+import { GraphDataWindow } from './ui/panels/graph-data';
+import { VariablesPanel } from './ui/panels/variables';
+import { GraphDesignDialog, graphColumnDialog, graphMarkerDialog, graphSizeDialog, graphTypeDialog } from './ui/panels/graph-dialogs';
+import { pendingGraph } from './tools/graph';
 import { CHECKER_CELL, CHECKER_PAIR, applyPrefs, loadPrefs, savePrefs, type Prefs } from './ui/prefs';
 import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './ui/properties';
 import { Rail } from './ui/rail';
@@ -124,7 +129,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group',appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group',appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -180,19 +185,30 @@ export function startApp(): void {
   let relinkId: string | null = null;
   relinkInput.addEventListener('change', () => { const f = relinkInput.files?.[0]; relinkInput.value = ''; if (f && relinkId) void relink(relinkId, f); });
   const linksP = new LinksPanel(engine, (id) => { relinkId = id; relinkInput.click(); });
-  const navP = new NavigatorPanel(engine), infoP = new InfoPanel(engine), historyP = new HistoryPanel(engine), actionsP = new ActionsPanel(commands, (t) => toast(t));
+  const navP = new NavigatorPanel(engine), infoP = new InfoPanel(engine), historyP = new HistoryPanel(engine, () => void historyOptions());
+  const actionsP = new ActionsPanel(engine, commands, { openFile: (f) => openFiles([f]), deliver: (b, n) => deliver(b, n), notify: (t, kind) => toast(t, kind ?? 'info'), version: VERSION, desktop: () => !!caps?.desktop });
+  async function historyOptions(): Promise<void> {
+    const v = await askForm('History Options', [{ kind: 'number', key: 'limit', label: 'Undo steps kept', value: engine.historyLimit, min: 10, max: 1000, step: 1 }, { kind: 'note', text: 'Older steps beyond the limit are dropped from every open document. The same setting is in Preferences > File Handling.' }]);
+    if (!v) return;
+    prefs = { ...prefs, historyStates: Math.round(Number(v.limit)) };
+    savePrefs(prefs);
+    applyPrefs(engine, prefs);
+  }
   const layersP = new LayersPanel(engine, contextMenu);
   const propsP = new PropertiesPanel(engine, (c) => { commands.run(c); });
   const xformP = new TransformPanel(engine), alignP = new AlignPanel(engine), pfP = new PathfinderPanel(engine);
   const charP = new CharacterPanel(engine), paraP = new ParagraphPanel(engine), glyphsP = new GlyphsPanel(engine), tabsP = new TabsPanel(engine);
   typing.redraw = () => { stage.ctx.redraw(); glyphsP.caretMoved(); };
   const charStylesP = new TextStylesPanel(engine, 'char'), paraStylesP = new TextStylesPanel(engine, 'para');
+  const graphData = new GraphDataWindow(engine);
+  const variablesP = new VariablesPanel(engine, { deliver: (b, n) => deliver(b, n), version: VERSION, desktop: () => !!caps?.desktop });
+  let graphDesign: GraphDesignDialog | null = null;
   void historyP; void navP;
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }], 'Color');
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
   new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }], 'Symbols');
-  new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
+  new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'variables', label: 'Variables', body: variablesP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
   new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }, { id: 'tabs', label: 'Tabs', body: tabsP.body }], 'Type');
@@ -536,6 +552,7 @@ export function startApp(): void {
     ensureFace,
   });
   agents.commands = commands;
+  agents.actions = actionsP;
   agents.setEnabled(loadPrefs().agentsAllowed);
   window.addEventListener('formpth:agents', (ev) => agents.setEnabled((ev as CustomEvent<boolean>).detail === true));
   const assistant = new AssistantPanel(engine, agents);
@@ -852,6 +869,12 @@ export function startApp(): void {
     { id: 'intertwine-release', label: 'Release Intertwine', enabled: () => engine.intertwineTargets().length > 0, run: () => engine.releaseIntertwine() },
     { id: 'intertwine-edit', label: 'Edit Intertwine', enabled: () => engine.intertwineTargets().length > 0, run: () => { const t = engine.intertwineTargets()[0]; if (t) { engine.select([t]); engine.setTool('intertwine'); } } },
     { id: 'shaper-expand', label: 'Expand Shaper Group', enabled: () => engine.shaperTargets().length > 0, run: () => engine.expandShaper() },
+    { id: 'graph-type', label: 'Type...', enabled: has, run: () => void graphTypeDialog(engine) },
+    { id: 'graph-data', label: 'Data...', keys: ['Alt+Shift+Mod+G'], enabled: () => engine.graphTargets().length > 0, run: () => graphData.open() },
+    { id: 'graph-design', label: 'Design...', enabled: has, run: () => (graphDesign ??= new GraphDesignDialog(engine)).show() },
+    { id: 'graph-column', label: 'Column...', enabled: () => engine.graphTargets().length > 0 && !!engine.doc?.graphDesigns?.length, run: () => void graphColumnDialog(engine) },
+    { id: 'graph-marker', label: 'Marker...', enabled: () => engine.graphTargets().length > 0 && !!engine.doc?.graphDesigns?.length, run: () => void graphMarkerDialog(engine) },
+    { id: 'graph-size', label: 'Graph Size...', enabled: has, run: () => void graphSizeDialog(engine, pendingGraph.type, pendingGraph.at).then((id) => { if (id) graphData.open(id); }) },
     { id: 'trace-expand', label: 'Expand Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.expandTrace() },
     { id: 'trace-release', label: 'Release Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.releaseTrace() },
     { id: 'embed-image', label: 'Embed Image', enabled: () => kindSel('image'), run: () => engine.applyToSelection('Embed Image', (n) => (n.kind === 'image' ? { ...n, link: undefined } : n)) },
@@ -968,6 +991,9 @@ export function startApp(): void {
     { id: 'pf-unite', label: 'Unite', enabled: sel, run: () => engine.pathfinder('unite') },
     ...pfs.filter((x) => x !== 'unite').map((x) => ({ id: `pf-${x}`, label: PF_LABEL[x], enabled: sel, run: () => engine.pathfinder(x) })),
     { id: 'play-action', label: 'Play Action', run: () => actionsP.play() },
+    { id: 'action-batch', label: 'Batch...', run: () => { showPanel('actions'); actionsP.openBatch(); } },
+    { id: 'history-new-document', label: 'New Document from History State', enabled: has, run: () => { engine.newDocumentFromState(); } },
+    { id: 'history-options', label: 'History Options...', run: () => void historyOptions() },
   );
 
   function stepSelection(dir: 1 | -1): void {
@@ -993,7 +1019,7 @@ export function startApp(): void {
   }
 
   const menus: MenuDef[] = [
-    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
+    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
     { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'clear', '-', 'find-replace', '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'reset-bounding-box'] },
@@ -1009,6 +1035,7 @@ export function startApp(): void {
       { label: 'Image Trace', items: ['image-trace', 'image-trace-expand', '-', 'trace-release', 'trace-expand', '-', 'embed-image'] },
       { label: 'Live Paint', items: ['live-paint-make', 'live-paint-merge', 'live-paint-release', 'live-paint-gap', 'live-paint-expand'] },
       { label: 'Intertwine', items: ['intertwine-make', 'intertwine-release', 'intertwine-edit'] }, '-',
+      { label: 'Graph', items: ['graph-type', 'graph-data', '-', 'graph-design', 'graph-column', 'graph-marker'] }, '-',
       { label: 'Text Wrap', items: ['wrap-make', 'wrap-release', '-', 'wrap-options'] },
       { label: 'Clipping Mask', items: ['make-clip', 'release-clip'] },
       { label: 'Compound Path', items: ['compound-make', 'compound-release'] },

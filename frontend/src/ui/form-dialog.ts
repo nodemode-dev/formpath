@@ -20,8 +20,23 @@ export interface FormOpts {
   width?: number;
 }
 
+export const formHooks: { supply: { values: Record<string, FieldValue>; modal: boolean } | null; onResult: ((title: string, v: Record<string, FieldValue> | null) => void) | null } = { supply: null, onResult: null };
+
+function withValues(fields: Field[], values: Record<string, FieldValue>): Field[] {
+  return fields.map((f) => {
+    if (f.kind === 'note' || !(f.key in values)) return f;
+    const v = values[f.key];
+    if (f.kind === 'number') return typeof v === 'number' && Number.isFinite(v) ? { ...f, value: v } : f;
+    if (f.kind === 'check') return { ...f, value: !!v };
+    if (f.kind === 'select') return f.choices.some((c) => c[0] === String(v)) ? { ...f, value: String(v) } : f;
+    return { ...f, value: String(v) };
+  });
+}
+const defaults = (fields: Field[]): Record<string, FieldValue> => Object.fromEntries(fields.flatMap((f) => (f.kind === 'note' ? [] : [[f.key, f.value]])));
+
 export class FormDialog extends Dialog {
   private resolve: ((v: Record<string, FieldValue> | null) => void) | null = null;
+  private title = '';
   private readers: Array<() => [string, FieldValue]> = [];
   private opts: FormOpts = {};
   private readonly okBtn: HTMLButtonElement;
@@ -40,7 +55,7 @@ export class FormDialog extends Dialog {
     this.foot.prepend(this.previewRow);
     this.previewBox.addEventListener('change', () => this.update());
     this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); this.finish(this.values()); } });
-    this.onClose = () => { if (!this.settled) { this.settled = true; this.opts.cancel?.(); this.resolve?.(null); this.resolve = null; } };
+    this.onClose = () => { if (!this.settled) { this.settled = true; this.opts.cancel?.(); this.resolve?.(null); this.resolve = null; formHooks.onResult?.(this.title, null); } };
   }
 
   private values(): Record<string, FieldValue> { return Object.fromEntries(this.readers.map((r) => r())); }
@@ -54,9 +69,15 @@ export class FormDialog extends Dialog {
     this.resolve = null;
     this.close();
     r?.(v);
+    formHooks.onResult?.(this.title, v);
   }
 
-  ask(title: string, fields: Field[], opts: FormOpts = {}): Promise<Record<string, FieldValue> | null> {
+  ask(title: string, given: Field[], opts: FormOpts = {}): Promise<Record<string, FieldValue> | null> {
+    const sup = formHooks.supply;
+    formHooks.supply = null;
+    const fields = sup ? withValues(given, sup.values) : given;
+    if (sup && !sup.modal) return Promise.resolve({ ...defaults(fields) });
+    this.title = title;
     this.setTitle(title);
     this.opts = opts;
     this.settled = false;

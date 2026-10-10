@@ -19,6 +19,12 @@ import { circleFrom, circumcentre, dimLabel } from '../engine/dimension';
 import type { DimensionSpec } from '../engine/types';
 import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type ParaStyle, type Justification, type TabStop, type ListStyle, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
+import type { ActionsPanel } from '../ui/panels/actions';
+import { cleanData, dataToText, GRAPH_TYPES, graphSummary, parseNumber, parseTable, swapXY, transposeData } from '../engine/graph';
+import { boundLabel, parseDataFile, VARIABLE_KINDS } from '../engine/variables';
+import { exportDataSets, showDataSet } from '../io/data-merge';
+import { VERSION } from '../version';
+import type { GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from '../engine/types';
 import { api } from '../io/api';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
@@ -51,6 +57,7 @@ export class AgentBridge {
   private on = false;
   private looping = false;
   commands: Commands | null = null;
+  actions: ActionsPanel | null = null;
   constructor(private readonly engine: Engine, private readonly deps: AgentDeps) {}
 
   setEnabled(on: boolean): void {
@@ -221,6 +228,159 @@ export class AgentBridge {
     return { id: n.id, kind: n.kind, name: nodeLabel(n), bounds: box(geomBounds(doc, n)), fill: f ? (f.paint.type === 'color' ? hex(f.paint.color) : f.paint.type) : undefined, ...t, ...(n.wrap ? { wrap: n.wrap } : {}) };
   }
 
+  private graphPatch(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Partial<GraphSpec> {
+    const p: Partial<GraphSpec> = {};
+    const pick = <T extends string>(k: string, ok: readonly T[], map: Record<string, T> = {}): T | undefined => { if (!has(k)) return undefined; const v = map[str(k)] ?? str(k) as T; if (!ok.includes(v)) throw new ToolError(`${k} must be one of ${[...ok, ...Object.keys(map)].join(', ')}.`); return v; };
+    const set = <K extends keyof GraphSpec>(k: K, v: GraphSpec[K] | undefined): void => { if (v !== undefined) p[k] = v; };
+    set('legend', pick('legend', ['right', 'top', 'none'] as const));
+    set('axis', pick('value_axis', ['start', 'end', 'both'] as const, { left: 'start', bottom: 'start', right: 'end', top: 'end' }));
+    set('valueTicks', pick('ticks', ['none', 'short', 'full'] as const));
+    set('catTicks', pick('category_ticks', ['none', 'short', 'full'] as const));
+    set('pieLegend', pick('pie_legend', ['standard', 'wedges', 'none'] as const));
+    set('pieSort', pick('pie_sort', ['none', 'all', 'first'] as const));
+    set('piePosition', pick('pie_position', ['ratio', 'even', 'stacked'] as const));
+    if (has('min') || has('max') || has('divisions')) { p.auto = false; if (has('min')) p.min = num('min', 0); if (has('max')) p.max = num('max', 100); if (has('divisions')) p.divisions = Math.max(1, Math.round(num('divisions', 5))); }
+    if (a.auto === true) p.auto = true;
+    if (has('prefix')) p.prefix = str('prefix');
+    if (has('suffix')) p.suffix = str('suffix');
+    if (has('column_width')) p.colWidth = Math.max(1, num('column_width', 90));
+    if (has('cluster_width')) p.clusterWidth = Math.max(1, num('cluster_width', 80));
+    if (has('mark_points')) p.mark = a.mark_points === true;
+    if (has('connect_points')) p.connect = a.connect_points === true;
+    if (has('edge_to_edge')) p.edgeToEdge = a.edge_to_edge === true;
+    if (has('fill_lines')) p.fillLines = a.fill_lines === true;
+    if (has('line_width')) p.lineWidth = Math.max(0.1, num('line_width', 1));
+    if (has('marker_size')) p.markerSize = Math.max(1, num('marker_size', 5));
+    if (has('drop_shadow')) p.shadow = a.drop_shadow === true;
+    if (has('font')) p.font = str('font');
+    if (has('size')) p.size = Math.max(4, Math.min(72, num('size', 9)));
+    return p;
+  }
+
+  private graphTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): McpResult {
+    const e = this.engine, act = str('action', has('id') ? 'update' : 'create');
+    const describeGraph = (id: string): McpResult => {
+      const n = this.node(id);
+      if (n.kind !== 'group' || !n.graph) return fail(`${id} is not a graph.`);
+      const d = cleanData(n.graph.data), series = n.children.filter((c) => /^s\d+$/.test(c.part ?? '')).map((c) => ({ index: Number(c.part?.slice(1)), name: n.graph?.type === 'scatter' ? d.series[2 * Number(c.part?.slice(1))] : d.series[Number(c.part?.slice(1))], group_id: c.id }));
+      return text(`${graphSummary(n.graph)} (id ${id}). Series groups: ${series.map((s) => `${s.index} ${s.name || '(unnamed)'} = ${s.group_id}`).join('; ')}. Data:\n${dataToText(d)}`, { id, type: n.graph.type, data: { series: d.series, categories: d.cats, values: d.values }, series, designs: (e.doc?.graphDesigns ?? []).map((x) => ({ id: x.id, name: x.name })) });
+    };
+    if (act === 'make_design') {
+      const id = e.addGraphDesign(str('name'), this.ids(a));
+      return id ? text(`Made the design ${str('name') || id} (id ${id}); use it with column_design or marker_design.`, { design: id }) : fail('Select or pass the art for the design (not part of a graph).');
+    }
+    let data: GraphData | undefined;
+    if (has('table')) data = parseTable(str('table'));
+    else if (a.data && typeof a.data === 'object') {
+      const d = a.data as { series?: unknown; categories?: unknown; values?: unknown };
+      if (!Array.isArray(d.values)) return fail('data needs values: a list of rows, each a list of numbers (null for an empty cell).');
+      data = cleanData({ series: Array.isArray(d.series) ? d.series.map(String) : [], cats: Array.isArray(d.categories) ? d.categories.map(String) : [], values: d.values.map((r) => (Array.isArray(r) ? r.map((v) => (typeof v === 'number' ? v : v === null || v === '' ? null : parseNumber(String(v)))) : [])) });
+    }
+    if (data && a.transpose === true) data = transposeData(data);
+    if (data && a.switch_xy === true) data = swapXY(data);
+    const patch = this.graphPatch(a, num, str, has);
+    const type = has('type') ? str('type') : undefined;
+    if (type && !GRAPH_TYPES.some((t) => t[0] === type)) return fail(`type must be one of ${GRAPH_TYPES.map((t) => t[0]).join(', ')}.`);
+    let id: string | null;
+    if (act === 'create') {
+      id = e.addGraph((type ?? 'column') as GraphType, { x: num('x', 72), y: num('y', 72), w: Math.max(4, num('width', 240)), h: Math.max(4, num('height', 160)) }, data, patch);
+      if (!id) return fail('Could not add the graph.');
+    } else {
+      id = has('id') ? e.graphOf(str('id')) : e.graphTargets()[0] ?? null;
+      if (!id) return fail('Pass the id of a graph (graph with action create returns one), or select one.');
+      if (act === 'get') return describeGraph(id);
+      const full: Partial<GraphSpec> = { ...patch, ...(data ? { data } : {}), ...(type ? { type: type as GraphType } : {}) };
+      if (Object.keys(full).length) e.setGraph(full, [id], data && Object.keys(full).length === 1 ? 'Graph Data' : 'Graph');
+    }
+    if (a.series_types && typeof a.series_types === 'object') for (const [k, v] of Object.entries(a.series_types as Record<string, unknown>)) {
+      if (v !== null && !['column', 'stacked', 'line', 'area'].includes(String(v))) return fail('series_types values are column, stacked, line, area or null.');
+      e.setGraphSeries([Number(k)], { type: v === null ? null : v as GraphSeriesType }, [id]);
+    }
+    const designOf = (raw: unknown): string | null => { const d = e.doc?.graphDesigns?.find((x) => x.id === raw || x.name === raw); if (raw !== null && raw !== '' && !d) throw new ToolError(`No graph design is called ${String(raw)}: make one with action make_design.`); return d?.id ?? null; };
+    for (const k of ['column_design', 'marker_design'] as const) {
+      const o = a[k] as { series?: unknown; design?: unknown; mode?: unknown; per?: unknown; fraction?: unknown } | undefined;
+      if (!o || typeof o !== 'object') continue;
+      const n = this.node(id), count = n.kind === 'group' && n.graph ? Math.max(n.graph.data.series.length, ...n.graph.data.values.map((r) => r.length)) : 0;
+      const series = Array.isArray(o.series) && o.series.length ? o.series.map(Number) : Array.from({ length: count }, (_, i) => i), des = designOf(o.design ?? null);
+      if (k === 'column_design') e.setGraphSeries(series, { column: des ? { design: des, mode: (['vertical', 'uniform', 'repeat'].includes(String(o.mode)) ? o.mode : 'vertical') as GraphColumnDesign['mode'], per: Math.max(1e-6, Number(o.per ?? 10) || 10), fraction: o.fraction === 'scale' ? 'scale' : 'chop' } : null }, [id]);
+      else e.setGraphSeries(series, { marker: des }, [id]);
+    }
+    return describeGraph(id);
+  }
+
+  private async variablesTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    const e = this.engine, p = e.current as NonNullable<Engine['current']>, act = str('action', 'list');
+    const vars = (): Variable[] => e.doc?.variables ?? [];
+    const findVar = (): Variable => { const k = str('variable'); const v = vars().find((x) => x.id === k || x.name === k); if (!v) throw new ToolError(`No variable is called ${k}: call variables with action list.`); return v; };
+    const list = (): McpResult => {
+      const d = p.doc, sets = d.dataSets ?? [];
+      const out = { variables: vars().map((v) => ({ id: v.id, name: v.name, kind: v.kind, object: v.node, bound: boundLabel(d, v) || null })), data_sets: sets.map((s, i) => ({ index: i, name: s.name, values: Object.fromEntries(vars().map((v) => [v.name, s.values[v.id] ?? null])) })), current: d.dataSet ?? null };
+      return text(`${out.variables.length} variable(s): ${out.variables.map((v) => `${v.name} (${v.kind}${v.bound ? `, bound to ${v.bound}` : ', unbound'})`).join('; ') || 'none'}. ${sets.length} data set(s)${d.dataSet !== undefined ? `, showing ${sets[d.dataSet]?.name}` : ''}.`, out);
+    };
+    switch (act) {
+      case 'list': return list();
+      case 'make': {
+        const kind = str('kind', 'text') as VariableKind;
+        if (!VARIABLE_KINDS.some((k) => k[0] === kind)) return fail('kind is text, image, visibility or graph.');
+        const id = e.makeVariable(kind, has('id') ? this.node(a.id).id : null, has('name') ? str('name') : undefined);
+        return id ? list() : fail(kind === 'text' ? 'A text variable binds to type: pass the id of a text object.' : kind === 'image' ? 'An image variable binds to a placed image.' : kind === 'graph' ? 'A graph variable binds to a graph.' : 'Could not make the variable.');
+      }
+      case 'bind': return e.bindVariable(findVar().id, this.node(a.id).id) ? list() : fail('That object does not fit the variable (text to type, image to a placed image, graph to a graph).');
+      case 'unbind': return e.bindVariable(findVar().id, null) ? list() : fail('Nothing changed.');
+      case 'rename': return e.renameVariable(findVar().id, str('name')) ? list() : fail('Give a new name that no other variable has.');
+      case 'delete': return e.deleteVariable(findVar().id) ? list() : fail('Nothing changed.');
+      case 'capture': { const i = e.captureDataSet(has('name') ? str('name') : undefined); return i >= 0 ? list() : fail('Make a variable first.'); }
+      case 'update': return e.updateDataSet(has('index') ? Math.round(num('index', 0)) : undefined) ? list() : fail('Show a data set first (action show).');
+      case 'import': {
+        if (!has('data')) return fail('Pass the data as CSV text (header row of variable names) or JSON (an array of objects).');
+        const raw = typeof a.data === 'string' ? a.data : JSON.stringify(a.data), r = parseDataFile(p.doc, raw, typeof a.data === 'string' && str('format', /^\s*[[{]/.test(raw) ? 'json' : 'csv') === 'csv' ? 'csv' : 'json');
+        if (!e.addDataSets(r.variables, r.sets)) return fail('The data has no rows.');
+        return list();
+      }
+      case 'show': case 'load': {
+        const sets = p.doc.dataSets ?? [], i = has('index') ? Math.round(num('index', 0)) : sets.findIndex((s) => s.name === str('name'));
+        if (!sets[i]) return fail(`There is no data set ${has('index') ? i : str('name')}: call variables with action list.`);
+        await showDataSet(e, i);
+        return text(`Showing data set ${i}: ${sets[i].name}. get_image shows the result.`, { current: i });
+      }
+      case 'export': {
+        const folder = str('folder').trim();
+        if (!folder) return fail('Give folder, an absolute path where formpth writes one file per data set (it is created if missing).');
+        const fmt = str('format', 'png');
+        if (!['png', 'svg', 'pdf'].includes(fmt)) return fail('format is png, svg or pdf.');
+        const r = await exportDataSets(e, { format: fmt as 'png', fpth: a.fpth === true, nameVar: has('name_variable') ? str('name_variable') : null, folder, scale: Math.max(0.1, Math.min(8, num('scale', 1))), artboard: Math.round(num('artboard', p.activeArtboard)), sets: Array.isArray(a.data_sets) ? a.data_sets.map(Number) : undefined }, VERSION);
+        return (r.files.length ? text : fail)(`Wrote ${r.files.length} file(s) to ${folder}.${r.errors.length ? ` Problems: ${r.errors.join('; ')}` : ''}`, { files: r.files, errors: r.errors });
+      }
+      default: return fail('action is list, make, bind, unbind, rename, delete, capture, update, import, show or export.');
+    }
+  }
+
+  private async actionsTool(a: Record<string, unknown>, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    const ap = this.actions, act = str('action', 'list');
+    if (!ap) return fail('The Actions panel is not ready yet: retry in a moment.');
+    if (act === 'list') {
+      const sets = ap.describe();
+      return text(sets.map((s) => `${s.set}: ${s.actions.map((x) => `${x.name} (${x.steps.length} steps)`).join(', ')}`).join('\n') || 'No actions.', { sets });
+    }
+    if (!has('name')) return fail('Pass name (the action) and, if two sets have one by that name, set.');
+    if (act === 'play') {
+      if (!this.engine.current) return fail('No document is open: call new_document or open_file first.');
+      const r = await ap.playNamed(has('set') ? str('set') : undefined, str('name'));
+      if (!r) return fail(`There is no action called ${str('name')}: call actions with action list.`);
+      return (r.stopped ? fail : text)(`Played ${str('name')}: ${r.ran} of ${r.total} steps ran${r.stopped ? `; it stopped: ${r.stopped}` : ''}.`, { ran: r.ran, total: r.total, stopped: r.stopped });
+    }
+    if (act === 'batch') {
+      const source = str('source', 'folder') === 'data_sets' ? 'datasets' : 'folder';
+      if (source === 'folder' && !str('folder').trim()) return fail('Give folder, the absolute path of the folder of .fpth, SVG or PDF files to run the action on.');
+      if (!str('out').trim()) return fail('Give out, the absolute path of the folder to save the results and the log in.');
+      const fmt = str('format', 'same');
+      if (!['same', 'fpth', 'svg', 'pdf', 'png'].includes(fmt)) return fail('format is same, fpth, svg, pdf or png.');
+      const r = await ap.batch({ set: has('set') ? str('set') : '', action: str('name'), source, folder: str('folder'), kinds: Array.isArray(a.kinds) ? a.kinds.map((k) => `.${String(k).replace(/^\./, '').toLowerCase()}`) : undefined, dest: 'folder', out: str('out'), format: fmt as 'same', name: has('name_variable') ? str('name_variable') : null, stopOnError: a.stop_on_error === true });
+      return text(`Batch done: ${r.done} file(s) saved, ${r.failed} failed. Log: ${r.logPath ?? 'not written'}.`, { done: r.done, failed: r.failed, files: r.files, log: r.log, log_path: r.logPath });
+    }
+    return fail('action is list, play or batch.');
+  }
+
   async run(name: string, a: Record<string, unknown>): Promise<McpResult> {
     const e = this.engine;
     const num = (k: string, d: number): number => (typeof a[k] === 'number' && Number.isFinite(a[k]) ? a[k] as number : d);
@@ -253,9 +413,12 @@ export class AgentBridge {
         c.run(id);
         return text(`Ran ${c.label(cmd).replace(/\.\.\.$/, '')}.`);
       }
+      if (name === 'actions') return await this.actionsTool(a, str, has);
       const p = e.current;
       if (!p) return fail('No document is open: call new_document or open_file first.');
       switch (name) {
+        case 'graph': return this.graphTool(a, num, str, has);
+        case 'variables': return await this.variablesTool(a, num, str, has);
         case 'get_document': { const d = e.describe(Math.max(1, Math.min(32, Math.round(num('depth', 8))))); return text(JSON.stringify(d), d); }
         case 'get_image': {
           const blob = await this.deps.image(str('scope', 'artboard'), has('artboard') ? Math.round(num('artboard', 0)) : undefined, Math.max(64, Math.min(2048, Math.round(num('max_size', 1024)))), a.outline === true);

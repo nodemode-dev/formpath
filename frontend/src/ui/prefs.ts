@@ -82,7 +82,7 @@ export function loadPrefs(): Prefs {
 export function savePrefs(p: Prefs): void { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { } }
 
 export function applyPrefs(engine: Engine, p: Prefs): void {
-  History.limit = p.historyStates;
+  if (History.limit !== p.historyStates) engine.setHistoryLimit(p.historyStates);
   engine.view = { ...engine.view, scaleStrokes: p.scaleStrokes, previewBounds: p.previewBounds };
   engine.maskDefaults = { clip: p.newMaskClip, invert: p.newMaskInvert };
   engine.emit('options', null);
