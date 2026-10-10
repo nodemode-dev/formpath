@@ -242,7 +242,7 @@ export function align(doc: Doc, ids: string[], action: AlignAction, to: Rect | n
   return updateNodes(doc, [...moves.keys()], (n) => { const [dx, dy] = moves.get(n.id) as [number, number]; return dx || dy ? transformNode(n, translate(dx, dy)) : n; });
 }
 
-export function setProps(doc: Doc, ids: string[], patch: Partial<Pick<VNode, 'name' | 'hidden' | 'locked' | 'opacity' | 'blend' | 'isolate' | 'knockout'>>): Doc {
+export function setProps(doc: Doc, ids: string[], patch: Partial<Pick<VNode, 'name' | 'hidden' | 'locked' | 'opacity' | 'blend' | 'isolate' | 'knockout' | 'knockoutShape' | 'note'>>): Doc {
   return updateNodes(doc, ids, (n) => ({ ...n, ...patch }) as VNode);
 }
 

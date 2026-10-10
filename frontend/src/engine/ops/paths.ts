@@ -1,8 +1,9 @@
 import { geomBounds } from '../bounds';
 import { childrenOf, findNode, newId, pathOf, removeNodes, topObjects, updateAt, updateNodes, type IndexPath } from '../doc';
 import { anchor, bezSplit, dist, flatIndex, hasIn, hasOut, isLineSeg, pathBounds, rectPath, rectsTouch, reversePath, segOf, segments, splitSegmentAt, unflatIndex } from '../geometry';
-import { boolean, cleanup, contains, area, offsetPath, polyKnife, simplifyPath, smoothPath, strokeToPath, toPaper, fromPaper, type BoolOp } from '../kernel';
+import { boolean, cleanup, contains, area, offsetPath, polyKnife, simplifyPath, smoothPath, toPaper, fromPaper, type BoolOp } from '../kernel';
 import { emptyAppearance, fill, NONE, solid, BLACK } from '../paint';
+import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
 import type { Anchor, CompoundNode, Doc, FillItem, FillRule, GroupNode, Join, Paint, PathData, PathNode, Pt, StrokeItem, SubPath, VNode } from '../types';
 import type { OpResult } from './objects';
 
@@ -199,9 +200,9 @@ export function pathOperation(doc: Doc, ids: string[], op: PathOp, a: PathOpArgs
         const parts: VNode[] = [];
         if (fills.length && fills.some((f) => f.paint.type !== 'none')) parts.push(shapeNode(g.d, n, { items: fills, effects: [] }));
         for (const s of strokes) {
-          let d = strokeToPath(g.d, s.width, s.cap, s.join, s.miter);
-          if (s.align !== 'center' && g.d.every((sp) => sp.closed)) d = s.align === 'inside' ? boolean(d, g.d, 'intersect', 'nonzero', g.rule) : boolean(d, g.d, 'subtract', 'nonzero', g.rule);
-          if (d.length) parts.push(shapeNode(d, n, { items: [fill(s.paint, s.opacity, s.blend)], effects: [] }));
+          const d = strokeRegion(g.d, g.rule, s), art = gradientStrokeArt(out, g.d, s, g.rule);
+          if (art) parts.push(...gradientStrokeNodes(art, d, s));
+          else if (d.length) parts.push(shapeNode(d, n, { items: [fill(s.paint, s.opacity, s.blend)], effects: [] }));
         }
         const rep: VNode = parts.length === 1 ? parts[0] : ({ id: newId('g'), kind: 'group', clip: false, children: parts, opacity: n.opacity, blend: n.blend, ap: emptyAppearance() } as GroupNode);
         out = updateAt(out, pathOf(out, id) as IndexPath, () => rep);

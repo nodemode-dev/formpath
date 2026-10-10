@@ -40,7 +40,7 @@ export function hsbToRgb(h: number, s: number, v: number): RGB {
 }
 
 export function hex(c: Color): string {
-  const v = toRgb(c), h = (n: number): string => n.toString(16).padStart(2, '0');
+  const v = toRgb(c), h = (n: number): string => clamp255(n).toString(16).padStart(2, '0');
   return `#${h(v.r)}${h(v.g)}${h(v.b)}`;
 }
 export function cssColor(c: Color, alpha = 1): string {
@@ -185,7 +185,7 @@ export function resolvePaint(doc: Doc, p: Paint): Paint {
   }
   if (p.type === 'gradient' && p.swatch) {
     const sw = doc.swatches.find((s) => s.id === p.swatch);
-    if (sw && sw.global && sw.paint.type === 'gradient') return { ...p, gradient: { ...sw.paint.gradient, angle: p.gradient.angle, geom: p.gradient.geom, aspect: p.gradient.aspect } };
+    if (sw && sw.global && sw.paint.type === 'gradient') return { ...p, gradient: { ...sw.paint.gradient, angle: p.gradient.angle, geom: p.gradient.geom, aspect: p.gradient.aspect, strokeMode: p.gradient.strokeMode } };
   }
   return p;
 }
@@ -223,7 +223,7 @@ export function paintFromInput(raw: unknown, doc?: Doc): Paint | null {
 export function describePaint(p: Paint, doc?: Doc): string {
   if (p.type === 'none') return 'none';
   if (p.type === 'color') { const sw = p.swatch && doc ? doc.swatches.find((s) => s.id === p.swatch) : null; return sw ? `${sw.name} (${hex(p.color)})` : p.color.kind === 'cmyk' ? `cmyk(${p.color.c},${p.color.m},${p.color.y},${p.color.k})` : hex(p.color); }
-  if (p.type === 'gradient') return `${p.gradient.kind} gradient ${p.gradient.stops.map((s) => hex(s.color)).join(' to ')}`;
+  if (p.type === 'gradient') return `${p.gradient.kind} gradient ${p.gradient.stops.map((s) => hex(s.color)).join(' to ')}${p.gradient.strokeMode === 'along' || p.gradient.strokeMode === 'across' ? ` (${p.gradient.strokeMode} the stroke)` : ''}`;
   return `pattern ${p.pattern}`;
 }
 

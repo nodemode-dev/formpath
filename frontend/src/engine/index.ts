@@ -62,6 +62,7 @@ export class Engine extends Emitter<EngineEvents> {
   strokeWidth = 1;
   activeSlot: 'fill' | 'stroke' = 'fill';
   newArtBasic = true;
+  maskDefaults = { clip: true, invert: false };
   view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false };
   options: ToolOptions = { polygonSides: 6, starPoints: 5, starRatio: 0.5, cornerRadius: 0, spiralDecay: 0.8, spiralSegments: 10, flareRays: 15, gridRows: 5, gridCols: 5, pencilFidelity: 0.5, pencilSmooth: 0.3, keepSelected: false, brushSize: 3, blobSize: 12, eraserSize: 12, widthPreset: 'uniform', magicTolerance: 32, symbolDensity: 5, symbolIntensity: 5, symbolMethod: 'user', meshRows: 4, meshCols: 4, blendSteps: 8, shapeMode: 'normal', textMode: 'point', vertical: false, arcConvex: true, liquifySize: 60, liquifyKind: 'warp' };
   currentBrush: string | null = null;
@@ -505,11 +506,19 @@ export class Engine extends Emitter<EngineEvents> {
   }
   setAppearance(ap: Appearance, ids?: string[], name = 'Appearance'): void { this.applyToSelection(name, (n) => ({ ...n, ap }), ids); }
   editAppearance(name: string, fn: (ap: Appearance) => Appearance, ids?: string[]): void { this.applyToSelection(name, (n) => ({ ...n, ap: fn(n.ap) }), ids); }
-  setObjectProps(patch: Partial<Pick<VNode, 'name' | 'hidden' | 'locked' | 'opacity' | 'blend' | 'isolate' | 'knockout' | 'note'>>, ids?: string[]): void {
+  setObjectProps(patch: Partial<Pick<VNode, 'name' | 'hidden' | 'locked' | 'opacity' | 'blend' | 'isolate' | 'knockout' | 'knockoutShape' | 'note'>>, ids?: string[]): void {
     const p = this.current; if (!p) return;
     const t = ids && ids.length ? ids : this.targetIds();
     if (!t.length) return;
-    this.edit(patch.opacity !== undefined ? 'Opacity' : patch.blend ? 'Blending Mode' : patch.name !== undefined ? 'Rename' : 'Object Options', (d) => setProps(d, t, patch));
+    this.edit(patch.opacity !== undefined ? 'Opacity' : patch.blend ? 'Blending Mode' : patch.name !== undefined ? 'Rename' : patch.knockout !== undefined || patch.knockoutShape !== undefined ? 'Knockout' : 'Object Options', (d) => setProps(d, t, patch));
+  }
+
+  setStrokeGradientMode(mode: 'within' | 'along' | 'across', ids?: string[]): boolean {
+    const graded = (p: Paint | undefined): p is Extract<Paint, { type: 'gradient' }> => p?.type === 'gradient' && p.gradient.kind !== 'freeform';
+    const has = (n: VNode): boolean => (n.kind === 'text' ? graded(n.spans[0]?.style.stroke) : graded(firstStroke(n.ap)?.paint)) || (childrenOf(n) ?? []).some(has);
+    if (graded(this.strokePaint)) { this.strokePaint = { ...this.strokePaint, gradient: { ...this.strokePaint.gradient, strokeMode: mode } }; this.emit('colors', null); }
+    if (!this.targetIds(ids).some((id) => { const n = this.nodeById(id); return !!n && has(n); })) return false;
+    return this.applyToSelection('Gradient Stroke', (n) => this.paintDeep(n, (ap) => { const s = firstStroke(ap); return s && graded(s.paint) ? withFirstStroke(ap, { paint: { ...s.paint, gradient: { ...s.paint.gradient, strokeMode: mode } } }) : ap; }), ids);
   }
 
   makeOpacityMask(ids?: string[]): boolean {
@@ -519,7 +528,7 @@ export class Engine extends Emitter<EngineEvents> {
       const top = findNode(d, t[t.length - 1]) as VNode, rest = t.slice(0, -1);
       let out = removeNodes(d, [top.id]), target = rest[0];
       if (rest.length > 1) { const g = groupNodes(out, rest); out = g.doc; target = g.ids[0]; }
-      out = updateNodes(out, [target], (n) => ({ ...n, mask: { art: top, clip: true, invert: false, disabled: false, linked: true } }));
+      out = updateNodes(out, [target], (n) => ({ ...n, mask: { art: top, clip: this.maskDefaults.clip, invert: this.maskDefaults.invert, disabled: false, linked: true } }));
       return { doc: out, select: [target] };
     });
   }

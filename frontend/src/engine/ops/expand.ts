@@ -1,7 +1,7 @@
 import { newId } from '../doc';
-import { arrowGeometry, brushGeometry, effectDef, effectPath, has3d, strokeOutline, threeDFaces } from '../effects';
-import { boolean, strokeToPath } from '../kernel';
+import { arrowGeometry, brushGeometry, effectDef, effectPath, has3d, threeDFaces } from '../effects';
 import { emptyAppearance, fill } from '../paint';
+import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
 import type { Doc, FillRule, PathData, StrokeItem, VNode } from '../types';
 import { geometryOf } from './paths';
 
@@ -17,48 +17,12 @@ function strokeParts(doc: Doc, d: PathData, rule: FillRule, s: StrokeItem): VNod
     const pieces = brushGeometry(doc, d, s);
     if (pieces) { for (const p of pieces) out.push(shape(p.d, 'nonzero', [fill(p.paint ?? s.paint, s.opacity, s.blend)])); return out; }
   }
-  let outline: PathData;
-  if (s.profile && s.profile.length) outline = strokeOutline(d, s);
-  else {
-    const dashed = s.dash.length ? dashPath(d, s.dash, s.dashOffset) : d;
-    outline = strokeToPath(dashed, s.width * (s.align === 'center' ? 1 : 2), s.cap, s.join, s.miter);
-    if (s.align !== 'center' && d.every((sp) => sp.closed)) outline = s.align === 'inside' ? boolean(outline, d, 'intersect', 'nonzero', rule) : boolean(outline, d, 'subtract', 'nonzero', rule);
-  }
+  const art = gradientStrokeArt(doc, d, s, rule);
+  if (art) return gradientStrokeNodes(art, strokeRegion(d, rule, s), s);
+  const outline = strokeRegion(d, rule, s);
   if (outline.length) out.push(shape(outline, 'nonzero', [it]));
   const arrows = arrowGeometry(d, s);
   if (arrows) out.push(shape(arrows, 'nonzero', [it]));
-  return out;
-}
-
-function dashPath(d: PathData, dash: number[], offset: number): PathData {
-  const pattern = dash.length % 2 ? [...dash, ...dash] : dash;
-  const total = pattern.reduce((a, b) => a + b, 0);
-  if (total <= 0) return d;
-  const out: PathData = [];
-  for (const sp of d) {
-    const segsPts = (() => { const arr: Array<{ x: number; y: number }> = []; const n = sp.pts.length; for (let i = 0; i < (sp.closed ? n : n - 1); i++) { const a = sp.pts[i], b = sp.pts[(i + 1) % n]; for (let k = 0; k <= 16; k++) { const t = k / 16, u = 1 - t; if (i > 0 && k === 0) continue; arr.push({ x: u * u * u * a.x + 3 * u * u * t * a.ox + 3 * u * t * t * b.ix + t * t * t * b.x, y: u * u * u * a.y + 3 * u * u * t * a.oy + 3 * u * t * t * b.iy + t * t * t * b.y }); } } return arr; })();
-    const pos = -((offset % total) + total) % total;
-    let k = 0, on = true;
-    let cur: Array<{ x: number; y: number }> = [];
-    let left = pattern[0] + pos;
-    while (left <= 0) { k = (k + 1) % pattern.length; on = !on; left += pattern[k]; }
-    for (let i = 1; i < segsPts.length; i++) {
-      let a = segsPts[i - 1];
-      const b = segsPts[i];
-      let segLen = Math.hypot(b.x - a.x, b.y - a.y);
-      if (on && !cur.length) cur.push(a);
-      while (segLen > left) {
-        const t = left / segLen, m = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-        if (on) { cur.push(m); out.push({ closed: false, pts: cur.map((p) => ({ x: p.x, y: p.y, ix: p.x, iy: p.y, ox: p.x, oy: p.y })) }); cur = []; }
-        else cur = [m];
-        segLen -= left; a = m;
-        k = (k + 1) % pattern.length; on = !on; left = pattern[k];
-      }
-      left -= segLen;
-      if (on) cur.push(b);
-    }
-    if (on && cur.length > 1) out.push({ closed: false, pts: cur.map((p) => ({ x: p.x, y: p.y, ix: p.x, iy: p.y, ox: p.x, oy: p.y })) });
-  }
   return out;
 }
 

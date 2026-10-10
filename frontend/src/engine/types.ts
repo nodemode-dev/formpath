@@ -90,7 +90,8 @@ export interface NodeBase {
   opacity: number;
   blend: BlendMode;
   isolate?: boolean;
-  knockout?: boolean;
+  knockout?: boolean | 'inherit';
+  knockoutShape?: boolean;
   ap: Appearance;
   mask?: OpacityMask | null;
   style?: string;

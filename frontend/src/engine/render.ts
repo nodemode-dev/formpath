@@ -9,6 +9,7 @@ import { liveFaceNodes } from './livepaint';
 import { latticeCopies, patternLattice } from './pattern';
 import { instanceArt } from './symbolism';
 import { runFilter, type FilterFrame } from './filters';
+import { gradientStrokeArt, type GradientStrokeArt, type StrokePiece } from './stroke-gradient';
 import { drawText, textEpoch } from './text';
 import { BLEND_MODES, type AppearanceItem, type BlendMode, type Doc, type Gradient, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
 
@@ -21,7 +22,10 @@ export interface RenderContext {
   printing?: boolean;
   pixelRatio?: number;
   outlineColor?: string;
+  knockout?: boolean;
 }
+
+export const knocksOut = (n: VNode, inherited: boolean): boolean => (n.kind === 'group' || n.kind === 'layer') && (n.knockout === 'inherit' ? inherited : n.knockout === true);
 
 const pathCache = new WeakMap<PathData, Path2D>();
 export function cachedPath(d: PathData): Path2D {
@@ -286,6 +290,8 @@ function applyFx(off: CanvasRenderingContext2D, canvas: HTMLCanvasElement | Offs
 function strokeWith(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Path2D, d: PathData, s: StrokeItem, b: Rect, rule: CanvasFillRule, solo = false): void {
   const style = paintStyle(ctx, rc, s.paint, b);
   if (!style || s.width <= 0) return;
+  const art = gradientStrokeArt(rc.doc, d, s, rule);
+  if (art) { gradientStroke(ctx, rc, art, path, d, s, b, rule, solo); return; }
   ctx.save();
   if (!solo) { ctx.globalAlpha *= s.opacity; ctx.globalCompositeOperation = blendCss(s.blend); }
   if (s.brush) {
@@ -297,30 +303,56 @@ function strokeWith(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Path
       return;
     }
   }
+  strokeShape(ctx, style, path, d, s, b, rule);
+  const arrows = arrowGeometry(d, s);
+  if (arrows) { ctx.setLineDash([]); ctx.fillStyle = style; ctx.fill(cachedPath(arrows), 'nonzero'); }
+  ctx.restore();
+}
+
+function strokeShape(ctx: CanvasRenderingContext2D, style: Style, path: Path2D, d: PathData, s: StrokeItem, b: Rect, rule: CanvasFillRule): void {
   if (s.profile && s.profile.length) {
     ctx.fillStyle = style;
     ctx.fill(cachedPath(strokeOutline(d, s)), 'nonzero');
-  } else {
-    ctx.strokeStyle = style;
-    ctx.lineWidth = s.width;
-    ctx.lineCap = s.cap;
-    ctx.lineJoin = s.join;
-    ctx.miterLimit = s.miter;
-    ctx.setLineDash(s.dash.length ? s.dash : []);
-    ctx.lineDashOffset = s.dashOffset;
-    const closed = d.every((sp) => sp.closed);
-    if (s.align === 'inside' && closed) { ctx.clip(path, rule); ctx.lineWidth = s.width * 2; ctx.stroke(path); }
-    else if (s.align === 'outside' && closed) {
-      const big = new Path2D(), r = inflate(b, s.width * 4 + 10);
-      big.rect(r.x, r.y, r.w, r.h);
-      tracePath(big, d);
-      ctx.clip(big, 'evenodd');
-      ctx.lineWidth = s.width * 2;
-      ctx.stroke(path);
-    } else ctx.stroke(path);
+    return;
   }
-  const arrows = arrowGeometry(d, s);
-  if (arrows) { ctx.setLineDash([]); ctx.fillStyle = style; ctx.fill(cachedPath(arrows), 'nonzero'); }
+  ctx.strokeStyle = style;
+  ctx.lineWidth = s.width;
+  ctx.lineCap = s.cap;
+  ctx.lineJoin = s.join;
+  ctx.miterLimit = s.miter;
+  ctx.setLineDash(s.dash.length ? s.dash : []);
+  ctx.lineDashOffset = s.dashOffset;
+  const closed = d.every((sp) => sp.closed);
+  if (s.align === 'inside' && closed) { ctx.clip(path, rule); ctx.lineWidth = s.width * 2; ctx.stroke(path); }
+  else if (s.align === 'outside' && closed) {
+    const big = new Path2D(), r = inflate(b, s.width * 4 + 10);
+    big.rect(r.x, r.y, r.w, r.h);
+    tracePath(big, d);
+    ctx.clip(big, 'evenodd');
+    ctx.lineWidth = s.width * 2;
+    ctx.stroke(path);
+  } else ctx.stroke(path);
+}
+
+function gradientStroke(ctx: CanvasRenderingContext2D, rc: RenderContext, art: GradientStrokeArt, path: Path2D, d: PathData, s: StrokeItem, b: Rect, rule: CanvasFillRule, solo: boolean): void {
+  const box = inflate(pathBounds(d), strokeReach(s) + s.width + 2);
+  const fillAll = (c: CanvasRenderingContext2D, list: StrokePiece[]): void => { for (const p of list) { const st = paintStyle(c, rc, p.paint, b); if (st) { c.fillStyle = st; c.fill(cachedPath(p.d), 'nonzero'); } } };
+  const keep = (c: CanvasRenderingContext2D): void => {
+    const t = c.getTransform(), { canvas: sc, ctx: m } = canvas2d(c.canvas.width, c.canvas.height);
+    m.setTransform(t);
+    strokeShape(m, '#fff', path, d, s, b, rule);
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = 'destination-in';
+    c.drawImage(sc as CanvasImageSource, 0, 0);
+    c.restore();
+  };
+  const alpha = art.alpha;
+  withLayer(ctx, box, { opacity: solo ? 1 : s.opacity, blend: solo ? 'normal' : s.blend, mask: alpha ? (m) => { fillAll(m, alpha); keep(m); } : null }, (c) => { fillAll(c, art.pieces); if (!alpha) keep(c); });
+  if (!art.arrows.length) return;
+  ctx.save();
+  if (!solo) { ctx.globalAlpha *= s.opacity; ctx.globalCompositeOperation = blendCss(s.blend); }
+  fillAll(ctx, art.arrows);
   ctx.restore();
 }
 
@@ -403,8 +435,42 @@ function drawFreeform(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Pa
   ctx.restore();
 }
 
-function needsLayer(n: VNode, multi: boolean): boolean {
-  return (n.opacity < 1 && multi) || n.blend !== 'normal' || !!(n.mask && !n.mask.disabled) || rasterEffects(n).length > 0 || !!n.isolate;
+function needsLayer(n: VNode, multi: boolean, rc: RenderContext): boolean {
+  return (n.opacity < 1 && multi) || n.blend !== 'normal' || !!(n.mask && !n.mask.disabled) || rasterEffects(n).length > 0 || !!n.isolate || knocksOut(n, !!rc.knockout);
+}
+
+const shapeVariants = new WeakMap<VNode, VNode>();
+export function knockoutShape(n: VNode): VNode {
+  if (n.knockoutShape || (n.opacity >= 1 && !(n.mask && !n.mask.disabled))) return n;
+  let v = shapeVariants.get(n);
+  if (!v) { v = { ...n, opacity: 1, mask: null } as VNode; shapeVariants.set(n, v); }
+  return v;
+}
+
+function drawKnockout(ctx: CanvasRenderingContext2D, kids: VNode[], rc: RenderContext): void {
+  const t = ctx.getTransform();
+  for (const c of kids) {
+    if (c.hidden || rc.skip?.has(c.id)) continue;
+    const vb = visualBounds(rc.doc, c);
+    const dev = isEmptyRect(vb) ? null : deviceRect(ctx, inflate(vb, 2 / Math.max(1e-6, Math.hypot(t.a, t.b))));
+    if (!dev) continue;
+    const draw = (n: VNode): HTMLCanvasElement | OffscreenCanvas => { const { canvas, ctx: o } = canvas2d(dev.w, dev.h); o.setTransform(t.a, t.b, t.c, t.d, t.e - dev.x, t.f - dev.y); renderNode(o, n, rc); return canvas; };
+    const art = draw(c), sv = knockoutShape(c), shape = sv === c ? art : draw(sv);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.drawImage(shape as CanvasImageSource, dev.x, dev.y);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(art as CanvasImageSource, dev.x, dev.y);
+    ctx.restore();
+  }
+}
+
+function drawKids(ctx: CanvasRenderingContext2D, n: VNode, kids: VNode[], rc: RenderContext): void {
+  const ko = knocksOut(n, !!rc.knockout), sub = ko === !!rc.knockout ? rc : { ...rc, knockout: ko };
+  if (ko && !rc.outline) { drawKnockout(ctx, kids, sub); return; }
+  for (const c of kids) renderNode(ctx, c, sub);
 }
 
 export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): void {
@@ -413,7 +479,7 @@ export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderCo
   const fx = rc.outline ? [] : rasterEffects(n);
   const ch = n.kind === 'compound' ? null : childrenOf(n);
   const multi = !!ch || n.ap.items.filter((i) => i.visible).length > 1 || n.kind === 'text' || n.kind === 'symbol' || n.kind === 'mesh' || has3d(n);
-  if (!rc.outline && needsLayer(n, multi)) {
+  if (!rc.outline && needsLayer(n, multi, rc)) {
     const vb = visualBounds(rc.doc, n);
     if (isEmptyRect(vb)) return;
     const mask = n.mask && !n.mask.disabled ? (c: CanvasRenderingContext2D) => renderNode(c, n.mask!.art, { ...rc, skip: undefined }) : null;
@@ -435,16 +501,16 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
   switch (n.kind) {
     case 'layer': {
       if (n.template && !rc.printing) { ctx.save(); ctx.globalAlpha *= 0.5; for (const c of n.children) renderNode(ctx, c, rc); ctx.restore(); return; }
-      if (n.clip && n.children.length > 1) { drawClipped(ctx, n.children, rc); return; }
-      for (const c of n.children) renderNode(ctx, c, rc);
+      if (n.clip && n.children.length > 1) { drawClipped(ctx, n, n.children, rc); return; }
+      drawKids(ctx, n, n.children, rc);
       if (n.ap.items.length && !rc.outline) drawGroupItems(ctx, n, rc);
       return;
     }
     case 'group':
       if (n.trace && !rc.outline && !rc.printing && n.trace.view !== 'result') { drawTraceView(ctx, n, n.trace.view, rc); return; }
       if (n.livePaint) { if (!rc.outline) for (const f of liveFaceNodes(n)) renderNode(ctx, f, rc); for (const c of n.children) renderNode(ctx, c, rc); return; }
-      if (n.clip && n.children.length > 1) { drawClipped(ctx, n.children, rc); return; }
-      for (const c of n.children) renderNode(ctx, c, rc);
+      if (n.clip && n.children.length > 1) { drawClipped(ctx, n, n.children, rc); return; }
+      drawKids(ctx, n, n.children, rc);
       if (n.ap.items.length && !rc.outline) drawGroupItems(ctx, n, rc);
       return;
     case 'blend': case 'envelope': case 'repeat':
@@ -533,12 +599,12 @@ function drawGroupItems(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderConte
   if (geo.length) drawShapeItems(ctx, rc, n, geo, 'nonzero');
 }
 
-function drawClipped(ctx: CanvasRenderingContext2D, children: VNode[], rc: RenderContext): void {
+function drawClipped(ctx: CanvasRenderingContext2D, n: VNode, children: VNode[], rc: RenderContext): void {
   const clipper = children[children.length - 1];
   const geo = clipGeometry(clipper);
   ctx.save();
   if (geo) ctx.clip(cachedPath(geo.d), geo.rule);
-  for (const c of children.slice(0, -1)) renderNode(ctx, c, rc);
+  drawKids(ctx, n, children.slice(0, -1), rc);
   ctx.restore();
   if (geo && clipper.ap.items.some((i) => i.kind === 'stroke' && i.visible && i.paint.type !== 'none')) {
     const strokesOnly = { ...clipper, ap: { ...clipper.ap, items: clipper.ap.items.filter((i) => i.kind === 'stroke') } };

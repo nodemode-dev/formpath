@@ -204,8 +204,32 @@ export function strokeToPath(d: PathData, width: number, cap: 'butt' | 'round' |
   if (!out.length) return [];
   let merged: PathData;
   try { merged = cleanup(fromPaper(toPaper(out, 'nonzero').unite(new (ps().Path)({ insert: false }), { insert: false }))); } catch { merged = out; }
-  if (curved) merged = merged.map((sp) => { const q = toPaperPath(sp); q.simplify(Math.max(0.01, Math.min(0.08, width / 200))); return fromPaperPath(q); });
+  if (curved) merged = merged.map((sp) => simplifyKeepingCorners(sp, Math.max(0.01, Math.min(0.08, width / 200))));
   return merged;
+}
+
+function simplifyKeepingCorners(sp: SubPath, tol: number): SubPath {
+  const P = sp.pts.map((a) => ({ x: a.x, y: a.y })), n = P.length;
+  if (n < 4) return sp;
+  const turn = (i: number): number => {
+    const a = P[(i - 1 + n) % n], b = P[i], c = P[(i + 1) % n], ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y, lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+    return lu < 1e-9 || lv < 1e-9 ? 0 : Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (lu * lv))));
+  };
+  const corners: number[] = [];
+  for (let i = 0; i < n; i++) if ((!sp.closed && (i === 0 || i === n - 1)) || turn(i) > 0.45) corners.push(i);
+  if (sp.closed && !corners.length) { const q = toPaperPath(sp); q.simplify(tol); return fromPaperPath(q); }
+  const s = ps(), out: Anchor[] = [], runs = sp.closed ? corners.length : corners.length - 1;
+  for (let k = 0; k < runs; k++) {
+    const i0 = corners[k], i1 = corners[(k + 1) % corners.length], run: Pt[] = [];
+    for (let i = i0; ; i = (i + 1) % n) { run.push(P[i]); if (i === i1 && run.length > 1) break; }
+    let part: Anchor[];
+    if (run.length < 3) part = run.map((q) => anchor(q.x, q.y));
+    else { const q = new s.Path({ segments: run.map((v) => new s.Point(v.x, v.y)), closed: false, insert: false }); q.simplify(tol); part = fromPaperPath(q).pts; }
+    const last = out[out.length - 1];
+    if (last) { last.ox = part[0].ox; last.oy = part[0].oy; last.smooth = false; out.push(...part.slice(1)); } else out.push(...part);
+  }
+  if (sp.closed && out.length > 1) { const f = out[0], l = out[out.length - 1]; if (Math.abs(f.x - l.x) < 1e-6 && Math.abs(f.y - l.y) < 1e-6) { f.ix = l.ix; f.iy = l.iy; f.smooth = false; out.pop(); } }
+  return { closed: sp.closed, pts: out };
 }
 
 export function offsetPath(d: PathData, offset: number, join: Join = 'miter', miter = 4, rule: FillRule = 'nonzero'): PathData {
