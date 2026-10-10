@@ -2,6 +2,23 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.20.0 · 2026-10-10
+
+Data: graphs, variables and data merge, and Actions with Batch. Parity is 65 of 76.
+
+### Added
+
+- Nine graph tools (Shift+G): column, stacked column, bar, stacked bar, line, area, scatter, pie and radar, as live graphs. The Graph Data window takes typing, pasting from a spreadsheet and CSV, with transpose and Switch X/Y. Graph Type covers the options and combined graphs; column and marker designs; series styles survive data edits; scaling redraws the graph.
+- Window > Variables: text, image, visibility and graph variables bound to objects; data sets captured, updated and stepped through live; CSV and JSON import; Export Variations as PNG, SVG, PDF or `.fpth` per data set.
+- Actions record dialog values, transforms including tool drags, drawn shapes, fills, strokes, opacity and graphic styles; per-step and modal toggles, stops, editing, reordering and duplicating; sets saved as `.fpaction` files in `~/Formpth/Actions`, with a Default Actions set.
+- File > Automate > Batch: run an action over a folder of `.fpth`, SVG and PDF files or over the document's data sets, with a log.
+- History: New Document from State and History Options with the undo limit.
+- MCP tools `graph`, `variables` and `actions`. 75 tools.
+
+### Changed
+
+- Actions live in the engine's library instead of browser storage.
+
 ## 0.19.0 · 2026-10-10
 
 New tools: Puppet Warp, Dimension, Shaper and Intertwine. Parity is 62.5 of 76.
