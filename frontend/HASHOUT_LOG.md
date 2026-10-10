@@ -38,7 +38,7 @@ frontend/
     │   ├── live.ts             live shapes, blends, repeats, envelopes
     │   ├── envelope.ts         envelope meshes, homographies, adaptive curve mapping
     │   ├── mesh.ts             gradient mesh
-    │   ├── brushes.ts          calligraphic, scatter, art, pattern brushes
+    │   ├── brushes.ts          calligraphic, scatter, art, bristle, pattern brushes
     │   ├── text.ts             type layout, styles, caret and index math
     │   ├── flow.ts             reflow: text wrap shapes and threaded stories
     │   ├── hyphen.ts           English hyphenation points, hyphenation and justification defaults
@@ -46,6 +46,8 @@ frontend/
     │   ├── symbolism.ts        instance tint, instance art and the symbolism operations
     │   ├── pattern.ts          tile lattices and the pattern editing session
     │   ├── style-libraries.ts  built-in graphic style libraries
+    │   ├── swatch-libraries.ts built-in swatch libraries, library from a document
+    │   ├── brush-libraries.ts  built-in brush libraries
     │   ├── stroke-gradient.ts  gradients along and across strokes as clipped pieces, stroke regions
     │   ├── livepaint.ts        Live Paint faces, gap closing and face paint
     │   ├── puppet.ts           Puppet Warp mesh and as-rigid-as-possible solve
@@ -87,6 +89,7 @@ frontend/
     │   └── view.ts             Hand, Rotate View, Zoom, Artboard
     ├── io/
     │   ├── api.ts              engine service client
+    │   ├── ase.ts              Adobe Swatch Exchange read and write
     │   ├── data-merge.ts       data set images, variation projects and the variations export
     │   ├── project-io.ts       .fpth manifest in and out
     │   ├── svg.ts              SVG export and import
@@ -147,6 +150,9 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/shaper.ts
 - src/engine/perspective.ts
 - src/engine/style-libraries.ts
+- src/engine/swatch-libraries.ts
+- src/engine/brush-libraries.ts
+- src/engine/brushes.ts
 - src/engine/stroke-gradient.ts
 - src/extensions/registry.ts
 - src/tools/select.ts
@@ -164,6 +170,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/tools/type.ts
 - src/tools/view.ts
 - src/io/api.ts
+- src/io/ase.ts
 - src/io/data-merge.ts
 - src/io/project-io.ts
 - src/io/svg.ts
@@ -184,6 +191,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/color.ts
 - src/ui/panels/color-guide.ts
 - src/ui/panels/color-picker.ts
+- src/ui/panels/recolor.ts
+- src/ui/panels/libraries.ts
 - src/ui/panels/navigator.ts
 - src/ui/panels/actions.ts
 - src/ui/panels/variables.ts
@@ -296,6 +305,13 @@ Object > Graph holds Type, Data (Alt+Shift+Ctrl+G), Design, Column and Marker; g
 
 View > Perspective Grid holds Show or Hide Grid (Shift+Ctrl+I), Lock Grid, Snap to Grid, Define Grid, One, Two and Three Point Perspective (each with its normal view preset as a submenu, as in Illustrator), Grid Presets, Save Grid as Preset and the four active plane commands. The plane commands carry the bare keys 1 to 4 and are enabled only while the grid shows; no other command or tool uses bare digits, and the dispatcher ignores keys typed into fields and the type editor. Object > Perspective holds Attach to Active Plane, Release with Perspective, Move Plane to Match Object and Edit Text, which switches to the Type tool and opens the editor on the flat type inside the perspective envelope.
 
+### src/app.ts · library menus and panel tabs
+- refers-to: src/app.ts :: swatchLibItems, brushLibItems, openLibraryFile, saveSwatchLibrary, saveBrushLibrary, libraryProject, recolorDialog, TAB_HOMES
+- kind: warning-context
+- logged: v0.22.0 · 2026-10-08
+
+The library tabs are `swatch-library` and `brush-library`: TAB_HOMES keys become Window commands labelled from the id, and `swatch-libraries` produced a "Swatch Libraries" panel command that shadowed the Swatch Libraries submenu of the same label. The Window menu is built by a function so the User Defined submenus list libraries saved during the session; their commands (`sw-user-0` to `sw-user-11`, `br-user-0` to `br-user-11`) take their labels from storage, as the recent-file commands do. Save Swatch Library as formpth and Save Brushes write a .fpth made from a blank document carrying only the swatches and patterns, or the brushes; any .fpth opens as a library through Other Library or Open Brush Library, and File > Open routes .ase files to the Swatch Library panel. The old Recolor Artwork form (a picker per colour plus hue, saturation and brightness shifts) is replaced by the RecolorDialog.
+
 ## src/automation/agent-bridge.ts
 
 ### src/automation/agent-bridge.ts · set_text type options
@@ -403,6 +419,13 @@ graph creates (default without id), updates (default with id or any part's id), 
 
 Each action is one engine call and so one undo step, except grid, which applies the grid values (one step, skipped when nothing changed) and then the view flags (no step); a grid call shows the grid unless show is false. draw builds the shape with the same shapePath and gridGroup as the tools, in plane coordinates, attaches it with an identity m and adds it, so it matches drawing with a tool. place defaults the centre to the plane point under the art's current centre, or the plane's middle when that point is behind the eye. get lists every attached leaf with its plane, offset and plane space bounds, the vanishing points and the planes' extents, which is what an agent needs to choose x and y.
 
+### src/automation/agent-bridge.ts · libraries, groups, brushes and recolor rows
+- refers-to: src/automation/agent-bridge.ts :: add_swatch, swatch_library, swatch_group, apply_brush, new_brush, brush_library, recolor
+- kind: explainer
+- logged: v0.22.0 · 2026-10-08
+
+New tools sit beside the old ones; no name or parameter changed. add_swatch gained tint_of and tint, so color is no longer required (it is still checked when tint_of is absent), and spot implies global. swatch_library and brush_library read the built-in libraries plus the person's User Defined ones through `AgentDeps.userLibraries`, since the bridge cannot import the UI. swatch_group make with colors adds the swatches in one gesture. new_brush maps paint_opacity and flip_along onto the brush fields and checks that pattern tiles name pattern swatches before building. recolor's reduce, group and harmony actions build rows with the same functions as the dialog and apply them in one Recolor Artwork step; preserve_tints defaults on except for a plain harmony.
+
 ## src/engine/index.ts
 
 ### src/engine/index.ts · beginGesture and endGesture
@@ -480,6 +503,13 @@ The Properties column overlays the right of the stage (284 px wide in a 46 px gr
 - logged: v0.9.0 · 2026-10-07
 
 Pucker and Bloat pulls each anchor toward the box centre by 0.4 of the amount and pushes each segment's midpoint the other way by 0.9, then rebuilds the segment as the quadratic through that apex raised to a cubic, so the points bloat while the anchors stay put. Roughen and Zig Zag resample by arc length (Roughen at `detail` points per inch, Zig Zag at `ridges + 1` per segment, rounded to an even count on closed paths so the teeth meet), offset along the normal (Roughen also slides a third of that along the tangent) and pass through `polyToSmooth`, whose handles run parallel to the neighbour chord at 0.3 of each neighbouring segment. Twist turns by the angle times the square of `1 - (r/R)^2`, R being the farthest anchor from the centre, so the middle turns most and the rim not at all. Transform builds one step matrix about the centre and multiplies it once per copy (500 at most). Tweak hashes subpath, anchor, channel and seed into a stable jitter, so the same seed always gives the same shape. Free Distort maps the unit square onto the four dragged corners with a projective `quadMap` (affine when the corners form a parallelogram).
+
+### src/engine/effects.ts · brushGeometry cache
+- refers-to: src/engine/effects.ts :: brushGeometry, brushCache
+- kind: rationale
+- logged: v0.22.0 · 2026-10-08
+
+Brush outlines were rebuilt on every frame; a bristle stroke makes dozens of pieces, so the result is now cached per path data and stroke item (both immutable) and checked against the brush definition object, which changes whenever the brush is edited.
 
 ## src/engine/live.ts
 
@@ -663,6 +693,13 @@ The outline of a curved stroke is built from flattened offsets and then fitted b
 - logged: v0.9.0 · 2026-10-07
 
 One `ColorFn` per Edit Colors action (invert, grayscale, cmyk, rgb, saturate, hue, brightness). `mapFn` maps by hex for Recolor Artwork; `nearestFn` fits to a palette by nearest RGB distance. `recolorDoc` walks fills, strokes, gradient stops, mesh points and type spans.
+
+### src/engine/ops/recolor.ts · rows, OKLab clustering and preserved tints
+- refers-to: src/engine/ops/recolor.ts :: oklab, fromOklab, clusterLab, reduceRows, rowReference, rowsFn, fitRowsToPalette, samplePalette
+- kind: rationale
+- logged: v0.22.0 · 2026-10-08
+
+Recolor Artwork works on rows: each row holds current colours and one new colour. Reducing to N colours clusters the artwork's colours with k-means in OKLab (Björn Ottosson's published matrices), seeded by the most chromatic colour and then farthest-point picks, so the result does not depend on colour order and stays stable between runs. A row's reference is its most chromatic, darker colour. Preserve Tints and Shades moves every other colour in the row by its lightness difference from the reference and scales the new colour's chroma by its chroma ratio, so a light pink in a red row becomes a light version of the new colour and a gray stays gray; Exact maps every colour of the row to the new colour. Applying a palette (a swatch group, a library, a harmony, a picked theme) first merges rows down to the palette's size, then pairs rows and palette colours by lightness. `samplePalette` clusters an image's pixels (at most about 4000 samples) for the Color Theme Picker and orders the colours by how much of the image they cover.
 
 ## src/engine/text.ts
 
@@ -1034,6 +1071,40 @@ Changes made outside the perspective code are absorbed in perspSync, run by refl
 
 Five libraries generated in code, every style built only from things formpth renders and exports: Shadows and Glows (drop shadows, a long shadow made with a Transform effect of 40 copies on the lower fill only, glows, a neon stroke blurred under sharp ones, feather), Buttons (gradients, round corners, a gloss fill inset with Offset Path, inner glows), Outlines (sticker strokes, offset and inset strokes, stitched dashes, roughened ink, zig zag), Textures (Effect Gallery grain, watercolor, halftone, mosaic, stained glass and texturizer on the fill only, so strokes stay crisp) and Scribbles (scribble fills and crosshatch, pencil-sketch strokes). Many use effects on one fill or stroke, which is what makes them more than a fill and a stroke. Effects are built from their defaults (`effectDefaults`) with a few overrides, so a parameter added later gets its default. `styleLibrary` matches an id or a name, with spaces, dashes and underscores alike.
 
+## src/engine/swatch-libraries.ts
+
+### src/engine/swatch-libraries.ts · SWATCH_LIBRARIES
+- refers-to: src/engine/swatch-libraries.ts :: SWATCH_LIBRARIES, swatchLibrary, libraryFromDoc, libraryColors; src/engine/index.ts :: Engine.addLibrarySwatches
+- kind: explainer
+- logged: v0.22.0 · 2026-10-08
+
+Fifteen libraries authored for formpth, each a list of colour groups: Brights, Pastels and Retro (Color Themes), Skin Tones, Earth Tones, Metals (flat colours and multi-stop gradients), Web (the 216 web-safe colours, generated), Grayscale (0 to 100 percent in fives, as gray colours), Spectrums, Sky and Water and Fades (gradients, Fades using stop opacity), Basic Lines and Dots and Grids (pattern swatches whose tile and art are authored here and become pattern definitions when loaded), Seasons and Spot Inks (spot swatches with CMYK values chosen by eye; no trademarked colour book). A library swatch is data, not a document swatch: `addLibrarySwatches` adds what is used in one undo step, keeps the group names, reuses an existing swatch of the same name and paint, and clones pattern art so ids stay unique. `folder` only sorts the libraries into the Window > Swatch Libraries submenus. `libraryFromDoc` turns a document's swatches back into a library for saving; a tint swatch is written as its parent's colour with the tint baked in.
+
+## src/engine/brush-libraries.ts
+
+### src/engine/brush-libraries.ts · BRUSH_LIBRARIES
+- refers-to: src/engine/brush-libraries.ts :: BRUSH_LIBRARIES, brushLibrary; src/engine/index.ts :: Engine.addLibraryBrushes
+- kind: explainer
+- logged: v0.22.0 · 2026-10-08
+
+Five libraries drawn in code: Arrows (art brushes whose guides keep the head and tail from stretching, and a pattern brush with start and end tiles), Borders (pattern brushes with outer and inner corner tiles), Decorative Scatter, Artistic Ink (art brushes and two calligraphic nibs) and Bristle Brushes (one per tip shape). `addLibraryBrushes` copies the definition through JSON so the document never shares objects with the library, and reuses a brush of the same name and type.
+
+## src/engine/brushes.ts
+
+### src/engine/brushes.ts · bristle brushes
+- refers-to: src/engine/brushes.ts :: bristleStrokes, bristleKind, rng, profileWidth
+- kind: rationale
+- logged: v0.22.0 · 2026-10-08
+
+A bristle stroke is many thin closed outlines, one per bristle, each a piece with its own opacity (`BrushPiece.opacity`), so render, SVG (fill-opacity), PDF (an ExtGState per piece) and Expand Appearance (the fill item's opacity) all show the same layered paint. Bristle count follows density (6 to 76), the across-tip offset follows the shape (a disc for round tips, a line for flat ones, an even spread for the fan), and the tip shape sets how much shorter the outer bristles are, which shapes the ends: point tips converge, curve tips round, angle tips slant, blunt tips stay square. Low stiffness adds a slow sine wobble per bristle. The random numbers come from a seeded generator keyed on the path length and the brush, so a stroke looks the same in every render and export. Pressure arrives as the stroke's width profile, written by the Paintbrush from pen pressure; calligraphic brushes read it too. Outline Stroke (`pathOperation` outline_stroke in ops/paths.ts) now outlines a brushed stroke as its brush pieces, as Expand Appearance does, instead of the plain stroke under the brush.
+
+### src/engine/brushes.ts · pattern brush tiles and art brush scaling
+- refers-to: src/engine/brushes.ts :: patternBrush, corners, artBrush, bend, artGuides, TILE_KEYS
+- kind: rationale
+- logged: v0.22.0 · 2026-10-08
+
+Corners are anchors where the tangent turns more than 25 degrees. A right-hand turn on screen (positive cross product with y down) uses the outer corner tile, as on a rectangle drawn clockwise; a left-hand turn uses the inner one. Corner tiles are drawn unbent, centred on the anchor and turned to the incoming side, at the brush scale; start and end tiles take their own width along the path. Side tiles fill the runs between them: Stretch fits a whole number of tiles by stretching them, Add Space keeps their size and spreads the gaps, Approximate scales them uniformly. Tiles are chosen from pattern swatches, as in Illustrator, and copied into the brush so deleting the swatch keeps the brush. The art brush's Stretch option now matters: off is Scale Proportionately (the art spans the path and its width scales with its length), guides stretch only the art between them while the ends keep the brush scale, falling back to a plain stretch when the path is shorter than the two ends. `bend` extends past either end of the path along the end tangent, so proportionate art longer than the path is not folded back on itself.
+
 ## src/engine/stroke-gradient.ts
 
 ### src/engine/stroke-gradient.ts · Along and Across as clipped pieces
@@ -1164,6 +1235,13 @@ A live shape keeps its parameters in its own space plus the transforms applied s
 - logged: v0.9.0 · 2026-10-07
 
 The stroke outline unites with every overlapping shape of the same fill (`uniteAll`), as Illustrator's Blob Brush merges.
+
+### src/tools/freehand.ts · Paintbrush pressure
+- refers-to: src/tools/freehand.ts :: collect, begin, pressureProfile, paintbrush up
+- kind: explainer
+- logged: v0.22.0 · 2026-10-08
+
+The pointer's pressure (1 for a mouse) is collected with each point. When the current brush is bristle or calligraphic and some pressure was below 0.99, up to 16 width points along the stroke become its width profile (pressure times 1.4, at least 0.1), which those brushes read; a mouse stroke gets no profile.
 
 ## src/tools/transform.ts
 
@@ -1330,6 +1408,22 @@ The window's side of the agent bridge goes through here now, as every other engi
 
 These call backend/app/routers/batch.py, which answers only formpth's own window (the agent bridge's origin check) because they read and write arbitrary folders. All are POST; readFile returns the bytes, writeFile posts a form with the folder, the file name and the blob and returns the written path.
 
+## src/io/ase.ts
+
+### src/io/ase.ts · Adobe Swatch Exchange
+- refers-to: src/io/ase.ts :: readAse, writeAse, labToColor
+- kind: explainer
+- logged: v0.22.0 · 2026-10-08
+
+Written from the public description of the format: the signature ASEF, version 1.0, a block count, then blocks of a 16-bit type and a 32-bit length, all big-endian. 0xC001 opens a group (its name), 0xC002 closes it, 0x0001 is a colour: a name as a UTF-16 length counting the terminating zero, the UTF-16 text and the zero, a four-letter model (CMYK, RGB, LAB, Gray), 32-bit floats, and a type (0 global, 1 spot, 2 process). Gradients and patterns cannot be expressed and are counted as skipped. LAB is read as L 0..1 with a and b in their usual range and converted through XYZ (D50, Bradford-adapted to sRGB).
+
+### src/io/ase.ts · Gray direction
+- refers-to: src/io/ase.ts :: readAse, writeAse
+- kind: warning-context
+- logged: v0.22.0 · 2026-10-08
+
+The public notes do not say which way the single Gray value runs. formpth writes and reads it as a gray level (1 white, 0 black), the opposite of its own ink percentage, so files round-trip in formpth; if a file from elsewhere shows gray swatches inverted, this is the line to flip.
+
 ## src/io/data-merge.ts
 
 ### src/io/data-merge.ts · images and variations
@@ -1467,6 +1561,13 @@ TypeScript 7 types `Uint8Array` as possibly backed by a SharedArrayBuffer, which
 - logged: v0.17.0 · 2026-10-08
 
 An image with a warp grid is rasterised at the export ppi through the same renderer as the canvas, for the reason given under src/io/svg.ts; the rest of an envelope stays vector.
+
+### src/io/pdf.ts · spot colours as Separation colour spaces
+- refers-to: src/io/pdf.ts :: Painter.separation, Painter.spaces, pdfName, exportPdf
+- kind: explainer
+- logged: v0.22.0 · 2026-10-08
+
+A paint linked to a spot swatch (directly or as a tint) is written as `/CSn cs t scn` against `[/Separation /Name /DeviceCMYK f]`, where f is a Type 2 function from no ink to the swatch's CMYK values, so viewers draw the alternate and separation tools show the plate under the swatch's name. Spaces are kept once per swatch name in the shared resource dictionary, which every page and form uses. Names are PDF name objects: bytes outside the regular range and delimiters are written as #xx. Gradients that use spot colours still go out as process colours. [Registration] (now linked from the Swatches panel like a global swatch) is written as `/Separation /All` with a full CMYK alternate, so it prints on every plate. Brush pieces with their own opacity (bristles) each get an ExtGState.
 
 ## src/io/pdf-read.ts
 
@@ -1746,6 +1847,13 @@ setStyleVar(b, 'background', '');
 b.style.background = s.name === '[Registration]' ? 'repeating-linear-gradient(45deg, #000 0 2px, #fff 2px 4px)' : paintCss(s.paint, this.engine);
 ```
 
+### src/ui/panels/color.ts · colour groups, tints and spot linking
+- refers-to: src/ui/panels/color.ts :: SwatchesPanel.sync, head, fill, bindDrag, newGroup, renameGroup, newSwatch, edit, swatchPaint; src/engine/index.ts :: groupSwatches, moveSwatches, renameSwatchGroup, ungroupSwatches, deleteSwatches, addTintSwatch; src/engine/paint.ts :: resolvePaint
+- kind: rationale
+- logged: v0.22.0 · 2026-10-08
+
+Groups stay a name on each swatch (`Swatch.group`, already in the format), so old files open unchanged and a group exists while it has a swatch. The grid is one keyed list: ungrouped swatches first, then a full-width folder row keyed `group:<name>` before each group's swatches, so moving a swatch is a move of its node, never a rebuild. Selection is a set (Shift or Mod click adds), a folder click picks the group and its swatches, and native drag and drop moves the dragged swatches (or the whole picked set) onto a folder, before a swatch (taking that swatch's group), or onto empty grid space (out of every group); each is one `moveSwatches` edit. Spot swatches are always linked like global ones: `swatchPaint` links both, `resolvePaint` resolves both, and editing either recolours its uses and its tint swatches. A tint swatch is a colour paint that points at its parent with a tint (`{ swatch, tint }`), the same shape an object's fill has after the Tint slider, so it resolves, exports (as a separation tint for spot parents) and survives deleting nothing else; deleting the parent bakes the tint into a plain colour. The Swatch Options and New Swatch dialogs offer Process, Global Process and Spot as one choice, as Illustrator's Color Type.
+
 ## src/ui/panels/color-guide.ts
 
 ### src/ui/panels/color-guide.ts · Color Guide
@@ -1755,6 +1863,13 @@ b.style.background = s.name === '[Registration]' ? 'repeating-linear-gradient(45
 
 The base colour follows the active fill or stroke colour, except when that colour came from the guide itself (its hex is in `shown`), so picking a harmony swatch does not move the harmony under the pointer. Twelve rules rotate and adjust the base in HSB; each gives five colours, and each colour gets seven variations (tints and shades, warm and cool, vivid and muted) in a fixed 5 by 7 grid. The cells are made once and only their `--sw` variable changes, so switching rules repaints without touching the DOM structure. The plus saves the five harmony colours as a swatch group in one undo step.
 
+### src/ui/panels/color-guide.ts · Limit to library
+- refers-to: src/ui/panels/color-guide.ts :: ColorGuidePanel.fit, limitCtl
+- kind: explainer
+- logged: v0.22.0 · 2026-10-08
+
+As Illustrator's Color Guide limit, a chosen swatch library snaps every harmony colour and variation to its nearest library colour (by RGB distance, `nearestFn`); the cells keep their fixed grid and only their colours change.
+
 ## src/ui/panels/color-picker.ts
 
 ### src/ui/panels/color-picker.ts · HSB scale
@@ -1763,6 +1878,24 @@ The base colour follows the active fill or stroke colour, except when that colou
 - logged: v0.9.0 · 2026-10-07
 
 The picker keeps saturation and brightness in 0..1; `hsbToRgb` takes 0..100. Multiply on the way out, divide on the way in.
+
+## src/ui/panels/recolor.ts
+
+### src/ui/panels/recolor.ts · RecolorDialog
+- refers-to: src/ui/panels/recolor.ts :: RecolorDialog.run, preview, bindWheel, drawWheel, applyPreset, applyLibrary, startPick, onPick, themeFrom, finish
+- kind: rationale
+- logged: v0.22.0 · 2026-10-08
+
+The dialog replaces the old list of pickers. It opens a drag on the engine (`beginDrag`), previews every change with `dragTo` once per animation frame, and OK commits the drag, so the whole session is one Recolor Artwork step and Cancel or Escape leaves no trace. The scrim lets the canvas through and the dialog sits at the bottom right so the art stays visible. The wheel puts hue on the angle (0 at the right, counter-clockwise) and saturation on the radius, drawn at the active row's brightness; the smooth wheel is cached as image data per brightness and the segmented one is 12 hues by 4 rings. With the link on, dragging a marker rotates every marker by the same hue and scales their saturation by the same ratio, measured from where the drag began so markers do not drift; unlinked, only that row moves. The Color Theme Picker turns the scrim click-through, catches the next pointer down outside the dialog in the capture phase (so the stage never sees it), hit tests the point on the original document, and samples an image's pixels or an object's colours. Rows carry their own ids for keyed patching; the current-colour strip inside each row is a small keyed list too. Generative Recolor (a text prompt to colours) is not built: it needs a language model, which the dialog does not call.
+
+## src/ui/panels/libraries.ts
+
+### src/ui/panels/libraries.ts · library panels and User Defined
+- refers-to: src/ui/panels/libraries.ts :: SwatchLibraryPanel, BrushLibraryPanel, userSwatchLibraries, keepUserSwatchLibrary, userBrushLibraries, keepUserBrushLibrary
+- kind: rationale
+- logged: v0.22.0 · 2026-10-08
+
+Illustrator opens each library as its own floating panel; here every opened library lives in one Swatch Library (and one Brush Library) tab, with a dropdown of the libraries opened this session, so the dock keeps its layout. Rows are keyed by library and position, so switching libraries swaps whole sets of keys (removals and additions, never a same-key rebuild) and an unchanged library is never touched. User Defined libraries are kept in this browser's local storage when they are saved (as well as written to a file), the place Illustrator keeps its user folder; they are personal conveniences, the file is the durable copy. Brush previews draw against a blank document when none is open.
 
 ## src/ui/panels/navigator.ts
 

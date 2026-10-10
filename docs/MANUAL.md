@@ -30,7 +30,7 @@ ask it questions.
 - Each tool's options are in the bar along the top.
 - Properties (the column beside the stage) shows what matters for the selection: transform, fill, stroke, opacity
   and quick actions; with nothing selected it shows the document's units, artboards, rulers and grids.
-- Panels dock on the right in groups: Color, Swatches, Gradient; Stroke, Transparency, Brushes, Attributes; Appearance, Graphic
+- Panels dock on the right in groups: Color, Swatches, Gradient, Color Guide, Swatch Library; Stroke, Transparency, Brushes, Attributes, Brush Library; Appearance, Graphic
   Styles; Symbols, Artboards, Links, Image Trace; Navigator, Info, History, Actions, Variables; Layers; Properties, Transform,
   Align, Pathfinder, Pattern Options; Character, Paragraph, Glyphs. Drag a tab into another group or between groups; Window lists every
   panel and Window > Reset Panels puts them back. Workspaces in the title bar arrange the panels for a kind of work.
@@ -244,11 +244,38 @@ ask it questions.
 
 ## Colour and paint
 
-- Color panel: Grayscale, RGB, HSB, CMYK and Web Safe sliders, a hex field and a spectrum. Global swatches show a
-  Tint slider. Edit > Edit Colors > Recolor Artwork lists the colours in the selection and maps each to another;
-  Invert, Grayscale, Convert to CMYK and Convert to RGB act on everything selected.
-- Swatches: colours, gradients and patterns, filtered by kind. Global swatches (the white corner) recolour every use
-  when edited; spot swatches carry a dot. New swatches come from the active paint.
+- Color panel: Grayscale, RGB, HSB, CMYK and Web Safe sliders, a hex field and a spectrum. Global and spot swatches
+  show a Tint slider; with a tint set, New Swatch in the Swatches panel saves it as a tint swatch (the light band at
+  its foot) that stays linked to its parent. Invert, Grayscale, Convert to CMYK and Convert to RGB (Edit > Edit Colors)
+  act on everything selected.
+- Swatches: process, global process (the white corner), spot (the white corner and a dot), tint, gradient, pattern,
+  [None] and [Registration] swatches, filtered by kind. Global and spot swatches recolour every use when edited, and
+  their tints follow. Colour groups show as folders: Shift or Mod click swatches and press New Color Group (the folder
+  button) to group them, or make a group from the selected artwork's colours; drag swatches onto a folder or onto a
+  swatch in a group to move them in, onto empty space to take them out; double-click a folder to rename or ungroup it,
+  and Delete with a folder picked removes the group and its swatches.
+- Swatch libraries: Window > Swatch Libraries (or the books button in the Swatches panel) opens Color Themes (Brights,
+  Pastels, Retro), Skin Tones, Earth Tones, Metals, Web, Grayscale, Gradients (Spectrums, Sky and Water, Fades),
+  Patterns (Basic Lines, Dots and Grids), Nature (Seasons), Color Books (Spot Inks) and User Defined in the Swatch
+  Library panel. Click a swatch to add it to the document and paint with it, a folder to add the group, or the plus
+  to add them all. Save Swatch Library as ASE writes an Adobe Swatch Exchange file of the solid colours with their
+  groups and process, global or spot type; Save Swatch Library as formpth writes a .fpth holding every swatch,
+  gradient and pattern. Saved libraries appear under User Defined; Other Library opens any .ase or .fpth (File > Open
+  also takes .ase).
+- Spot colours print on their own plate: PDF export writes each spot swatch as a Separation colour space named after
+  the swatch, with its CMYK values as the alternate, and tints as the separation's tint value.
+- Recolor Artwork (Edit > Edit Colors, or Recolor in Properties): a colour wheel (Smooth or Segmented) with a marker
+  for each new colour; drag a marker to change hue and saturation, and use Brightness for the active row. With the
+  link on, the markers move together as a harmony; the starred row is the base colour. Colors reduces the artwork to
+  that many colours, clustered by how alike they look (OKLab); Recolor Exact or Preserve tints and shades. The Colors
+  list maps the current colours of each row to its new colour: click the new colour to pick another, untick a row to
+  leave it alone, Shift click rows and Merge them, or Separate a row back into its colours. Library recolours with a
+  document colour group or any swatch library or library group; Preset sets up a 1 color job, a 2 color job or a
+  colour harmony around the base colour (Harmony picks the rule). The eyedropper is the Color Theme Picker: click an
+  image or object on the canvas to take its palette. The other buttons shuffle the colours or their saturation and
+  brightness. The art previews live; OK is one undo step.
+- Color Guide: harmony rules and tints and shades, warm and cool, or vivid and muted variations; Limit to snaps them
+  to a swatch library.
 - Gradient panel and Gradient tool (G): linear and radial gradients with any number of stops and midpoints; drag a
   stop off the bar to remove it, click under the bar to add one. The Gradient tool drags the direction on the art
   and shows its annotator. Strokes take gradients within, along or across: with the stroke active (X), the Within,
@@ -326,9 +353,22 @@ ask it questions.
   the Appearance panel; Expand Appearance makes plain shaded shapes.
 - Rasterize (Effect > Rasterize) shows the object as pixels at a resolution you pick, optionally on white with a
   margin. Effect > Document Raster Effects Settings sets the resolution raster effects are written at in PDF and SVG.
-- Brushes: calligraphic, scatter, art and pattern brushes apply to any stroke from the Brushes panel. New Brush
-  makes a calligraphic brush, or a scatter, art or pattern brush from the selected art; double-click a brush for its
-  options and colorization.
+- Brushes: calligraphic, scatter, art, bristle and pattern brushes apply to any stroke from the Brushes panel. New
+  Brush makes a calligraphic or bristle brush, or a scatter, art or pattern brush from the selected art; double-click a
+  brush for its options and colorization.
+  - Bristle brushes paint with many thin, semi-transparent bristles: Shape (Round or Flat Point, Blunt, Curve, Angle,
+    and Fan), Size, Bristle Length, Density and Thickness, Paint Opacity and Stiffness. With a pen tablet the
+    Paintbrush records pressure, which widens the bristles (and calligraphic brushes) as you press.
+  - Art brushes scale proportionately, stretch to the stroke length, or stretch between guides (only the art between
+    the start and end guide stretches, so arrow heads and tails keep their shape); Flip Along and Flip Across mirror it.
+  - Pattern brushes take a side tile (the art) and outer corner, inner corner, start and end tiles from pattern
+    swatches; corner tiles sit at sharp corners, start and end tiles at the ends of open paths. Fit stretches the
+    tiles, adds space between them, or approximates the path by scaling them.
+  - Window > Brush Libraries (or the books button in the Brushes panel) opens Arrows, Borders, Decorative Scatter,
+    Artistic Ink, Bristle Brushes and User Defined in the Brush Library panel; click a brush to add it and apply it.
+    Save Brushes writes the document's brushes as a .fpth library (also kept under User Defined), and Open Brush
+    Library loads the brushes of any .fpth. Brush strokes look the same on screen, in SVG and PDF, and after Expand
+    Appearance.
 
 ## Type
 
