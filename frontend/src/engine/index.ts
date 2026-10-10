@@ -1993,6 +1993,38 @@ export class Engine extends Emitter<EngineEvents> {
     return id;
   }
 
+  addPatternSwatches(list: Array<{ name: string; tile: Rect; art: VNode }>, fillIds: string[] = [], step = 'Generate Patterns'): string[] {
+    if (!this.current || !list.length) return [];
+    const defs: PatternDef[] = list.map((x) => ({ id: newId('pt'), name: x.name, tile: { ...x.tile }, art: cloneNode(x.art), type: 'grid', hs: 0, vs: 0 }));
+    const sw = defs.map((def) => ({ id: newId('s'), name: def.name, paint: { type: 'pattern' as const, pattern: def.id, xf: [1, 0, 0, 1, 0, 0] as Mat }, global: false, spot: false }));
+    const paint: Paint = sw[0].paint;
+    const ok = this.edit(step, (d) => {
+      const doc = { ...d, patterns: [...d.patterns, ...defs], swatches: [...d.swatches, ...sw] };
+      return fillIds.length ? updateNodes(doc, fillIds, (n) => (n.kind === 'layer' ? n : { ...n, ap: withFirstFill(n.ap, paint) })) : doc;
+    });
+    return ok ? defs.map((x) => x.id) : [];
+  }
+
+  replaceWithClip(id: string, art: VNode[], name: string, step: string): string | null {
+    const p = this.current, n = p ? findNode(p.doc, id) : null;
+    if (!p || !n || n.kind === 'layer' || !art.length) return null;
+    const g: VNode = { id: newId('g'), kind: 'group', name, clip: true, children: [...art.map((a) => cloneNode(a)), n], opacity: 1, blend: 'normal', ap: emptyAppearance() };
+    return this.edit(step, (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => g), select: [g.id] } : d)) ? g.id : null;
+  }
+
+  replaceWithText(ids: string[], node: TextNode, keep: boolean, step = 'Retype'): string | null {
+    const p = this.current;
+    if (!p || !ids.length) return null;
+    const order = inDocOrder(p.doc, ids), last = order[order.length - 1], at = last ? pathOf(p.doc, last) : null;
+    if (!at) return null;
+    const t = { ...node, id: newId('t') };
+    return this.edit(step, (d) => {
+      let out = insertInto(d, at.slice(0, -1), at[at.length - 1] + 1, [t]);
+      if (!keep) out = removeNodes(out, order);
+      return { doc: out, select: [t.id] };
+    }) ? t.id : null;
+  }
+
   get patternSession(): PatternSession | null { return this.current?.patternEdit ?? null; }
   patternGeometry(): PatternGeometry | null {
     const p = this.current, s = p?.patternEdit, g = s && p ? findNode(p.doc, s.group) : null;
