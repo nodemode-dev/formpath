@@ -2,12 +2,13 @@ import { findNode, newId } from '../engine/doc';
 import { cachedPath } from '../engine/render';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
 import { computeFaces, faceAt, faceContains, liveFaces } from '../engine/livepaint';
-import { nearestOnPath } from '../engine/geometry';
+import { insideFill, nearestOnPath } from '../engine/geometry';
+import { envelopeOutline } from '../engine/live';
 import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, toRgb, withFirstFill } from '../engine/paint';
 import type { Doc, Engine, FreeformPoint, Gradient, GroupNode, MeshNode, MeshPoint, PathData, Pt, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
-import { replaceNode } from './select';
+import { EP, envelopeDown, envelopeMove, envelopeOverlay, envelopePointHit, envelopeUp, replaceNode } from './select';
 import { fmt, hud, inView, layerColor, tolDoc, unitLabel } from './util';
 
 registerTool({
@@ -199,7 +200,7 @@ function setMeshPoint(e: Engine, patch: Partial<MeshPoint>, name: string): void 
 registerTool({
   id: 'mesh', label: 'Mesh Tool', group: 'gradient', order: 72, shortcut: 'U',
   icon: () => 'vMesh',
-  hint: () => 'Click a shape to make a gradient mesh. Click inside a mesh to add lines in the fill colour (Shift keeps the colour there); drag points and their handles; Alt-click a point to remove its lines.',
+  hint: () => 'Click a shape to make a gradient mesh. Click inside a mesh or a selected envelope to add lines in the fill colour (Shift keeps the colour there); drag points and their handles; Alt-click a point to remove its lines.',
   cursor: () => CURSORS.cross,
   activate: () => { M.sel = null; },
   down: (ctx, p) => {
@@ -207,9 +208,22 @@ registerTool({
     if (!pr) return;
     const tol = 6 / ctx.view().zoom, hk = meshHandleAt(e, p.doc, tol);
     if (hk >= 0 && M.sel) { M.on = true; M.id = M.sel.id; M.idx = M.sel.idx; M.handle = hk; M.start = p.doc; M.moved = false; e.beginDrag('Move Mesh Handle'); return; }
+    const eh = envelopePointHit(ctx, p);
+    if (eh && p.alt && eh.handle < 0) { EP.idx = -1; e.removeEnvelopeMeshLines(eh.n.id, eh.idx); return; }
+    if (eh && envelopeDown(ctx, p)) return;
+    const inside = e.selectedEnvelopes().find((x) => !x.editContents && pr.selection.has(x.id) && insideFill(envelopeOutline(pr.doc, x), p.doc, 'nonzero'));
+    if (inside) { const idx = e.addEnvelopeMeshLine(inside.id, p.doc, 1e6); if (idx >= 0) { EP.id = inside.id; EP.idx = idx; } ctx.redraw(); return; }
     const h = e.hit(p.doc, 5);
     const n = h ? findNode(pr.doc, h.id) : null;
     if (!n) { M.sel = null; e.emit('options', null); ctx.redraw(); return; }
+    if (n.kind === 'envelope' && !n.editContents) {
+      M.sel = null;
+      if (!pr.selection.has(n.id)) { e.select([n.id]); EP.id = n.id; EP.idx = -1; return; }
+      const idx = e.addEnvelopeMeshLine(n.id, p.doc, 1e6);
+      if (idx >= 0) { EP.id = n.id; EP.idx = idx; }
+      ctx.redraw();
+      return;
+    }
     if (n.kind === 'mesh') {
       const idx = meshPointAt(n, p.doc, tol);
       e.select([n.id]);
@@ -230,6 +244,7 @@ registerTool({
     if (n.kind === 'path' || n.kind === 'compound') { M.sel = null; e.select([n.id]); e.createMesh(Math.max(1, e.options.meshRows), Math.max(1, e.options.meshCols), 'flat'); }
   },
   move: (ctx, p) => {
+    if (envelopeMove(ctx, p)) return;
     const e = ctx.engine, base = e.dragOrigin;
     if (!M.on || !base) return;
     const m = findNode(base, M.id) as MeshNode | null;
@@ -245,7 +260,7 @@ registerTool({
     });
     e.dragTo(replaceNode(base, M.id, { ...m, points: pts }));
   },
-  up: (ctx) => { const e = ctx.engine; if (!M.on) return; M.on = false; if (M.moved) e.commitDrag(); else e.cancelDrag(); ctx.redraw(); },
+  up: (ctx) => { if (envelopeUp(ctx)) return; const e = ctx.engine; if (!M.on) return; M.on = false; if (M.moved) e.commitDrag(); else e.cancelDrag(); ctx.redraw(); },
   options: (e) => [
     { kind: 'title', text: 'Mesh' },
     { kind: 'range', label: 'Rows', min: 1, max: 20, get: () => e.options.meshRows, set: (v) => e.update({ meshRows: Math.round(v) }) },
@@ -257,6 +272,7 @@ registerTool({
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
     const v = ctx.view(), color = layerColor(e), sel = meshSel(e);
+    envelopeOverlay(ctx, g);
     for (const id of e.selectedIds()) {
       const m = findNode(pr.doc, id);
       if (m?.kind !== 'mesh') continue;

@@ -1,13 +1,15 @@
 import { allNodes, findNode, isLocked, isVisible } from '../engine/doc';
 import { anchorHit, segmentHit } from '../engine/hit';
-import { apply, flatIndex, hasIn, hasOut, invert, nearestOnPath, normRect, pointInPolygon, rectContains, rotateAbout, scaleAbout, translate, unflatIndex } from '../engine/geometry';
+import { apply, flatIndex, hasIn, hasOut, invert, mul, nearestOnPath, normRect, pointInPolygon, rectContains, rotateAbout, scaleAbout, translate, unflatIndex } from '../engine/geometry';
 import { transformNodes } from '../engine/ops/objects';
 import { constrainAngle } from '../engine/snap';
 import { framePort } from '../engine/flow';
 import { pathBrackets, pathParamAt } from '../engine/text';
 import { editLive, normalizeLive } from '../engine/ops/live-shapes';
 import { updateNodes } from '../engine/doc';
-import type { Anchor, Doc, Engine, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
+import type { Anchor, Doc, Engine, EnvelopeNode, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
+import { meshHandleAt, meshHandles, meshPointAt, withMeshHandle, withMeshPoint, type MeshSpec } from '../engine/envelope';
+import { envelopeFrame } from '../engine/live';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { isMac } from '../ui/dom';
@@ -20,25 +22,30 @@ export function boxHandles(r: Rect): Pt[] {
   return [{ x: r.x, y: r.y }, { x: cx, y: r.y }, { x: x1, y: r.y }, { x: x1, y: cy }, { x: x1, y: y1 }, { x: cx, y: y1 }, { x: r.x, y: y1 }, { x: r.x, y: cy }];
 }
 
+export function frameHandles(c: Pt[]): Pt[] {
+  const m = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  return [c[0], m(c[0], c[1]), c[1], m(c[1], c[2]), c[2], m(c[2], c[3]), c[3], m(c[3], c[0])];
+}
+
 export function handleAt(ctx: ToolContext, p: ToolPointer): number {
   const e = ctx.engine, pr = e.current;
   if (!pr || !e.view.boundingBox || pr.anchors.size || !pr.selection.size) return -1;
-  const b = e.selectionBounds(false);
-  if (!b) return -1;
-  const v = ctx.view(), a = v.toScreen({ x: b.x, y: b.y }), c = v.toScreen({ x: b.x + b.w, y: b.y + b.h });
-  const r = normRect(a.x, a.y, c.x, c.y), hs = boxHandles(r);
+  const f = e.selectionFrame();
+  if (!f) return -1;
+  const v = ctx.view(), cs = f.corners.map((q) => v.toScreen(q)), hs = frameHandles(cs);
   for (let i = 0; i < 8; i++) if (Math.abs(p.screen.x - hs[i].x) <= 5 && Math.abs(p.screen.y - hs[i].y) <= 5) return i;
-  for (const i of [0, 2, 4, 6]) if (Math.hypot(p.screen.x - hs[i].x, p.screen.y - hs[i].y) <= 18 && !rectContains(r, p.screen)) return 100 + i;
+  for (const i of [0, 2, 4, 6]) if (Math.hypot(p.screen.x - hs[i].x, p.screen.y - hs[i].y) <= 18 && pointInPolygon(p.screen, cs) === 0) return 100 + i;
   return -1;
 }
 
-interface Drag { mode: 'move' | 'scale' | 'rotate' | 'marquee' | null; start: Pt; cur: Pt; ids: string[]; box: Rect | null; handle: number; moved: boolean; copyIds: string[] | null; info: string[] }
-export const newDrag = (): Drag => ({ mode: null, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, ids: [], box: null, handle: -1, moved: false, copyIds: null, info: [] });
+type Frame = NonNullable<ReturnType<Engine['selectionFrame']>>;
+interface Drag { mode: 'move' | 'scale' | 'rotate' | 'marquee' | null; start: Pt; cur: Pt; ids: string[]; box: Rect | null; frame: Frame | null; handle: number; moved: boolean; copyIds: string[] | null; info: string[] }
+export const newDrag = (): Drag => ({ mode: null, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, ids: [], box: null, frame: null, handle: -1, moved: false, copyIds: null, info: [] });
 
 export function beginTransform(ctx: ToolContext, S: Drag, p: ToolPointer, mode: 'move' | 'scale' | 'rotate', handle = -1): void {
   const e = ctx.engine;
   S.mode = mode; S.start = p.doc; S.cur = p.doc; S.moved = false; S.copyIds = null; S.handle = handle;
-  S.ids = e.targetIds(); S.box = e.selectionBounds(false);
+  S.ids = e.targetIds(); S.box = e.selectionBounds(false); S.frame = e.selectionFrame();
   e.beginDrag(mode === 'move' ? 'Move' : mode === 'scale' ? 'Scale' : 'Rotate');
 }
 
@@ -58,8 +65,9 @@ export function dragTransform(ctx: ToolContext, S: Drag, p: ToolPointer): void {
     e.dragTo(r.doc);
     S.info = [`dX: ${unitLabel(e, dx)}`, `dY: ${unitLabel(e, dy)}`];
   } else if (S.mode === 'scale') {
-    const i = S.handle, hs = boxHandles(b), h = hs[i], o = p.alt ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : hs[(i + 4) % 8];
-    const q = ctx.snap(p.doc, new Set(S.ids)).p;
+    const a = S.frame?.angle ?? 0, r = S.frame?.local ?? b, toLocal = rotateAbout(-a, 0, 0), toDoc = rotateAbout(a, 0, 0);
+    const i = S.handle, hs = boxHandles(r), h = hs[i], o = p.alt ? { x: r.x + r.w / 2, y: r.y + r.h / 2 } : hs[(i + 4) % 8];
+    const qd = ctx.snap(p.doc, new Set(S.ids)).p, q = apply(toLocal, qd.x, qd.y);
     let sx = i === 1 || i === 5 ? 1 : (q.x - o.x) / (Math.abs(h.x - o.x) > 1e-9 ? h.x - o.x : 1e-9);
     let sy = i === 3 || i === 7 ? 1 : (q.y - o.y) / (Math.abs(h.y - o.y) > 1e-9 ? h.y - o.y : 1e-9);
     if (p.shift) {
@@ -69,10 +77,10 @@ export function dragTransform(ctx: ToolContext, S: Drag, p: ToolPointer): void {
     }
     const lim = (s: number): number => (Math.abs(s) < 1e-3 ? (s < 0 ? -1e-3 : 1e-3) : s);
     sx = lim(sx); sy = lim(sy);
-    e.dragTo(transformNodes(origin, S.ids, scaleAbout(sx, sy, o.x, o.y), false, xf(e)).doc);
-    S.info = [`W: ${unitLabel(e, b.w * Math.abs(sx))}`, `H: ${unitLabel(e, b.h * Math.abs(sy))}`];
+    e.dragTo(transformNodes(origin, S.ids, mul(toDoc, mul(scaleAbout(sx, sy, o.x, o.y), toLocal)), false, xf(e)).doc);
+    S.info = [`W: ${unitLabel(e, r.w * Math.abs(sx))}`, `H: ${unitLabel(e, r.h * Math.abs(sy))}`];
   } else if (S.mode === 'rotate') {
-    const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    const fc = S.frame?.corners, c = fc ? { x: (fc[0].x + fc[2].x) / 2, y: (fc[0].y + fc[2].y) / 2 } : { x: b.x + b.w / 2, y: b.y + b.h / 2 };
     let deg = ((Math.atan2(p.doc.y - c.y, p.doc.x - c.x) - Math.atan2(S.start.y - c.y, S.start.x - c.x)) * 180) / Math.PI;
     if (p.shift) deg = Math.round(deg / 45) * 45;
     e.dragTo(transformNodes(origin, S.ids, rotateAbout(deg, c.x, c.y), p.alt, xf(e)).doc);
@@ -360,9 +368,87 @@ const D: DState = { mode: null, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, grab
 let hoverLeaf: string | null = null;
 let hoverAnchor = false;
 
+export const EP = { id: '', idx: -1, handle: -1, on: false, moved: false, start: { x: 0, y: 0 }, mesh: null as MeshSpec | null, frame: null as Rect | null };
+
+function envelopeTargets(e: Engine): EnvelopeNode[] {
+  const pr = e.current;
+  if (!pr) return [];
+  return [...pr.selection].map((id) => findNode(pr.doc, id)).filter((n): n is EnvelopeNode => n?.kind === 'envelope' && !n.editContents);
+}
+
+export function envelopePointHit(ctx: ToolContext, p: ToolPointer): { n: EnvelopeNode; s: MeshSpec; idx: number; handle: number } | null {
+  const e = ctx.engine, pr = e.current;
+  if (!pr) return null;
+  const tol = tolDoc(ctx, 5);
+  for (const n of envelopeTargets(e).reverse()) {
+    const s = e.envelopeMesh(pr.doc, n);
+    if (EP.id === n.id && EP.idx >= 0 && EP.idx < s.points.length) { const h = meshHandleAt(s, EP.idx, p.doc, tol); if (h >= 0) return { n, s, idx: EP.idx, handle: h }; }
+    const i = meshPointAt(s, p.doc, tol);
+    if (i >= 0) return { n, s, idx: i, handle: -1 };
+  }
+  return null;
+}
+
+export function envelopeDown(ctx: ToolContext, p: ToolPointer): boolean {
+  const e = ctx.engine, pr = e.current, h = envelopePointHit(ctx, p);
+  if (!pr || !h) return false;
+  Object.assign(EP, { id: h.n.id, idx: h.idx, handle: h.handle, on: true, moved: false, start: p.doc, mesh: h.s, frame: envelopeFrame(pr.doc, h.n) });
+  e.beginDrag(h.handle >= 0 ? 'Move Envelope Handle' : 'Move Envelope Point');
+  ctx.redraw();
+  return true;
+}
+
+export function envelopeMove(ctx: ToolContext, p: ToolPointer): boolean {
+  if (!EP.on) return false;
+  const e = ctx.engine, origin = e.dragOrigin, n = origin ? findNode(origin, EP.id) : null;
+  if (!origin || n?.kind !== 'envelope' || !EP.mesh || !EP.frame) return true;
+  if (!EP.moved && Math.hypot(p.doc.x - EP.start.x, p.doc.y - EP.start.y) * ctx.view().zoom < 2) return true;
+  EP.moved = true;
+  const P = EP.mesh.points[EP.idx];
+  let spec: MeshSpec;
+  if (EP.handle >= 0) spec = withMeshHandle(EP.mesh, EP.idx, EP.handle, p.doc, p.shift);
+  else {
+    const q = p.shift ? constrainAngle(EP.start, p.doc) : p.doc, want = { x: P.x + q.x - EP.start.x, y: P.y + q.y - EP.start.y };
+    spec = withMeshPoint(EP.mesh, EP.idx, p.shift ? want : ctx.snap(want, new Set([EP.id])).p);
+  }
+  e.dragTo(replaceNode(origin, EP.id, { ...n, frame: EP.frame, spec }));
+  return true;
+}
+
+export function envelopeUp(ctx: ToolContext): boolean {
+  if (!EP.on) return false;
+  const e = ctx.engine;
+  EP.on = false; EP.mesh = null;
+  if (EP.moved) e.commitDrag(); else e.cancelDrag();
+  ctx.redraw();
+  return true;
+}
+
+export function envelopeOverlay(ctx: ToolContext, g: CanvasRenderingContext2D): void {
+  const e = ctx.engine, pr = e.current;
+  if (!pr) return;
+  const v = ctx.view();
+  for (const n of envelopeTargets(e)) {
+    const s = e.envelopeMesh(pr.doc, n), color = layerColor(e, n.id);
+    g.save(); g.strokeStyle = color; g.lineWidth = 1;
+    s.points.forEach((q, i) => { const sc = v.toScreen(q), on = EP.id === n.id && EP.idx === i; g.fillStyle = on ? color : '#fff'; g.fillRect(Math.round(sc.x - 3), Math.round(sc.y - 3), 6, 6); g.strokeRect(Math.round(sc.x - 3) + 0.5, Math.round(sc.y - 3) + 0.5, 5, 5); });
+    if (EP.id === n.id && EP.idx >= 0 && EP.idx < s.points.length) {
+      const q = s.points[EP.idx], sc = v.toScreen(q);
+      for (const hh of meshHandles(s)[EP.idx]) {
+        if (Math.hypot(hh.x, hh.y) < 1e-6) continue;
+        const t = v.toScreen({ x: q.x + hh.x, y: q.y + hh.y });
+        g.beginPath(); g.moveTo(sc.x, sc.y); g.lineTo(t.x, t.y); g.stroke();
+        g.beginPath(); g.arc(t.x, t.y, 3, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+      }
+    }
+    g.restore();
+  }
+}
+
 function directDown(ctx: ToolContext, p: ToolPointer, groupMode: boolean): void {
   const e = ctx.engine, pr = e.current;
   if (!pr) return;
+  if (!groupMode && envelopeDown(ctx, p)) return;
   const doc = pr.doc, t = tolDoc(ctx, 5);
   D.start = D.cur = p.doc; D.moved = false;
   const hit = e.hit(p.doc, 5);
@@ -422,6 +508,7 @@ function groupPick(e: Engine, chain: string[]): string {
 }
 
 function directMove(ctx: ToolContext, p: ToolPointer): void {
+  if (envelopeMove(ctx, p)) return;
   const e = ctx.engine, pr = e.current, origin = e.dragOrigin;
   D.cur = p.doc;
   if (D.mode === 'marquee') { ctx.redraw(); return; }
@@ -516,6 +603,7 @@ function selectAnchorsWhere(e: Engine, inside: (p: Pt) => boolean, add: boolean)
 }
 
 function directUp(ctx: ToolContext, p: ToolPointer): void {
+  if (envelopeUp(ctx)) return;
   const e = ctx.engine;
   if (D.mode === 'marquee') {
     const r = normRect(D.start.x, D.start.y, p.doc.x, p.doc.y), z = ctx.view().zoom;
@@ -538,6 +626,7 @@ function directUp(ctx: ToolContext, p: ToolPointer): void {
 function directOverlay(ctx: ToolContext, g: CanvasRenderingContext2D): void {
   const e = ctx.engine, pr = e.current;
   if (!pr) return;
+  envelopeOverlay(ctx, g);
   if (D.mode === 'marquee') marquee(ctx, g, D.start, D.cur);
   if (D.mode === 'lasso') { const v = ctx.view(); stroke2(g, D.lasso.map((q) => v.toScreen(q)), ctx.paint().accent, false); }
   if (!D.mode && hoverLeaf && !pr.selection.has(hoverLeaf)) {
@@ -557,7 +646,7 @@ function directHover(ctx: ToolContext, p: ToolPointer | null): void {
     const h = e.hit(p.doc, 5);
     if (h) next = leafChild(pr.doc, h.id, p.doc);
     const cands = [...(h ? [findNode(pr.doc, h.id) as VNode] : []), ...selectedLeaves(e)].filter(Boolean);
-    onAnchor = !!anchorHit(pr.doc, cands, p.doc, tolDoc(ctx, 5), (id) => pr.anchors.get(id) ?? null);
+    onAnchor = !!anchorHit(pr.doc, cands, p.doc, tolDoc(ctx, 5), (id) => pr.anchors.get(id) ?? null) || !!envelopePointHit(ctx, p);
   }
   if (next !== hoverLeaf || onAnchor !== hoverAnchor) { hoverLeaf = next; hoverAnchor = onAnchor; ctx.redraw(); }
 }
@@ -571,7 +660,7 @@ registerTool({
   move: (ctx, p) => { if (BR.on) bracketMove(ctx, p); else directMove(ctx, p); },
   up: (ctx, p) => { if (BR.on) bracketUp(ctx); else directUp(ctx, p); },
   hover: directHover,
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); D.mode = null; BR.on = false; ctx.redraw(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); D.mode = null; BR.on = false; EP.on = false; ctx.redraw(); },
   overlay: directOverlay,
 });
 

@@ -1,6 +1,7 @@
 import { findNode, layerOf } from '../engine/doc';
 import { apply, normRect } from '../engine/geometry';
 import { cachedPath } from '../engine/render';
+import { envelopeGrid } from '../engine/live';
 import { layoutText, lineBaseline } from '../engine/text';
 import type { Doc, Engine, PathData, Pt, Rect, VNode } from '../engine';
 import { dashed, type ToolContext } from '../extensions/registry';
@@ -43,7 +44,7 @@ export function outlineNode(ctx: ToolContext, g: CanvasRenderingContext2D, doc: 
       if (x.kind === 'path') g.stroke(cachedPath(x.d));
       else if (x.kind === 'compound') for (const c of x.children) g.stroke(cachedPath(c.d));
       else if (x.kind === 'group' || x.kind === 'layer' || x.kind === 'blend' || x.kind === 'repeat') for (const c of x.children) walk(c);
-      else if (x.kind === 'envelope') g.strokeRect(x.frame.x, x.frame.y, x.frame.w, x.frame.h);
+      else if (x.kind === 'envelope') g.stroke(cachedPath(envelopeGrid(doc, x)));
       else if (x.kind === 'text') {
         if (x.mode === 'path' && x.path) { g.stroke(cachedPath(x.path)); return; }
         if (x.mode === 'area' && x.frame) { g.strokeRect(x.frame.x, x.frame.y, x.frame.w, x.frame.h); return; }

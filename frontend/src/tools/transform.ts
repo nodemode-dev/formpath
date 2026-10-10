@@ -2,8 +2,8 @@ import { findNode } from '../engine/doc';
 import { apply, mul, nearestOnPath, normRect, rotateAbout, scaleAbout, segLength, segments } from '../engine/geometry';
 import { transformNodes } from '../engine/ops/objects';
 import { firstStroke, withFirstStroke } from '../engine/paint';
-import type { Anchor, Doc, Engine, Mat, PathData, Pt, Rect, VNode, WidthPoint } from '../engine';
-import { registerTool, toolHost } from '../extensions/registry';
+import type { Anchor, Engine, Mat, PathData, Pt, VNode, WidthPoint } from '../engine';
+import { registerTool, toolHost, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { beginTransform, dragTransform, endTransform, handleAt, newDrag, replaceNode } from './select';
 import { fmt, hud, marquee } from './util';
@@ -96,14 +96,6 @@ xformTool('reflect', 'Reflect Tool', 'vReflect', 'rotate', 51, 'O', 'reflect', '
 xformTool('scale', 'Scale Tool', 'vScale', 'scale', 52, 'S', 'scale', 'scale-dialog');
 xformTool('shear', 'Shear Tool', 'vShear', 'scale', 53, undefined, 'shear', 'shear-dialog');
 
-function bilinear(r: Rect, q: [Pt, Pt, Pt, Pt]): (p: Pt) => Pt {
-  return (p) => {
-    const u = r.w ? (p.x - r.x) / r.w : 0, v = r.h ? (p.y - r.y) / r.h : 0;
-    const top = { x: q[0].x + (q[1].x - q[0].x) * u, y: q[0].y + (q[1].y - q[0].y) * u }, bot = { x: q[3].x + (q[2].x - q[3].x) * u, y: q[3].y + (q[2].y - q[3].y) * u };
-    return { x: top.x + (bot.x - top.x) * v, y: top.y + (bot.y - top.y) * v };
-  };
-}
-
 function mapAnchorsNode(n: VNode, f: (p: Pt) => Pt): VNode {
   const ma = (a: Anchor): Anchor => { const c = f(a), i = f({ x: a.ix, y: a.iy }), o = f({ x: a.ox, y: a.oy }); return { ...a, x: c.x, y: c.y, ix: i.x, iy: i.y, ox: o.x, oy: o.y }; };
   const md = (d: PathData): PathData => d.map((sp) => ({ ...sp, pts: sp.pts.map(ma) }));
@@ -117,50 +109,117 @@ function mapAnchorsNode(n: VNode, f: (p: Pt) => Pt): VNode {
   return n;
 }
 
-const FT = { ...newDrag(), distort: false, corner: -1, q: null as [Pt, Pt, Pt, Pt] | null };
+type FtMode = 'transform' | 'perspective' | 'free';
+const FT = { ...newDrag(), distort: null as null | 'free' | 'perspective', corner: -1, src: null as Pt[] | null, q: null as Pt[] | null, angle: 0, envIds: new Map<string, string>(), shear: false };
+function shearDrag(ctx: ToolContext, p: ToolPointer): void {
+  const e = ctx.engine, base = e.dragOrigin, f = FT.frame;
+  if (!base || !f) return;
+  FT.cur = p.doc;
+  if (!FT.moved && Math.hypot(p.doc.x - FT.start.x, p.doc.y - FT.start.y) * ctx.view().zoom < 3) return;
+  FT.moved = true;
+  const toLocal = rotateAbout(-f.angle, 0, 0), toDoc = rotateAbout(f.angle, 0, 0), r = f.local;
+  const a = apply(toLocal, FT.start.x, FT.start.y), b = apply(toLocal, p.doc.x, p.doc.y), horiz = FT.handle === 1 || FT.handle === 5;
+  const top = FT.handle === 1, left = FT.handle === 7;
+  const k = horiz ? (b.x - a.x) / Math.max(1e-6, r.h) * (top ? -1 : 1) : (b.y - a.y) / Math.max(1e-6, r.w) * (left ? -1 : 1);
+  const oy = top ? r.y + r.h : r.y, ox = left ? r.x + r.w : r.x;
+  const s: Mat = horiz ? [1, 0, k, 1, -k * oy, 0] : [1, k, 0, 1, 0, -k * ox];
+  e.dragTo(transformNodes(base, FT.ids, mul(toDoc, mul(s, toLocal)), p.alt, xf(e)).doc);
+  FT.info = [`${fmt((Math.atan(k) * 180) / Math.PI)}°`];
+}
+const ftMode = (e: Engine): FtMode => e.options.ftMode ?? 'transform';
+const FT_HINT: Record<FtMode, string> = {
+  transform: 'Drag handles to scale, outside a corner to rotate, Ctrl or Command on a side handle to shear. Ctrl or Command on a corner distorts freely; Ctrl+Alt+Shift or Command+Option+Shift on a corner distorts in perspective.',
+  perspective: 'Perspective Distort: drag a corner along its edge; the opposite corner on that edge moves the other way.',
+  free: 'Free Distort: drag any corner of the bounding box anywhere.',
+};
+function distortQuad(p: ToolPointer, constrain: boolean): Pt[] {
+  const src = FT.src as Pt[], q = src.map((c) => ({ ...c })), k = FT.corner, a = (FT.angle * Math.PI) / 180;
+  const u = { x: Math.cos(a), y: Math.sin(a) }, v = { x: -Math.sin(a), y: Math.cos(a) };
+  const dx = p.doc.x - FT.start.x, dy = p.doc.y - FT.start.y, du = dx * u.x + dy * u.y, dv = dx * v.x + dy * v.y;
+  if (FT.distort === 'perspective') {
+    const horiz = Math.abs(du) >= Math.abs(dv), partner = horiz ? k ^ 1 : 3 - k, dir = horiz ? u : v, t = horiz ? du : dv;
+    q[k] = { x: src[k].x + dir.x * t, y: src[k].y + dir.y * t };
+    q[partner] = { x: src[partner].x - dir.x * t, y: src[partner].y - dir.y * t };
+    return q;
+  }
+  if (constrain) { const horiz = Math.abs(du) >= Math.abs(dv), dir = horiz ? u : v, t = horiz ? du : dv; q[k] = { x: src[k].x + dir.x * t, y: src[k].y + dir.y * t }; }
+  else q[k] = { x: src[k].x + dx, y: src[k].y + dy };
+  return q;
+}
 registerTool({
   id: 'freeTransform', label: 'Free Transform Tool', group: 'free', order: 54, shortcut: 'E',
   icon: () => 'vFreeTransform',
-  hint: () => 'Drag handles to scale, outside a corner to rotate. Hold Ctrl or Command while dragging a corner to distort freely.',
-  cursor: (ctx, p) => { if (!p) return CURSORS.select; const h = handleAt(ctx, p); return h >= 100 ? CURSORS.rotate : h >= 0 ? (p.mod ? CURSORS.direct : cursorFor(h)) : CURSORS.select; },
+  hint: (e) => FT_HINT[ftMode(e)],
+  cursor: (ctx, p) => {
+    if (!p) return CURSORS.select;
+    const h = handleAt(ctx, p), mode = ftMode(ctx.engine), corner = h >= 0 && h < 100 && h % 2 === 0;
+    if (mode !== 'transform') return corner ? CURSORS.direct : CURSORS.select;
+    return h >= 100 ? CURSORS.rotate : h >= 0 ? (p.mod && corner ? CURSORS.direct : cursorFor(h)) : CURSORS.select;
+  },
+  options: (e) => [
+    { kind: 'title', text: 'Free Transform' },
+    { kind: 'segment', label: 'Mode', choices: [{ id: 'transform', label: 'Free Transform' }, { id: 'perspective', label: 'Perspective Distort' }, { id: 'free', label: 'Free Distort' }], get: () => ftMode(e), set: (id) => e.update({ ftMode: id as FtMode }) },
+    { kind: 'toggle', label: 'Constrain', get: () => !!e.options.ftConstrain, set: (v) => e.update({ ftConstrain: v }) },
+  ],
   down: (ctx, p) => {
-    const e = ctx.engine, h = handleAt(ctx, p);
+    const e = ctx.engine, h = handleAt(ctx, p), mode = ftMode(e);
     if (h < 0) {
       const hit = e.hit(p.doc);
       if (hit) { const id = e.selectableFor(hit.id); if (!e.current?.selection.has(id)) e.select([id]); beginTransform(ctx, FT, p, 'move'); }
       else { e.deselect(); FT.mode = 'marquee'; FT.start = FT.cur = p.doc; }
       return;
     }
-    if (p.mod && h < 100 && h % 2 === 0) {
-      const b = e.selectionBounds(false);
-      if (!b) return;
-      FT.distort = true; FT.corner = h / 2; FT.box = b; FT.ids = e.targetIds(); FT.start = p.doc; FT.moved = false;
-      FT.q = [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
-      e.beginDrag('Free Distort');
+    const corner = h < 100 && h % 2 === 0;
+    const persp = corner && (mode === 'perspective' || (mode === 'transform' && p.mod && p.alt && p.shift));
+    const free = corner && !persp && (mode === 'free' || (mode === 'transform' && p.mod));
+    if (persp || free) {
+      const f = e.selectionFrame();
+      if (!f) return;
+      FT.distort = persp ? 'perspective' : 'free'; FT.corner = h / 2; FT.ids = e.targetIds(); FT.start = p.doc; FT.cur = p.doc; FT.moved = false;
+      FT.src = f.corners; FT.q = f.corners.map((c) => ({ ...c })); FT.angle = f.angle; FT.envIds = new Map(); FT.copyIds = null;
+      e.beginDrag(persp ? 'Perspective Distort' : 'Free Distort');
       return;
     }
+    if (mode !== 'transform') return;
+    FT.shear = h < 100 && h % 2 === 1 && p.mod;
     beginTransform(ctx, FT, p, h >= 100 ? 'rotate' : 'scale', h % 100);
+    if (FT.shear) e.beginDrag('Shear');
   },
   move: (ctx, p) => {
+    const e = ctx.engine, constrain = p.shift || !!e.options.ftConstrain;
     if (FT.mode === 'marquee') { FT.cur = p.doc; ctx.redraw(); return; }
-    if (!FT.distort) { dragTransform(ctx, FT, p); return; }
-    const e = ctx.engine, base = e.dragOrigin;
-    if (!base || !FT.box || !FT.q) return;
+    if (FT.shear && FT.mode === 'scale') { shearDrag(ctx, p); return; }
+    if (!FT.distort) { dragTransform(ctx, FT, constrain && FT.mode !== 'move' ? { ...p, shift: true } : p); return; }
+    const base = e.dragOrigin;
+    if (!base || !FT.src) return;
+    FT.cur = p.doc;
+    if (!FT.moved && Math.hypot(p.doc.x - FT.start.x, p.doc.y - FT.start.y) * ctx.view().zoom < 2) return;
     FT.moved = true;
-    const q = FT.q.map((x) => ({ ...x })) as [Pt, Pt, Pt, Pt];
-    q[FT.corner] = ctx.snap(p.doc, new Set(FT.ids)).p;
-    const f = bilinear(FT.box, q);
-    let doc: Doc = base;
-    for (const id of FT.ids) { const n = findNode(doc, id); if (n) doc = replaceNode(doc, id, mapAnchorsNode(n, f)); }
-    e.dragTo(doc);
+    let ptr = p;
+    if (FT.distort === 'free' && !constrain) { const c = FT.src[FT.corner], s = ctx.snap({ x: c.x + p.doc.x - FT.start.x, y: c.y + p.doc.y - FT.start.y }, new Set(FT.ids)).p; ptr = { ...p, doc: { x: FT.start.x + s.x - c.x, y: FT.start.y + s.y - c.y } }; }
+    FT.q = distortQuad(ptr, constrain);
+    const r = e.distortTargets(base, FT.ids, FT.src, FT.q, FT.envIds);
+    FT.copyIds = r.select;
+    e.dragTo(r.doc);
   },
   up: (ctx, p) => {
     const e = ctx.engine;
     if (FT.mode === 'marquee') { const r = normRect(FT.start.x, FT.start.y, p.doc.x, p.doc.y); FT.mode = null; if (r.w * ctx.view().zoom > 2) e.selectInRect(r, 'replace', false); ctx.redraw(); return; }
-    if (FT.distort) { FT.distort = false; if (FT.moved) e.commitDrag(); else e.cancelDrag(); return; }
+    if (FT.distort) { FT.distort = null; FT.q = null; if (FT.moved) e.commitDrag(FT.copyIds ?? undefined); else e.cancelDrag(); FT.copyIds = null; ctx.redraw(); return; }
+    FT.shear = false;
     endTransform(ctx, FT);
   },
-  overlay: (ctx, g) => { if (FT.mode === 'marquee') marquee(ctx, g, FT.start, FT.cur); if (FT.mode && FT.moved) hud(ctx, g, ctx.view().toScreen(FT.cur), FT.info); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); FT.mode = null; FT.distort = null; FT.q = null; FT.shear = false; ctx.redraw(); },
+  overlay: (ctx, g) => {
+    if (FT.mode === 'marquee') marquee(ctx, g, FT.start, FT.cur);
+    if (FT.mode && FT.moved) hud(ctx, g, ctx.view().toScreen(FT.cur), FT.info);
+    if (FT.distort && FT.q && FT.moved) {
+      const v = ctx.view(), s = FT.q.map((q) => v.toScreen(q));
+      g.save(); g.strokeStyle = ctx.paint().accent; g.lineWidth = 1; g.beginPath(); s.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); g.closePath(); g.stroke();
+      g.fillStyle = '#fff'; for (const q of s) { g.fillRect(Math.round(q.x) - 3, Math.round(q.y) - 3, 6, 6); g.strokeRect(Math.round(q.x) - 2.5, Math.round(q.y) - 2.5, 5, 5); }
+      g.restore();
+    }
+  },
 });
 
 const R = { on: false, id: '', start: { x: 0, y: 0 }, moved: false };
