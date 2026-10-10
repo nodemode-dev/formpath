@@ -5,12 +5,14 @@ import { cachedPath, invalidateLayers, renderDocument, renderNode, type RenderCo
 import { collectTargets, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
 import { layoutText, lineBaseline, pathBrackets } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
+import { envelopeFrame, envelopeGrid } from '../engine/live';
 import { cssColor } from '../engine/paint';
 import { latticeCopies, tileOutline } from '../engine/pattern';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
 import type { Project } from '../engine/project';
 import { getTool, type SnapAt, type Tool, type ToolContext, type ToolPointer, type ViewInfo } from '../extensions/registry';
-import { isMac, q, setHidden } from './dom';
+import { el, isMac, q, setClass, setHidden, setStyleVar } from './dom';
+import { icon } from './icons';
 import { paint, type StagePaint } from './palette';
 
 const RULER = 18;
@@ -45,6 +47,8 @@ export class Stage {
   private loading = new Set<string>();
   private typeHandler: ((r: TypeRequest) => void) | null = null;
   private lastTool: Tool | undefined;
+  private readonly ftWidget: HTMLElement;
+  private readonly ftButtons: Array<{ id: string; b: HTMLButtonElement }> = [];
   onPointerDoc: ((p: Pt | null) => void) | null = null;
 
   static prefs: { zoomWheel: boolean; gridColor: string; guideColor: string; snapTol: number; gridInBack: boolean; cell: number } = { zoomWheel: false, gridColor: '', guideColor: '', snapTol: 4, gridInBack: true, cell: 8 };
@@ -56,6 +60,16 @@ export class Stage {
     this.rulerV = q<HTMLCanvasElement>(host, '.cv-ruler-v');
     for (const [r, vertical] of [[this.rulerH, false], [this.rulerV, true]] as const) this.bindRuler(r, vertical);
     this.welcome = q(host, '.cv-welcome');
+    this.ftWidget = el('<div class="cv-ft-widget" role="toolbar" aria-label="Free Transform" hidden></div>');
+    for (const [id, ic, label] of [['constrain', 'ftConstrain', 'Constrain'], ['transform', 'ftTransform', 'Free Transform'], ['perspective', 'ftPerspective', 'Perspective Distort'], ['free', 'ftFree', 'Free Distort']] as const) {
+      const b = el<HTMLButtonElement>(`<button class="cv-ft-btn" type="button" title="${label}" aria-label="${label}" aria-pressed="false">${icon(ic, 16)}</button>`);
+      b.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      b.addEventListener('click', () => { if (id === 'constrain') engine.update({ ftConstrain: !engine.options.ftConstrain }); else engine.update({ ftMode: id }); });
+      this.ftWidget.appendChild(b);
+      if (id === 'constrain') this.ftWidget.appendChild(el('<span class="cv-ft-sep" aria-hidden="true"></span>'));
+      this.ftButtons.push({ id, b });
+    }
+    host.appendChild(this.ftWidget);
     const s = this.scene.getContext('2d');
     const o = this.overlay.getContext('2d');
     if (!s || !o) throw new Error('2D canvas is unavailable');
@@ -368,6 +382,7 @@ export class Stage {
     g.clearRect(0, 0, this.overlay.width, this.overlay.height);
     this.renderRulers();
     const p = this.engine.current;
+    this.syncFtWidget(p);
     if (!p) return;
     const pal = paint(), d = this.dpr;
     g.setTransform(d, 0, 0, d, 0, 0);
@@ -376,6 +391,19 @@ export class Stage {
     try { this.drawSelection(g, p, pal); this.drawTextPorts(g, p, pal); this.drawPathBrackets(g, p, pal); } catch (err) { console.error(err); }
     this.drawSmart(g, p, pal);
     try { this.tool()?.overlay?.(this.ctx, g); } catch (err) { console.error(err); }
+  }
+
+  private syncFtWidget(p: Project | null): void {
+    const f = p && this.engine.tool === 'freeTransform' && p.selection.size ? this.engine.selectionFrame() : null;
+    if (!f) { setHidden(this.ftWidget, true); return; }
+    const v = this.viewInfo(), pts = f.corners.map((c) => v.toScreen(c)), W = 34, H = 126, inset = this.engine.view.rulers ? RULER + 8 : 8;
+    const minX = Math.min(...pts.map((s) => s.x)), minY = Math.min(...pts.map((s) => s.y));
+    const x = Math.max(inset, Math.min(this.cssW - W - 8, minX - W - 14)), y = Math.max(inset, Math.min(this.cssH - H - 8, minY));
+    setStyleVar(this.ftWidget, '--ft-x', `${Math.round(x)}px`);
+    setStyleVar(this.ftWidget, '--ft-y', `${Math.round(y)}px`);
+    const mode = this.engine.options.ftMode ?? 'transform';
+    for (const { id, b } of this.ftButtons) { const on = id === 'constrain' ? !!this.engine.options.ftConstrain : id === mode; setClass(b, 'is-active', on); if (b.getAttribute('aria-pressed') !== String(on)) b.setAttribute('aria-pressed', String(on)); }
+    setHidden(this.ftWidget, false);
   }
 
   private drawArtboardNames(g: CanvasRenderingContext2D, p: Project, pal: StagePaint): void {
@@ -518,10 +546,11 @@ export class Stage {
     }
     const t = this.engine.tool;
     if (vw.boundingBox && (t === 'selection' || t === 'freeTransform' || t === 'scale') && !p.anchors.size) {
-      const b = this.engine.selectionBounds(false);
-      if (b) {
+      const f = this.engine.selectionFrame();
+      if (f) {
         const color = layerOf(doc, ids[ids.length - 1])?.color || pal.layer;
-        drawBox(g, v.toScreen(b.x, b.y), v.toScreen(b.x + b.w, b.y + b.h), color, pal.handle);
+        if (!f.angle) drawBox(g, v.toScreen(f.local.x, f.local.y), v.toScreen(f.local.x + f.local.w, f.local.y + f.local.h), color, pal.handle);
+        else drawFrame(g, f.corners.map((c) => v.toScreen(c.x, c.y)), color, pal.handle);
       }
     }
   }
@@ -531,7 +560,12 @@ export class Stage {
       case 'path': g.stroke(cachedPath(n.d)); break;
       case 'compound': for (const c of n.children) g.stroke(cachedPath(c.d)); break;
       case 'group': case 'layer': case 'blend': case 'repeat': for (const c of n.children) if (!c.hidden) this.traceEdges(g, c); break;
-      case 'envelope': g.strokeRect(n.frame.x, n.frame.y, n.frame.w, n.frame.h); break;
+      case 'envelope': {
+        const d = this.engine.doc as Doc;
+        if (n.editContents) { const fr = envelopeFrame(d, n), z = Math.max(1e-6, g.getTransform().a / this.dpr); g.save(); g.setLineDash([4 / z, 3 / z]); g.strokeRect(fr.x, fr.y, fr.w, fr.h); g.restore(); for (const c of n.children) if (!c.hidden) this.traceEdges(g, c); }
+        else g.stroke(cachedPath(envelopeGrid(d, n)));
+        break;
+      }
       case 'mesh': { const b = geomBounds(this.engine.doc as Doc, n); g.strokeRect(b.x, b.y, b.w, b.h); break; }
       case 'text': {
         if (n.mode === 'area' && n.framePath) g.stroke(cachedPath(transformPath(n.framePath, n.xf)));
@@ -887,6 +921,17 @@ export function drawBox(g: CanvasRenderingContext2D, a: Pt, b: Pt, color: string
   g.strokeRect(x0, y0, x1 - x0, y1 - y0);
   g.fillStyle = fill;
   for (const [x, y] of boxHandles({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 })) { g.fillRect(x - 3, y - 3, 6, 6); g.strokeRect(x - 3, y - 3, 6, 6); }
+  g.restore();
+}
+
+export function drawFrame(g: CanvasRenderingContext2D, c: Pt[], color: string, fill: string): void {
+  const m = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  g.save();
+  g.lineWidth = 1;
+  g.strokeStyle = color;
+  g.beginPath(); c.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); g.closePath(); g.stroke();
+  g.fillStyle = fill;
+  for (const h of [c[0], m(c[0], c[1]), c[1], m(c[1], c[2]), c[2], m(c[2], c[3]), c[3], m(c[3], c[0])]) { const x = Math.round(h.x) + 0.5, y = Math.round(h.y) + 0.5; g.fillRect(x - 3, y - 3, 6, 6); g.strokeRect(x - 3, y - 3, 6, 6); }
   g.restore();
 }
 

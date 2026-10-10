@@ -149,7 +149,7 @@ export class PropertiesPanel {
     else if (n.kind === 'image') out.push(['Image Trace', 'image-trace'], ['Embed', 'embed-image']);
     else if (n.kind === 'path') out.push(['Offset Path', 'offset-path'], ['Outline Stroke', 'outline-stroke'], ['Simplify', 'simplify'], ...(n.live ? [['Expand Shape', 'expand-shape'] as [string, string]] : []));
     else if (n.kind === 'compound') out.push(['Release Compound Path', 'compound-release']);
-    else if (n.kind === 'blend' || n.kind === 'repeat' || n.kind === 'envelope') out.push(['Expand', 'expand-object'], ['Release', 'release-live'], ...(n.kind === 'blend' ? [['Blend Options', 'blend-options'] as [string, string]] : []));
+    else if (n.kind === 'blend' || n.kind === 'repeat' || n.kind === 'envelope') out.push(['Expand', 'expand-object'], ['Release', 'release-live'], ...(n.kind === 'blend' ? [['Blend Options', 'blend-options'] as [string, string]] : []), ...(n.kind === 'envelope' ? [['Edit Contents', 'envelope-edit-contents'], ['Envelope Options', 'envelope-options']] as Array<[string, string]> : []));
     else if (n.kind === 'symbol') out.push(['Break Link', 'break-symbol']);
     out.push(['Arrange', 'bring-to-front'], ['Recolor', 'recolor'], ['Expand Appearance', 'expand-appearance']);
     return out;
