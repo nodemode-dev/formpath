@@ -151,6 +151,40 @@ ask it questions.
   the document's units relabels it. Object > Expand turns it into plain paths and type. Dimensions export to SVG and
   PDF and are saved in .fpth files.
 
+## Perspective drawing
+
+- View > Perspective Grid > Show Grid (Ctrl+Shift+I) shows the document's perspective grid: a left plane, a right
+  plane and a horizontal (ground) plane meeting at the origin on the ground level, with the horizon and the
+  vanishing points. One Point, Two Point and Three Point Perspective each have a normal view preset laid out on the
+  first artboard; Grid Presets applies one of them or a preset you saved with Save Grid as Preset. Lock Grid stops
+  the widgets from moving and Snap to Grid snaps drawing on a plane to the gridlines.
+- Define Grid sets the type, Gridline every (the cell size), the viewing angle and distance, the horizon height
+  above the ground level, the third vanishing point (its distance below the horizon, negative above, for three point
+  grids), the left, right and vertical extents, each plane's colour and the grid's opacity, with a live preview.
+- The Perspective Grid tool (Shift+P) drags the grid's widgets: the round vanishing points (dragging one in a two
+  point grid changes the viewing angle and distance, and its height moves the horizon), the square horizon handles,
+  the ground level origin (moves the whole grid), the extent handles at the far ends of the ground lines and at the
+  top of the corner line, the cell size handle one cell along the top edge, and the diamond plane controls that slide
+  the left, right and horizontal planes parallel to themselves.
+- The plane widget in the stage's top-left corner picks the active plane: click a face, or press 1 (left), 2
+  (horizontal), 3 (right) or 4 (none) while the grid shows. With a plane active, the Rectangle, Rounded Rectangle,
+  Ellipse, Polygon, Star, Flare, Line, Arc, Spiral and grid tools draw on that plane: the shape is built in the
+  plane's own coordinates and projected, and it stays attached to the plane.
+- The Perspective Selection tool (Shift+V) works on art in perspective. Drag art that is not in perspective onto the
+  grid to bring it onto the active plane (paths and groups are projected, type, images and symbols are drawn through
+  the projection). Drag perspective art to slide it along its plane, Alt-drag to copy it, and press 5 during the drag
+  to move it perpendicular to its plane instead. The box around the selection is its bounding box in plane space;
+  drag its handles to scale on the plane (Shift keeps proportions, Alt scales from the centre). Double-click type in
+  perspective to edit it: the words change in place and stay in perspective.
+- Object > Perspective: Attach to Active Plane attaches the selection to the active plane where it already looks
+  right; Release with Perspective keeps the look and makes it ordinary art; Move Plane to Match Object moves the
+  grid's plane to the selected object's plane; Edit Text edits type in perspective.
+- Attached art remembers its plane and its coordinates on the plane, so editing the grid (any widget, Define Grid,
+  a preset or a different grid type) re-projects it. Editing an attached path directly, or moving it with the
+  Selection tool, keeps it attached at its new place. The grid itself never prints or exports; attached art exports
+  to SVG and PDF as it looks. The grid, its view settings and the attachments are saved in .fpth files, and every
+  change is one undo step.
+
 ## Graphs
 
 - The graph tools share one rail slot (Shift+G): Column, Stacked Column, Bar, Stacked Bar, Line, Area, Scatter, Pie

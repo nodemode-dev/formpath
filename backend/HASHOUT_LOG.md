@@ -161,6 +161,13 @@ The desktop shell loads the main window from the sidecar as an external URL (`ht
 
 Three tools run in the window like every other: graph (create, update, get, make_design), variables (list, make, bind, unbind, rename, delete, capture, update, import, show, export) and actions (list, play, batch). Their folder arguments are not handled by _run here: the window writes and reads through batch.py, which it may call because it has the app origin. setup/agents.py lists graph and variables under Graphs and data and actions under Commands.
 
+### app/routers/mcp.py · perspective tool
+- refers-to: app/routers/mcp.py :: TOOLS perspective; setup/agents.py :: GROUPS
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+One tool covers the perspective grid with an action: get, grid (preset or type plus the Define Grid values, show, lock, snap, active_plane), draw (a shape in plane coordinates), place, attach, move, scale, release and match_plane. Agents say horizontal for the ground plane, as Illustrator's menus do; the engine calls it floor. Plane coordinates are explained in the description because an agent cannot see the grid's local frames; get reports each plane's extent in them. It runs in the window and needs nothing from _run. setup/agents.py lists it under Drawing.
+
 ## app/routers/batch.py
 
 ### app/routers/batch.py · library and folder access for the window

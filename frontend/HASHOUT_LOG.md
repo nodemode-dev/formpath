@@ -54,6 +54,7 @@ frontend/
     │   ├── variables.ts        variables, data sets and applying a data set to the document
     │   ├── intertwine.ts       intertwine objects: member areas, overlap faces, zones
     │   ├── shaper.ts           Shaper gesture recognition, Shaper Group faces and scribbles
+    │   ├── perspective.ts      perspective grid camera, plane homographies, attached art and re-projection
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -80,6 +81,7 @@ frontend/
     │   ├── dimension.ts        Dimension
     │   ├── graph.ts            the nine graph tools
     │   ├── shaper.ts           Shaper, Intertwine
+    │   ├── perspective.ts      Perspective Grid, Perspective Selection
     │   ├── symbolism.ts        Symbol Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler
     │   ├── type.ts             type tools and their options
     │   └── view.ts             Hand, Rotate View, Zoom, Artboard
@@ -143,6 +145,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/variables.ts
 - src/engine/intertwine.ts
 - src/engine/shaper.ts
+- src/engine/perspective.ts
 - src/engine/style-libraries.ts
 - src/engine/stroke-gradient.ts
 - src/extensions/registry.ts
@@ -156,6 +159,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/tools/dimension.ts
 - src/tools/graph.ts
 - src/tools/shaper.ts
+- src/tools/perspective.ts
 - src/tools/symbolism.ts
 - src/tools/type.ts
 - src/tools/view.ts
@@ -185,6 +189,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/ui/panels/variables.ts
 - src/ui/panels/graph-data.ts
 - src/ui/panels/graph-dialogs.ts
+- src/ui/panels/perspective-grid.ts
 - src/ui/panels/stroke.ts
 - src/ui/panels/type.ts
 - src/ui/panels/text-styles.ts
@@ -283,6 +288,13 @@ Attributes joins the Stroke group (Window > Attributes comes from `TAB_HOMES`). 
 - logged: v0.20.0 · 2026-10-10
 
 Object > Graph holds Type, Data (Alt+Shift+Ctrl+G), Design, Column and Marker; graph-size is the click-to-size dialog of the graph tools. File > Automate holds Play Action, Batch, New Document from History State and History Options. The Variables panel sits in the Navigator group (Window > Variables). The Actions panel gets openFiles, deliver and toast from here, and agents.actions points the bridge at it.
+
+### src/app.ts · perspective commands
+- refers-to: src/app.ts :: persp-show, persp-lock, persp-snap, persp-define, persp-1p, persp-2p, persp-3p, persp-presets, persp-save-preset, persp-plane-left, persp-plane-floor, persp-plane-right, persp-plane-none, persp-attach, persp-release, persp-match-plane, persp-edit-text
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+View > Perspective Grid holds Show or Hide Grid (Shift+Ctrl+I), Lock Grid, Snap to Grid, Define Grid, One, Two and Three Point Perspective (each with its normal view preset as a submenu, as in Illustrator), Grid Presets, Save Grid as Preset and the four active plane commands. The plane commands carry the bare keys 1 to 4 and are enabled only while the grid shows; no other command or tool uses bare digits, and the dispatcher ignores keys typed into fields and the type editor. Object > Perspective holds Attach to Active Plane, Release with Perspective, Move Plane to Match Object and Edit Text, which switches to the Type tool and opens the editor on the flat type inside the perspective envelope.
 
 ## src/automation/agent-bridge.ts
 
@@ -383,6 +395,13 @@ intertwine takes action make (ids or the selection), flip (x, y inside an overla
 - logged: v0.20.0 · 2026-10-10
 
 graph creates (default without id), updates (default with id or any part's id), gets or makes a design; data comes as {series, categories, values} or spreadsheet text, and the answer lists every series group id so set_paint can restyle a series. Setting min, max or divisions turns calculated ticks off; auto true turns them back on. variables runs the Variables panel's operations and export writes into an absolute folder through the engine. actions lists, plays (stops that allow continue are passed, others end the run and are reported) and batches; it runs before the open-document check so list and batch work with no document. Each call is still one history step through beginStep and endStep.
+
+### src/automation/agent-bridge.ts · perspective
+- refers-to: src/automation/agent-bridge.ts :: AgentBridge.perspectiveTool; src/engine/index.ts :: Engine.setPerspGrid, setPerspView, placeOnPlane, attachToPlane, perspMove, perspScale, releasePerspective, movePlaneToObject
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+Each action is one engine call and so one undo step, except grid, which applies the grid values (one step, skipped when nothing changed) and then the view flags (no step); a grid call shows the grid unless show is false. draw builds the shape with the same shapePath and gridGroup as the tools, in plane coordinates, attaches it with an identity m and adds it, so it matches drawing with a tool. place defaults the centre to the plane point under the art's current centre, or the plane's middle when that point is behind the eye. get lists every attached leaf with its plane, offset and plane space bounds, the vanishing points and the planes' extents, which is what an agent needs to choose x and y.
 
 ## src/engine/index.ts
 
@@ -752,6 +771,13 @@ Not Liang's patterns: the TeX US English pattern list could not be added as data
 
 Layout is cached per node by identity and never reads the document, so anything that depends on other nodes is written into the text node as derived data by one pass, `reflow`, which `Engine.edit`, `dragTo`, `restore` and `addProject` run on every new document. `wrapShape` holds the outlines of the wrap objects above the type in its layer, in the type's local space, plus its own `framePath`; threaded frames hold their share of one story. The story is the concatenation of every frame's spans in chain order, so typing into any frame works without knowing about threads, and the pass deals the story back out frame by frame using each frame's overflow index. `reflow` returns the same document when nothing changed and costs one walk when there are no wraps, threads or shaped frames. Links that point at a missing, duplicated or non-area frame are dropped by the pass, which is how a duplicated threaded frame comes out unthreaded. `detachFrames` runs before a delete and for Release Selection so the text of a removed frame flows back into the rest of the thread instead of being lost. `reflowAll` reruns the pass without a history step when fonts finish loading, because the distribution depends on glyph widths.
 
+### src/engine/flow.ts · perspective sync
+- refers-to: src/engine/flow.ts :: reflow; src/engine/perspective.ts :: perspSync
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+reflow runs perspSync after the dimension and graph refresh, so every edit, drag preview, undo and file open sees attached art whose source matches what is drawn, and the grid is written into the document in the same step that first attaches art. It returns the same document when nothing attached changed.
+
 ## src/engine/symbolism.ts
 
 ### src/engine/symbolism.ts · instance tint and the symbolism operations
@@ -981,6 +1007,24 @@ Scribble rules: the scribble is sampled every two points; if every sample that l
 
 A stroke whose ends are farther apart than 30 percent of its bounding diagonal (and 14 points) is open: it becomes a line when no sample strays more than 8 percent of the chord (4 points minimum) from it, snapped to 45 degree steps within 6 degrees, and is ignored otherwise. A closed stroke is resampled to 96 points by arc length. Candidates: a circle (centroid, mean radius); an ellipse from the principal axes of the samples (second moments; for points spread evenly along an ellipse the variance along an axis is half its squared radius, so the radii are the square roots of twice the eigenvalues), snapped to the axes within 8 degrees; and the corners found by a closed Ramer-Douglas-Peucker pass at 7 percent of the diagonal from the farthest pair, merging vertices that turn less than 28 degrees. Three corners give a triangle as a live polygon whose xf is the affine map from the regular triangle to the drawn one (any triangle is an affine image of an equilateral one, orientation matched first). Four give a rectangle whose angle is the length-weighted mean edge direction modulo 90 degrees (averaged as 4 theta), snapped to the axes within 8 degrees, with extents from the 3rd and 97th percentiles of the samples in that frame, made square when the sides differ by under 12 percent. Five to eight give a regular polygon with the drawn rotation. Each candidate is scored by the mean distance of the samples to its outline over the shape's radius plus a small penalty that grows with complexity, and the best wins if it scores under 0.16. A scribble is told apart first: at least two direction reversals sharper than 135 degrees over a five-sample window with the path at least 1.3 times its convex hull's perimeter, or four or more reversals.
 
+## src/engine/perspective.ts
+
+### src/engine/perspective.ts · the grid as a camera
+- refers-to: src/engine/perspective.ts :: PerspGrid, camera, tiltOf, planeFrame, planeH, invH, projectPt, toPlane, vanishing, presetGrid, sanitizeGrid, dragGrid; src/engine/types.ts :: PerspGrid, PerspView, Doc.persp
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+The grid is stored as the Define Grid values, not as widget positions: type, the ground level origin (where the planes meet, in document points), the horizon height above it, the station offset (the centre of vision's x from the origin), viewing angle and distance, the third vanishing point's distance below the horizon, the cell size, extents, plane offsets, colours and opacity. Everything else is derived from a pinhole camera: the eye at the origin looking along z, the picture plane at the viewing distance D, screen x = cx + D x/z and y = cy - D y/z. The corner of the planes is the point on the ray through the ground origin at depth D, so one plane unit is one point at the corner. The right plane runs along r = (sin a, 0, cos a) and the left along l = (-cos a, 0, sin a) with a the viewing angle, so the vanishing points sit at cx + D tan a and cx - D cot a on the horizon; one point is a = 0, where the left plane faces the viewer and the right plane and the floor run toward the single vanishing point. Three point tilts the camera by p with sin 2p = 2D / vp3, which puts the third vanishing point vp3 below the horizon (the principal point moves to the horizon plus D tan p so the horizon stays where it was set), which is why vp3 is kept at least 2D. Each plane is a frame (origin, x axis, y axis pointing down the picture, normal): left x = -l, right x = r, floor x = -l and y = -r, so type reads naturally on all three. Projecting a plane frame through the camera is linear in plane x and y, which gives the 3 by 3 homography planeH directly (normalised by the origin's depth); its third row is the depth, so a point is in front of the eye when it is positive, toPlane refuses points behind the eye (the floor above the horizon), and projectPt clamps the depth at 2% of the origin's so nothing explodes near the eye. The grid drawing clips plane rectangles and gridlines at 5% of that depth before projecting. Dragging a two point vanishing point solves the angle and distance from both vanishing points (tan a squared is the ratio of their distances from cx, D their geometric mean), iterated against the tilt for three point grids. The default when a document has no grid is the two point preset on its first artboard; it is written into the document the first time art is attached.
+
+### src/engine/perspective.ts · attached art
+- refers-to: src/engine/perspective.ts :: PerspAttach, attachPlace, attachKeep, projectLeaf, wrap, normalized, meshed, perspSync, syncLeaf, fitAffine, reprojectDoc, moveLeaf, scaleLeaf, releaseNode, sigPaths; src/engine/types.ts :: NodeBase.persp; src/engine/flow.ts :: reflow
+- kind: rationale
+- logged: v0.21.0 · 2026-10-10
+
+Attachment lives on leaves only: paths, compound paths and envelopes carry persp (plane, the plane offset it sits on, and m, an affine from the art's own coordinates to plane coordinates); groups pass attachment down to their children so a group can span planes. Paths keep their geometry in persp.src and their d is the projection, mapped with mapPathAdaptive (lines stay lines, curves are split until within 0.05 pt of the true projective image), so render, hit testing, Direct Selection, SVG and PDF see ordinary paths. Type, images, symbols, meshes and the special groups cannot be projected in place, so they are wrapped in an envelope whose children stay flat and whose 6 by 6 mesh is fitted to the homography; that keeps type editable (Edit Text selects the child and opens the type editor, with no Edit Contents step) and reuses the envelope's renderers and exporters. normalized translates the envelope's child to sit where its projection is (compensating m) whenever art is placed, moved or the grid changes, so the flat type the editor works on is next to what is drawn.
+
+Changes made outside the perspective code are absorbed in perspSync, run by reflow: each attached path stores sig, a weighted sum over its anchors that survives a JSON round trip exactly; when d no longer matches (a Direct Selection edit, a transform, a nudge) the source is re-derived by mapping every anchor and handle back through the inverse homography, so the art stays where the person put it and later grid edits move it from there. An envelope whose mesh changed (a 2D move or scale) gets a new m fitted to three mesh corners mapped back onto the plane and is re-meshed, which snaps it to a true perspective rendering; one whose child's bounds changed (typing) is re-meshed over the new bounds with the same m. Verified nodes are remembered per grid object in a WeakMap, so an unchanged document costs one walk. reprojectDoc rebuilds every attached leaf from its source with the new grid and maps gradient geometry through the old inverse and the new forward mapping. Moves are world space vectors: a delta on one plane is converted into each leaf's own plane axes and normal, so a group whose parts sit on several planes moves as one solid, and the perpendicular move changes off. Attach keeps the look: paths get the inverse-mapped source and keep d, other art gets m from the local inverse affine at its centre. Release only drops persp, so paths keep their projected anchors and envelopes stay envelopes.
+
 ## src/engine/style-libraries.ts
 
 ### src/engine/style-libraries.ts · STYLE_LIBRARIES
@@ -1098,6 +1142,13 @@ Curvature is `Shift+~` (Illustrator's key). The first draft used Shift plus back
 
 A click under a few screen pixels stores the point in `pendingShape` and runs the `shape-dialog` command, which asks exact sizes and draws at that point.
 
+### src/tools/draw.ts · drawing on a perspective plane
+- refers-to: src/tools/draw.ts :: buildOn, planePt, State.plane; src/engine/index.ts :: Engine.perspActive; src/engine/perspective.ts :: planeAt, snapPlane, attachPlace
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+When the perspective grid shows and a plane is active (captured at pointer down), both drag points are mapped onto the plane, snapped to the gridlines within 6 screen pixels when Snap to Grid is on (the ordinary snap is skipped, it works in the picture), and the same build function makes the shape in plane coordinates; attachPlace with an identity m projects it. Shift, Alt and the arrow keys behave as on the flat page because they act in plane space. A point behind the eye (the floor above the horizon) draws nothing. The click-for-exact-size dialog still draws flat.
+
 ### src/engine/ops/live-shapes.ts · editing live shapes
 - refers-to: src/engine/ops/live-shapes.ts :: normalizeLive, patchLive, liveShapePath, liveParams; src/ui/shape-fields.ts :: ShapeFields; src/tools/select.ts :: cornerWidgets, dragWidget
 - kind: rationale
@@ -1213,6 +1264,15 @@ Nine tools share the graph slot; Column Graph has Shift+G (J, Illustrator's old 
 
 Shaper (Shift+N) sits in the Pencil flyout after Pencil so N keeps its default; Intertwine (Shift+J, a key Illustrator leaves free) sits with Shape Builder and Live Paint. A Shaper drag shorter than five screen pixels is a click: in Faces mode it selects the face under it (Engine.shaperSelection, honoured by setFill while the Shaper tool is active, so the Color and Swatches panels paint the face) and in Shapes mode it selects the source shape inside the group; in Shapes mode a drag that starts on the selected source moves it as one Move Shape step. Longer strokes go to isScribble, then to recognition. The Intertwine tool is the editing mode of Object > Intertwine: it works on the selected intertwine object or the one under the pointer, highlights the overlap face under the pointer, flips on click, takes any drag (Alt or not) as a lasso, and returns to the Selection tool on Escape, Enter or Done.
 
+## src/tools/perspective.ts
+
+### src/tools/perspective.ts · Perspective Grid and Perspective Selection
+- refers-to: src/tools/perspective.ts :: perspectiveGrid tool, perspectiveSelect tool, handleAt, planeBox, boxHandleAt, dragDoc, leafOfHit; src/engine/perspective.ts :: gridHandles, dragGrid; src/engine/index.ts :: Engine.perspMoveDoc, Engine.perspScaleDoc
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+Both tools share the perspective rail slot after Shape Builder, with Shift+P and Shift+V as in Illustrator, and both show the grid when picked. The grid tool hit tests the widget positions from gridHandles within 7 screen pixels and previews each drag with dragTo(reprojectDoc(origin, dragGrid(grid at press, handle, pointer))), so attached art follows live and the drag commits as one step named after the widget; it does nothing while the grid is locked. Round handles are vanishing points, diamonds the plane controls, squares the rest. The selection tool decides at press: a box handle of the selection's plane space bounds scales (opposite handle fixed, Shift proportional, Alt about the centre); art that has an attached leaf under the pointer, or a press inside the plane box, moves along that leaf's plane by the difference of the press and pointer mapped onto the plane; unattached art is placed on the active plane with its centre under the pointer's offset; empty space marquee selects. Alt at press duplicates inside the preview, so a cancel leaves nothing behind. There is no keyup in the tool contract, so 5 toggles the perpendicular move for the rest of the drag instead of only while held; the perpendicular distance is the vertical pointer travel divided by the plane's local scale at the press. A double-click on type in perspective runs Edit Text.
+
 ## src/tools/symbolism.ts
 
 ### src/tools/symbolism.ts · Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler
@@ -1287,6 +1347,13 @@ resolveImages turns a data set's image values into assets before the synchronous
 - logged: v0.9.0 · 2026-10-07
 
 Artboards carry `rect: [x, y, w, h]` beside `x, y, w, h` so other tools can read the manifest without knowing the engine's field names. Readers prefer `rect`. The cast in `docFromManifest` exists because the manifest type does not declare `rect`.
+
+### src/io/project-io.ts · perspective grid view state
+- refers-to: src/io/project-io.ts :: serialize; src/engine/project.ts :: Project.persp; src/engine/perspective.ts :: perspViewOf
+- kind: rationale
+- logged: v0.21.0 · 2026-10-10
+
+Show, Lock, Snap to Grid and the active plane are view state, not document edits: they live on the Project so toggling them is never an undo step and an undo never hides the grid. serialize writes them into the document as perspView and the Project constructor reads them back, so a saved file reopens with the grid as it was without the opening code (which does not read the manifest's view block) changing. The grid itself is doc.persp and round trips with the rest of the document; attachments are node fields. Both are optional, so older files open unchanged.
 
 ## src/io/svg.ts
 
@@ -1553,6 +1620,13 @@ Selected area type shows an in port at its top left and an out port at its botto
 
 The widget is built once in the constructor (Constrain, then Free Transform, Perspective Distort and Free Distort, icons from icons-vector) and synced on every overlay frame: shown only with the Free Transform tool and a selection, placed beside the selection's top-left through CSS variables in a transform (so moving it is no layout shift), clamped inside the stage and below the rulers, with a fixed 34 px width so placing it never measures the DOM. Its buttons stop pointerdown from reaching the canvas. The selection box is drawn from Engine.selectionFrame, as a turned polygon with eight handles when the box has an angle. An envelope's selection outline is its mesh lines (or the warped box grid, or the top shape), cached per node; in Edit Contents it is a dashed contents box with the raw contents' edges.
 
+### src/ui/stage.ts · perspective grid and plane widget
+- refers-to: src/ui/stage.ts :: perspWidget, perspFaces, syncPerspWidget, drawPerspective; src/styles/formpth.css :: .cv-persp-widget, .cv-persp-face, .cv-persp-none; src/styles/tokens.css :: --cv-persp-left, --cv-persp-right, --cv-persp-floor
+- kind: explainer
+- logged: v0.21.0 · 2026-10-10
+
+The grid is drawn on the overlay canvas (it is a guide: never in the scene, never exported) after the guides and before the selection: the floor, then the left and right planes, each a translucent fill at the grid's opacity and its gridlines, the active plane stronger, then the horizon across the stage, the ground level dashed and a dot at each vanishing point. The widgets themselves belong to the Perspective Grid tool's overlay. The plane widget is built once in the constructor like the Free Transform widget: an inline cube whose three faces are radio items (left, horizontal, right) and a None button, all with data-plane; one delegated click sets the active plane. syncPerspWidget runs with each overlay frame and only patches its position variables, the faces' is-active class and aria-checked, and its hidden flag; its size is fixed in CSS so showing it moves nothing. Face colours are tokens, not the document's grid colours, so the widget reads the same in every document.
+
 ## src/ui/text-editor.ts
 
 ### src/ui/text-editor.ts · vertical editing
@@ -1757,6 +1831,15 @@ A non-modal floating window (z-companion) built once; the grid is rows of text i
 - logged: v0.20.0 · 2026-10-10
 
 Graph Type is an askForm (so actions record it) that only writes the options that changed, as one step with the series type change; with no graph selected it sets the defaults for new graphs (Engine.options.graph). The series a dialog acts on are those whose parts the Group or Direct Selection tool selected, or all series when the whole graph is selected.
+
+## src/ui/panels/perspective-grid.ts
+
+### src/ui/panels/perspective-grid.ts · Define Grid and presets
+- refers-to: src/ui/panels/perspective-grid.ts :: defineGrid, gridFrom, fieldsFor, saveGridPreset, savedPresets, presetById, presetChoices; src/app.ts :: persp-define, persp-presets, persp-save-preset
+- kind: rationale
+- logged: v0.21.0 · 2026-10-10
+
+Define Grid is a previewEdit form, so every change previews by re-projecting the drag origin and OK commits one step. The form cannot rewrite its own fields when the Preset select changes, so the preset is the base and only the fields the person changed from their opening values override it; picking a preset and pressing OK applies the preset as saved. Saved presets are app wide, as in Illustrator, in localStorage under formpth.perspectivePresets (name and the whole grid); they are offered in Define Grid and in View > Perspective Grid > Grid Presets, because the menu tables are static and cannot list them. Applying a built-in preset from the menu keeps the document's grid colours and opacity.
 
 ## src/ui/panels/stroke.ts
 
@@ -1986,6 +2069,13 @@ Added for the vector stage and the paint chips; `src/ui/palette.ts` reads them.
 - logged: v0.9.0 · 2026-10-07
 
 Every class the vector modules introduced: the fill and stroke widget, the Layers tree rows, the panel kit, Properties, Color, Swatches, Gradient, Stroke, Appearance, Symbols, Artboards, Links, Actions, type panels, the picker, status bar, home presets, New Document, dialogs. `.cv-stage-col` gets its own stacking context so the rulers stay under the Properties column that overlays the stage.
+
+### src/styles/formpth.css · number fields in form dialogs
+- refers-to: src/styles/formpth.css :: .cv-dialog .cv-field > .cv-num; src/ui/form-dialog.ts :: FormDialog.ask
+- kind: rationale
+- logged: v0.21.0 · 2026-10-10
+
+Form dialog number fields used the panel width (a 34 px input beside the spinner), which cut off values of three or more digits such as Define Grid's distances and extents. Inside a dialog field row the box is now 110 px with the input filling it; the row's grid column already has the room, so no dialog grows.
 
 ## Inherited from formvis
 

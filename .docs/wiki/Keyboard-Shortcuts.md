@@ -13,6 +13,8 @@ Ctrl stands for Command on a Mac. Help > Keyboard Shortcuts in the app lists eve
 | Dimension | Shift+I |
 | Column Graph (the graph tools' slot) | Shift+G |
 | Shaper, Intertwine | Shift+N, Shift+J |
+| Perspective Grid, Perspective Selection | Shift+P, Shift+V |
+| Left, horizontal, right or no active perspective plane (grid shown) | 1, 2, 3, 4 |
 | Eyedropper, Gradient, Mesh, Live Paint, Live Paint Selection, Shape Builder, Blend | I, G, U, K, Shift+L, Shift+M, W |
 | Symbol Sprayer, Artboard | Shift+S, Shift+O |
 | Type, Touch Type | T, Shift+T |
@@ -30,6 +32,7 @@ Ctrl stands for Command on a Mac. Help > Keyboard Shortcuts in the app lists eve
 | Join, Make Clipping Mask, Make Compound Path | Ctrl+J, Ctrl+7, Ctrl+8 |
 | Transform Again | Ctrl+D |
 | Outline view, Rulers, Guides, Grid, Smart Guides | Ctrl+Y, Ctrl+R, Ctrl+;, Ctrl+', Ctrl+U |
+| Show or Hide Perspective Grid | Shift+Ctrl+I |
 | Zoom In, Zoom Out, Fit Artboard, Actual Size, Fit All | Ctrl+=, Ctrl+-, Ctrl+0, Ctrl+1, Alt+Ctrl+0 |
 | Swap Fill and Stroke, Default colours, Fill or Stroke | Shift+X, D, X |
 | Colour, Gradient, None | comma, period, slash |
