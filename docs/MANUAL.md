@@ -82,6 +82,17 @@ ask it questions.
 - Curvature (Shift+~): click points and the curve passes smoothly through them; Alt-click makes a corner.
 - Pencil (N) draws a fitted path from a freehand stroke and extends a selected open path when you start at its end.
   Smooth simplifies under the drag, Path Eraser removes under the drag, Join joins two open ends.
+- Shaper (Shift+N, in the Pencil flyout) turns rough gestures into live shapes: draw a rectangle (a square when the
+  sides come out about equal; one drawn nearly level snaps square to the axes), a circle, an ellipse, a triangle, a
+  polygon of five to eight sides or a straight line, and it becomes the matching live shape in the current fill and
+  stroke. The options bar names what it recognised. Scribble (a zigzag) over shapes to cut and combine them: a
+  scribble that stays inside one overlap punches that region out, a scribble across several regions merges them
+  into one face in the colour of the face where it started, and a scribble over a single shape's area that no other
+  shape overlaps deletes that shape. Overlapping shapes become a Shaper Group that keeps the shapes: with Click
+  selects set to Faces, click a face to select it and change its fill (the Color panel, swatches or Face fill in the
+  options bar); with Shapes, click a shape inside the group to select it and drag to move it (the Direct Selection
+  tool and the Shape section of Properties edit it too), and the faces recompute. Expand (options bar, Properties,
+  or Object > Shape > Expand Shaper Group) turns the group into plain paths; Ungroup gives the shapes back.
 - Paintbrush (B) draws strokes with the current brush. Blob Brush (Shift+B) draws filled shapes that merge with
   overlapping shapes of the same fill. Eraser (Shift+E) cuts shapes away; Scissors (C) splits a path at a point; Knife
   cuts shapes along a freehand line.
@@ -345,6 +356,15 @@ ask it questions.
 - Blends (W or Object > Blend): smooth colour, a number of steps, or a distance, along a straight spine or a path you
   choose with Replace Spine.
 - Repeats: radial, grid and mirror, editable in Repeat Options until released or expanded.
+- Intertwine (Object > Intertwine): Make turns two or more overlapping objects (paths, groups, type) into an
+  intertwine object and starts its editing mode (the Intertwine tool, Shift+J). Overlaps light up under the pointer;
+  click one and the object below comes to the front inside that overlap, so two rings link like a chain. Where
+  three or more objects overlap, each click brings the next one down to the top. Drag (or Alt-drag) a loop around
+  part of an overlap to set the order there freely. Escape, Enter or Done leaves; Edit (or Edit Intertwine in
+  Properties) comes back. Moving or reshaping one of the objects keeps the areas where they are on the page.
+  Release gives back the plain objects in their original order; Object > Expand makes plain objects with clipped
+  copies for each area. Live Paint, Repeat and Shaper Groups cannot be intertwined. SVG and PDF export draw the
+  areas as clipping paths.
 - Envelope Distort (Object > Envelope Distort): Make with Warp (the 15 warp presets), Make with Mesh (rows and
   columns) or Make with Top Object pours the selection, type and images included, into a shape. With the Direct
   Selection tool, drag a mesh point or one of its handles (Shift turns the opposite handle with it); with the Mesh

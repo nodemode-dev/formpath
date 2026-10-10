@@ -50,6 +50,8 @@ frontend/
     │   ├── livepaint.ts        Live Paint faces, gap closing and face paint
     │   ├── puppet.ts           Puppet Warp mesh and as-rigid-as-possible solve
     │   ├── dimension.ts        live dimension groups and their labels
+    │   ├── intertwine.ts       intertwine objects: member areas, overlap faces, zones
+    │   ├── shaper.ts           Shaper gesture recognition, Shaper Group faces and scribbles
     │   ├── transform.ts        node transforms
     │   ├── snap.ts             point, grid and smart guide snapping
     │   ├── kernel.ts           paper.js adapter: booleans, offset, simplify
@@ -74,6 +76,7 @@ frontend/
     │   ├── paint.ts            Eyedropper, Gradient, Mesh, Live Paint, Shape Builder, Blend, Sprayer, Measure
     │   ├── puppet.ts           Puppet Warp
     │   ├── dimension.ts        Dimension
+    │   ├── shaper.ts           Shaper, Intertwine
     │   ├── symbolism.ts        Symbol Shifter, Scruncher, Sizer, Spinner, Stainer, Screener, Styler
     │   ├── type.ts             type tools and their options
     │   └── view.ts             Hand, Rotate View, Zoom, Artboard
@@ -132,6 +135,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/engine/ops/distort.ts
 - src/engine/puppet.ts
 - src/engine/dimension.ts
+- src/engine/intertwine.ts
+- src/engine/shaper.ts
 - src/engine/style-libraries.ts
 - src/engine/stroke-gradient.ts
 - src/extensions/registry.ts
@@ -143,6 +148,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/tools/paint.ts
 - src/tools/puppet.ts
 - src/tools/dimension.ts
+- src/tools/shaper.ts
 - src/tools/symbolism.ts
 - src/tools/type.ts
 - src/tools/view.ts
@@ -343,6 +349,13 @@ New optional parameters and enum values only. `envelope` gains info (points row-
 - logged: v0.19.0 · 2026-10-10
 
 Two new tools. puppet_warp takes pins as x, y with optional to_x, to_y (a pin left out holds its place) and rotate in degrees counter-clockwise, the harness convention, which Engine.puppetWarp negates because the solver works in the y-down page; the warp is one Engine.edit, so one undo step. A pin given rotate turns its neighbourhood by that much from rest. add_dimension builds a spec from the parameters and adds it in one edit; radial takes circle (the id of a live ellipse or a single closed circular path, with the first point if any giving the rim direction) or three_points (circumcentre), and with ids and no points it patches existing dimensions instead, so agents can restyle without a separate tool.
+
+### src/automation/agent-bridge.ts · intertwine and shaper
+- refers-to: src/automation/agent-bridge.ts :: intertwine case, shaper case; backend/app/routers/mcp.py :: intertwine, shaper; setup/agents.py :: GROUPS
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+intertwine takes action make (ids or the selection), flip (x, y inside an overlap), area (a loop of points), release and expand; id defaults to the selected intertwine object and get_document reports its zones (top member id and bounds). shaper takes action draw (the gesture as points, answered with the recognised kind and the live shape's id), scribble (punch, merge or delete by the same rules as the tool), fill (x, y and color for one face) and expand. Each call is one engine edit, so one undo step.
 
 ## src/engine/index.ts
 
@@ -869,6 +882,35 @@ The art maps through the deformed triangles with barycentric coordinates, and di
 
 A dimension is a group with dim set: the spec stores the measured points (linear a and b; angular vertex and two arm points; radial centre and rim point), the offset and the style. The children are derived, like Live Paint faces: refreshDimensions, run first in reflow, regenerates them whenever the spec object, the group id or the document's units change, from a cache keyed by the spec's identity, so an unchanged dimension costs one walk and an edit, drag, undo or file open always shows children that match the spec. Because the children are ordinary paths and point type, render, hit testing, SVG and PDF need nothing new, and expand only drops dim. Children ids are the group id plus -dl (lines), -dh (filled arrowheads and dots) and -dt (label), so regenerating keeps them stable. transformNode maps the points and re-derives the offset from where the dimension line's handle lands, which keeps the line on the correct side under reflection; distortNode maps the points. Linear offsets are measured from the measured point farthest along the normal (the nearer one when negative), so a horizontal dimension of points at different heights clears both. The label turns with the line but never reads upside down (its direction is flipped into the right half plane), and above or below stay on the side of the line away from or toward the art after that flip. Centre text cuts a gap in the dimension line the width of the laid out label plus padding. Editing a child directly (Direct Selection, a paint swatch) is overwritten on the next reflow; the dimension's colour, weight and type come from its settings.
 
+## src/engine/intertwine.ts
+
+### src/engine/intertwine.ts · zones over a base order
+- refers-to: src/engine/intertwine.ts :: memberArea, overlapAt, intertwineTopAt, intertwineFlip, intertwineLasso, withZone, intertwineOverlays, intertwineHit, expandedIntertwine; src/engine/types.ts :: IntertwineSpec, GroupNode.intertwine; src/engine/index.ts :: Engine.makeIntertwine, Engine.intertwineFlip, Engine.intertwineZone, Engine.releaseIntertwine
+- kind: rationale
+- logged: v0.19.0 · 2026-10-10
+
+An intertwine object is a group with intertwine set: its children are the members in their base stacking order and the spec holds zones, each a region in page coordinates and the id of the member drawn on top inside it. Render, SVG and PDF draw the members in base order and then, per zone, a derived clipping group (the member re-id'd with a ~z suffix plus the zone as its clip path), so the existing clip code in all three writers does the work and SVG gets real clip paths with unique ids. Zones are not moved when a member moves (only when the whole group is transformed or distorted), matching Illustrator, so dragging a ring keeps the crossing where it was.
+
+A member's area is what you see of it: its fill region (open paths closed) united with the outline of each visible stroke (strokeToPath; an outside stroke at twice the width, an inside stroke skipped when there is a fill), type outlines when fonts are shaped, the union of a group's children (a clip group's clip path), and the bounding box for anything else. The overlap under the pointer is the face of the arrangement that contains it: the intersection of every member containing the point minus every member that does not, split into connected parts; faces are cached per children array and membership set so hovering is cheap. A click finds the member currently on top there (the last zone containing the point whose member also contains it, else the highest member) and brings the one below it to the top, wrapping to the base top, so three or more members cycle. The new zone is subtracted from older zones first, so zones never stack up, and no zone is stored when the result equals the base order. A lasso intersects the loop with every pairwise overlap inside it, picks the next member below at an interior point of that region and stores the region clipped to that member. Release replaces the group by its children; Expand keeps the children and adds clone copies of the overlay clip groups with fresh ids. Hit testing checks zones first so clicking inside a flipped overlap selects the member that is drawn there.
+
+## src/engine/shaper.ts
+
+### src/engine/shaper.ts · Shaper Groups
+- refers-to: src/engine/shaper.ts :: shaperCells, shaperRegions, shaperRegionAt, shaperScribble, shaperFill, expandedShaper, mapShaper, derivedArt; src/engine/types.ts :: ShaperSpec, GroupNode.shaper; src/engine/index.ts :: Engine.shaperScribble, Engine.shaperFill, Engine.expandShaper, Engine.shaperSelection
+- kind: rationale
+- logged: v0.19.0 · 2026-10-10
+
+A Shaper Group keeps its source shapes as children (still live shapes, editable with Direct Selection, Properties and the Shaper tool's Shapes mode) and stores only seeds, like Live Paint: cuts (a point inside each punched region), merges (points inside the merged regions and the id of the shape whose look the merged face takes) and fills (a point and a paint). The faces are derived. shaperCells runs the Pathfinder arrangement (ops/paths.ts) over the children's fill geometry, cached per children array, and records for each cell an interior point (paper.js interiorPoint) and which shapes contain it. shaperRegions drops cells that contain a cut seed, unions cells reached by the same merge seeds (union-find, so merges that share a cell join), groups the remaining cells by their top shape and splits those into connected parts; each region is a path node drawn with its owner's appearance, its first fill replaced by the latest fill seed inside it. Because the seeds are points, moving or reshaping a source recomputes the faces and the cuts, merges and fills stay where they were drawn. The children are never drawn themselves (except in Outline view), so the region list is what render, SVG, PDF, hit testing and Expand use. Strokes follow each region's outline, so where shapes overlap the lower shape's stroke runs along the upper shape's edge under it; Illustrator draws a Shaper Group the same way after a merge.
+
+Scribble rules: the scribble is sampled every two points; if every sample that lands in a live cell lands in the same cell, that cell is punched out when two or more shapes cover it, and when only one shape covers it that shape is deleted from the group (a group left with one shape dissolves into it). A scribble crossing two or more cells merges them, takes the look of the region where it started and clears cuts it passes over. On plain art (no Shaper Group under the scribble) the visible, unlocked paths and compound paths the scribble touches are collected; one alone is deleted, two or more become a new Shaper Group at the topmost one's place and the scribble applies to it, all in one history step.
+
+### src/engine/shaper.ts · gesture recognition
+- refers-to: src/engine/shaper.ts :: recognizeShape, isScribble, resample, closedRdp, meanDist, reversals, hull, affineFrom, polygonTemplate; src/engine/index.ts :: Engine.addShaperShape
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+A stroke whose ends are farther apart than 30 percent of its bounding diagonal (and 14 points) is open: it becomes a line when no sample strays more than 8 percent of the chord (4 points minimum) from it, snapped to 45 degree steps within 6 degrees, and is ignored otherwise. A closed stroke is resampled to 96 points by arc length. Candidates: a circle (centroid, mean radius); an ellipse from the principal axes of the samples (second moments; for points spread evenly along an ellipse the variance along an axis is half its squared radius, so the radii are the square roots of twice the eigenvalues), snapped to the axes within 8 degrees; and the corners found by a closed Ramer-Douglas-Peucker pass at 7 percent of the diagonal from the farthest pair, merging vertices that turn less than 28 degrees. Three corners give a triangle as a live polygon whose xf is the affine map from the regular triangle to the drawn one (any triangle is an affine image of an equilateral one, orientation matched first). Four give a rectangle whose angle is the length-weighted mean edge direction modulo 90 degrees (averaged as 4 theta), snapped to the axes within 8 degrees, with extents from the 3rd and 97th percentiles of the samples in that frame, made square when the sides differ by under 12 percent. Five to eight give a regular polygon with the drawn rotation. Each candidate is scored by the mean distance of the samples to its outline over the shape's radius plus a small penalty that grows with complexity, and the best wins if it scores under 0.16. A scribble is told apart first: at least two direction reversals sharper than 135 degrees over a five-sample window with the path at least 1.3 times its convex hull's perimeter, or four or more reversals.
+
 ## src/engine/style-libraries.ts
 
 ### src/engine/style-libraries.ts · STYLE_LIBRARIES
@@ -1082,6 +1124,15 @@ Pins live in the tool, not the document, as in Illustrator, where they disappear
 - logged: v0.19.0 · 2026-10-10
 
 Points are taken by drag or by clicks (a press that does not move waits for the next click), snapped through ctx.snap so anchors, centres and smart guides catch them, with Shift holding 45 degree steps from the previous point. Once the type has its points the pointer sets the offset and the next click (or Enter) adds the dimension as one history step. Radial in Centre mode first tries the object under the pointer as a circle (a live ellipse, or a single closed path whose anchors are all on one circle) and takes its centre and radius, placing the rim point toward the click. The preview draws the generated children in the accent colour, so it matches the result. The options bar shows the first selected dimension's settings, or the defaults when none is selected; changing one sets the default and patches every selected dimension in one edit. Type changes only the default, because the points of one type do not fit another. Square handles on a selected dimension move its measured points (snapping, excluding the dimension itself) and the round handle its offset; each drag is one Edit Dimension step.
+
+## src/tools/shaper.ts
+
+### src/tools/shaper.ts · Shaper and Intertwine tools
+- refers-to: src/tools/shaper.ts :: shaper tool, intertwine tool, click, shaperAt, sourceAt, intertwineFor; src/ui/cursors.ts :: CURSORS.shaper, CURSORS.intertwine; src/ui/icons-vector.ts :: vShaper, vIntertwine; src/app.ts :: intertwine-make, intertwine-release, intertwine-edit, shaper-expand
+- kind: explainer
+- logged: v0.19.0 · 2026-10-10
+
+Shaper (Shift+N) sits in the Pencil flyout after Pencil so N keeps its default; Intertwine (Shift+J, a key Illustrator leaves free) sits with Shape Builder and Live Paint. A Shaper drag shorter than five screen pixels is a click: in Faces mode it selects the face under it (Engine.shaperSelection, honoured by setFill while the Shaper tool is active, so the Color and Swatches panels paint the face) and in Shapes mode it selects the source shape inside the group; in Shapes mode a drag that starts on the selected source moves it as one Move Shape step. Longer strokes go to isScribble, then to recognition. The Intertwine tool is the editing mode of Object > Intertwine: it works on the selected intertwine object or the one under the pointer, highlights the overlap face under the pointer, flips on click, takes any drag (Alt or not) as a lasso, and returns to the Selection tool on Escape, Enter or Done.
 
 ## src/tools/symbolism.ts
 
