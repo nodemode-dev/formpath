@@ -4,7 +4,7 @@ export interface OpenedProject { session: string; name: string; manifest: Record
 export interface LibraryFolder { folder: string; default: string; custom: boolean; fixed: boolean; synced: Array<{ label: string; base: string; suggested: string }> }
 export interface FilePart { name: string; blob: Blob }
 export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string; variable?: boolean }
-export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file' }
+export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file'; vision?: boolean }
 export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown> }
 const BRIDGE_HEADER = 'X-Formpth-Bridge';
 
@@ -80,8 +80,11 @@ export const api = {
     return json(await request('/llm/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, tools }) }));
   },
   async llmStatus(): Promise<LlmStatus | null> { try { return await json<LlmStatus>(await request('/llm/status')); } catch { return null; } },
-  async llmSave(baseUrl: string, model: string, key: string | null, forgetKey = false): Promise<LlmStatus> {
-    return json(await request('/llm/settings', { method: 'POST', body: form({ base_url: baseUrl, model, ...(key ? { key } : {}), ...(forgetKey ? { forget_key: 'true' } : {}) }) }));
+  async llmSave(baseUrl: string, model: string, key: string | null, forgetKey = false, vision?: boolean): Promise<LlmStatus> {
+    return json(await request('/llm/settings', { method: 'POST', body: form({ base_url: baseUrl, model, ...(key ? { key } : {}), ...(forgetKey ? { forget_key: 'true' } : {}), ...(vision !== undefined ? { vision: String(vision) } : {}) }) }));
+  },
+  async llmGenerate(system: string, prompt: string, o: { image?: string; temperature?: number; maxTokens?: number } = {}): Promise<{ text: string; model: string }> {
+    return json(await request('/llm/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, prompt, image: o.image ?? null, temperature: o.temperature ?? 0.8, max_tokens: o.maxTokens ?? 6000 }) }));
   },
   async llmModels(): Promise<string[]> { return (await json<{ models: string[] }>(await request('/llm/models'))).models; },
 
