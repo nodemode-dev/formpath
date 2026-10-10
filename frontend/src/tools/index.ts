@@ -6,6 +6,7 @@ import './transform';
 import './puppet';
 import './dimension';
 import './paint';
+import './shaper';
 import './symbolism';
 import './type';
 import './view';
