@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.21.0 · 2026-10-10
+
+The Perspective Grid. Every drawing row is Full; parity is 66 of 76.
+
+### Added
+
+- View > Perspective Grid with one, two and three point grids, Define Grid with live preview, saved grid presets, Show, Lock, Snap and the plane widget.
+- Perspective Grid tool (Shift+P) to move vanishing points, the ground and the planes, and Perspective Selection tool (Shift+V) to move, copy, scale and move perpendicular on a plane (5), and to drag flat art and type onto a plane.
+- Shape tools draw on the active plane, chosen with 1 to 4 or the plane widget, while the grid shows.
+- Art attached to a plane re-projects when the grid changes; type stays editable; Object > Perspective > Attach to Active Plane, Release with Perspective and Move Plane to Match Object.
+- The `perspective` MCP tool. 76 tools.
+
+### Changed
+
+- Number fields in dialogs are wider, so three-digit values are no longer cut off.
+
 ## 0.20.0 · 2026-10-10
 
 Data: graphs, variables and data merge, and Actions with Batch. Parity is 65 of 76.
