@@ -1,6 +1,6 @@
 import { parse, type Font, type PathCommand } from 'opentype.js';
 import { anchor, mul, transformPath } from '../engine/geometry';
-import { fontsChanged, glyphMat, layoutText, setShaping, weightOf } from '../engine/text';
+import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, setShaping, weightOf } from '../engine/text';
 import type { Anchor, CharStyle, Mat, PathData, SubPath, TextNode } from '../engine';
 import { api, type FontInfo } from './api';
 
@@ -54,13 +54,37 @@ export function families(): string[] {
   const sys = [...new Set((systemList ?? []).map((f) => f.family))].sort((a, b) => a.localeCompare(b));
   return [...BUNDLED_FAMILIES, ...WEB_FAMILIES.filter((f) => !sys.includes(f)), ...sys.filter((f) => !BUNDLED_FAMILIES.includes(f))];
 }
+export function isVariableFamily(family: string): boolean { return (systemList ?? []).some((f) => f.family === family && !!f.variable); }
 
+const instanceStyles = new Map<string, string[]>();
 export function stylesOf(family: string): string[] {
   const sys = (systemList ?? []).filter((f) => f.family === family).map((f) => f.style);
-  return sys.length ? [...new Set(sys)] : STYLES;
+  const inst = instanceStyles.get(family) ?? [];
+  return sys.length || inst.length ? [...new Set([...sys, ...inst])] : STYLES;
+}
+
+export interface VariationAxis { tag: string; name: string; min: number; def: number; max: number }
+export interface VariationInfo { axes: VariationAxis[]; instances: Array<{ name: string; coords: Record<string, number> }> }
+export const AXIS_NAMES: Record<string, string> = { wght: 'Weight', wdth: 'Width', slnt: 'Slant', ital: 'Italic', opsz: 'Optical size' };
+type Fvar = { axes?: Array<{ tag: string; minValue: number; defaultValue: number; maxValue: number; name?: Record<string, string> }>; instances?: Array<{ name?: Record<string, string>; coordinates: Record<string, number> }> };
+const infoCache = new WeakMap<Font, VariationInfo | null>();
+function infoOf(font: Font): VariationInfo | null {
+  if (infoCache.has(font)) return infoCache.get(font) ?? null;
+  const fv = font.tables.fvar as Fvar | undefined;
+  const info: VariationInfo | null = fv?.axes?.length ? {
+    axes: fv.axes.map((a) => ({ tag: a.tag, name: AXIS_NAMES[a.tag] ?? `${a.name?.en ?? a.tag} (${a.tag})`, min: a.minValue, def: a.defaultValue, max: a.maxValue })),
+    instances: (fv.instances ?? []).map((i) => ({ name: i.name?.en ?? Object.values(i.name ?? {})[0] ?? '', coords: { ...i.coordinates } })).filter((i) => !!i.name),
+  } : null;
+  infoCache.set(font, info);
+  return info;
+}
+export async function variationOf(family: string, style: string): Promise<VariationInfo | null> {
+  const font = await fontFor(family, style);
+  return font ? infoOf(font) : null;
 }
 
 const parsed = new Map<string, Promise<Font | null>>();
+const byFile = new Map<string, Promise<Font | null>>();
 const rawData = new WeakMap<Font, ArrayBuffer>();
 const keep = (buf: ArrayBuffer): Font => { const f = parse(buf); rawData.set(f, buf); return f; };
 export function fontFor(family: string, style: string): Promise<Font | null> {
@@ -73,12 +97,45 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
         if (load) { const url = await load(); return keep(await (await fetch(url)).arrayBuffer()); }
         const hit = await api.findFont(family, style);
         if (!hit) return null;
-        return keep(await api.fontFile(hit.id));
+        let f = byFile.get(hit.id);
+        if (!f) { f = api.fontFile(hit.id).then(keep).catch(() => null); byFile.set(hit.id, f); }
+        const font = await f;
+        const info = font ? infoOf(font) : null;
+        if (info?.instances.length) {
+          const names = info.instances.map((i) => i.name), had = instanceStyles.get(family) ?? [];
+          if (names.some((x) => !had.includes(x))) instanceStyles.set(family, [...new Set([...had, ...names])]);
+        }
+        return font;
       } catch { return null; }
     })();
     parsed.set(key, p);
   }
   return p;
+}
+
+type Varied = { d: PathData; adv: number };
+type VarGlyph = { advanceWidth?: number; _advanceWidth?: number; leftSideBearing?: number; _leftSideBearing?: number };
+type VarFont = { variation?: { getTransform(g: number, coords: Record<string, number>): { advanceWidth?: number; path: { commands: PathCommand[] } } } };
+const outlines = new WeakMap<Font, Map<string, Varied>>();
+function variedGlyph(font: Font, gid: number, st: CharStyle): Varied {
+  const key = `${gid}|${axesKey(st)}`;
+  let m = outlines.get(font);
+  if (!m) { m = new Map(); outlines.set(font, m); }
+  const hit = m.get(key);
+  if (hit) return hit;
+  const g = font.glyphs.get(gid), upm = font.unitsPerEm || 1000, v = (font as unknown as VarFont).variation;
+  let out: Varied = { d: g ? commandsToPath(g.getPath(0, 0, 1).commands, [1, 0, 0, 1, 0, 0]) : [], adv: (g?.advanceWidth ?? 0) / upm };
+  if (g && v && hasAxes(st)) {
+    const raw = g as unknown as VarGlyph;
+    try {
+      const t = v.getTransform(gid, { ...st.axes });
+      out = { d: commandsToPath(t.path.commands, [1 / upm, 0, 0, -1 / upm, 0, 0]), adv: (t.advanceWidth ?? g.advanceWidth ?? 0) / upm };
+    } catch { out = { ...out }; }
+    if (raw._advanceWidth !== undefined) raw.advanceWidth = raw._advanceWidth;
+    if (raw._leftSideBearing !== undefined) raw.leftSideBearing = raw._leftSideBearing;
+  }
+  m.set(key, out);
+  return out;
 }
 
 function commandsToPath(cmds: PathCommand[], m: Mat): PathData {
@@ -117,10 +174,9 @@ export async function outlineText(n: TextNode): Promise<PathData | null> {
     if (g.ch === ' ' || g.ch === '\t') continue;
     const font = await fontFor(g.style.font, g.style.style);
     if (!font) return null;
-    const glyph = g.gid !== undefined ? font.glyphs.get(g.gid) : font.charToGlyph(g.ch);
-    const local: Mat = mul(glyphMat(g), [g.style.hscale / 100, 0, 0, g.style.vscale / 100, 0, 0]);
-    const m = n.mode === 'path' ? local : mul(n.xf, local);
-    out.push(...commandsToPath(glyph.getPath(0, 0, g.size).commands, m));
+    const gid = g.gid ?? font.charToGlyph(g.ch).index;
+    const local: Mat = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]);
+    out.push(...transformPath(variedGlyph(font, gid, g.style).d, n.mode === 'path' ? local : mul(n.xf, local)));
   }
   return out;
 }
@@ -353,8 +409,6 @@ function fractions(font: Font, gs: G[]): G[] {
 
 export const OT_ORDER = ['frac', 'ordn', 'ccmp', 'rlig', 'liga', 'clig', 'calt', 'dlig', 'smcp', 'c2sc', 'case', 'lnum', 'onum', 'pnum', 'tnum', 'zero', 'sups', 'subs', 'sinf', 'numr', 'dnom', 'titl', 'swsh', 'salt', ...Array.from({ length: 20 }, (_, i) => `ss${String(i + 1).padStart(2, '0')}`)];
 
-const outlines = new WeakMap<Font, Map<number, PathData>>();
-
 function featureGlyphs(font: Font, st: CharStyle, text: string, features: string[]): G[] {
   let gs: G[] = Array.from(text, (ch) => ({ gid: font.charToGlyph(ch).index, chars: ch.length, ch }));
   const want = new Set(features);
@@ -388,21 +442,17 @@ export function installShaping(): void {
       if (!font) return null;
       const gs = featureGlyphs(font, st, text, features);
       const upm = font.unitsPerEm || 1000;
+      const vary = hasAxes(st);
       return gs.map((g, i) => {
-        let adv = (font.glyphs.get(g.gid)?.advanceWidth ?? 0) / upm;
+        let adv = vary ? variedGlyph(font, g.gid, st).adv : (font.glyphs.get(g.gid)?.advanceWidth ?? 0) / upm;
         const next = gs[i + 1];
-        if (next && st.kerning !== 'none') { try { adv += font.getKerningValue(g.gid, next.gid) / upm; } catch { adv += 0; } }
+        if (next && st.kerning === 'auto') { try { adv += font.getKerningValue(g.gid, next.gid) / upm; } catch { adv += 0; } }
         return { gid: g.gid, chars: g.chars, adv };
       });
     },
     outline: (st, gid) => {
       const font = fontNow(st);
-      if (!font) return null;
-      let m = outlines.get(font);
-      if (!m) { m = new Map(); outlines.set(font, m); }
-      let d = m.get(gid);
-      if (!d) { const g = font.glyphs.get(gid); d = g ? commandsToPath(g.getPath(0, 0, 1).commands, [1, 0, 0, 1, 0, 0]) : []; m.set(gid, d); }
-      return d;
+      return font ? variedGlyph(font, gid, st).d : null;
     },
     has: (st, feature) => !!fontNow(st)?.tables.gsub?.features?.some((f) => f.tag === feature),
   });

@@ -10,7 +10,7 @@ import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
 import { clipGeometry, docArtBounds, gradientGeom, knockoutShape, knocksOut, renderNode } from '../engine/render';
 import { gradientStrokeArt, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
-import { glyphBox, glyphMat, glyphOutline, layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
+import { glyphBox, glyphMat, glyphOutline, glyphShape, layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
 import { BLEND_MODES, type AppearanceItem, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
 import { outlineText } from './fonts';
 import { docFromManifest, serialize } from './project-io';
@@ -221,41 +221,62 @@ class Writer {
       const f = this.paint(st.fill, b), s = st.stroke.type !== 'none' ? ` stroke="${this.paint(st.stroke, b).v}" stroke-width="${num(st.strokeWidth)}"` : '';
       return `<path d="${this.d(outlined)}" fill="${f.v}"${s}/>`;
     }
-    const lay = layoutText(n), b = selectionBounds(this.doc, [n]);
+    const lay = layoutText(n), b = selectionBounds(this.doc, [n]), pr = this.o.precision;
     const runs: string[] = [];
+    const css = (st: typeof DEFAULT_CHAR, feats: boolean): string => {
+      const ft = feats ? st.features.filter((t) => /^[a-z0-9]{4}$/.test(t)) : [], ax = Object.entries(st.axes ?? {}).filter(([k, v]) => /^[A-Za-z0-9 ]{4}$/.test(k) && Number.isFinite(v));
+      const rules = [ft.length ? `font-feature-settings:${ft.map((t) => `'${t}'`).join(',')}` : '', ax.length ? `font-variation-settings:${ax.map(([k, v]) => `'${k}' ${num(v)}`).join(',')}` : ''].filter(Boolean);
+      return rules.length ? ` style="${rules.join(';')}"` : '';
+    };
+    const face = (st: typeof DEFAULT_CHAR): string => {
+      const { weight, italic } = weightOf(st.style), ax = st.axes ?? {}, w = Number.isFinite(ax.wght) ? Math.round(ax.wght) : weight;
+      const slant = Number.isFinite(ax.slnt) && ax.slnt ? ` font-style="oblique ${num(-ax.slnt)}deg"` : italic || ax.ital ? ' font-style="italic"' : '';
+      return `${w !== 400 ? ` font-weight="${w}"` : ''}${slant}${Number.isFinite(ax.wdth) && ax.wdth !== 100 ? ` font-stretch="${num(ax.wdth)}%"` : ''}`;
+    };
+    const outlineOnly = (g: (typeof lay.glyphs)[number]): boolean => g.gid !== undefined && Object.keys(g.style.axes ?? {}).some((k) => !['wght', 'wdth', 'slnt', 'ital'].includes(k));
+    const one = (g: (typeof lay.glyphs)[number]): string => {
+      const parts: string[] = [];
+      const st = g.style, m = mul(glyphMat(g), [st.hscale / 100, 0, 0, st.vscale / 100, 0, 0]), f = this.paint(st.fill, b);
+      const stroked = st.stroke.type !== 'none' && st.strokeWidth > 0, sv = stroked ? this.paint(st.stroke, b).v : '';
+      const shape = g.gid !== undefined ? glyphOutline(st, g.gid) : g.t ? glyphShape(g) : null;
+      if (shape && shape.length) parts.push(`<path d="${this.d(transformPath(shape, mul(m, [g.size, 0, 0, g.size, 0, 0])))}" fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}/>`);
+      else {
+        const deco = g.up ? '' : [st.underline ? 'underline' : '', st.strike ? 'line-through' : ''].filter(Boolean).join(' ');
+        parts.push(`<text transform="${mat(m, pr)}" font-family="${esc(st.font)}" font-size="${num(g.size)}"${face(st)} fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}${deco ? ` text-decoration="${deco}"` : ''}${css(st, false)}>${esc(g.ch)}</text>`);
+      }
+      if (g.up && (st.underline || st.strike)) {
+        const bx = glyphBox(g), t = Math.max(0.5, g.size * 0.06), gm = mat(glyphMat(g), pr);
+        if (st.underline) parts.push(`<rect transform="${gm}" x="${num(bx.x + bx.w - t)}" y="${num(bx.y)}" width="${num(t)}" height="${num(bx.h)}" fill="${f.v}"/>`);
+        if (st.strike) parts.push(`<rect transform="${gm}" x="${num(bx.x + bx.w / 2 - t / 2)}" y="${num(bx.y)}" width="${num(t)}" height="${num(bx.h)}" fill="${f.v}"/>`);
+      }
+      return parts.join('');
+    };
     const glyphRuns = (gs: typeof lay.glyphs): string => {
       const parts: string[] = [];
       let cur: typeof lay.glyphs = [];
       const flush = (): void => {
         if (!cur.length) return;
-        const st = cur[0].style, { weight, italic } = weightOf(st.style);
+        const st = cur[0].style;
         const f = this.paint(st.fill, b), s = st.stroke.type !== 'none' && st.strokeWidth > 0 ? ` stroke="${this.paint(st.stroke, b).v}" stroke-width="${num(st.strokeWidth)}"` : '';
         const deco = [st.underline ? 'underline' : '', st.strike ? 'line-through' : ''].filter(Boolean).join(' ');
-        const feats = st.features.filter((t) => /^[a-z0-9]{4}$/.test(t)), ff = feats.length ? ` style="font-feature-settings:${feats.map((t) => `'${t}'`).join(',')}"` : '';
-        parts.push(`<tspan x="${cur.map((g) => num(g.x)).join(' ')}" y="${num(cur[0].y)}" font-family="${esc(st.font)}" font-size="${num(cur[0].size)}"${weight !== 400 ? ` font-weight="${weight}"` : ''}${italic ? ' font-style="italic"' : ''} fill="${f.v}"${s}${deco ? ` text-decoration="${deco}"` : ''}${ff}>${esc(cur.map((g) => g.ch).join(''))}</tspan>`);
+        parts.push(`<tspan x="${cur.map((g) => num(g.x)).join(' ')}" y="${num(cur[0].y)}" font-family="${esc(st.font)}" font-size="${num(cur[0].size)}"${face(st)} fill="${f.v}"${s}${deco ? ` text-decoration="${deco}"` : ''}${css(st, true)}>${esc(cur.map((g) => g.ch).join(''))}</tspan>`);
         cur = [];
       };
-      for (const g of gs) { if (cur.length && (cur[0].style !== g.style || g.style.features.length)) flush(); cur.push(g); }
+      const loose: string[] = [];
+      for (const g of gs) {
+        if (g.t || outlineOnly(g)) { if (g.ch !== ' ' && g.ch !== '\t') loose.push(one(g)); continue; }
+        if (cur.length && (cur[0].style !== g.style || g.style.features.length || cur[cur.length - 1].y !== g.y)) flush();
+        cur.push(g);
+      }
       flush();
-      return parts.join('');
+      return parts.join('') + (loose.length ? `</text><g${xfAttr} style="font-kerning:none">${loose.join('')}</g><text xml:space="preserve"${xfAttr}>` : '');
     };
+    const xfAttr = n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5] ? '' : ` transform="${mat(n.xf, pr)}"`;
     if (n.mode === 'path' || lay.vertical) {
-      const parts: string[] = [], pr = this.o.precision;
+      const parts: string[] = [];
       for (const g of lay.glyphs) {
         if (g.ch === ' ' || g.ch === '\t') continue;
-        const st = g.style, m = mul(glyphMat(g), [st.hscale / 100, 0, 0, st.vscale / 100, 0, 0]), f = this.paint(st.fill, b);
-        const stroked = st.stroke.type !== 'none' && st.strokeWidth > 0, sv = stroked ? this.paint(st.stroke, b).v : '';
-        const shape = g.gid !== undefined ? glyphOutline(st, g.gid) : null;
-        if (shape) parts.push(`<path d="${this.d(transformPath(shape, mul(m, [g.size, 0, 0, g.size, 0, 0])))}" fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}/>`);
-        else {
-          const { weight, italic } = weightOf(st.style), deco = g.up ? '' : [st.underline ? 'underline' : '', st.strike ? 'line-through' : ''].filter(Boolean).join(' ');
-          parts.push(`<text transform="${mat(m, pr)}" font-family="${esc(st.font)}" font-size="${num(g.size)}"${weight !== 400 ? ` font-weight="${weight}"` : ''}${italic ? ' font-style="italic"' : ''} fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}${deco ? ` text-decoration="${deco}"` : ''}>${esc(g.ch)}</text>`);
-        }
-        if (g.up && (st.underline || st.strike)) {
-          const bx = glyphBox(g), t = Math.max(0.5, g.size * 0.06), gm = mat(glyphMat(g), pr);
-          if (st.underline) parts.push(`<rect transform="${gm}" x="${num(bx.x + bx.w - t)}" y="${num(bx.y)}" width="${num(t)}" height="${num(bx.h)}" fill="${f.v}"/>`);
-          if (st.strike) parts.push(`<rect transform="${gm}" x="${num(bx.x + bx.w / 2 - t / 2)}" y="${num(bx.y)}" width="${num(t)}" height="${num(bx.h)}" fill="${f.v}"/>`);
-        }
+        parts.push(one(g));
       }
       const xf = n.mode === 'path' || (n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5]) ? '' : ` transform="${mat(n.xf, pr)}"`;
       return `<g${xf} style="font-kerning:none">${parts.join('')}</g>`;

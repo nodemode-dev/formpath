@@ -3,7 +3,7 @@ export interface LibraryItem { name: string; modified: number; size: number }
 export interface OpenedProject { session: string; name: string; manifest: Record<string, unknown>; images: Record<string, string>; version?: string }
 export interface LibraryFolder { folder: string; default: string; custom: boolean; fixed: boolean; synced: Array<{ label: string; base: string; suggested: string }> }
 export interface FilePart { name: string; blob: Blob }
-export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string }
+export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string; variable?: boolean }
 export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file' }
 export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown> }
 const BRIDGE_HEADER = 'X-Formpth-Bridge';

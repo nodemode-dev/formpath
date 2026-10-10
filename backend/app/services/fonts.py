@@ -62,7 +62,12 @@ def _names(data: bytes, base: int) -> dict[int, str]:
     return {}
 
 
-def _members(path: Path) -> list[tuple[int, dict[int, str]]]:
+def _has_table(data: bytes, base: int, want: bytes) -> bool:
+    num = struct.unpack_from(">H", data, base + 4)[0]
+    return any(struct.unpack_from(">4s", data, base + 12 + i * 16)[0] == want for i in range(num))
+
+
+def _members(path: Path) -> list[tuple[int, dict[int, str], bool]]:
     try:
         data = path.read_bytes()
     except OSError:
@@ -71,8 +76,8 @@ def _members(path: Path) -> list[tuple[int, dict[int, str]]]:
         if data[:4] == b"ttcf":
             count = struct.unpack_from(">I", data, 8)[0]
             offsets = struct.unpack_from(f">{count}I", data, 12)
-            return [(i, _names(data, off)) for i, off in enumerate(offsets)]
-        return [(0, _names(data, 0))]
+            return [(i, _names(data, off), _has_table(data, off, b"fvar")) for i, off in enumerate(offsets)]
+        return [(0, _names(data, 0), _has_table(data, 0, b"fvar"))]
     except struct.error:
         return []
 
@@ -85,13 +90,13 @@ def _scan() -> dict[str, dict]:
         for path in root.rglob("*"):
             if path.suffix.lower() not in EXTS or not path.is_file():
                 continue
-            for member, names in _members(path):
+            for member, names, variable in _members(path):
                 family = names.get(16) or names.get(1)
                 style = names.get(17) or names.get(2) or "Regular"
                 if not family or family.startswith("."):
                     continue
                 key = hashlib.sha1(f"{path}#{member}".encode()).hexdigest()[:16]
-                out[key] = {"id": key, "family": family, "style": style, "full": names.get(4, f"{family} {style}"), "postscript": names.get(6, ""), "path": str(path), "member": member}
+                out[key] = {"id": key, "family": family, "style": style, "full": names.get(4, f"{family} {style}"), "postscript": names.get(6, ""), "path": str(path), "member": member, "variable": variable}
     return out
 
 
@@ -106,7 +111,7 @@ def index() -> dict[str, dict]:
 
 def listing() -> list[dict]:
     fonts = sorted(index().values(), key=lambda f: (f["family"].lower(), f["style"].lower()))
-    return [{k: f[k] for k in ("id", "family", "style", "full", "postscript")} for f in fonts]
+    return [{**{k: f[k] for k in ("id", "family", "style", "full", "postscript")}, "variable": bool(f.get("variable"))} for f in fonts]
 
 
 def _extract(data: bytes, member: int) -> bytes:
@@ -145,5 +150,7 @@ def find(family: str, style: str = "Regular") -> dict | None:
     exact = [f for f in candidates if f["style"].lower() == want_s]
     if exact:
         return exact[0]
-    regular = [f for f in candidates if f["style"].lower() in ("regular", "book", "roman", "normal")]
-    return (regular or candidates)[0]
+    slanted = re.search(r"italic|oblique", want_s) is not None
+    same = [f for f in candidates if (re.search(r"italic|oblique", f["style"].lower()) is not None) == slanted]
+    pool = sorted(same or candidates, key=lambda f: (not f.get("variable"), f["style"].lower() not in ("regular", "book", "roman", "normal", "italic", "oblique")))
+    return pool[0]
