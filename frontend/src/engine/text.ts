@@ -1,6 +1,7 @@
 import { apply, emptyRect, invert, mul, nearestOnSeg, pathBounds, pathLength, pointAtLength, rectCorners, reversePath, segLength, segments, toPath2D, transformPath, transformRect, unionRect } from './geometry';
+import { allowedBreaks, DEFAULT_HYPH } from './hyphen';
 import { BLACK, NONE, solid } from './paint';
-import type { AreaOptions, CharStyle, Mat, ParaStyle, PathData, Pt, Rect, Span, SubPath, TextNode } from './types';
+import type { AreaOptions, CharStyle, CharTouch, Justification, ListStyle, Mat, ParaStyle, PathData, Pt, Rect, Span, SubPath, TabStop, TextNode } from './types';
 
 export const DEFAULT_CHAR: CharStyle = {
   font: 'Inter', style: 'Regular', size: 12, leading: null, tracking: 0, kerning: 'auto', baseline: 0, hscale: 100, vscale: 100,
@@ -8,7 +9,7 @@ export const DEFAULT_CHAR: CharStyle = {
 };
 export const DEFAULT_PARA: ParaStyle = { align: 'left', indentLeft: 0, indentRight: 0, indentFirst: 0, spaceBefore: 0, spaceAfter: 0, hyphenate: false };
 
-export interface Glyph { ch: string; x: number; y: number; w: number; size: number; style: CharStyle; index: number; angle: number; gid?: number; m?: [number, number, number, number]; iu?: number; ia?: number; up?: boolean; box?: Rect }
+export interface Glyph { ch: string; x: number; y: number; w: number; size: number; style: CharStyle; index: number; angle: number; gid?: number; m?: [number, number, number, number]; iu?: number; ia?: number; up?: boolean; box?: Rect; t?: Mat; syn?: boolean }
 export interface Line { y: number; x: number; width: number; ascent: number; descent: number; glyphs: Glyph[]; start: number; end: number }
 export interface TextLayout { lines: Line[]; glyphs: Glyph[]; bounds: Rect; overflow: number; text: string; vertical?: boolean }
 
@@ -34,8 +35,11 @@ export function cssFont(st: CharStyle, size = st.size): string {
 }
 
 const widthCache = new Map<string, Map<string, number>>();
+interface Profile { adv: number; left: number[]; right: number[] }
+const profiles = new Map<string, Profile>();
+const refGaps = new Map<string, number>();
 let fontEpoch = 0;
-export function fontsChanged(): void { widthCache.clear(); fontEpoch++; layoutCache = new WeakMap(); }
+export function fontsChanged(): void { widthCache.clear(); profiles.clear(); refGaps.clear(); fontEpoch++; layoutCache = new WeakMap(); }
 export const textEpoch = (): number => fontEpoch;
 function charWidth(font: string, ch: string): number {
   let m = widthCache.get(font);
@@ -61,6 +65,71 @@ function metrics(st: CharStyle, size: number): { ascent: number; descent: number
   return { ascent: size * 0.8, descent: size * 0.22 };
 }
 
+export const hasAxes = (st: CharStyle): boolean => !!st.axes && Object.keys(st.axes).length > 0;
+export const axesKey = (st: CharStyle): string => (st.axes ? Object.keys(st.axes).sort().map((k) => `${k}=${st.axes?.[k]}`).join(',') : '');
+const faceKey = (st: CharStyle): string => `${st.font}|${st.style}|${axesKey(st)}`;
+
+const BANDS = 24, BAND_TOP = -0.74, BAND_BOTTOM = 0;
+function profileOf(st: CharStyle, ch: string): Profile | null {
+  if (!shaping || !ch.trim()) return null;
+  const key = `${faceKey(st)}\u0000${ch}`, hit = profiles.get(key);
+  if (hit) return hit;
+  const sg = shaping.shape({ ...st, alt: undefined, kerning: 'none' }, ch, []);
+  if (!sg || sg.length !== 1) return null;
+  const d = shaping.outline(st, sg[0].gid);
+  if (!d) return null;
+  const segs: number[][] = [];
+  for (const sp of d) {
+    const n = sp.pts.length;
+    for (let i = 0; i < n; i++) {
+      const a = sp.pts[i], b = sp.pts[(i + 1) % n];
+      let px = a.x, py = a.y;
+      for (let s = 1; s <= 6; s++) {
+        const t = s / 6, u = 1 - t;
+        const x = u * u * u * a.x + 3 * u * u * t * a.ox + 3 * u * t * t * b.ix + t * t * t * b.x, y = u * u * u * a.y + 3 * u * u * t * a.oy + 3 * u * t * t * b.iy + t * t * t * b.y;
+        segs.push([px, py, x, y]); px = x; py = y;
+      }
+    }
+  }
+  const left: number[] = [], right: number[] = [];
+  for (let k = 0; k < BANDS; k++) {
+    const y = BAND_TOP + ((k + 0.5) * (BAND_BOTTOM - BAND_TOP)) / BANDS;
+    let lo = Infinity, hi = -Infinity;
+    for (const [x0, y0, x1, y1] of segs) {
+      if ((y0 <= y && y1 > y) || (y1 <= y && y0 > y)) { const x = x0 + ((y - y0) / (y1 - y0)) * (x1 - x0); lo = Math.min(lo, x); hi = Math.max(hi, x); }
+    }
+    left.push(lo <= hi ? lo : NaN); right.push(lo <= hi ? hi : NaN);
+  }
+  const fill = (arr: number[], pick: (a: number, b: number) => number): number[] => arr.map((v, k) => {
+    if (!Number.isNaN(v)) return v;
+    let best = NaN;
+    for (let r = 1; r <= 3; r++) for (const q of [arr[k - r], arr[k + r]]) if (q !== undefined && !Number.isNaN(q)) best = Number.isNaN(best) ? q : pick(best, q);
+    return best;
+  });
+  const p: Profile = { adv: sg[0].adv, left: fill(left, Math.min), right: fill(right, Math.max) };
+  profiles.set(key, p);
+  return p;
+}
+function meanGap(a: Profile, b: Profile): { mean: number; min: number } | null {
+  const gaps: number[] = [];
+  for (let k = 0; k < BANDS; k++) if (!Number.isNaN(a.right[k]) && !Number.isNaN(b.left[k])) gaps.push(a.adv - a.right[k] + b.left[k]);
+  if (!gaps.length) return null;
+  const min = Math.min(...gaps), cap = min + 0.18;
+  return { mean: gaps.reduce((s, g) => s + Math.min(g, cap), 0) / gaps.length, min };
+}
+export function opticalKern(a: CharStyle, ca: string, b: CharStyle, cb: string): number | null {
+  if (!ca.trim() || !cb.trim()) return 0;
+  const pa = profileOf(a, ca), pb = profileOf(b, cb);
+  if (!pa || !pb) return null;
+  const fk = faceKey(a);
+  let ref = refGaps.get(fk);
+  if (ref === undefined) { const n = profileOf(a, 'n'), g = n ? meanGap(n, n) : null; if (!n) return null; ref = g?.mean ?? 0.1; refGaps.set(fk, ref); }
+  const g = meanGap(pa, pb);
+  if (!g) return 0;
+  const k = Math.max(0.55 * (ref - g.mean), 0.3 * ref - g.min);
+  return Math.max(-0.2, Math.min(0.1, k));
+}
+
 export function plainText(n: TextNode): string { return n.spans.map((s) => s.text).join(''); }
 
 export interface ShapedGlyph { gid: number; chars: number; adv: number }
@@ -76,9 +145,13 @@ export interface Shaping {
 let shaping: Shaping | null = null;
 export function setShaping(s: Shaping | null): void { shaping = s; fontsChanged(); }
 export function glyphOutline(st: CharStyle, gid: number): PathData | null { return shaping?.outline(st, gid) ?? null; }
+export function glyphShape(g: Glyph): PathData | null {
+  const gid = g.gid ?? shaping?.shape({ ...g.style, alt: undefined }, g.ch, [])?.[0]?.gid;
+  return gid === undefined ? null : glyphOutline(g.style, gid);
+}
 export function fontHasFeature(st: CharStyle, feature: string): boolean { return !!shaping?.has(st, feature); }
 
-interface Item { ch: string; st: CharStyle; index: number; gid?: number; adv?: number; up?: boolean; vadv?: number; vorg?: number }
+interface Item { ch: string; st: CharStyle; index: number; gid?: number; adv?: number; up?: boolean; vadv?: number; vorg?: number; syn?: boolean }
 const EM_ORG = 0.88;
 const UPRIGHT: ReadonlyArray<readonly [number, number]> = [[0xa7, 0xa7], [0xa9, 0xa9], [0xae, 0xae], [0xb1, 0xb1], [0xbc, 0xbe], [0xd7, 0xd7], [0xf7, 0xf7], [0x1100, 0x11ff], [0x2030, 0x2031], [0x203b, 0x203b], [0x2100, 0x218f], [0x2460, 0x24ff], [0x25a0, 0x27bf], [0x2e80, 0xa4cf], [0xa960, 0xa97f], [0xac00, 0xd7ff], [0xe000, 0xfaff], [0xfe10, 0xfe1f], [0xfe30, 0xfe6f], [0xff00, 0xff60], [0xffe0, 0xffe7], [0x1f000, 0x1faff], [0x20000, 0x3ffff]];
 const TURNED: ReadonlyArray<readonly [number, number]> = [[0x2329, 0x232a], [0x3008, 0x3011], [0x3014, 0x301f], [0x3030, 0x3030], [0x30a0, 0x30a0], [0x30fc, 0x30fc], [0xfe59, 0xfe5e], [0xff08, 0xff09], [0xff0d, 0xff0d], [0xff1c, 0xff1e], [0xff3b, 0xff3b], [0xff3d, 0xff3d], [0xff3f, 0xff3f], [0xff5b, 0xff60], [0xffe3, 0xffe3]];
@@ -122,7 +195,7 @@ function itemsOf(spans: Span[]): Item[] {
     for (const piece of text.split(/(\r\n|\r|\n)/)) {
       if (!piece) continue;
       if (piece === '\n' || piece === '\r' || piece === '\r\n') { out.push({ ch: '\n', st, index: i }); i += piece.length; continue; }
-      const shaped = (feats.length || st.alt !== undefined) && shaping ? shaping.shape(st, piece, feats) : null;
+      const shaped = (feats.length || st.alt !== undefined || hasAxes(st)) && shaping ? shaping.shape(st, piece, feats) : null;
       if (shaped) {
         let k = 0;
         for (const g of shaped) { const ch = piece.slice(k, k + g.chars); out.push({ ch, st, index: i, gid: g.gid, adv: g.adv }); i += ch.length; k += g.chars; }
@@ -142,11 +215,12 @@ function effSize(st: CharStyle): number { return st.position === 'normal' ? st.s
 function effShift(st: CharStyle): number { return st.baseline + (st.position === 'super' ? -st.size * 0.333 : st.position === 'sub' ? st.size * 0.15 : 0); }
 
 function advance(it: Item, next: Item | undefined): number {
-  const size = effSize(it.st);
-  if (it.adv !== undefined) return it.adv * size * (it.st.hscale / 100) + (it.st.tracking / 1000) * it.st.size;
+  const size = effSize(it.st), opt = next && it.st.kerning === 'optical' && !next.syn ? opticalKern(it.st, it.ch, next.st, next.ch) : null;
+  if (it.adv !== undefined) return (it.adv + (opt ?? 0)) * size * (it.st.hscale / 100) + (it.st.tracking / 1000) * it.st.size;
   const font = cssFont(it.st, size);
   let w = charWidth(font, it.ch) * (it.st.hscale / 100);
-  if (next && next.st === it.st && it.st.kerning !== 'none') w += pairKern(font, it.ch, next.ch) * (it.st.hscale / 100);
+  if (opt !== null) w += opt * size * (it.st.hscale / 100);
+  else if (next && next.st === it.st && it.st.kerning !== 'none') w += pairKern(font, it.ch, next.ch) * (it.st.hscale / 100);
   return w + (it.st.tracking / 1000) * it.st.size;
 }
 
@@ -189,7 +263,7 @@ function areaCells(a: AreaOptions | undefined, f: Rect, vertical: boolean): Cell
 }
 
 function place(it: Item, u: number, a: number, base: number, vertical: boolean): Glyph {
-  const size = effSize(it.st), shift = effShift(it.st), common = { ch: it.ch, size, style: it.st, index: it.index, gid: it.gid, iu: u, ia: a };
+  const size = effSize(it.st), shift = effShift(it.st), common = { ch: it.ch, size, style: it.st, index: it.index, gid: it.gid, iu: u, ia: a, ...(it.syn ? { syn: true } : {}) };
   if (!vertical) return { ...common, x: u, y: base + shift, w: a, angle: 0 };
   const c = -(base + shift);
   if (it.up) {
@@ -199,6 +273,38 @@ function place(it: Item, u: number, a: number, base: number, vertical: boolean):
   const m = metrics(it.st, size), x0 = c + (m.descent - m.ascent) / 2, off = (m.descent - m.ascent) / 2;
   return { ...common, x: x0, y: u, w: a, angle: Math.PI / 2, m: [0, 1, -1, 0], box: { x: 0, y: off - size / 2, w: a, h: size } };
 }
+
+export function charTransform(st: CharStyle, box: Rect, gx = 1): Mat | undefined {
+  const tc = st.touch, rot = (st.rotate ?? 0) + (tc?.r ?? 0), sx = ((tc?.sx ?? 100) / 100) * gx, sy = (tc?.sy ?? 100) / 100, dx = tc?.x ?? 0, dy = tc?.y ?? 0;
+  if (!rot && sx === 1 && sy === 1 && !dx && !dy) return undefined;
+  const cx = (box.x + box.w / 2) * sx, cy = (box.y + box.h / 2) * sy, a = (-rot * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+  return [c * sx, s * sx, -s * sy, c * sy, dx + cx - (c * cx - s * cy), dy + cy - (s * cx + c * cy)];
+}
+function withT(g: Glyph, gx = 1): Glyph {
+  const t = charTransform(g.style, glyphBox(g), gx);
+  if (t) g.t = t;
+  return g;
+}
+const plainStyles = new WeakMap<CharStyle, CharStyle>();
+function plainSt(st: CharStyle): CharStyle {
+  if (!st.touch && !st.rotate && st.position === 'normal') return st;
+  let s = plainStyles.get(st);
+  if (!s) { s = { ...st, touch: undefined, rotate: undefined, position: 'normal' }; plainStyles.set(st, s); }
+  return s;
+}
+const isLetter = (it: Item | undefined): boolean => !!it && !it.syn && it.ch.length === 1 && /\p{L}/u.test(it.ch);
+const DEFAULT_TAB = 36;
+const ROMAN: ReadonlyArray<readonly [number, string]> = [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']];
+export function listMarker(l: ListStyle, n: number): string {
+  if (l.kind === 'bullet') return l.bullet || '•';
+  const f = l.format ?? '1';
+  let s: string;
+  if (f === 'a' || f === 'A') { let k = Math.max(1, n), out = ''; while (k > 0) { k--; out = String.fromCharCode(97 + (k % 26)) + out; k = Math.floor(k / 26); } s = f === 'A' ? out.toUpperCase() : out; }
+  else if (f === 'i' || f === 'I') { let k = Math.max(1, Math.min(3999, n)), out = ''; for (const [v, r] of ROMAN) while (k >= v) { out += r; k -= v; } s = f === 'I' ? out.toUpperCase() : out; }
+  else s = f === '01' ? String(n).padStart(2, '0') : String(n);
+  return s + (l.sep ?? '.');
+}
+function spaceW(st: CharStyle): number { return charWidth(cssFont(st, effSize(st)), ' ') * (st.hscale / 100); }
 
 let layoutCache = new WeakMap<TextNode, TextLayout>();
 
@@ -257,12 +363,36 @@ function layoutLines(n: TextNode): TextLayout {
     return free.filter(([a, b]) => b - a >= minW);
   };
   const tail = n.spans[n.spans.length - 1]?.style ?? DEFAULT_CHAR;
-  let paraStart = 0;
+  const J: Justification | null = para.just ?? null, H = para.hyphenate && frame ? { ...DEFAULT_HYPH, ...(para.hyph ?? {}) } : null;
+  const tabs = (para.tabs ?? []).filter((t) => Number.isFinite(t.pos)).slice().sort((a, b) => a.pos - b.pos);
+  const measure = (it: Item, next: Item | undefined): { w: number; shrink: number } => {
+    const b = step(it, next);
+    if (!J) return { w: b, shrink: 0 };
+    if (it.ch === ' ') return { w: (b * J.wordDes) / 100, shrink: (b * Math.max(0, J.wordDes - J.wordMin)) / 100 };
+    const sw = spaceW(it.st);
+    return { w: (b * J.glyphDes) / 100 + (sw * J.letterDes) / 100, shrink: (b * Math.max(0, J.glyphDes - J.glyphMin)) / 100 + (sw * Math.max(0, J.letterDes - J.letterMin)) / 100 };
+  };
+  const tabAt = (p: Item[], k: number, rel: number): { w: number; stop: TabStop | null } => {
+    const stop = tabs.find((t) => t.pos > rel + 0.01) ?? null;
+    if (!stop) { const next = (Math.floor(rel / DEFAULT_TAB + 1e-6) + 1) * DEFAULT_TAB; return { w: next - rel, stop: null }; }
+    if (stop.align === 'left') return { w: stop.pos - rel, stop };
+    let follow = 0, before = -1;
+    const dec = stop.char || '.';
+    for (let m = k + 1; m < p.length && p[m].ch !== '\t'; m++) { if (stop.align === 'decimal' && before < 0 && p[m].ch === dec) before = follow; follow += measure(p[m], p[m + 1]).w; }
+    const shift = stop.align === 'right' ? follow : stop.align === 'center' ? follow / 2 : before >= 0 ? before : follow;
+    return { w: Math.max(0, stop.pos - rel - shift), stop };
+  };
+  let paraStart = 0, listNo = 0;
   outer: for (let pi = 0; pi < paragraphs.length; pi++) {
     const p = paragraphs[pi];
     const pIndex = p.length ? p[0].index : paraStart;
     if (pi > 0) y += para.spaceBefore;
-    let i = 0, lineNo = 0;
+    const list = para.list && p.length ? para.list : null;
+    if (list) listNo++;
+    const mst = p.length ? plainSt(p[0].st) : tail;
+    const marker: Item[] = list ? Array.from(listMarker(list, (list.start ?? 1) + listNo - 1), (ch) => ({ ch, st: mst, index: pIndex, syn: true })) : [];
+    const markerW = marker.reduce((s, it, k) => s + step(it, marker[k + 1]), 0), markerGap = marker.length ? mst.size * 0.5 : 0;
+    let i = 0, lineNo = 0, hyphRun = 0;
     do {
       const st0 = p[i]?.st ?? tail, lead0 = leadingOf(st0), m0 = lm(st0, st0.size), fb0 = frame ? firstBase(n.area, st0, st0.size, lead0, vertical) : 0;
       let ly = first ? (frame ? cells[col].top + fb0 : 0) : y + lead0, fromTop = first && !!frame;
@@ -285,46 +415,112 @@ function layoutLines(n: TextNode): TextLayout {
       for (let si = 0; si < band.length; si++) {
         if (si > 0 && i >= p.length) break;
         const [sx0, sx1] = band[si];
-        const firstLine = lineNo === 0;
-        const indent = para.indentLeft + (firstLine ? para.indentFirst : 0);
+        const firstLine = lineNo === 0, mIndent = para.indentLeft + para.indentFirst;
+        const indent = firstLine ? (marker.length ? Math.max(para.indentLeft, mIndent + markerW + markerGap) : mIndent) : para.indentLeft;
         const availW = frame ? sx1 - sx0 - indent - para.indentRight : Infinity;
-        let j = i, width = 0, lastBreak = -1, end = p.length;
+        const lineAt = (frame ? sx0 - cells[col].x : startCol(col)) + indent, justified = !!frame && para.align.startsWith('justify');
+        let j = i, width = 0, shrink = 0, lastBreak = -1, end = p.length, hyphen = false;
+        const cum: number[] = [], cumS: number[] = [];
         while (j < p.length) {
-          const w = step(p[j], p[j + 1]);
-          if (width + w > availW && j > i) { end = p[j].ch === ' ' || p[j].ch === '\t' ? j + 1 : lastBreak > i ? lastBreak : j; break; }
-          width += w;
-          if (p[j].ch === ' ' || p[j].ch === '\t' || p[j].ch === '-' || cjkBreakAfter(p[j].ch, p[j + 1]?.ch)) lastBreak = j + 1;
+          const it = p[j], m = it.ch === '\t' ? { w: tabAt(p, j, lineAt + width).w, shrink: 0 } : measure(it, p[j + 1]);
+          if (width + m.w - (justified ? shrink + m.shrink : 0) > availW && j > i) {
+            if (it.ch === ' ' || it.ch === '\t') end = j + 1;
+            else {
+              end = lastBreak > i ? lastBreak : j;
+              if (H && (H.limit <= 0 || hyphRun < H.limit) && isLetter(it)) {
+                const at = (k: number): number => (k === j ? width : cum[k - i]), atS = (k: number): number => (k === j ? shrink : cumS[k - i]);
+                if (justified || H.zone <= 0 || lastBreak <= i || availW - at(lastBreak) >= H.zone) {
+                  let ws = j, we = j;
+                  while (ws > i && isLetter(p[ws - 1])) ws--;
+                  while (we < p.length && isLetter(p[we])) we++;
+                  const word = p.slice(ws, we).map((x) => x.ch).join('');
+                  for (const q of allowedBreaks(word, H).filter((q) => ws + q <= j && ws + q > i).sort((a, b) => b - a)) {
+                    const k = ws + q, hw = measure({ ch: '-', st: plainSt(p[k - 1].st), index: p[k].index }, undefined).w;
+                    if (at(k) + hw - (justified ? atS(k) : 0) <= availW) { end = k; hyphen = true; break; }
+                  }
+                }
+              }
+            }
+            break;
+          }
+          cum.push(width); cumS.push(shrink);
+          width += m.w; shrink += m.shrink;
+          if (it.ch === ' ' || it.ch === '\t' || it.ch === '-' || cjkBreakAfter(it.ch, p[j + 1]?.ch)) lastBreak = j + 1;
           j++;
         }
-        const li = p.slice(i, end);
+        const li = p.slice(i, end), lineFirst = i;
         i = end;
+        hyphRun = hyphen ? hyphRun + 1 : 0;
         const sizes = li.length ? li.map((x) => x.st) : [st0];
         const lead = Math.max(...sizes.map(leadingOf)), maxSize = Math.max(...sizes.map((s) => s.size));
         const asc = lm(sizes[0], maxSize).ascent, desc = lm(sizes[0], maxSize).descent;
         if (si === 0) lineY = ly + (fromTop ? firstBase(n.area, sizes[0], maxSize, lead, vertical) - fb0 : lines.length ? lead - lead0 : 0);
         const visible = li.filter((x, k) => !(k === li.length - 1 && x.ch === ' '));
-        const widths = visible.map((x, k) => step(x, visible[k + 1]));
-        const lineW = widths.reduce((a, b) => a + b, 0);
+        const hy: Item | null = hyphen && li.length ? { ch: '-', st: plainSt(li[li.length - 1].st), index: p[i]?.index ?? li[li.length - 1].index + 1, syn: true } : null;
+        const widths: number[] = [], stops: Array<TabStop | null> = [];
+        let acc = 0;
+        visible.forEach((x, k) => {
+          let w: number, stop: TabStop | null = null;
+          if (x.ch === '\t') ({ w, stop } = tabAt(p, lineFirst + k, lineAt + acc));
+          else w = measure(x, k < visible.length - 1 ? visible[k + 1] : hy ?? undefined).w;
+          widths.push(w); stops.push(stop); acc += w;
+        });
+        const hyW = hy ? measure(hy, undefined).w : 0, lineW = acc + hyW;
         const lastLine = i >= p.length;
-        let x0 = (frame ? sx0 : startCol(col)) + indent, extraSpace = 0;
-        const align = para.align;
-        if (frame) {
-          if (align === 'center' || (align === 'justify_center' && lastLine)) x0 += (availW - lineW) / 2;
-          else if (align === 'right' || (align === 'justify_right' && lastLine)) x0 += availW - lineW;
-          else if (align.startsWith('justify') && (!lastLine || align === 'justify_all')) {
-            const spaces = visible.filter((x) => x.ch === ' ').length;
-            if (spaces > 0) extraSpace = (availW - lineW) / spaces;
+        let x0 = (frame ? sx0 : startCol(col)) + indent, gx = J ? J.glyphDes / 100 : 1, alignAs: string = para.align;
+        const align = para.align, extra = widths.map(() => 0);
+        if (justified && (!lastLine || align === 'justify_all')) {
+          let slack = availW - lineW;
+          const sp: number[] = [], letters: number[] = [];
+          visible.forEach((x, k) => { if (x.ch === ' ') sp.push(k); else if (x.ch !== '\t') letters.push(k); });
+          const gaps = letters.filter((k) => k < visible.length - 1 || !!hy);
+          if (!J) { if (sp.length) for (const k of sp) extra[k] = slack / sp.length; }
+          else if (!sp.length && J.single !== 'justify') alignAs = J.single;
+          else {
+            const grow = slack >= 0, base = visible.map((x, k) => step(x, visible[k + 1]));
+            const take = (ks: number[], cap: (k: number) => number): number => {
+              const tot = ks.reduce((s, k) => s + cap(k), 0);
+              if (!tot || !slack) return 0;
+              const f = Math.max(0, Math.min(1, slack / tot));
+              for (const k of ks) extra[k] += cap(k) * f;
+              slack -= tot * f;
+              return f;
+            };
+            take(sp, (k) => (base[k] * ((grow ? J.wordMax : J.wordMin) - J.wordDes)) / 100);
+            take(gaps, (k) => (spaceW(visible[k].st) * ((grow ? J.letterMax : J.letterMin) - J.letterDes)) / 100);
+            const gl = grow ? J.glyphMax : J.glyphMin, f = take(letters, (k) => (base[k] * (gl - J.glyphDes)) / 100);
+            gx = (J.glyphDes + (gl - J.glyphDes) * f) / 100;
+            if (slack > 1e-6) { const ks = sp.length ? sp : gaps; for (const k of ks) extra[k] += slack / ks.length; }
           }
+        }
+        const lineSpan = lineW + extra.reduce((a, b) => a + b, 0);
+        if (frame) {
+          if (alignAs === 'center' || (align === 'justify_center' && lastLine)) x0 += (availW - lineSpan) / 2;
+          else if (alignAs === 'right' || (align === 'justify_right' && lastLine)) x0 += availW - lineSpan;
         } else {
-          if (align === 'center' || align === 'justify_center') x0 = -lineW / 2;
-          else if (align === 'right' || align === 'justify_right') x0 = -lineW;
+          if (align === 'center' || align === 'justify_center') x0 = -lineSpan / 2;
+          else if (align === 'right' || align === 'justify_right') x0 = -lineSpan;
         }
         const glyphs: Glyph[] = [];
+        if (firstLine && si === 0 && marker.length) {
+          let mx = x0 - (indent - mIndent);
+          marker.forEach((it, k) => { const w = step(it, marker[k + 1]); glyphs.push(place(it, mx, w, lineY, vertical)); mx += w; });
+        }
         let x = x0;
         visible.forEach((it, k) => {
-          glyphs.push(place(it, x, widths[k], lineY, vertical));
-          x += widths[k] + (it.ch === ' ' ? extraSpace : 0);
+          glyphs.push(withT(place(it, x, widths[k], lineY, vertical), it.ch === ' ' || it.ch === '\t' ? 1 : gx));
+          const leader = stops[k]?.leader;
+          if (leader && widths[k] > 0) {
+            const units = Array.from(leader, (ch) => ({ ch, st: plainSt(it.st), index: it.index, syn: true }) as Item), unit = units.reduce((s, q) => s + step(q, undefined), 0);
+            if (unit > 0.1) {
+              const count = Math.floor(widths[k] / unit);
+              let lx = x + widths[k] - count * unit;
+              for (let c = 0; c < count; c++) for (const q of units) { const w = step(q, undefined); if (q.ch.trim()) glyphs.push(place(q, lx, w, lineY, vertical)); lx += w; }
+            }
+          }
+          x += widths[k] + extra[k];
         });
+        if (hy) { glyphs.push(withT(place(hy, x, hyW, lineY, vertical), gx)); x += hyW; }
         const start = li.length ? li[0].index : pIndex, stop = li.length ? li[li.length - 1].index + li[li.length - 1].ch.length : pIndex;
         lines.push({ y: lineY, x: x0, width: x - x0, ascent: asc, descent: desc, glyphs, start, end: stop });
         lineNo++;
@@ -342,6 +538,7 @@ function layoutLines(n: TextNode): TextLayout {
   const out: TextLayout = { lines, glyphs: lines.flatMap((l) => l.glyphs), bounds: emptyRect(), overflow: overflowAt, text: all.map((x) => x.ch).join(''), vertical };
   let b = emptyRect();
   for (const l of lines) b = unionRect(b, lineRect(out, l));
+  for (const g of out.glyphs) if (g.t || g.syn) for (const c of glyphCorners(g)) b = unionRect(b, { x: c.x, y: c.y, w: 0, h: 0 });
   out.bounds = frame ? { ...frame } : b;
   return out;
 }
@@ -351,11 +548,13 @@ const absPt = (vertical: boolean | undefined, p: Pt): Pt => (vertical ? { x: -p.
 const toAbs = (vertical: boolean | undefined, p: Pt): Pt => (vertical ? { x: p.y, y: -p.x } : p);
 export function lineRect(lay: TextLayout, l: Line): Rect { return absRect(lay.vertical, { x: Math.min(l.x, l.x + l.width), y: l.y - l.ascent, w: Math.abs(l.width), h: l.ascent + l.descent }); }
 export function lineBaseline(lay: TextLayout, l: Line): [Pt, Pt] { const w = Math.max(1, l.width); return [absPt(lay.vertical, { x: l.x, y: l.y }), absPt(lay.vertical, { x: l.x + w, y: l.y })]; }
-export function glyphMat(g: Glyph): Mat {
+export function glyphBaseMat(g: Glyph): Mat {
   if (g.m) return [g.m[0], g.m[1], g.m[2], g.m[3], g.x, g.y];
   const c = Math.cos(g.angle), s = Math.sin(g.angle);
   return [c, s, -s, c, g.x, g.y];
 }
+export function glyphMat(g: Glyph): Mat { const b = glyphBaseMat(g); return g.t ? mul(b, g.t) : b; }
+export function touchMap(g: Glyph): Mat | null { return g.t ? mul(glyphMat(g), invert(glyphBaseMat(g))) : null; }
 export function glyphBox(g: Glyph): Rect { return g.box ?? { x: 0, y: -g.size * 0.85, w: g.w, h: g.size * 1.1 }; }
 export function glyphCorners(g: Glyph): Pt[] { const m = glyphMat(g); return rectCorners(glyphBox(g)).map((p) => apply(m, p.x, p.y)); }
 export function glyphCenter(g: Glyph): Pt { const b = glyphBox(g); return apply(glyphMat(g), b.x + b.w / 2, b.y + b.h / 2); }
@@ -429,7 +628,7 @@ function layoutOnPath(n: TextNode): TextLayout {
       const O = { x: P.x + V.x * (off + shift), y: P.y + V.y * (off + shift) };
       g = { ch: it.ch, x: O.x, y: O.y, w, size, style: it.st, index: it.index, gid: it.gid, angle: Math.atan2(U.y, U.x), m: [U.x, U.y, V.x, V.y] };
     }
-    glyphs.push(g);
+    glyphs.push(withT(g));
     for (const c of glyphCorners(g)) b = unionRect(b, { x: c.x, y: c.y, w: 0, h: 0 });
     let tighten = 0;
     if (spacing > 0) {
@@ -494,6 +693,7 @@ export function drawText(ctx: CanvasRenderingContext2D, n: TextNode, paintStyle:
     ctx.translate(g.x, g.y);
     if (g.m) ctx.transform(g.m[0], g.m[1], g.m[2], g.m[3], 0, 0);
     else if (g.angle) ctx.rotate(g.angle);
+    if (g.t) ctx.transform(g.t[0], g.t[1], g.t[2], g.t[3], g.t[4], g.t[5]);
     if (g.up && (st.underline || st.strike)) {
       const bx = glyphBox(g), t = Math.max(0.5, g.size * 0.06);
       ctx.fillStyle = paintStyle(st.fill, b) ?? '#000';
@@ -554,16 +754,18 @@ export function caretAt(n: TextNode, index: number): { x: number; y: number; h: 
     return caretFrom(a, { x: z.x - a.x, y: z.y - a.y });
   }
   const local = (q: Pt): Pt => absPt(lay.vertical, q);
-  const at = (u: number, l: Line): { x: number; y: number; h: number; angle: number } => {
-    const a = local({ x: u, y: l.y - l.ascent }), z = local({ x: u, y: l.y + l.descent });
+  const at = (u: number, l: Line, tm: Mat | null = null): { x: number; y: number; h: number; angle: number } => {
+    let a = local({ x: u, y: l.y - l.ascent }), z = local({ x: u, y: l.y + l.descent });
+    if (tm) { a = apply(tm, a.x, a.y); z = apply(tm, z.x, z.y); }
     const A = apply(xf, a.x, a.y), Z = apply(xf, z.x, z.y);
     return caretFrom(A, { x: Z.x - A.x, y: Z.y - A.y });
   };
   for (const l of lay.lines) {
     if (index >= l.start && index <= l.end) {
-      let u = l.x;
-      for (const g of l.glyphs) { if (g.index >= index) break; u = gu(g) + ga(g); }
-      return at(u, l);
+      let u = l.x, prev: Glyph | null = null, next: Glyph | null = null;
+      for (const g of l.glyphs) { if (g.index >= index) { next = g; break; } u = gu(g) + ga(g); prev = g; }
+      const tg = next?.t && !next.syn ? next : prev?.t && !prev.syn ? prev : null;
+      return at(u, l, tg ? touchMap(tg) : null);
     }
   }
   const last = lay.lines[lay.lines.length - 1];
@@ -582,6 +784,11 @@ export function indexAt(n: TextNode, local: Pt): number {
       best = (g.up ? q.y > bx.y + bx.h / 2 : q.x > bx.x + bx.w / 2) ? g.index + g.ch.length : g.index;
     }
     return best;
+  }
+  for (const g of lay.glyphs) {
+    if (!g.t || g.syn) continue;
+    const r = apply(invert(glyphMat(g)), local.x, local.y), bx = glyphBox(g);
+    if (r.x >= bx.x && r.x <= bx.x + bx.w && r.y >= bx.y && r.y <= bx.y + bx.h) return (g.up ? r.y > bx.y + bx.h / 2 : r.x > bx.x + bx.w / 2) ? g.index + g.ch.length : g.index;
   }
   const q = toAbs(lay.vertical, local);
   let line = lay.lines[0], ld = Infinity;
@@ -610,8 +817,9 @@ export function selectionQuads(n: TextNode, a: number, b: number): Pt[][] {
   const lay = layoutText(n), out: Pt[][] = [];
   if (n.mode === 'path') { for (const g of lay.glyphs) if (g.index >= a && g.index < b) out.push(glyphCorners(g)); return out; }
   for (const l of lay.lines) for (const g of l.glyphs) {
-    if (g.index < a || g.index >= b) continue;
-    out.push(rectCorners(absRect(lay.vertical, { x: gu(g), y: l.y - l.ascent, w: ga(g), h: l.ascent + l.descent })).map((p) => apply(n.xf, p.x, p.y)));
+    if (g.index < a || g.index >= b || g.syn) continue;
+    const tm = touchMap(g);
+    out.push(rectCorners(absRect(lay.vertical, { x: gu(g), y: l.y - l.ascent, w: ga(g), h: l.ascent + l.descent })).map((p) => (tm ? apply(tm, p.x, p.y) : p)).map((p) => apply(n.xf, p.x, p.y)));
   }
   return out;
 }
@@ -658,6 +866,7 @@ export function mergeSpans(spans: Span[]): Span[] {
   return out.length ? out : spans.slice(0, 1);
 }
 export function insertText(spans: Span[], at: number, text: string, style?: CharStyle): Span[] {
+  if (!style) { const st = styleAt(spans, at); if (st.touch) style = { ...st, touch: undefined }; }
   const out: Span[] = [];
   let pos = 0, done = false;
   for (const sp of spans) {
@@ -695,6 +904,19 @@ export function sliceSpans(spans: Span[], start: number, end = Infinity): Span[]
   }
   return out.length ? mergeSpans(out) : [{ text: '', style: styleAt(spans, start) }];
 }
+export function cleanTouch(t: CharTouch | null | undefined): CharTouch | undefined {
+  if (!t) return undefined;
+  const r = (v: number, d: number): number => (Number.isFinite(v) ? Math.round(v * 1000) / 1000 : d);
+  const out = { x: r(t.x, 0), y: r(t.y, 0), sx: Math.max(1, r(t.sx, 100)), sy: Math.max(1, r(t.sy, 100)), r: r(((t.r % 360) + 540) % 360 - 180, 0) };
+  return out.x || out.y || out.sx !== 100 || out.sy !== 100 || out.r ? out : undefined;
+}
+export function touchSpans(spans: Span[], index: number, touch: CharTouch | null): Span[] { return styleSpans(spans, index, index + 1, { touch: cleanTouch(touch) }); }
+export function charStyleAt(spans: Span[], index: number): CharStyle {
+  let pos = 0;
+  for (const sp of spans) { if (index < pos + sp.text.length) return sp.style; pos += sp.text.length; }
+  return spans[spans.length - 1]?.style ?? DEFAULT_CHAR;
+}
+
 export function styleAt(spans: Span[], index: number): CharStyle {
   let pos = 0;
   for (const sp of spans) { if (index <= pos + sp.text.length) return sp.style; pos += sp.text.length; }

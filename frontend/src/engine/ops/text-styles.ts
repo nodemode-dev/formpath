@@ -25,7 +25,8 @@ export function paraOverridden(def: ParaStyleDef, t: TextNode): boolean {
   return !!def.char && t.spans.some((s) => !s.style.cs && Object.entries(def.char ?? {}).some(([k, v]) => !same(v, (s.style as unknown as Record<string, unknown>)[k])));
 }
 
-const NORMAL_CHAR: Partial<CharStyle> = (() => { const { fill, stroke, strokeWidth, ...rest } = pickChar(DEFAULT_CHAR); void fill; void stroke; void strokeWidth; return rest; })();
+const NORMAL_CHAR: Partial<CharStyle> = (() => { const { fill, stroke, strokeWidth, ...rest } = pickChar(DEFAULT_CHAR); void fill; void stroke; void strokeWidth; return { ...rest, axes: undefined, rotate: undefined }; })();
+const NORMAL_PARA: Partial<ParaStyle> = { ...pickPara(DEFAULT_PARA), hyph: undefined, tabs: undefined, just: undefined, list: undefined };
 
 export function charPatch(doc: Doc, id: string | null): Partial<CharStyle> {
   const def = id ? doc.charStyles.find((s) => s.id === id) : null;
@@ -41,7 +42,7 @@ export function applyParaStyle(doc: Doc, ids: string[], id: string | null): Doc 
   const def = id ? doc.paraStyles.find((s) => s.id === id) : null;
   return updateNodes(doc, ids, (n) => {
     if (n.kind !== 'text') return n;
-    const para: ParaStyle = def ? { ...n.para, ...def.style, ps: def.id } : { ...n.para, ...pickPara(DEFAULT_PARA), ps: undefined };
+    const para: ParaStyle = def ? { ...n.para, ...def.style, ps: def.id } : { ...n.para, ...NORMAL_PARA, ps: undefined };
     const ch = def?.char ?? (def ? null : NORMAL_CHAR);
     const spans = ch ? n.spans.map((s) => ({ ...s, style: { ...s.style, ...ch, ...(s.style.cs ? doc.charStyles.find((c) => c.id === s.style.cs)?.style ?? {} : {}) } })) : n.spans;
     return { ...n, para, spans };

@@ -108,18 +108,26 @@ export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; 
 export interface PathNode extends NodeBase { kind: 'path'; d: PathData; rule: FillRule; live?: LiveShape; guide?: boolean }
 export interface CompoundNode extends NodeBase { kind: 'compound'; children: PathNode[]; rule: FillRule }
 
+export interface CharTouch { x: number; y: number; sx: number; sy: number; r: number }
 export interface CharStyle {
   font: string; style: string; size: number; leading: number | null; tracking: number; kerning: 'auto' | 'optical' | 'none';
   baseline: number; hscale: number; vscale: number; fill: Paint; stroke: Paint; strokeWidth: number;
   underline: boolean; strike: boolean; caps: 'none' | 'all' | 'small'; position: 'normal' | 'super' | 'sub'; features: string[]; cs?: string; alt?: number; upright?: boolean;
+  axes?: Record<string, number>; rotate?: number; touch?: CharTouch;
 }
 export type TextAlign = 'left' | 'center' | 'right' | 'justify' | 'justify_center' | 'justify_right' | 'justify_all';
-export interface ParaStyle { align: TextAlign; indentLeft: number; indentRight: number; indentFirst: number; spaceBefore: number; spaceAfter: number; hyphenate: boolean; name?: string; ps?: string }
+export interface HyphenOptions { minWord: number; after: number; before: number; limit: number; zone: number; caps: boolean }
+export type TabAlign = 'left' | 'center' | 'right' | 'decimal';
+export interface TabStop { pos: number; align: TabAlign; leader?: string; char?: string }
+export interface Justification { wordMin: number; wordDes: number; wordMax: number; letterMin: number; letterDes: number; letterMax: number; glyphMin: number; glyphDes: number; glyphMax: number; single: 'justify' | 'left' | 'center' | 'right' }
+export type ListFormat = '1' | '01' | 'a' | 'A' | 'i' | 'I';
+export interface ListStyle { kind: 'bullet' | 'number'; bullet?: string; format?: ListFormat; start?: number; sep?: string }
+export interface ParaStyle { align: TextAlign; indentLeft: number; indentRight: number; indentFirst: number; spaceBefore: number; spaceAfter: number; hyphenate: boolean; name?: string; ps?: string; hyph?: HyphenOptions; tabs?: TabStop[]; just?: Justification; list?: ListStyle }
 export interface Span { text: string; style: CharStyle }
 export interface CharStyleDef { id: string; name: string; style: Partial<CharStyle> }
 export interface ParaStyleDef { id: string; name: string; style: Partial<ParaStyle>; char?: Partial<CharStyle> }
-export const CHAR_STYLE_KEYS = ['font', 'style', 'size', 'leading', 'tracking', 'kerning', 'baseline', 'hscale', 'vscale', 'fill', 'stroke', 'strokeWidth', 'underline', 'strike', 'caps', 'position', 'features'] as const;
-export const PARA_STYLE_KEYS = ['align', 'indentLeft', 'indentRight', 'indentFirst', 'spaceBefore', 'spaceAfter', 'hyphenate'] as const;
+export const CHAR_STYLE_KEYS = ['font', 'style', 'size', 'leading', 'tracking', 'kerning', 'baseline', 'hscale', 'vscale', 'fill', 'stroke', 'strokeWidth', 'underline', 'strike', 'caps', 'position', 'features', 'axes', 'rotate'] as const;
+export const PARA_STYLE_KEYS = ['align', 'indentLeft', 'indentRight', 'indentFirst', 'spaceBefore', 'spaceAfter', 'hyphenate', 'hyph', 'tabs', 'just', 'list'] as const;
 export type FirstBaseline = 'ascent' | 'cap' | 'x' | 'leading' | 'fixed' | 'em' | 'legacy';
 export interface AreaOptions { columns: number; rows: number; gutter: number; inset: number; firstBaseline: FirstBaseline; rowGutter?: number; baselineMin?: number; flow?: 'rows' | 'columns' }
 export type PathEffect = 'rainbow' | 'skew' | 'ribbon' | 'stair' | 'gravity';

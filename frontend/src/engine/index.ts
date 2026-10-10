@@ -20,9 +20,9 @@ import { edgePaths, faceContains, interiorOf, liveFaceNodes, liveFaces, type Liv
 import { artChildren, sessionGeometry, type PatternGeometry, type PatternSession } from './pattern';
 import { Project } from './project';
 import { applySymbolism, bakedInstance, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
-import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans } from './text';
+import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans, touchSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
+import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, CharTouch,Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
 import { Viewport } from './viewport';
 import { styleLibrary } from './style-libraries';
 import { meshAddLine, meshFromMapper, meshRemoveLines, withMeshHandle, withMeshPoint, type MeshSpec } from './envelope';
@@ -762,6 +762,7 @@ export class Engine extends Emitter<EngineEvents> {
     return this.applyToSelection('Character', (n) => (n.kind === 'text' ? { ...n, spans: range ? styleSpans(n.spans, range[0], range[1], patch) : n.spans.map((s) => ({ ...s, style: { ...s.style, ...patch } })) } : n), ids);
   }
   setParaStyle(patch: Partial<ParaStyle>, ids?: string[]): boolean { return this.applyToSelection('Paragraph', (n) => (n.kind === 'text' ? { ...n, para: { ...n.para, ...patch } } : n), ids); }
+  setCharTouch(id: string, index: number, touch: CharTouch | null, name = 'Touch Type'): boolean { return this.edit(name, (d) => updateNodes(d, [id], (n) => (n.kind === 'text' ? { ...n, spans: touchSpans(n.spans, index, touch) } : n)), { keepAnchors: true }); }
   setTextNode(id: string, patch: Partial<TextNode>, name = 'Type Options'): boolean { return this.edit(name, (d) => updateNodes(d, [id], (n) => (n.kind === 'text' ? ({ ...n, ...patch } as TextNode) : n))); }
   setTextOrientation(vertical: boolean, ids?: string[]): boolean {
     const p = this.current; if (!p) return false;
