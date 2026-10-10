@@ -283,6 +283,23 @@
 .cv-charp .cv-props-field .cv-num input, .cv-parap .cv-props-field .cv-num input { width: 100%; }
 .cv-parap-area { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid var(--line-2); }
 .cv-parap-area[hidden] { display: none; }
+.cv-parap .cv-seg button { min-width: 0; }
+.cv-parap-btn, .cv-tabsp .cv-parap-btn { flex: 1 1 0; min-width: 0; height: 28px; justify-content: center; font-size: 12px; }
+.cv-parap-btn:disabled { opacity: .45; cursor: default; }
+.cv-charp-axes { display: flex; flex-direction: column; gap: 6px; }
+.cv-charp-axes[hidden] { display: none; }
+.cv-charp-axes-list { display: flex; flex-direction: column; gap: 6px; }
+.cv-charp-axes .cv-kit-slider { grid-template-columns: 78px minmax(0, 1fr) 62px; }
+.cv-tabsp .cv-kit-row > .cv-props-field, .cv-tabsp .cv-kit-row > .cv-btn { flex: 1 1 0; min-width: 0; }
+.cv-tabsp .cv-props-field .cv-num { padding: 0 6px; }
+.cv-tabsp .cv-props-field .cv-num input { width: 100%; }
+.cv-tabsp-ruler { position: relative; height: 34px; border: 1px solid var(--line-2); border-radius: 6px; background-color: var(--surface-2); background-image: linear-gradient(to right, var(--line-3) 1px, transparent 1px); background-size: var(--cv-tab-tick, 12.5%) 9px; background-repeat: repeat-x; background-position: left bottom; cursor: copy; touch-action: none; }
+.cv-tabsp-ruler.is-off { opacity: .5; pointer-events: none; }
+.cv-tabsp-stops { position: absolute; inset: 0; }
+.cv-tabsp-stop { position: absolute; top: 3px; left: var(--x, 0%); width: 16px; height: 18px; margin-left: -8px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); cursor: ew-resize; }
+.cv-tabsp-stop:hover { color: var(--text-primary); }
+.cv-tabsp-stop.is-on { color: var(--accent-color); background: var(--accent-soft); }
+.cv-tabsp-scale { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .cv-glyphp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 2px; max-height: 260px; overflow-y: auto; }
 .cv-glyphp-cell { display: grid; place-items: center; height: 34px; padding: 0; border: 1px solid var(--line-1); border-radius: 5px; background: var(--surface-2); color: var(--text-primary); font-size: 18px; cursor: pointer; }
 .cv-glyphp-cell:hover { border-color: var(--accent-line); background: var(--accent-soft); }

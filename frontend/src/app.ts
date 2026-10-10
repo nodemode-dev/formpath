@@ -56,7 +56,7 @@ import { EffectGallery } from './ui/panels/effect-gallery';
 import { ThreeDPanel } from './ui/panels/three-d';
 import { BrushesPanel, StrokePanel, TransparencyPanel } from './ui/panels/stroke';
 import { ArtboardsPanel, LinksPanel, SymbolsPanel } from './ui/panels/symbols';
-import { areaTypeOptionsDialog, CharacterPanel, findReplaceDialog, GlyphsPanel, ParagraphPanel, pathTypeOptionsDialog } from './ui/panels/type';
+import { areaTypeOptionsDialog, CharacterPanel, findReplaceDialog, GlyphsPanel, hyphenationDialog, justificationDialog, ParagraphPanel, pathTypeOptionsDialog, TabsPanel } from './ui/panels/type';
 import { TextStylesPanel } from './ui/panels/text-styles';
 import { FindFontDialog } from './ui/panels/find-font';
 import { ColorGuidePanel } from './ui/panels/color-guide';
@@ -124,7 +124,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group',appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group',appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -184,7 +184,7 @@ export function startApp(): void {
   const layersP = new LayersPanel(engine, contextMenu);
   const propsP = new PropertiesPanel(engine, (c) => { commands.run(c); });
   const xformP = new TransformPanel(engine), alignP = new AlignPanel(engine), pfP = new PathfinderPanel(engine);
-  const charP = new CharacterPanel(engine), paraP = new ParagraphPanel(engine), glyphsP = new GlyphsPanel(engine);
+  const charP = new CharacterPanel(engine), paraP = new ParagraphPanel(engine), glyphsP = new GlyphsPanel(engine), tabsP = new TabsPanel(engine);
   typing.redraw = () => { stage.ctx.redraw(); glyphsP.caretMoved(); };
   const charStylesP = new TextStylesPanel(engine, 'char'), paraStylesP = new TextStylesPanel(engine, 'para');
   void historyP; void navP;
@@ -195,7 +195,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
-  new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }], 'Type');
+  new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }, { id: 'tabs', label: 'Tabs', body: tabsP.body }], 'Type');
   const dock = new Dock(dockHost, sideHost);
   const propsShown = (): boolean => stored('formpth.propsCol') !== 'hidden';
   const sideOpen = (): boolean => propsShown() && dock.sideShown() > 0;
@@ -880,6 +880,8 @@ export function startApp(): void {
     { id: 'wrap-make', label: 'Make', enabled: sel, run: () => engine.setTextWrap({ offset: wrapDefaults.offset, invert: wrapDefaults.invert }) },
     { id: 'wrap-release', label: 'Release', enabled: () => engine.selected().some((n) => !!n.wrap), run: () => engine.setTextWrap(null) },
     { id: 'wrap-options', label: 'Text Wrap Options...', enabled: sel, run: () => { const cur = engine.selected().find((n) => n.wrap)?.wrap ?? wrapDefaults; void askForm('Text Wrap Options', [{ kind: 'number', key: 'offset', label: 'Offset', value: cur.offset, min: -500, max: 500, unit: 'pt' }, { kind: 'check', key: 'invert', label: 'Invert Wrap', value: cur.invert }], { ok: 'OK' }).then((v) => { if (!v) return; wrapDefaults.offset = Number(v.offset); wrapDefaults.invert = !!v.invert; engine.setTextWrap({ offset: wrapDefaults.offset, invert: wrapDefaults.invert }); }); } },
+    { id: 'hyphenation-options', label: 'Hyphenation...', enabled: () => kindSel('text') || !!typing.node(), run: () => void hyphenationDialog(engine) },
+    { id: 'justification-options', label: 'Justification...', enabled: () => kindSel('text') || !!typing.node(), run: () => void justificationDialog(engine) },
     { id: 'area-type-options', label: 'Area Type Options...', enabled: () => engine.selected().some((n) => n.kind === 'text' && n.mode === 'area'), run: () => void areaTypeOptionsDialog(engine) },
     { id: 'type-on-path-options', label: 'Type on a Path Options...', enabled: () => engine.selected().some((n) => n.kind === 'text' && n.mode === 'path'), run: () => void pathTypeOptionsDialog(engine) },
     ...([['rainbow', 'Rainbow'], ['skew', 'Skew'], ['ribbon', '3D Ribbon'], ['stair', 'Stair Step'], ['gravity', 'Gravity']] as const).map(([fx, label]) => ({ id: `type-path-${fx}`, label, enabled: () => engine.selected().some((n) => n.kind === 'text' && n.mode === 'path'), checked: () => engine.selected().some((n) => n.kind === 'text' && n.mode === 'path' && (n.pathEffect ?? 'rainbow') === fx), run: () => { engine.applyToSelection('Type on a Path Effect', (n) => (n.kind === 'text' && n.mode === 'path' ? { ...n, pathEffect: fx } : n)); } })),
@@ -1008,7 +1010,7 @@ export function startApp(): void {
       { label: 'Opacity Mask', items: ['opacity-mask', 'release-opacity-mask', 'disable-opacity-mask', 'unlink-opacity-mask', '-', 'new-mask-clip', 'new-mask-invert'] },
       { label: 'Symbol', items: ['new-symbol', 'break-symbol'] },
       { label: 'Artboards', items: ['artboards-from-selection', 'artboards-rearrange', 'artboard-fit-art', 'artboard-fit-selection', '-', 'artboard-options'] }] },
-    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', '-', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
+    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
