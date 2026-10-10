@@ -10,6 +10,9 @@ import { updateNodes } from '../engine/doc';
 import type { Anchor, Doc, Engine, EnvelopeNode, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
 import { meshHandleAt, meshHandles, meshPointAt, withMeshHandle, withMeshPoint, type MeshSpec } from '../engine/envelope';
 import { envelopeFrame } from '../engine/live';
+import { instanceArt } from '../engine/symbolism';
+import { findPart } from '../engine/symbols';
+import { transformNode } from '../engine/transform';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { isMac } from '../ui/dom';
@@ -227,6 +230,26 @@ function dragWidget(ctx: ToolContext, p: ToolPointer): void {
   e.setOverlay({ label: `Radius: ${unitLabel(e, r)}`, at: p.doc, lines: [] });
 }
 
+const SG: { edge: 'x1' | 'x2' | 'y1' | 'y2' | null; moved: boolean } = { edge: null, moved: false };
+
+function sliceGuideAt(ctx: ToolContext, p: ToolPointer): 'x1' | 'x2' | 'y1' | 'y2' | null {
+  const e = ctx.engine, s = e.symbolSession, sl = s ? e.symbolDef(s.symbol)?.slice : null;
+  if (!s || !sl) return null;
+  const t = tolDoc(ctx, 4), x = p.doc.x - s.origin.x, y = p.doc.y - s.origin.y;
+  for (const k of ['x1', 'x2'] as const) if (Math.abs(x - sl[k]) <= t) return k;
+  for (const k of ['y1', 'y2'] as const) if (Math.abs(y - sl[k]) <= t) return k;
+  return null;
+}
+
+function dragSlice(ctx: ToolContext, p: ToolPointer): void {
+  const e = ctx.engine, base = e.dragOrigin, s = e.symbolSession, k = SG.edge;
+  if (!base || !s || !k) return;
+  const v = k[0] === 'x' ? p.doc.x - s.origin.x : p.doc.y - s.origin.y;
+  SG.moved = true;
+  e.dragTo({ ...base, symbols: base.symbols.map((x) => (x.id === s.symbol && x.slice ? { ...x, slice: { ...x.slice, [k]: v } } : x)) });
+  e.setOverlay({ label: `${k[0] === 'x' ? 'X' : 'Y'}: ${unitLabel(e, v)}`, at: p.doc, lines: [] });
+}
+
 registerTool({
   id: 'selection', label: 'Selection Tool', group: 'select', order: 10, shortcut: 'V',
   icon: () => 'vSelect',
@@ -248,6 +271,8 @@ registerTool({
     if (port) { L.id = port; ctx.redraw(); return; }
     const wdg = widgetAt(ctx, p);
     if (wdg) { CW.on = true; CW.w = wdg; CW.moved = false; e.beginDrag('Corner Radius'); return; }
+    const sg = sliceGuideAt(ctx, p);
+    if (sg) { SG.edge = sg; SG.moved = false; e.beginDrag('9-Slice Scaling Guides'); return; }
     const h = handleAt(ctx, p);
     if (h >= 0) { beginTransform(ctx, S, p, h >= 100 ? 'rotate' : 'scale', h % 100); return; }
     if (p.mod && !p.shift) {
@@ -270,6 +295,7 @@ registerTool({
   move: (ctx, p) => {
     if (BR.on) { bracketMove(ctx, p); return; }
     if (CW.on) { dragWidget(ctx, p); return; }
+    if (SG.edge) { dragSlice(ctx, p); return; }
     if (L.drag) { L.cur = p.doc; ctx.redraw(); return; }
     if (S.mode === 'marquee') { S.cur = p.doc; ctx.redraw(); return; }
     dragTransform(ctx, S, p);
@@ -278,6 +304,7 @@ registerTool({
     const e = ctx.engine;
     if (BR.on) { bracketUp(ctx); return; }
     if (CW.on) { CW.on = false; CW.w = null; e.clearOverlay(); if (CW.moved) e.commitDrag(); else e.cancelDrag(); return; }
+    if (SG.edge) { SG.edge = null; e.clearOverlay(); if (SG.moved) e.commitDrag(); else e.cancelDrag(); return; }
     if (L.drag) { placeLoaded(ctx, p); ctx.redraw(); return; }
     if (S.mode === 'marquee') {
       const r = normRect(S.start.x, S.start.y, p.doc.x, p.doc.y), z = ctx.view().zoom;
@@ -288,7 +315,7 @@ registerTool({
     }
     endTransform(ctx, S);
   },
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; L.id = null; L.drag = false; BR.on = false; ctx.redraw(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; L.id = null; L.drag = false; BR.on = false; SG.edge = null; ctx.redraw(); },
   deactivate: () => { L.id = null; L.drag = false; },
   hover: (ctx, p) => {
     const next = p && ctx.engine.view.smartGuides ? (() => { const h = ctx.engine.hit(p.doc); return h ? ctx.engine.selectableFor(h.id) : null; })() : null;
@@ -302,6 +329,7 @@ registerTool({
     const leaf = findNode(pr.doc, hit.id);
     if (leaf?.kind === 'text') { e.setTool('type'); ctx.typeAt({ id: leaf.id, x: p.doc.x, y: p.doc.y }); return; }
     const top = findNode(pr.doc, e.selectableFor(hit.id));
+    if (top && top.kind === 'symbol' && !pr.symbolEdit) { e.enterSymbolEdit(top.symbol, top.id); return; }
     if (top && top.kind === 'group') e.isolate(top.id);
   },
   overlay: (ctx, g) => {
@@ -492,6 +520,7 @@ function directDown(ctx: ToolContext, p: ToolPointer, groupMode: boolean): void 
     if (p.shift && pr.selection.has(id)) { e.select([id], 'subtract'); return; }
     e.select([id], p.shift ? 'add' : groupMode && pr.selection.size && hit.chain.some((c) => pr.selection.has(c)) ? 'add' : 'replace');
     if (!groupMode) e.setAnchors(id, new Set([-1]));
+    if (!groupMode && node?.kind === 'symbol' && !p.shift) e.pickSymbolPart(id, p.doc, t);
     D.mode = 'anchors'; D.grab = p.doc;
     if (groupMode) { e.clearAnchors(); D.mode = null; beginTransform(ctx, G, p, 'move'); return; }
     e.beginDrag('Move');
@@ -631,6 +660,11 @@ function directOverlay(ctx: ToolContext, g: CanvasRenderingContext2D): void {
   const e = ctx.engine, pr = e.current;
   if (!pr) return;
   envelopeOverlay(ctx, g);
+  const sp = e.activeSymbolPart(), inst = sp ? findNode(pr.doc, sp.instance) : null;
+  if (sp && inst?.kind === 'symbol') {
+    const art = instanceArt(pr.doc, inst), part = art ? findPart(art, sp.part) : null;
+    if (part) outlineNode(ctx, g, pr.doc, transformNode(part, inst.xf), ctx.paint().accent, 2);
+  }
   if (D.mode === 'marquee') marquee(ctx, g, D.start, D.cur);
   if (D.mode === 'lasso') { const v = ctx.view(); stroke2(g, D.lasso.map((q) => v.toScreen(q)), ctx.paint().accent, false); }
   if (!D.mode && hoverLeaf && !pr.selection.has(hoverLeaf)) {
