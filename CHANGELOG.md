@@ -2,6 +2,26 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.22.0 · 2026-10-10
+
+Libraries, paint and links. Parity is 69 of 76, 90.8 percent.
+
+### Added
+
+- Swatches: colour groups as folders with drag and drop, tint and registration swatches, 15 swatch libraries in a Swatch Library panel, User Defined libraries, and ASE swatch files opened and saved.
+- Spot colours and their tints are written to PDF as Separation colour spaces; [Registration] prints on every plate.
+- Recolor Artwork: a smooth or segmented colour wheel, reduce to a colour count, merge and separate, recolor from a colour group or library, the Color Theme Picker, shuffles and colour job presets, with a live preview. The Color Guide can be limited to a library.
+- The Bristle brush, pen pressure from the Paintbrush, five-tile pattern brushes, art brushes that stretch between guides and flip, five brush libraries and Save Brushes.
+- Symbol editing mode, Redefine, Duplicate, Replace, Reset Overrides and Symbol Options; dynamic symbols with per-instance part overrides; 9-slice scaling; registration points; five symbol libraries.
+- Image Trace at the image's own resolution in a worker, with Corners, Noise, Method, palettes, centreline strokes, Snap Curves to Lines and an Outline preset.
+- Real linked images: Place Linked, Linked, Modified and Missing states, Update, Relink from Folder, Go To Link, Embed and Unembed, with a cached preview in `.fpth`.
+- MCP tools `swatch_library`, `swatch_group`, `new_brush`, `brush_library` and `links`; new options on `recolor`, `add_swatch`, `apply_brush`, `image_trace`, `place_image` and the symbol tools. 81 tools.
+
+### Changed
+
+- Outline Stroke and Expand Appearance follow brushes.
+- Image Trace swaps in the tracing object at once and fills it when the trace finishes.
+
 ## 0.21.0 · 2026-10-10
 
 The Perspective Grid. Every drawing row is Full; parity is 66 of 76.
