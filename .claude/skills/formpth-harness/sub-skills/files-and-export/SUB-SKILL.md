@@ -1,6 +1,6 @@
 ---
 name: files-and-export
-description: Files in formpth through MCP. Owns open_file for .fpth, SVG, any PDF or PDF-compatible .ai, and images, place_image, save_project, export_file to SVG, PDF, PNG, JPEG and WebP with scopes, scale, quality, transparency and outlined text, switch_document and document_setup. Load whenever a file is read, placed, saved or delivered.
+description: Files in formpth through MCP. Owns open_file for .fpth, SVG, any PDF or PDF-compatible .ai, and images, place_image, save_project, export_file to SVG, PDF, PNG, JPEG and WebP with scopes, scale, quality, transparency and outlined text, switch_document and document_setup, data merge (variables with action export) and batch processing of a folder (actions with action batch). Load whenever a file is read, placed, saved or delivered.
 ---
 
 # files-and-export
@@ -24,6 +24,8 @@ Paths are absolute, and the folder exists. When the person names a folder like D
    - .png: scale 2 for crisp screens, transparent true for a cut-out; .jpg with quality; .webp for the web.
 5. **Several documents**: `switch_document` by index or name from `get_document`.
 6. **Document settings**: `document_setup` units, colour_mode rgb or cmyk (cmyk for print), title.
+7. **Data merge** (one design, many variations): `variables` with action make binds a text, image, visibility or graph variable to an object (id); action import takes CSV text whose header row names the variables (image columns hold absolute paths or URLs) or JSON; action show with an index previews one data set (check with `get_image`); action export with folder, format (png, svg or pdf), name_variable and fpth writes one file per data set and reports the paths.
+8. **Batch**: `actions` with action list shows the recorded actions; action play runs one on the open document; action batch with name, folder (the .fpth, SVG and PDF files to process) and out (where results and formpth-batch-log.txt go) opens each file, plays the action and saves it in format (same, fpth, svg, pdf or png). source data_sets runs it over the open document's data sets instead.
 
 ## Gate
 

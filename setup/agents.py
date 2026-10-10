@@ -35,7 +35,8 @@ GROUPS = [
     ("Effects and live objects", {"apply_effect", "three_d", "expand", "make_blend", "envelope", "repeat", "symbol", "symbolism", "apply_brush", "image_trace", "live_paint", "intertwine", "gradient_mesh", "make_pattern", "edit_pattern", "recolor"}),
     ("Artboards", {"artboard"}),
     ("Type", {"set_text", "text_flow", "text_style", "find_font", "create_outlines"}),
-    ("Commands", {"list_commands", "run_command"}),
+    ("Graphs and data", {"graph", "variables"}),
+    ("Commands", {"list_commands", "run_command", "actions"}),
     ("History", {"undo", "redo"}),
 ]
 

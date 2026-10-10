@@ -58,7 +58,8 @@ Each recipe is a sequence of tool calls; check with `get_image` where it says ch
 2. Labels: `add_text` centred in each box (`align` horizontal_center and vertical_center with `to` key and the box as key).
 3. Connectors: `draw_shape` line or `draw_path`, then `set_stroke` end_arrow triangle.
 4. `align` distribute_horizontal_space with spacing for even gaps.
-5. Check, export svg.
+5. Charts: `graph` with type (column, stacked, bar, stackedBar, line, area, scatter, pie, radar), x, y, width and height of the plot body and data {series, categories, values} or table text; labels and legend sit outside the body. The reply lists each series' group id: `set_paint` on that id recolours the series and survives later data edits (`graph` with id and new data). series_types {index: line} draws one series as a line over columns.
+6. Check, export svg.
 
 ## Seamless pattern
 

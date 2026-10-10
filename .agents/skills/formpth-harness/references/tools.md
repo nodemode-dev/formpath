@@ -15,7 +15,8 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
 - Type: `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
-- Commands: `list_commands`, `run_command`
+- Graphs and data: `graph`, `variables`
+- Commands: `actions`, `list_commands`, `run_command`
 - History: `undo`, `redo`
 
 ## get_document
@@ -867,6 +868,85 @@ Lists the fonts the document's type uses (family, style and the objects using ea
 Turns type objects into compound paths of their glyph outlines, in their colours.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
+
+## graph
+
+Creates or updates a live graph from data: column, stacked column, bar, stacked bar, line, area, scatter, pie or radar. The graph keeps its data table; its columns, lines, markers, wedges, axes, labels and legend are ordinary paths and type inside it, regenerated when the data or options change while keeping any colours you gave its parts (each series is a group: get returns the group ids, so set_paint on one recolours that series). x, y, width and height are the body of the graph in points; labels and the legend sit outside it. Data rows are categories (one pie each in pie graphs, one axis each in radar graphs) and columns are series; in scatter graphs each pair of columns is Y then X. series_types combines types (a column graph with one series as a line). make_design turns the selection into a design for column_design or marker_design. Ungroup or expand turns a graph into plain art.
+
+- `action`: string (create | update | get | make_design); create (default without id), update (default with id), get the data and series group ids, or make_design from ids or the selection.
+- `id`: string; The graph, or any part of it.
+- `type`: string (column | stacked | bar | stackedBar | line | area | scatter | pie | radar); default "column"
+- `x`: number
+- `y`: number
+- `width`: number; default 240
+- `height`: number; default 160
+- `data`: object; {series: [legend labels], categories: [row labels], values: [[row 1 numbers], [row 2 numbers], ...]}; null for an empty cell.
+- `table`: string; The data as spreadsheet text instead (tab-separated or CSV): a header row of legend labels and a first column of category labels are detected.
+- `transpose`: boolean; default false; Swap rows and columns of the data first.
+- `switch_xy`: boolean; default false; Scatter: swap each pair of columns (X and Y).
+- `legend`: string (right | top | none); default "right"
+- `value_axis`: string (left | right | both | bottom | top); Where the value axis and its labels go (bar graphs: bottom, top or both).
+- `min`: number
+- `max`: number
+- `divisions`: integer; Setting min, max or divisions overrides the calculated tick values.
+- `auto`: boolean; true goes back to calculated tick values.
+- `ticks`: string (none | short | full); default "short"; Value axis tick marks; full draws gridlines.
+- `category_ticks`: string (none | short | full); default "short"
+- `prefix`: string
+- `suffix`: string; Text after each value label, such as %.
+- `column_width`: number; default 90; Percent of the space each column may take.
+- `cluster_width`: number; default 80; Percent of each category the cluster takes.
+- `mark_points`: boolean; default true
+- `connect_points`: boolean; default true
+- `edge_to_edge`: boolean; default false
+- `fill_lines`: boolean; default false
+- `line_width`: number; default 1
+- `marker_size`: number; default 5
+- `pie_legend`: string (standard | wedges | none); default "standard"
+- `pie_sort`: string (none | all | first); default "none"
+- `pie_position`: string (ratio | even | stacked); default "ratio"
+- `drop_shadow`: boolean; default false
+- `font`: string; default "Inter"
+- `size`: number; default 9; Label size in points.
+- `series_types`: object; Combined graphs: {series index: column | stacked | line | area | null}; works when the graph type is column, stacked, line or area.
+- `column_design`: object; {series: [indices] (all when left out), design: name or id (null removes), mode: vertical | uniform | repeat, per: units each repeated design stands for, fraction: chop | scale}.
+- `marker_design`: object; {series: [indices], design: name or id (null removes)}: the design replaces the square markers.
+- `name`: string; make_design: the design's name.
+- `ids`: array; Object ids from get_document; the selection when left out.
+
+## variables
+
+Variables and data merge: list the variables and data sets; make a variable (text to type, image to a placed image, visibility to any object, graph to a graph's data) bound to an object; bind, unbind, rename or delete one; capture the artboard as a data set or update the shown one; import data sets from CSV (a header row names the variables, an image column holds file paths or URLs the engine can read) or JSON; show a data set (the art changes to it); export writes one PNG, SVG or PDF per data set (and .fpth with fpth) into a folder.
+
+- `action`: string (list | make | bind | unbind | rename | delete | capture | update | import | show | export); default "list"
+- `kind`: string (text | image | visibility | graph); default "text"
+- `id`: string; make and bind: the object to bind.
+- `variable`: string; A variable's name or id.
+- `name`: string; make, rename and capture: the new name; show: a data set's name.
+- `data`: string or array or object; import: CSV text, or JSON (an array of objects whose keys are variable names, or {dataSets: [...]}).
+- `format`: string (csv | json | png | svg | pdf); import: csv or json; export: png (default), svg or pdf.
+- `index`: integer; show and update: the data set's index.
+- `folder`: string; export: absolute path of the folder to write into (created if missing).
+- `fpth`: boolean; default false
+- `name_variable`: string; export: a text variable whose value names each file (the data set's name otherwise).
+- `artboard`: integer
+- `scale`: number; default 1
+- `data_sets`: array; export: only these data sets.
+
+## actions
+
+Actions: list the action sets and their recorded steps (menu commands with their dialog values, transforms, drawing and paint), play one on the open document, or batch it over every .fpth, SVG and PDF file in a folder (or over the document's data sets), saving each result into out with a log file formpth-batch-log.txt.
+
+- `action`: string (list | play | batch); default "list"
+- `set`: string; The action set's name, when two sets have an action with the same name.
+- `name`: string; The action's name.
+- `source`: string (folder | data_sets); default "folder"
+- `folder`: string; batch: absolute path of the folder of files to process.
+- `kinds`: array; batch: which files to take (default fpth, svg and pdf).
+- `out`: string; batch: absolute path of the folder for the results and the log (created if missing).
+- `format`: string (same | fpth | svg | pdf | png); default "same"
+- `name_variable`: string; batch over data sets: a text variable that names each file.
+- `stop_on_error`: boolean; default false
 
 ## list_commands
 
