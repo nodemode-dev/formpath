@@ -377,10 +377,10 @@ export class AboutDialog extends Dialog {
   }
 }
 
-export type ExportFormat = 'svg' | 'pdf' | 'png' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf';
+export type ExportFormat = 'svg' | 'pdf' | 'ai' | 'png' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf';
 export interface TiffExportChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface CadChoice { version: 'R12' | '2000'; units: DxfUnit; scale: number; text: 'text' | 'outlines'; lineweights: boolean }
-export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks }
+export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: 'none' | 'x4'; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks }
 
 export function parseArtboardRange(text: string, count: number, current: number): number[] | null {
   const t = text.trim().toLowerCase();
@@ -398,7 +398,7 @@ export function parseArtboardRange(text: string, count: number, current: number)
 }
 
 export class ExportDialog extends Dialog {
-  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['tiff', 'TIFF (.tiff)']]);
+  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['ai', 'Illustrator (.ai)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['tiff', 'TIFF (.tiff)']]);
   private readonly tiffCompression = selectOf([['none', 'None'], ['packbits', 'PackBits'], ['lzw', 'LZW'], ['deflate', 'Deflate']]);
   private readonly tiffColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
   private readonly markTrim = el<HTMLInputElement>('<input type="checkbox">');
@@ -426,6 +426,8 @@ export class ExportDialog extends Dialog {
   private readonly transparent = el<HTMLInputElement>('<input type="checkbox">');
   private readonly outline = el<HTMLInputElement>('<input type="checkbox">');
   private readonly preserve = el<HTMLInputElement>('<input type="checkbox" checked>');
+  private readonly liveText = el<HTMLInputElement>('<input type="checkbox" checked>');
+  private readonly standard = selectOf([['none', 'None'], ['x4', 'PDF/X-4:2010']]);
   private readonly rows: Record<string, HTMLElement> = {};
   private resolve: ((c: ExportChoice | null) => void) | null = null;
   private artboard = 0;
@@ -442,6 +444,10 @@ export class ExportDialog extends Dialog {
     this.rows.transparent = row('Transparent background', this.transparent);
     this.rows.preserve = row('Preserve formpth editing (reopens fully editable)', this.preserve);
     this.rows.outline = row('Convert type to outlines', this.outline);
+    this.rows.liveText = row('Preserve text as live text', this.liveText);
+    this.liveText.title = 'Writes selectable, searchable text with the fonts embedded. Type with gradients, effects or an unavailable font is outlined instead.';
+    this.rows.standard = row('Standard', this.standard);
+    this.standard.title = 'PDF/X-4 embeds the document CMYK profile as the output intent (Edit > Color Settings) and leaves out formpth editing data.';
     this.rows.epsColor = row('Color', this.epsColor);
     this.rows.cadVersion = row('Version', this.cadVersion);
     this.rows.cadUnits = row('Units', this.cadUnits);
@@ -514,6 +520,8 @@ export class ExportDialog extends Dialog {
     for (const k of ['markTrim', 'markReg', 'markBars', 'markInfo', 'markOffset', 'markWeight', 'bleedMode']) setHidden(this.rows[k], f !== 'pdf');
     for (const k of ['bleedTB', 'bleedLR']) setHidden(this.rows[k], f !== 'pdf' || this.bleedMode.value !== 'custom');
     setHidden(this.rows.outline, f !== 'svg');
+    setHidden(this.rows.liveText, f !== 'pdf' && f !== 'ai');
+    setHidden(this.rows.standard, f !== 'pdf');
     setHidden(this.rows.preserve, !(f === 'svg' || f === 'pdf' || f === 'eps'));
     setHidden(this.rows.epsColor, f !== 'eps');
     for (const k of ['cadVersion', 'cadUnits', 'cadScale', 'cadText', 'cadWeights']) setHidden(this.rows[k], f !== 'dxf');
@@ -527,7 +535,7 @@ export class ExportDialog extends Dialog {
     const scale = Number(this.scale.value) || 1;
     const tiff: TiffExportChoice = { compression: this.tiffCompression.value as TiffCompression, cmyk: this.tiffColor.value === 'cmyk', ppi: Math.round(72 * scale) };
     const marks: PdfMarks = { trim: this.markTrim.checked, registration: this.markReg.checked, colorBars: this.markBars.checked, pageInfo: this.markInfo.checked, offset: num(this.markOffset), weight: Math.max(0.1, Number(this.markWeight.value) || DEFAULT_MARKS.weight), bleed: this.bleedMode.value as PdfMarks['bleed'], custom: { t: num(this.bleedTop), b: num(this.bleedBottom), l: num(this.bleedLeft), r: num(this.bleedRight) } };
-    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, cmyk: this.epsColor.value === 'cmyk', cad };
+    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, liveText: this.liveText.checked, standard: this.standard.value === 'x4' ? 'x4' : 'none', cmyk: this.epsColor.value === 'cmyk', cad };
   }
 }
 

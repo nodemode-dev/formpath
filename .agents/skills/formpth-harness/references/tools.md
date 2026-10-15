@@ -13,6 +13,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Transform and align: `transform`, `align`, `puppet_warp`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`, `shaper`
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `new_brush`, `brush_library`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
+- Colour management: `list_color_profiles`, `set_color_settings`, `convert_to_profile`, `proof_colors`
 - Artboards: `artboard`
 - Type: `retype`, `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
 - Generative: `generative_shape_fill`, `generate_patterns`, `text_to_vector`, `generative_recolor`
@@ -71,7 +72,7 @@ Opens a new document with one or more artboards.
 
 ## open_file
 
-Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF) as a new document. DWG is not supported: save it as DXF first.
+Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF) as a new document. DWG opens through a DWG converter on this computer (ODA File Converter or LibreDWG dwg2dxf); without one the call says how to get it.
 
 - `path`: string; required
 - `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); DXF only: what one drawing unit is; default the file's own units, else mm for metric drawings and in otherwise.
@@ -88,7 +89,7 @@ Saves the document as a formpth project (.fpth) at an absolute path; everything 
 
 ## export_file
 
-Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .png, .jpg or .webp.
+Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .png, .jpg or .webp.
 
 - `path`: string; required
 - `scope`: string (artboard | document | selection | all_artboards); default "artboard"
@@ -97,6 +98,8 @@ Exports the art to an absolute path; the extension chooses the format: .svg, .pd
 - `quality`: number; default 0.92
 - `transparent`: boolean; default false
 - `outline_text`: boolean; default false; SVG and DXF: type as outlines (DXF writes TEXT otherwise).
+- `live_text`: boolean; default true; PDF only: write type as selectable, searchable text with the fonts embedded (default). Type with gradients, effects, 3D or an unavailable font is outlined either way; false outlines all type.
+- `pdf_standard`: string (none | x4); default "none"; PDF only: x4 writes PDF/X-4 with the document CMYK profile (set_color_settings) as the output intent, XMP metadata and a document ID, and leaves out formpth editing data.
 - `color`: string (rgb | cmyk); EPS only: colour model; default the document's colour mode.
 - `dxf_version`: string (2000 | R12); default "2000"; DXF only: 2000 writes splines, solid hatches for fills, true colours and lineweights; R12 writes polylines with arcs.
 - `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); default "mm"; DXF only: the drawing units.
@@ -581,7 +584,7 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 
 ## three_d
 
-3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed surface: depth, volume, and rx, ry, rz to tilt it) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, wireframe or flat (plane); light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. map_symbol wraps a symbol (by name; make one with the symbol tool) onto the front face of an extrude or plane, sized by map_scale percent and moved by map_x, map_y points, shaded with the surface unless shade_art is false; an empty map_symbol clears it. shadow true casts a soft shadow (not for inflate): shadow_position behind or below, shadow_distance and shadow_softness in points, shadow_opacity in percent. Leave kind out to change only the parameters you pass; remove true takes 3D off. Type and groups extrude as one object; expand turns the result into plain shaded paths.
+3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed surface: depth, volume, and rx, ry, rz to tilt it) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, brushed_metal, wood, rough, wireframe or flat (plane); brushed_metal, wood and rough are textures that show only with ray_trace (vector mode falls back to metal or matte) and texture_scale sets their size in percent. light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. lighting standard, diffuse, top_left or right sets a lighting preset of several lights; lights replaces them with your own array (up to 8) of {color, intensity 0 to 200, rotation -180 to 180 degrees around the object, height 0 to 90 degrees, softness 0 to 100}, and the shading sums every light (omit lights and lighting to keep the single light above). ray_trace true renders the object per pixel with smooth normals, soft shadows from the lights, ambient occlusion and the ground shadow, at quality low, medium or high (high takes a second or two); SVG and PDF export a ray-traced object as an image and expand appearance turns it into an image object. map_symbol wraps a symbol (by name; make one with the symbol tool) onto the front face of an extrude or plane, sized by map_scale percent and moved by map_x, map_y points, shaded with the surface unless shade_art is false; an empty map_symbol clears it. shadow true casts a soft shadow (not for inflate): shadow_position behind or below, shadow_distance and shadow_softness in points, shadow_opacity in percent. Leave kind out to change only the parameters you pass; remove true takes 3D off. Type and groups extrude as one object; expand turns the result into plain shaded paths.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `kind`: string (extrude | revolve | inflate | plane)
@@ -599,7 +602,12 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 - `offset`: number
 - `from`: string (left | right)
 - `volume`: number
-- `material`: string (plastic | matte | metal | wireframe | flat)
+- `material`: string (plastic | matte | metal | brushed_metal | wood | rough | wireframe | flat)
+- `texture_scale`: number
+- `ray_trace`: boolean
+- `quality`: string (low | medium | high)
+- `lighting`: string (standard | diffuse | top_left | right)
+- `lights`: array
 - `light`: string
 - `intensity`: number
 - `ambient`: number
@@ -926,6 +934,38 @@ Retype: identifies the font of outlined type or of text in a placed image and li
 - `keep_image`: boolean; default true; Images: keep the image under the new text.
 
 Note: reaches outside this computer.
+
+## list_color_profiles
+
+Lists the ICC colour profiles formpth can use (the built-in sRGB, the generated formpth Generic CMYK, profiles loaded in Color Settings and those installed on this computer) with name, colour space (RGB, CMYK, GRAY), class and id, and the colour settings of the open document: working spaces, rendering intent, black point compensation and whether Proof Colors is on. Call this before set_color_settings or convert_to_profile to get the exact names.
+
+- no parameters
+
+Note: read-only.
+
+## set_color_settings
+
+Color Settings for the open document, like Edit > Color Settings: the RGB working space, the CMYK working space (CMYK colours then display and convert through that ICC profile; none returns to the simple formula), the rendering intent and black point compensation. Colour numbers do not change; only how they are interpreted. One undo step. Only the fields given change.
+
+- `rgb_profile`: string; A name or id from list_color_profiles.
+- `cmyk_profile`: string; A name or id from list_color_profiles, or none for the formula.
+- `intent`: string (perceptual | relative_colorimetric | saturation | absolute_colorimetric); Default relative_colorimetric.
+- `bpc`: boolean; Black point compensation; default true.
+
+## convert_to_profile
+
+Edit > Convert to Profile: converts every fill, stroke, gradient stop, mesh point, swatch, symbol, graphic style and artboard colour in the open document to the destination profile, keeping the look, with the document's intent and black point setting, as one undo step. A CMYK profile makes the document CMYK; an RGB profile turns CMYK colours into RGB.
+
+- `profile`: string; required; A name or id from list_color_profiles.
+
+Note: replaces or removes.
+
+## proof_colors
+
+View > Proof Colors: turns the on-screen soft proof on or off. The proof shows the art as the chosen CMYK device would print it, using the document's paper color and black ink settings. It affects the window only; exports and get_image are unchanged.
+
+- `on`: boolean; required; true to turn the proof on, false to turn it off.
+- `profile`: string; A CMYK profile name or id to simulate; kept in the document's Proof Setup.
 
 ## edit_pattern
 

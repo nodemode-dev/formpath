@@ -102,6 +102,12 @@ const parsed = new Map<string, Promise<Font | null>>();
 const byFile = new Map<string, Promise<Font | null>>();
 const rawData = new WeakMap<Font, ArrayBuffer>();
 const keep = (buf: ArrayBuffer): Font => { const f = parse(buf); rawData.set(f, buf); return f; };
+const installedId = new WeakMap<Font, string>();
+export function fontSource(font: Font): { id: string } | { bytes: ArrayBuffer } | null {
+  const id = installedId.get(font), bytes = rawData.get(font);
+  return id ? { id } : bytes ? { bytes } : null;
+}
+export function glyphAdvance(font: Font, gid: number, st: CharStyle): number { return variedGlyph(font, gid, st).adv; }
 export function fontFor(family: string, style: string): Promise<Font | null> {
   const key = `${family}|${style}`;
   let p = parsed.get(key);
@@ -115,6 +121,7 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
         let f = byFile.get(hit.id);
         if (!f) { f = api.fontFile(hit.id).then(keep).catch(() => null); byFile.set(hit.id, f); }
         const font = await f;
+        if (font) installedId.set(font, hit.id);
         const info = font ? infoOf(font) : null;
         if (info?.instances.length) {
           const names = info.instances.map((i) => i.name), had = instanceStyles.get(family) ?? [];

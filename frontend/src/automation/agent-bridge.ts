@@ -2,7 +2,7 @@ import { geomBounds, selectionBounds, visualBounds } from '../engine/bounds';
 import { findNode, inDocOrder, nodeLabel, updateNodes } from '../engine/doc';
 import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES } from '../engine/effects';
 import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
-import { ROTATION_PRESETS } from '../engine/threed';
+import { LIGHT_LIMIT, LIGHTING_PRESETS, lightsToParam, ROTATION_PRESETS } from '../engine/threed';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, fitRowsToPalette, mapFn, nearestFn, oklab, RECOLOR, recolorDoc, reduceRows, rowReference, rowsFn } from '../engine/ops/recolor';
 import { libraryColors, swatchLibrary, SWATCH_LIBRARIES, type SwatchLibrary } from '../engine/swatch-libraries';
@@ -31,12 +31,15 @@ import { exportDataSets, showDataSet } from '../io/data-merge';
 import { VERSION } from '../version';
 import type { GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from '../engine/types';
 import { api } from '../io/api';
+import { bakeTraced } from '../io/raster';
 import { attachPlace, gridOf, leafPlaneBounds, planeLocalRect, presetGrid, vanishing } from '../engine/perspective';
 import type { BrushDef, Doc, PerspPlane } from '../engine/types';
 import { DXF_UNITS, type DxfImportOptions, type DxfUnit } from '../io/dxf';
 import type { CadChoice } from '../ui/app-dialogs';
 import { generativePalettes, modelState, PATTERN_PRESETS, patternVariations, placeVector, recolorWithPalette, shapeFillVariations, textToVectorVariations } from '../io/generative';
 import { loadPrefs } from '../ui/prefs';
+import { colorManaged, colorSettled, INTENTS, isProofing, proofDevice, refOf, refreshProfiles, resolveSettings, setProofing, type ProfileInfo } from '../engine/color-management';
+import { applySettings, convertToProfile, findProfile, settingsPatch } from '../io/color-ops';
 import { rankFonts, recognize, retypeNode, sourceFromImage, sourceFromOutlines } from '../io/retype';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
@@ -49,7 +52,7 @@ export interface AgentDeps {
   placeLinked?(path: string, at: Pt | null, width: number | null): Promise<string | null>;
   links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
   projectBlob(): Promise<Blob | null>;
-  exportBlob(format: 'svg' | 'pdf' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
+  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: 'none' | 'x4'; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
   image(scope: string, artboard: number | undefined, maxSize: number, outline: boolean): Promise<Blob | null>;
   svg(scope: string, artboard: number | undefined, ids: string[] | undefined): Promise<string>;
   outlines(ids?: string[]): Promise<boolean>;
@@ -523,6 +526,58 @@ export class AgentBridge {
     return text(`Recolored ${ids.length} object(s) with palette ${pick} of ${palettes.length} (${st.model}).`, { palettes: palettes.map((pl) => pl.map((c) => hex(c))), picked: pick });
   }
 
+  private async colorTool(name: string, a: Record<string, unknown>, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    const e = this.engine, doc = e.doc;
+    if (!doc) return fail('No document is open.');
+    const list = await refreshProfiles();
+    if (!list.length) return fail('The colour profiles are unavailable: is the engine running (./formpth boot)?');
+    const pick = (key: string, space: 'RGB' | 'CMYK'): ProfileInfo | string => {
+      const hit = findProfile(str(key), space);
+      return hit ?? `${key} "${str(key)}" is not a ${space} profile on this computer. list_color_profiles shows the names to use.`;
+    };
+    const line = (p: ProfileInfo): string => `${p.name} [${p.space}, ${p.class}, ${p.source}] id ${p.id}`;
+    if (name === 'list_color_profiles') {
+      const s = resolveSettings(doc.cm);
+      return text(`${list.length} colour profiles. The document uses RGB ${s.rgb?.name ?? 'none'}, CMYK ${s.cmyk?.name ?? 'none (formula)'}, intent ${INTENTS[s.intent][1]}, black point compensation ${s.bpc ? 'on' : 'off'}; Proof Colors is ${isProofing() ? 'on' : 'off'}.\n${list.map(line).join('\n')}`, { profiles: list, settings: { rgb: s.rgb?.name ?? null, cmyk: s.cmyk?.name ?? null, intent: s.intent, bpc: s.bpc, proof: isProofing() } });
+    }
+    if (name === 'set_color_settings') {
+      const s = resolveSettings(doc.cm);
+      let rgb = s.rgb, cmyk = s.cmyk, intent: number = s.intent, bpc = s.bpc;
+      if (has('rgb_profile')) { const r = pick('rgb_profile', 'RGB'); if (typeof r === 'string') return fail(r); rgb = r; }
+      if (has('cmyk_profile')) {
+        if (['none', 'formula', ''].includes(str('cmyk_profile').toLowerCase())) cmyk = null;
+        else { const r = pick('cmyk_profile', 'CMYK'); if (typeof r === 'string') return fail(r); cmyk = r; }
+      }
+      if (has('intent')) {
+        const names: Record<string, number> = { perceptual: 0, relative: 1, relative_colorimetric: 1, saturation: 2, absolute: 3, absolute_colorimetric: 3 };
+        const v = names[str('intent').toLowerCase()];
+        if (v === undefined) return fail('intent is one of perceptual, relative_colorimetric, saturation, absolute_colorimetric.');
+        intent = v;
+      }
+      if (has('bpc')) bpc = a.bpc === true;
+      const changed = applySettings(e, settingsPatch(rgb, cmyk, intent, bpc, doc.cm));
+      await colorSettled();
+      const now = resolveSettings(e.doc?.cm);
+      return text(`${changed ? 'Set' : 'Kept'} Color Settings: RGB ${now.rgb?.name ?? 'none'}, CMYK ${now.cmyk?.name ?? 'none (formula)'}, ${INTENTS[now.intent][1]}, black point compensation ${now.bpc ? 'on' : 'off'}${colorManaged() ? '; CMYK colours now follow the profile' : ''}.`, { changed, rgb: now.rgb?.name ?? null, cmyk: now.cmyk?.name ?? null, intent: now.intent, bpc: now.bpc });
+    }
+    if (name === 'convert_to_profile') {
+      const hit = findProfile(str('profile'));
+      if (!hit || (hit.space !== 'RGB' && hit.space !== 'CMYK')) return fail(`profile "${str('profile')}" is not an RGB or CMYK profile on this computer. list_color_profiles shows the names to use.`);
+      try { await convertToProfile(e, hit); } catch (err) { return fail(err instanceof Error ? err.message : 'The conversion failed.'); }
+      await colorSettled();
+      return text(`Converted every colour in the document to ${hit.name} as one undo step.`, { profile: hit.name, space: hit.space });
+    }
+    if (has('profile')) {
+      const r = pick('profile', 'CMYK');
+      if (typeof r === 'string') return fail(r);
+      applySettings(e, { proof: { ...(doc.cm?.proof ?? {}), device: refOf(r) } }, 'Proof Setup');
+    }
+    const on = a.on !== false;
+    const ok = await setProofing(on, e.doc);
+    if (on && !ok) return fail('Proof Colors could not start: is the engine running and is a CMYK profile available?');
+    return text(`Proof Colors is ${on ? 'on' : 'off'}${on ? ` for ${proofDevice(e.doc?.cm)?.name ?? 'the proof device'}` : ''}. get_image shows the document colours, not the proof.`, { on });
+  }
+
   private async patternsTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
     const e = this.engine, st = await modelState();
     if (!st.ready) return fail(st.message);
@@ -631,6 +686,7 @@ export class AgentBridge {
         case 'text_to_vector': return await this.textToVectorTool(num, str, has);
         case 'generative_recolor': return await this.generativeRecolorTool(a, num, str, has);
         case 'retype': return await this.retypeTool(a, num, str, has);
+        case 'list_color_profiles': case 'set_color_settings': case 'convert_to_profile': case 'proof_colors': return await this.colorTool(name, a, str, has);
         case 'get_document': { const d = e.describe(Math.max(1, Math.min(32, Math.round(num('depth', 8))))); return text(JSON.stringify(d), d); }
         case 'get_image': {
           const blob = await this.deps.image(str('scope', 'artboard'), has('artboard') ? Math.round(num('artboard', 0)) : undefined, Math.max(64, Math.min(2048, Math.round(num('max_size', 1024)))), a.outline === true);
@@ -650,11 +706,11 @@ export class AgentBridge {
         }
         case '__project': { const blob = await this.deps.projectBlob(); return blob ? text('Packed the project.', { data: await b64(blob) }) : fail('Could not pack the project: is the engine running (./formpth boot)?'); }
         case '__export': {
-          const fmt = str('format') as 'svg' | 'pdf' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf';
+          const fmt = str('format') as 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf';
           const units = str('units', 'mm') as DxfUnit;
           if (fmt === 'dxf' && !DXF_UNITS.some(([u]) => u === units)) return fail(`units must be one of ${DXF_UNITS.map(([u]) => u).join(', ')}.`);
           const cad: CadChoice = { version: str('dxf_version', '2000') === 'R12' ? 'R12' : '2000', units, scale: Math.max(1e-4, num('drawing_scale', 1)), text: a.outline_text === true ? 'outlines' : 'text', lineweights: a.scale_lineweights === true };
-          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, scale: Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
+          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, scale: Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard: a.pdf_standard === 'x4' ? 'x4' : 'none', cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
           return blob ? text(`Exported ${fmt.toUpperCase()}.`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {
@@ -1056,9 +1112,14 @@ export class AgentBridge {
           const KIND: Record<string, string> = { extrude: '3d.extrude', revolve: '3d.revolve', inflate: '3d.inflate', plane: '3d.rotate' }, kind = has('kind') ? KIND[str('kind')] : null;
           if (has('kind') && !kind) return fail('kind is extrude, revolve, inflate or plane.');
           const patch: Record<string, number | string | boolean> = {};
-          for (const k of ['rx', 'ry', 'rz', 'perspective', 'depth', 'bevel_height', 'angle', 'offset', 'volume', 'intensity', 'ambient', 'highlight', 'map_scale', 'map_x', 'map_y', 'shadow_distance', 'shadow_softness', 'shadow_opacity']) if (has(k)) patch[k] = num(k, 0);
-          for (const k of ['bevel', 'from', 'material', 'light', 'shadow_position']) if (has(k)) patch[k] = str(k);
-          for (const k of ['cap', 'shade_art', 'shadow']) if (has(k)) patch[k] = a[k] === true;
+          if (has('lighting')) { const pr = LIGHTING_PRESETS[str('lighting')]; if (!pr) return fail(`lighting is one of ${Object.keys(LIGHTING_PRESETS).join(', ')}.`); patch.lights = lightsToParam(pr.lights); patch.ambient = pr.ambient; }
+          if (Array.isArray(a.lights)) {
+            if (a.lights.length > LIGHT_LIMIT) return fail(`lights holds at most ${LIGHT_LIMIT} lights.`);
+            patch.lights = lightsToParam((a.lights as Array<Record<string, unknown>>).map((o) => { const q = o && typeof o === 'object' ? o : {}, n = (k: string, d: number): number => (typeof q[k] === 'number' ? (q[k] as number) : d), c = typeof q.color === 'string' ? parseColor(q.color) : null; return { color: c ? hex(c) : '#ffffff', intensity: n('intensity', 100), rotation: n('rotation', -45), height: n('height', 40), softness: n('softness', 0) }; }));
+          }
+          for (const k of ['texture_scale', 'rx', 'ry', 'rz', 'perspective', 'depth', 'bevel_height', 'angle', 'offset', 'volume', 'intensity', 'ambient', 'highlight', 'map_scale', 'map_x', 'map_y', 'shadow_distance', 'shadow_softness', 'shadow_opacity']) if (has(k)) patch[k] = num(k, 0);
+          for (const k of ['bevel', 'from', 'material', 'light', 'shadow_position', 'quality']) if (has(k)) patch[k] = str(k);
+          for (const k of ['cap', 'shade_art', 'shadow', 'ray_trace']) if (has(k)) patch[k] = a[k] === true;
           if (has('map_symbol')) {
             const want = typeof a.map_symbol === 'string' ? a.map_symbol.trim() : '', syms = e.doc?.symbols ?? [], sym = syms.find((s) => s.id === want || s.name === want);
             if (want && !sym) return fail(syms.length ? `map_symbol is one of ${syms.map((s) => s.name).join(', ')}, or empty to clear it.` : 'The document has no symbols: make one with the symbol tool first.');
@@ -1072,7 +1133,7 @@ export class AgentBridge {
           const ok = e.set3d(kind, patch, ids), n = e.nodeById(targets[0]), fx = n?.ap.effects.find((x) => x.id.startsWith('3d.'));
           return ok && fx ? text(`${effectDef(fx.id)?.label ?? '3D'}: ${Object.entries(fx.params).map(([k, v]) => `${k} ${k === 'map_symbol' ? e.doc?.symbols.find((s) => s.id === v)?.name ?? v : v}`).join(', ')}. get_image shows it; expand makes it plain paths.`) : fail('Nothing changed.');
         }
-        case 'expand': { const ok = e.expand(str('what', 'all') as 'all', this.ids(a)); return ok ? text('Expanded to plain objects.', { selection: e.selectedIds() }) : fail('Nothing to expand.'); }
+        case 'expand': { const what = str('what', 'all') as 'all' | 'object' | 'appearance', ok = e.expand(what, this.ids(a), what === 'object' ? undefined : await bakeTraced(e, this.ids(a))); return ok ? text('Expanded to plain objects.', { selection: e.selectedIds() }) : fail('Nothing to expand.'); }
         case 'make_blend': {
           const act = str('action', 'make');
           if (act === 'release') return e.releaseLive(this.ids(a)) ? text('Released the blend.') : fail('Select a blend.');

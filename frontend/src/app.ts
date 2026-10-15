@@ -20,7 +20,7 @@ import { exportEps, readEpsNative } from './io/eps';
 import { readEpsVector } from './io/ps-read';
 import { readPdfVector } from './io/pdf-read';
 import { docFromManifest, serialize } from './io/project-io';
-import { canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
+import { bakeTraced, canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
 import { exportRegion, exportSvg, importSvg } from './io/svg';
 import { TRACE_VIEWS, traceImage, traceOptions, type TraceOpts, type TraceRun } from './io/trace';
@@ -108,6 +108,10 @@ import { Tabs } from './ui/tabs';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
 import { toast } from './ui/toast';
+import { activateDocument, isProofing, onColorChange } from './engine/color-management';
+import { invalidateLayers } from './engine/render';
+import { installColorBackend } from './io/color-ops';
+import { assignProfileDialog, colorSettingsDialog, convertToProfileDialog, proofSetupDialog, toggleProofColors } from './ui/color-settings';
 import { slotTool, toolGroups } from './ui/tool-groups';
 import { Viewport } from './engine/viewport';
 import { VERSION } from './version';
@@ -403,13 +407,14 @@ export function startApp(): void {
 
   async function readForeign(f: File, dxf: Partial<DxfImportOptions> | null): Promise<{ doc: Doc; assets: Map<string, Blob>; title: string; note: string } | null> {
     const lower = f.name.toLowerCase(), title = f.name.replace(/\.[^.]+$/, '');
-    if (lower.endsWith('.dwg')) throw new Error('DWG is a closed binary format that formpth does not read. Save the drawing as DXF in your CAD program, then open the DXF.');
-    if (lower.endsWith('.dxf')) {
-      const file = parseDxf(await f.text());
+    const isDwg = lower.endsWith('.dwg');
+    if (isDwg || lower.endsWith('.dxf')) {
+      const conv = isDwg ? await api.dwgToDxf(f) : null;
+      const file = parseDxf(conv ? conv.text : await f.text());
       const o = await dxfOptions(file, dxf);
       if (!o) return null;
       const r = dxfToDoc(file, o, title);
-      return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
+      return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name}${conv ? ` through ${conv.converter}` : ''}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
     }
     const data = await f.arrayBuffer(), native = readEpsNative(data);
     if (native) return { doc: docFromManifest(native.manifest), assets: native.assets, title, note: '' };
@@ -676,7 +681,7 @@ export function startApp(): void {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
       return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
     }
-    if (c.format === 'pdf') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.marks });
+    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none' });
     if (c.format === 'eps') {
       const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
       if (scope === 'all' && p.doc.artboards.length > 1) {
@@ -708,7 +713,7 @@ export function startApp(): void {
     if (!c) return;
     await engine.task(async () => {
       try {
-        if (c.artboards && c.artboards.length > 1 && c.format !== 'pdf') {
+        if (c.artboards && c.artboards.length > 1 && c.format !== 'pdf' && c.format !== 'ai') {
           const files: Array<{ name: string; blob: Blob }> = [];
           for (const i of c.artboards) {
             const one = await exportBlob({ ...c, artboard: i, artboards: undefined });
@@ -845,7 +850,7 @@ export function startApp(): void {
     placeLinked: async (path, at, width) => placeLinked(await links.readPath(path), at, width),
     links: (a) => linkTool(a),
     projectBlob: projectZip,
-    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' || format === 'eps', cmyk: o.cmyk, cad: o.cad }); },
+    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' || format === 'eps', liveText: o.liveText, standard: o.standard, cmyk: o.cmyk, cad: o.cad }); },
     image: async (scope, artboard, maxSize, outline) => {
       const p = engine.current;
       if (!p) return null;
@@ -1387,6 +1392,11 @@ export function startApp(): void {
     { id: 'document-setup', label: 'Document Setup...', keys: ['Alt+Mod+P'], enabled: has, run: () => void documentSetup() },
     { id: 'mode-rgb', label: 'RGB Color', enabled: has, checked: () => engine.doc?.colorMode === 'rgb', run: () => engine.documentSetup({ colorMode: 'rgb' }) },
     { id: 'mode-cmyk', label: 'CMYK Color', enabled: has, checked: () => engine.doc?.colorMode === 'cmyk', run: () => engine.documentSetup({ colorMode: 'cmyk' }) },
+    { id: 'color-settings', label: 'Color Settings...', enabled: has, run: () => void colorSettingsDialog(engine) },
+    { id: 'assign-profile', label: 'Assign Profile...', enabled: has, run: () => void assignProfileDialog(engine) },
+    { id: 'convert-to-profile', label: 'Convert to Profile...', enabled: has, run: () => void convertToProfileDialog(engine) },
+    { id: 'proof-setup', label: 'Customize...', enabled: has, run: () => void proofSetupDialog(engine) },
+    { id: 'proof-colors', label: 'Proof Colors', enabled: has, checked: () => isProofing(), run: () => void toggleProofColors(engine) },
     { id: 'send-nodemode', label: 'Send to NodeMode', enabled: has, run: () => void engine.task(async () => { const p = engine.current; if (!p) return; try { const r = exportRegion(p, p.activeArtboard); const b = await exportRaster(p, { region: r, scale: 2, format: 'png', quality: 1, transparent: true }); const res = await api.sendToNodeMode(loadPrefs().nodemodeUrl, p.name, [{ name: p.name, kind: 'image', width: Math.round(r.w * 2), height: Math.round(r.h * 2) }], [{ name: '0.png', blob: b }]); toast(res.placed ? 'Sent to NodeMode: the artwork is on its canvas.' : res.detail ?? 'Uploaded to NodeMode.'); } catch (err) { toast(message(err), 'error'); } }) },
 
     { id: 'undo', label: () => `Undo${engine.current?.history.undoName ? ` ${engine.current.history.undoName}` : ''}`, keys: ['Mod+Z'], enabled: () => !!engine.current?.history.canUndo, run: () => { typing.end(); engine.undo(); } },
@@ -1439,7 +1449,7 @@ export function startApp(): void {
     { id: 'hide', label: 'Hide Selection', keys: ['Mod+3'], enabled: sel, run: () => engine.hideSelection() },
     { id: 'show-all', label: 'Show All', keys: ['Alt+Mod+3'], enabled: has, run: () => engine.showAll() },
     { id: 'expand-object', label: 'Expand', enabled: sel, run: () => engine.expand('object') },
-    { id: 'expand-appearance', label: 'Expand Appearance', enabled: sel, run: () => engine.expand('appearance') },
+    { id: 'expand-appearance', label: 'Expand Appearance', enabled: sel, run: () => void engine.task(async () => { engine.expand('appearance', undefined, await bakeTraced(engine)); }) },
     { id: 'expand-shape', label: 'Expand Shape', enabled: sel, run: () => engine.applyToSelection('Expand Shape', (n) => (n.kind === 'path' ? { ...n, live: undefined } : n)) },
     { id: 'rasterize', label: 'Rasterize...', enabled: sel, run: () => void rasterizeSel() },
     { id: 'create-mesh', label: 'Create Gradient Mesh...', enabled: sel, run: () => void askForm('Create Gradient Mesh', [{ kind: 'number', key: 'rows', label: 'Rows', value: 4, min: 1, max: 50 }, { kind: 'number', key: 'cols', label: 'Columns', value: 4, min: 1, max: 50 }, { kind: 'select', key: 'hl', label: 'Appearance', value: 'flat', choices: [['flat', 'Flat'], ['center', 'To Center'], ['edge', 'To Edge']] }]).then((v) => { if (v) engine.createMesh(Math.round(Number(v.rows)), Math.round(Number(v.cols)), v.hl as 'flat'); }) },
@@ -1711,7 +1721,7 @@ export function startApp(): void {
 
   const menus: MenuDef[] = [
     { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'package', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
-    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['auto-spell-check', 'check-spelling', 'spelling-dictionary'] }, '-', { label: 'Edit Colors', items: ['recolor', ...(prefs.showGenerative ? ['generative-recolor'] : []), '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
+    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['auto-spell-check', 'check-spelling', 'spelling-dictionary'] }, '-', 'color-settings', 'assign-profile', 'convert-to-profile', '-', { label: 'Edit Colors', items: ['recolor', ...(prefs.showGenerative ? ['generative-recolor'] : []), '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: () => [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },
       { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', '-', 'send-to-layer'] },
@@ -1741,7 +1751,7 @@ export function startApp(): void {
     { label: 'Type', items: () => ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', ...(prefs.showGenerative ? ['retype'] : []), '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
-    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
+    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', { label: 'Proof Setup', items: ['proof-setup'] }, 'proof-colors', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
     { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype', 'text-to-vector'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
@@ -1913,6 +1923,10 @@ export function startApp(): void {
   window.addEventListener('beforeunload', (e) => { if (!engine.projects.some((p) => p.modified)) return; e.preventDefault(); e.returnValue = ''; });
 
   onFontsLoaded(() => { fontsChanged(); engine.reflowAll(); engine.emit('options', null); });
+  installColorBackend();
+  onColorChange(() => { invalidateLayers(); engine.emit('colors', null); engine.emit('render', null); });
+  for (const ev of ['doc', 'active', 'projects'] as const) engine.on(ev, () => activateDocument(engine.doc));
+  activateDocument(engine.doc);
   installShaping();
   void ensureFace(typeDefaults.font, typeDefaults.style);
   status.setEngine('Engine: checking');

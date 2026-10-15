@@ -4,6 +4,7 @@ export interface OpenedProject { session: string; name: string; manifest: Record
 export interface LibraryFolder { folder: string; default: string; custom: boolean; fixed: boolean; synced: Array<{ label: string; base: string; suggested: string }> }
 export interface FilePart { name: string; blob: Blob }
 export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string; variable?: boolean }
+export interface ColorProfileInfo { id: string; name: string; space: string; class: string; size: number; source: 'builtin' | 'user' | 'system' }
 export interface SpellHit { word: string; suggestions: string[] }
 export interface SimilarFont { id: string; family: string; style: string; score: number }
 export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file'; vision?: boolean }
@@ -74,6 +75,12 @@ export const api = {
   async statFiles(paths: string[]): Promise<Array<{ path: string; exists: boolean; size: number; mtime: number }>> { return (await json<{ files: Array<{ path: string; exists: boolean; size: number; mtime: number }> }>(await request('/files/stat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths }) }))).files; },
   async writeFile(folder: string, name: string, blob: Blob): Promise<string> { return (await json<{ path: string }>(await request('/files/write', { method: 'POST', body: form({ folder, name }, [{ name, blob }], 'file') }))).path; },
 
+  async colorProfiles(): Promise<ColorProfileInfo[]> { return (await json<{ profiles: ColorProfileInfo[] }>(await request('/color/profiles'))).profiles; },
+  async colorUpload(file: File): Promise<ColorProfileInfo> { const f = new FormData(); f.append('file', file, file.name); return json(await request('/color/profiles', { method: 'POST', body: f })); },
+  async colorProfileBytes(id: string): Promise<Uint8Array> { return new Uint8Array(await (await request(`/color/profiles/${encodeURIComponent(id)}/bytes`)).arrayBuffer()); },
+  async colorLut(kind: 'rgb-to-cmyk' | 'cmyk-to-rgb' | 'proof', body: Record<string, unknown>): Promise<Uint8Array> {
+    return new Uint8Array(await (await request(`/color/lut/${kind}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).arrayBuffer());
+  },
   async spellCheck(words: string[], lang: string): Promise<SpellHit[]> { return (await json<{ unknown: SpellHit[] }>(await request('/spell/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ words, lang }) }))).unknown; },
   async spellDictionary(): Promise<string[]> { return (await json<{ words: string[] }>(await request('/spell/dictionary'))).words; },
   async spellDictionaryEdit(add: string[], remove: string[] = []): Promise<string[]> { return (await json<{ words: string[] }>(await request('/spell/dictionary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ add, remove }) }))).words; },
@@ -81,6 +88,23 @@ export const api = {
   async fonts(): Promise<FontInfo[]> { try { return await json<FontInfo[]>(await request('/fonts')); } catch { return []; } },
   async findFont(family: string, style: string): Promise<FontInfo | null> { try { return await json<FontInfo>(await request(`/fonts/find?family=${encodeURIComponent(family)}&style=${encodeURIComponent(style)}`)); } catch { return null; } },
   async fontFile(id: string): Promise<ArrayBuffer> { return (await request(`/fonts/file/${encodeURIComponent(id)}`)).arrayBuffer(); },
+  async subsetFont(src: { id: string } | { bytes: ArrayBuffer }, gids: number[], axes: Record<string, number>): Promise<{ data: Uint8Array; cff: boolean } | null> {
+    const body = new FormData();
+    body.append('gids', JSON.stringify(gids));
+    body.append('axes', JSON.stringify(axes));
+    if ('id' in src) body.append('font_id', src.id); else body.append('file', new Blob([src.bytes]), 'font.bin');
+    try {
+      const res = await request('/fonts/subset', { method: 'POST', body });
+      return { data: new Uint8Array(await res.arrayBuffer()), cff: res.headers.get('X-Font-Outlines') === 'cff' };
+    } catch { return null; }
+  },
+
+  async dwgToDxf(file: Blob): Promise<{ text: string; converter: string }> {
+    const body = new FormData();
+    body.append('file', file, 'drawing.dwg');
+    const res = await request('/io/dwg/to-dxf', { method: 'POST', body });
+    return { text: await res.text(), converter: res.headers.get('X-Converter') ?? 'a DWG converter' };
+  },
 
   async plugins(): Promise<Array<{ name: string; size: number }>> { try { return await json<Array<{ name: string; size: number }>>(await request('/plugins')); } catch { return []; } },
   async pluginCode(name: string): Promise<string> { return (await request(`/plugins/${encodeURIComponent(name)}`)).text(); },

@@ -10,13 +10,16 @@ import { instanceArt } from '../engine/symbolism';
 import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
 import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
-import type { BlendMode, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, Project, Rect, StrokeItem, VNode } from '../engine';
+import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, Project, Rect, StrokeItem, VNode } from '../engine';
 import { outlineText } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
 import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
+import { pdfxParts } from './pdf-x';
+import { outputProfileBytes } from '../engine/color-management';
+import { LiveFonts, liveStream, type Ink, type LiveText } from './pdf-text';
 
-export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks }
+export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: 'none' | 'x4' }
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
 export const PDF_MAX_SIDE = 14400;
@@ -44,13 +47,13 @@ class PdfFile {
     this.objs[id] = all;
   }
   add(dict: string, stream?: Uint8Array): number { const id = this.reserve(); this.set(id, dict, stream); return id; }
-  build(root: number, info: number): Blob {
-    const parts: Uint8Array[] = [this.enc.encode('%PDF-1.7\n%\xe2\xe3\xcf\xd3\n')];
+  build(root: number, info: number, version = '1.7', id = ''): Blob {
+    const parts: Uint8Array[] = [this.enc.encode(`%PDF-${version}\n%\xe2\xe3\xcf\xd3\n`)];
     let pos = parts[0].length;
     const offsets: number[] = [0];
     for (let i = 1; i < this.objs.length; i++) { offsets.push(pos); const o = this.objs[i] ?? this.enc.encode(`${i} 0 obj\nnull\nendobj\n`); parts.push(o); pos += o.length; }
     const xref = [`xref\n0 ${this.objs.length}\n0000000000 65535 f \n`, ...offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n \n`)].join('');
-    parts.push(this.enc.encode(`${xref}trailer\n<< /Size ${this.objs.length} /Root ${root} 0 R /Info ${info} 0 R >>\nstartxref\n${pos}\n%%EOF\n`));
+    parts.push(this.enc.encode(`${xref}trailer\n<< /Size ${this.objs.length} /Root ${root} 0 R /Info ${info} 0 R${id ? ` /ID [<${id}> <${id}>]` : ''} >>\nstartxref\n${pos}\n%%EOF\n`));
     return new Blob(parts as Uint8Array<ArrayBuffer>[], { type: 'application/pdf' });
   }
 }
@@ -61,7 +64,7 @@ class Painter {
   readonly xobjects = new Map<string, number>();
   readonly spaces = new Map<string, number>();
   private n = 0;
-  constructor(private readonly pdf: PdfFile, private readonly p: Project, private readonly o: PdfOptions, private readonly cmyk: boolean, private readonly outlines: Map<string, PathData>) {}
+  constructor(private readonly pdf: PdfFile, private readonly p: Project, private readonly o: PdfOptions, private readonly cmyk: boolean, private readonly outlines: Map<string, PathData>, private readonly live: LiveFonts, private readonly plans: Map<string, LiveText>) {}
   get doc(): Doc { return this.p.doc; }
   name(prefix: string): string { this.n++; return `${prefix}${this.n}`; }
 
@@ -142,9 +145,14 @@ class Painter {
     return null;
   }
 
+  livePlan(n: VNode): LiveText | null {
+    const plan = this.plans.get(n.id);
+    return plan && plan.node === n && this.live.ok(plan) ? plan : null;
+  }
+
   needsRaster(n: VNode): boolean {
     if (rasterEffects(n).length || (n.mask && !n.mask.disabled) || n.kind === 'mesh' || (n.kind === 'image' && !!n.warp)) return true;
-    if (n.kind === 'text' && !this.outlines.has(n.id)) return true;
+    if (n.kind === 'text' && !this.outlines.has(n.id) && !this.livePlan(n)) return true;
     return n.ap.items.some((i) => i.visible && (i.paint.type === 'pattern' || (i.paint.type === 'gradient' && i.paint.gradient.kind === 'freeform') || rasterEffectsOf(i.effects).length > 0 || (i.kind === 'stroke' && !!strokeGradient(this.doc, i)?.stops.some((s) => s.opacity < 1))));
   }
 
@@ -310,6 +318,19 @@ class Painter {
       case 'path': return n.guide ? '' : this.shape(n, effectPath(n.d, n.ap.effects), n.rule, page);
       case 'compound': return this.shape(n, effectPath(n.children.flatMap((c) => c.d), n.ap.effects), n.rule, page);
       case 'text': {
+        const plan = this.livePlan(n);
+        if (plan) {
+          const b = selectionBounds(this.doc, [n]), inks = new Map<CharStyle, Ink>();
+          return liveStream(plan, (st) => {
+            let ink = inks.get(st);
+            if (!ink) {
+              const hasStroke = st.stroke.type !== 'none' && st.strokeWidth > 0;
+              ink = { fill: this.paint(st.fill, false, b, page), stroke: hasStroke ? this.paint(st.stroke, true, b, page) : null, width: st.strokeWidth };
+              inks.set(st, ink);
+            }
+            return ink;
+          });
+        }
         const d = this.outlines.get(n.id), st = n.spans[0]?.style;
         if (!d || !st) return '';
         const b = selectionBounds(this.doc, [n]);
@@ -337,10 +358,22 @@ let RES = 0;
 export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const pdf = new PdfFile();
   const outlines = new Map<string, PathData>();
-  const visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
-  for (const l of p.doc.layers) await visit(l);
-  for (const s of p.doc.symbols) await visit(s.art);
-  const painter = new Painter(pdf, p, o, p.doc.colorMode === 'cmyk', outlines);
+  const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false;
+  const visit = async (n: VNode, plain: boolean): Promise<void> => {
+    if (n.kind === 'text') {
+      const d = await outlineText(n);
+      if (d) {
+        outlines.set(n.id, d);
+        const plan = wantLive && !plain ? await live.plan(p.doc, n) : null;
+        if (plan) plans.set(n.id, plan);
+      }
+    }
+    for (const c of childrenOf(n) ?? []) await visit(c, plain || n.kind === 'envelope');
+  };
+  for (const l of p.doc.layers) await visit(l, false);
+  for (const s of p.doc.symbols) await visit(s.art, true);
+  if (plans.size) await live.build(pdf, deflate);
+  const painter = new Painter(pdf, p, o, p.doc.colorMode === 'cmyk', outlines, live, plans);
   RES = pdf.reserve();
   const pagesId = pdf.reserve();
   const pageIds: number[] = [];
@@ -374,11 +407,18 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(W)} ${f(H)}]${bleedBox} /TrimBox ${box(ox, oy, ox + a.w * s, oy + a.h * s)}${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
   }
   const fontId = usesMarkFont ? pdf.add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>') : 0;
+  const liveFonts = plans.size ? live.resources() : '';
   const res = (m: Map<string, number>, pre: string): string => [...m.values()].map((id) => `/${pre}${id} ${id} 0 R`).join(' ');
-  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${fontId ? ` /Font << /FMark ${fontId} 0 R >>` : ''}${painter.spaces.size ? ` /ColorSpace << ${res(painter.spaces, 'CS')} >>` : ''} >>`);
+  const x4 = o.standard === 'x4';
+  const cmykOut = x4 ? await outputProfileBytes(p.doc, 'CMYK') : null, rgbOut = x4 ? await outputProfileBytes(p.doc, 'RGB') : null;
+  if (x4 && !cmykOut) throw new Error('PDF/X-4 needs an output profile, and the engine could not supply one. Check that the engine is running, then try again.');
+  const xp = cmykOut ? pdfxParts(cmykOut.bytes, 4, 'Custom', cmykOut.name) : null;
+  const defaultRgb = rgbOut ? pdf.add(`[/ICCBased ${pdf.add('<< /N 3 /Alternate /DeviceRGB >>', rgbOut.bytes)} 0 R]`) : 0;
+  const spaces = `${res(painter.spaces, 'CS')}${defaultRgb ? ` /DefaultRGB ${defaultRgb} 0 R` : ''}`.trim();
+  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${fontId || liveFonts ? ` /Font << ${fontId ? `/FMark ${fontId} 0 R ` : ''}${liveFonts} >>` : ''}${spaces ? ` /ColorSpace << ${spaces} >>` : ''} >>`);
   pdf.set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((x) => `${x} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
   let names = '';
-  if (o.preserve) {
+  if (o.preserve && o.standard !== 'x4') {
     const { manifest, files } = serialize(p);
     const assets: Record<string, string> = {};
     for (const fp of files) { const b = new Uint8Array(await fp.blob.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000)); assets[fp.name] = `data:${fp.blob.type || 'application/octet-stream'};base64,${btoa(bin)}`; }
@@ -387,10 +427,22 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     const spec = pdf.add(`<< /Type /Filespec /F (formpth-document.json) /UF (formpth-document.json) /Desc (formpth editing data) /EF << /F ${ef} 0 R >> /AFRelationship /Source >>`);
     names = ` /Names << /EmbeddedFiles << /Names [(formpth-document.json) ${spec} 0 R] >> >> /AF [${spec} 0 R]`;
   }
-  const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names} >>`);
   const now = new Date(), stamp = `D:${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}${String(now.getUTCSeconds()).padStart(2, '0')}Z`;
-  const info = pdf.add(`<< /Title ${pdfString(o.title ?? p.doc.title ?? p.name)} /Producer ${pdfString(`formpth ${o.version ?? ''}`.trim())} /Creator (formpth) /CreationDate (${stamp}) >>`);
-  return pdf.build(root, info);
+  const title = o.title ?? p.doc.title ?? p.name;
+  let extra = '';
+  let docId = '';
+  if (xp) {
+    const icc = pdf.add(xp.iccDict, xp.iccStream);
+    const intent = pdf.add(xp.intentDict(icc));
+    const iso = now.toISOString().replace(/\.\d+Z$/, 'Z'), esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    docId = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const xmp = `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"><dc:format>application/pdf</dc:format><dc:title><rdf:Alt><rdf:li xml:lang="x-default">${esc(title)}</rdf:li></rdf:Alt></dc:title><xmp:CreateDate>${iso}</xmp:CreateDate><xmp:ModifyDate>${iso}</xmp:ModifyDate><xmp:MetadataDate>${iso}</xmp:MetadataDate><xmp:CreatorTool>formpth</xmp:CreatorTool><pdf:Producer>${esc(`formpth ${o.version ?? ''}`.trim())}</pdf:Producer><pdf:Trapped>False</pdf:Trapped><pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion><xmpMM:DocumentID>uuid:${docId.replace(/^(.{8})(.{4})(.{4})(.{4})/, '$1-$2-$3-$4-')}</xmpMM:DocumentID><xmpMM:VersionID>1</xmpMM:VersionID><xmpMM:RenditionClass>default</xmpMM:RenditionClass></rdf:Description></rdf:RDF></x:xmpmeta>\n<?xpacket end="w"?>`;
+    const meta = pdf.add('<< /Type /Metadata /Subtype /XML >>', new TextEncoder().encode(xmp));
+    extra = ` /OutputIntents [${intent} 0 R] /Metadata ${meta} 0 R`;
+  }
+  const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names}${extra} >>`);
+  const info = pdf.add(`<< /Title ${pdfString(title)} /Producer ${pdfString(`formpth ${o.version ?? ''}`.trim())} /Creator (formpth) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
+  return pdf.build(root, info, xp ? '1.6' : '1.7', docId);
 }
 
 export async function readPdfNative(data: ArrayBuffer): Promise<{ manifest: Record<string, unknown>; assets: Map<string, Blob> } | null> {

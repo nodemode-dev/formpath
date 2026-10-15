@@ -336,3 +336,42 @@ A bundled family such as JetBrains Mono has no installed file, so `resolve_fonts
 - logged: v0.31.0 · 2026-10-15
 
 Two tools join the Generative group beside generative_shape_fill. Both run in the window through the bridge, call the language model set for the Assistant through the existing llm generate route, and refuse with a clear message when no model is set or Show generative features is off.
+
+### app/routers/mcp.py · export_file live_text
+- refers-to: app/routers/mcp.py :: TOOLS export_file
+- kind: explainer
+- logged: v0.32.0 · 2026-10-15
+
+export_file takes live_text (default true) for PDF. The parameter rides in the existing rest of the arguments to the bridge, which passes it to exportPdf as liveText. It is an addition beside outline_text, so no existing name changed.
+
+## app/services/subset.py
+
+### app/services/subset.py · font subsets for PDF live text
+- refers-to: app/services/subset.py :: build; app/routers/fonts.py :: subset_font; setup/freeze_backend :: --collect-submodules fontTools
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+POST /api/fonts/subset takes gids (JSON list), optional axes (JSON tag to number) and either font_id of an installed font or the font file itself (bundled Inter and JetBrains Mono live in the frontend, and a WOFF is read as is). It keeps glyph ids (retain_gids) so the PDF can use Identity for CIDToGIDMap and CID equals gid, drops layout tables, and writes plain sfnt. A variable font is fixed at the requested axis values with fontTools.varLib.instancer, every axis pinned (unlisted ones at their default), because a PDF cannot carry variations; any failure, and CFF2 outlines, answer 422 with what to do and the frontend then outlines that text. The reply header X-Font-Outlines says truetype or cff so the frontend picks FontFile2 or FontFile3. Like package-full the route requires a loopback client and Host, since font_id reads a file from this computer. fontTools is imported lazily for the instancer, which PyInstaller cannot see, so the freeze scripts use --collect-submodules fontTools; fonttools 4.67.0 (MIT) is pinned in requirements.txt and requirements_macos.txt and listed in NOTICE.md.
+
+## app/services/color.py
+
+### app/services/color.py · profile listing, ids and the generated CMYK profile
+- refers-to: app/services/color.py :: listing, generic_cmyk_bytes, build_generic_cmyk, srgb_bytes; app/routers/color.py
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Pillow 12.3.0 (LittleCMS 2) is a new dependency, pinned in requirements.txt and requirements_macos.txt and listed in NOTICE.md; it is imported lazily so the engine still starts without it and the routes answer with what to run. Profile ids are the sha1 of the bytes. lcms writes the creation time into its built-in sRGB, so its bytes (and id) changed every second; both built-ins are therefore cached under `profiles/.builtin/` on first use and the folder scan skips dot folders. formpth Generic CMYK is written in Python with struct: an ICC v2 output profile (prtr, CMYK, Lab PCS) with A2B0 to A2B2 sharing one 11 point lut16 and B2A0 to B2A2 sharing one 17 point lut16. The forward model is a Neugebauer model with Yule-Nielsen n 2.0 over 16 primaries given as Lab values of a generic coated press, dot gain of 15 percent (17 for black) at 50 percent, relative to its own paper, with the paper as the media white point. The separation table solves Lab to CMYK per node by Gauss-Newton on CMY with black fixed from lightness and chroma (a medium GCR), then limits total ink to 300 percent. It takes about 2 seconds to build once. It is a generic model, not a characterisation of FOGRA, SWOP or any press, and its copyright tag says so.
+
+### app/routers/color.py · loopback only, table layouts
+- refers-to: app/routers/color.py :: lut_rgb_to_cmyk, lut_cmyk_to_rgb, lut_proof; app/services/color.py :: rgb_to_cmyk, cmyk_to_rgb, proof
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Every route uses origin_ok from terminal.py because uploads write to the data folder and the listing reads system folders. The table routes are POST with JSON and return raw bytes: RGB to CMYK is grid^3 by 4 (red slowest, blue fastest, 17 points), CMYK to RGB is grid^4 by 3 (cyan slowest, black fastest, 9 or 11 points), proof is grid^3 by 3 (17 or 33). Proof uses buildProofTransform with the document intent into the device and relative colorimetric (absolute with Simulate Paper Color) into sRGB; Simulate Black Ink drops black point compensation. The monitor is the built-in sRGB until the display profile is read. Transforms are cached by profile ids, intent and flags; the transform cache and the lock are reentrant because building a transform reads profile bytes through the same listing.
+
+### app/services/dwg.py · DWG through an installed converter
+- refers-to: app/services/dwg.py :: converters, to_dxf; app/routers/io.py :: dwg_to_dxf; app/routers/mcp.py :: _run open_file
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+DWG is read by converting it to DXF with a program already on the computer, then through the existing DXF reader, bc no DWG library is under a licence formpth can ship (LibreDWG is GPL 3, the ODA SDK is commercial), and running either as a separate program keeps formpth Apache 2.0. The ODA File Converter is tried first (free, reads every DWG release, found on PATH, at FORMPTH_ODA_CONVERTER or at its default install folder per OS), then LibreDWG's dwg2dxf. Qt's offscreen platform is set on Linux without a display bc the ODA converter is a Qt program. Without a converter the call answers 422 with where to get one. The MCP open_file path converts in the engine and hands the window a .dxf, so agents and people go through the same reader.

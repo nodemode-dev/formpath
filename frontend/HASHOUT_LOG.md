@@ -2806,3 +2806,109 @@ A palette click only rewrites the dialog rows and previews through the open drag
 - logged: v0.31.0 · 2026-10-15
 
 The star live shape gained an optional radius, generated with roundCorners the same way a polygon's is, and left out of the stored shape when it is zero so older files load and save unchanged. The Corners dialog keeps a star live by writing the radius, as it does for a polygon; a chamfer or inverted corner still expands it to a plain path because the star has no corner type. The widget sits on the top tip along the bisector, at the radius divided by the sine of the tip's half angle.
+
+## src/io/pdf-text.ts
+
+### src/io/pdf-text.ts · live text in PDF
+- refers-to: src/io/pdf-text.ts :: LiveFonts, liveStream; src/io/pdf.ts :: exportPdf, Painter.livePlan; src/io/fonts.ts :: fontSource, glyphAdvance; src/io/api.ts :: subsetFont
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Type is written as a Type0 font with Identity-H, one `Tm` and one hex `Tj` per glyph, so on-path, vertical, rotated, touched and scaled type land exactly where outlineText put them. The matrix is the outline matrix (the node xf, or none on a path, times glyphMat times the size, hscale and vscale scale) with its second row negated, because the page is y-down and PDF glyph space is y-up; the font size is 1. Each face (family, style and variation axes) is embedded once per document: a planning pass in exportPdf lays out every text node and collects the glyph ids, the engine subsets each face once with glyph ids kept so Identity needs no remap, and nodes whose face could not be subset (no font bytes, engine down, CFF2, an axis that cannot be fixed) keep their outlines. Glyph ids go through ToUnicode, so a ligature maps to its letters and extraction reads "fi". Spaces are emitted as glyphs (not skipped as outlineText does) so extractors see word breaks; tabs and control characters are skipped. Fill and stroke follow each glyph's own style, not the first span as the outline path does, so multi-colour runs stay multi-colour. Text render mode 3 is never used.
+
+Live text is used only when it is faithful: solid or separation fills and strokes, no visible appearance items or effects on the node, no 3D, no opacity mask, not inside an envelope, and not in a symbol definition (an instance can be tinted, which the plan would not see). A plan is also dropped when the node object at paint time is not the one planned. Everything else, and every raster case, is unchanged. Underline and strikethrough are not drawn, as before. liveText defaults to true; false is the previous behaviour for all type.
+
+Widths in W come from the font's advances at the used axis values; FontDescriptor flags are symbolic (4) plus italic and fixed pitch from the font, StemV is derived from the weight, and the bounding box and metrics are scaled from the face's head, hhea and OS/2 tables.
+
+## src/engine/color-management.ts
+
+### src/engine/color-management.ts · document colour settings, LUT caches and the paint.ts hook
+- refers-to: src/engine/color-management.ts :: activateDocument, cmToRgb, cmToCmyk, setProofing, applyProof; src/engine/paint.ts :: toRgb, toCmyk; src/engine/types.ts :: Doc.cm
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Settings live in the optional `Doc.cm` (rgb and cmyk profile references as id plus name, intent, bpc, proof setup). It rides inside the manifest's document object through the existing spread, so .fpth needs no new code, and a document without `cm` behaves exactly as before: paint.ts only calls into the module and falls back to the formula whenever `cmToRgb` or `cmToCmyk` return null, which is the case with no CMYK profile set or before its tables arrive. The module is global state, not per document, because paint.ts has no document argument; `activateDocument` runs on doc, active and projects events and keys the load by profile ids, intent and bpc. When the tables land, the app invalidates cached layers and emits render, the way fontsChanged does for fonts. A profile is found by id first and then by name, so a project opened on another computer with a different copy of the same profile still resolves. The CMYK to RGB table is 9 points per axis with quadrilinear interpolation (tetrahedral was not worth the code at that size), RGB to CMYK is 17 points trilinear, and results are memoised for the last query because renders ask for the same colour many times in a row. The engine never fetches: `setColorBackend` is installed by io/color-ops.ts, which keeps engine/ free of io.
+
+### src/engine/color-management.ts · Proof Colors is a post pass on the scene canvas
+- refers-to: src/ui/stage.ts :: Stage.proofPass; src/engine/color-management.ts :: applyProof, isProofing, activeProof
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Proof Colors is a view state in the module (not saved), the proof setup is saved in the document. The pass runs at the end of the artwork draw inside the same frame, over each artboard rectangle clipped to the canvas, so the pasteboard, grid, guides and the overlay canvas are never proofed and nothing is presented unproofed. The command awaits the 33 point table before the flag turns on, so toggling never shows a frame without the proof. The pass reads back with getImageData and writes with putImageData, and the table lookup skips repeated neighbouring colours, which is most of a vector drawing. Measured under 4x CPU throttling a render grew from about 32 ms to about 65 ms and layout shift stayed 0. Preserve Color Numbers is stored and shown in Proof Setup but does not change the table yet: it needs a CMYK to monitor table, which is a different endpoint.
+
+### src/engine/ops/profile-convert.ts · Convert to Profile
+- refers-to: src/engine/ops/profile-convert.ts :: convertDoc, throughCmykFn, toRgbFn; src/io/color-ops.ts :: convertToProfile
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+The conversion is one Engine.edit that maps layers, swatches, symbol art, graphic style appearances and artboard backgrounds, then writes colorMode and the new profile in the same step, so one Undo returns the old colours, mode and settings together. Unlike recolor.ts it keeps swatch ids and tints on paints because the swatch itself is converted in the same pass. To CMYK, an RGB or gray-derived colour goes through the destination's RGB to CMYK table, an existing CMYK colour goes through the old profile to RGB and then the new table, and gray colours stay gray. To RGB, only CMYK colours change; an RGB to RGB conversion between two RGB profiles is not done (the numbers are kept and the profile is assigned). Brush art and pattern tiles are left as they are.
+
+### src/io/pdf-x.ts · pdfxParts helper
+- refers-to: src/io/pdf-x.ts :: pdfxParts; src/engine/color-management.ts :: documentCmykProfileBytes
+- kind: explainer
+- logged: v0.32.0 · 2026-10-15
+
+A pure helper for the PDF exporter: the ICCBased stream dictionary (N, Alternate, Length, no filter, so the caller may add FlateDecode and fix Length), the OutputIntent dictionary as a function of the profile's object number, and the PDF/X-4 markers as ready-to-write key fragments (`/GTS_PDFXVersion (PDF/X-4)` for the Info dictionary, `/Trapped /False`). Strings with non-ASCII text are written as UTF-16BE hex. PDF/X-4 also needs a PDF 1.6 header and an XMP stream, which the caller owns; io/pdf.ts is not touched by this change.
+
+### src/ui/color-settings.ts · dialogs and Load Profile
+- refers-to: src/ui/color-settings.ts :: colorSettingsDialog, assignProfileDialog, convertToProfileDialog, proofSetupDialog, toggleProofColors
+- kind: explainer
+- logged: v0.32.0 · 2026-10-15
+
+The dialogs are askForm forms. Load Profile uses the form's extra button: the file picker opens inside that click so the browser allows it, the dialog closes, the file is uploaded, and the dialog opens again with the new profile already picked and the other choices kept. Settings that equal the defaults (built-in sRGB, relative colorimetric, black point on, no CMYK profile) are stored as absent so a document that never used colour management does not gain a `cm` field. Assign Profile changes only `cm`; Convert to Profile changes numbers. The tools list_color_profiles, set_color_settings, convert_to_profile and proof_colors reach the same functions through the bridge.
+
+### src/engine/raytrace.ts · quality table and renderer shape
+- refers-to: src/engine/raytrace.ts :: rayTrace, RAY_QUALITY, RAY_DRAFT_PX, Tracer
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+The renderer is DOM-free and returns a Uint8ClampedArray plus size so it can run anywhere the engine runs. Primary visibility is a raster pass over triangle bounding boxes (one ray-triangle test per covered pixel), not a ray per pixel through the BVH, because that alone brought Low from about 450 ms to about 220 ms for a 300 pt extrude; only edge pixels get the supersampling. The BVH is used for shadow and occlusion rays, with spatial-median splits, near-first ordering and leaves of at most four triangles. The quality table (pixel budget, shadow rays, AO rays, edge samples, denoise passes) was tuned against the Low budget of well under 300 ms: low 130000 px / 1 / 1 / 2 / 2 passes, medium 250000 / 4 / 3 / 3 / 1, high 400000 / 8 / 5 / 3 / 0. A bilateral 3x3 denoise stands in for samples at Low and Medium. Ambient occlusion rays are limited to 16 percent of the object size so a large flat cap does not darken from far geometry.
+
+### src/engine/raymesh.ts · smooth normals and cap triangulation
+- refers-to: src/engine/raymesh.ts :: rayMesh, triangulate
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Side quads share vertex normals across a crease only when the neighbouring face normals have a dot product above 0.84, so a star keeps its hard edges while a rounded shape or a revolve shades as a smooth surface; caps stay flat. The outward direction of each side quad comes from a hint recorded in `scene3dWith` (ring winding and hole parity) rather than from the centroid, since a concave star has points where the centroid test flips. Caps are triangulated with an earcut port that joins holes by bridging, so compound paths and text outlines extrude correctly.
+
+### src/engine/threed.ts · lights parameter and material fallbacks
+- refers-to: src/engine/threed.ts :: lightSources, lightsToParam, lightSpecs, lightingPreset, MATERIAL_BASE, LIGHT_LIMIT
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Several lights are stored in one string param `lights` (JSON array of `{c, i, r, h, s}`: colour, intensity, rotation, height, softness) because effect params are scalars. An empty or missing `lights` takes the untouched legacy single-light path (`light` and `intensity`), so documents saved before this change render byte for byte as before; this was checked against reference renders of four old documents. The preset shown in the panel is derived by comparing the lights with the presets, never stored. The light direction is `[cos h sin r, -cos h cos r, -sin h]`, and the legacy top_left light is about rotation -45, height 40. Vector shading sums the light contributions with the same terms the single light used. Textured materials (brushed metal, wood, rough) fall back to metal, matte and matte in vector mode through MATERIAL_BASE, so they never show a texture outside ray tracing.
+
+### src/engine/effects.ts · trace cache, draft pass and progressive render
+- refers-to: src/engine/effects.ts :: rayTraceImage, setTraceDraft, pumpTraces, traceHash, onTraceReady, rasterEffectsOf
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Results are cached by a hash of the mesh, lights, material, quality, texture scale and ground shadow (eight entries, least recently used out). While a gesture is open the engine turns on draft mode and the tracer uses the 40000 pixel budget; on release it draws full quality. A node that has no image yet keeps showing the vector faces and the traced image replaces them when it is ready, which is why toggling Ray Tracing in the panel moves nothing (measured layout shift 0 under 4x CPU throttle). Jobs run through a queue so a slider drag keeps only the newest request. Ray tracing is a `filter` kind in `rasterEffectsOf`, so SVG, PDF and EPS rasterise the node through the existing path instead of needing their own code; DXF ignores it.
+
+### src/engine/render.ts · drawnFx and drawTraced
+- refers-to: src/engine/render.ts :: drawnFx, drawTraced, traceCanvas
+- kind: explainer
+- logged: v0.32.0 · 2026-10-15
+
+`drawnFx` is the effect list the layer path draws with: the same as the node's effects minus the trace entry, because the traced image is drawn by `drawTraced` in `drawBody` and must not be run through `runFilter`, which has no kernel for it. The traced canvas is memoised per node in a WeakMap.
+
+### src/io/raster.ts · bakeTraced and Expand Appearance
+- refers-to: src/io/raster.ts :: bakeTraced; src/engine/index.ts :: Engine.expand; src/automation/agent-bridge.ts :: expand
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+Expand Appearance on a ray-traced object cannot be done inside the engine, which has no PNG encoder, so the app and the MCP expand tool first call `bakeTraced`, which renders each traced node at print resolution, stores the PNG as an asset and hands `Engine.expand` a map of node id to image node. The expand is still one history step, and undo restores the live 3D object. Expand Object leaves ray tracing alone.
+
+### src/ui/panels/three-d.ts · lighting and render sections
+- refers-to: src/ui/panels/three-d.ts :: ThreeDPanel.specs, ThreeDPanel.patchLight
+- kind: explainer
+- logged: v0.32.0 · 2026-10-15
+
+Choosing a preset writes the whole `lights` string and the ambient value in one edit; add, duplicate and delete do the same, and a light colour pick is wrapped in a gesture so a drag across the picker is one history step. Slider edits patch the selected light inside the string. The Quality select and Texture Scale are disabled instead of hidden when they do not apply, so the panel never changes height when Ray Tracing is toggled.
+
+### src/io/pdf.ts · PDF/X-4 and the .ai writer
+- refers-to: src/io/pdf.ts :: exportPdf, PdfFile.build; src/io/pdf-x.ts :: pdfxParts; src/engine/color-management.ts :: outputProfileBytes; src/ui/app-dialogs.ts :: ExportDialog
+- kind: rationale
+- logged: v0.32.0 · 2026-10-15
+
+PDF/X-4 writes a 1.6 header, an OutputIntent whose DestOutputProfile is the document CMYK profile (formpth Generic CMYK when none is set), OutputConditionIdentifier Custom with the profile name as Info, GTS_PDFXVersion and Trapped in the Info dictionary and in XMP, ModDate, and a trailer ID. DeviceRGB content stays as written and a DefaultRGB ICCBased space carries the document RGB profile, bc that is how the PDF specification makes device RGB colorimetric without converting every colour and image. The formpth editing payload is left out under PDF/X bc it is an embedded file. The page information mark font is not embedded, so PDF/X with page information still fails a strict preflight. The .ai writer is the same PDF with the editing payload always on and no marks or standard, which is what Illustrator's own PDF-compatible .ai is from the outside: Illustrator opens it as PDF content and formpth reopens it fully editable. Illustrator's private data stream is not written, bc its format is unpublished.
