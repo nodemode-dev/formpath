@@ -1,12 +1,13 @@
 export type V3 = [number, number, number];
 
-export interface RayMesh { tris: number; pos: Float32Array; nrm: Float32Array; obj: Float32Array; solid: Int32Array; colors: Float32Array }
+export interface RayTexture { w: number; h: number; data: Uint8ClampedArray; lit: boolean; clip?: boolean }
+export interface RayMesh { tris: number; pos: Float32Array; nrm: Float32Array; obj: Float32Array; solid: Int32Array; colors: Float32Array; uv?: Float32Array; uvOn?: Uint8Array; tex?: RayTexture }
 export interface RayLight { dir: V3; color: V3; intensity: number; softness: number }
 export interface RayGround { m: number[]; blur: number; opacity: number }
 export type RayQuality = 'low' | 'medium' | 'high';
 export interface RayInput {
   mesh: RayMesh; w: number; h: number; sx: number; sy: number; ox: number; oy: number; f: number; rot: number[]; axis: V3;
-  lights: RayLight[]; ambient: number; highlight: number; shade: V3; look: string; texScale: number; quality: RayQuality; size: number; ground: RayGround | null;
+  lights: RayLight[]; ambient: number; highlight: number; shade: V3; look: string; texScale: number; quality: RayQuality; size: number; ground: RayGround | null; bias?: number; denoise?: number;
 }
 export interface RayResult { data: Uint8ClampedArray; w: number; h: number }
 
@@ -16,6 +17,10 @@ export const RAY_QUALITY: Record<RayQuality, { px: number; shadow: number; ao: n
   high: { px: 400000, shadow: 8, ao: 5, aa: 3, denoise: 0 },
 };
 export const RAY_DRAFT_PX = 40000;
+let drafting = false, draftTaken = false;
+export const setRayDraft = (on: boolean): void => { drafting = on; };
+export const rayDrafting = (): boolean => { if (drafting) draftTaken = true; return drafting; };
+export const rayDraftTaken = (): boolean => { const t = draftTaken; draftTaken = false; return t; };
 export const TEXTURE_LOOKS = new Set(['brushed_metal', 'wood', 'rough']);
 
 const BIG = 1e30, GOLD = 2.399963229728653, TAU = Math.PI * 2;
@@ -189,12 +194,13 @@ class Tracer {
   private rox = 0; private roy = 0; private roz = 0; private rdx = 0; private rdy = 1; private rdz = 0;
   private px = 0; private py = 0; private pz = 0; private nx = 0; private ny = 0; private nz = 0; private gx = 0; private gy = 0; private gz = 0; private vx = 0; private vy = 0; private vz = -1; private qx = 0; private qy = 0; private qz = 0; private sol = 0;
   private readonly vv: Float64Array;
+  private tal = 0; private tu = 0; private tvv = 0; private texOn = false; private tcr = 0; private tcg = 0; private tcb = 0; private tca = 0;
 
   constructor(private readonly inp: RayInput) {
-    this.Q = RAY_QUALITY[inp.quality];
+    this.Q = inp.denoise === undefined ? RAY_QUALITY[inp.quality] : { ...RAY_QUALITY[inp.quality], denoise: inp.denoise };
     this.mesh = inp.mesh; this.w = inp.w; this.h = inp.h; this.sx = inp.sx; this.sy = inp.sy; this.ox = inp.ox; this.oy = inp.oy; this.f = inp.f;
     this.lights = inp.lights; this.ambient = inp.ambient; this.highlight = inp.highlight; this.shade = inp.shade; this.look = inp.look; this.sc = Math.max(0.05, inp.texScale / 100);
-    this.rot = inp.rot; this.axis = inp.axis; this.size = Math.max(1, inp.size); this.eps = this.size * 0.0012; this.aoDist = this.size * 0.16;
+    this.rot = inp.rot; this.axis = inp.axis; this.size = Math.max(1, inp.size); this.eps = inp.bias ?? this.size * 0.0012; this.aoDist = this.size * 0.16;
     this.bvh = build(inp.mesh);
     this.vv = new Float64Array(Math.max(1, inp.lights.length));
     let z = Infinity;
@@ -225,6 +231,43 @@ class Tracer {
     const ob = this.mesh.obj;
     this.qx = w0 * ob[b] + u * ob[b + 3] + v * ob[b + 6]; this.qy = w0 * ob[b + 1] + u * ob[b + 4] + v * ob[b + 7]; this.qz = w0 * ob[b + 2] + u * ob[b + 5] + v * ob[b + 8];
     this.sol = this.mesh.solid[tri];
+    const on = this.mesh.uvOn;
+    if (on && on[tri]) {
+      const uv = this.mesh.uv as Float32Array, q = tri * 6;
+      this.tu = w0 * uv[q] + u * uv[q + 2] + v * uv[q + 4]; this.tvv = w0 * uv[q + 1] + u * uv[q + 3] + v * uv[q + 5];
+      this.texOn = true;
+    } else this.texOn = false;
+  }
+
+  private sample(): void {
+    const T = this.mesh.tex as RayTexture, W = T.w, H = T.h, d = T.data;
+    this.tca = 0; this.tal = 0;
+    if (this.tu < 0 || this.tu > 1 || this.tvv < 0 || this.tvv > 1) return;
+    const x = this.tu * W - 0.5, y = this.tvv * H - 0.5, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+    let r = 0, g = 0, b = 0, a = 0, cov = 0;
+    for (let k = 0; k < 4; k++) {
+      const xi = Math.min(W - 1, Math.max(0, x0 + (k & 1))), yi = Math.min(H - 1, Math.max(0, y0 + (k >> 1))), wt = (k & 1 ? fx : 1 - fx) * (k & 2 ? fy : 1 - fy), o = (yi * W + xi) * 4, al = (d[o + 3] / 255) * wt;
+      r += d[o] * al; g += d[o + 1] * al; b += d[o + 2] * al; a += al; cov += wt;
+    }
+    if (a < 1e-6) return;
+    this.tal = cov > 0 ? a / cov : 0;
+    this.tcr = r / (a * 255); this.tcg = g / (a * 255); this.tcb = b / (a * 255); this.tca = T.clip ? 1 : this.tal;
+  }
+
+  private clipTest(slot: number, u: number, v: number): boolean {
+    const tri = this.bvh.order[slot], on = this.mesh.uvOn;
+    if (!on || !on[tri]) return true;
+    const uv = this.mesh.uv as Float32Array, q = tri * 6, w0 = 1 - u - v;
+    this.tu = w0 * uv[q] + u * uv[q + 2] + v * uv[q + 4]; this.tvv = w0 * uv[q + 1] + u * uv[q + 3] + v * uv[q + 5];
+    this.sample();
+    return this.tal >= 0.5;
+  }
+
+  private combine(ao: number, out: Float64Array): void {
+    const tex = this.texOn ? (this.mesh.tex as RayTexture) : null;
+    if (tex) this.sample();
+    this.shadeInto(ao, out, tex !== null && tex.lit);
+    if (tex && !tex.lit && this.tca > 0) { const a = this.tca; out[0] += (this.tcr - out[0]) * a; out[1] += (this.tcg - out[1]) * a; out[2] += (this.tcb - out[2]) * a; }
   }
 
   private lightVis(li: number, S: number, x: number, y: number, seed: number): number {
@@ -268,7 +311,7 @@ class Tracer {
     return 1 - occ / S;
   }
 
-  private combine(ao: number, out: Float64Array): void {
+  private shadeInto(ao: number, out: Float64Array, lit: boolean): void {
     const look = this.look, sol = this.sol * 3, col = this.mesh.colors, sc = this.sc, size = this.size;
     let br = col[sol], bg = col[sol + 1], bb = col[sol + 2], nx = this.nx, ny = this.ny, nz = this.nz, hard = 12;
     const qx = this.qx, qy = this.qy, qz = this.qz;
@@ -285,6 +328,7 @@ class Tracer {
       nx /= l; ny /= l; nz /= l;
       hard = 9;
     }
+    if (lit && this.tca > 0) { const t = this.tca; br += (this.tcr - br) * t; bg += (this.tcg - bg) * t; bb += (this.tcb - bb) * t; }
     const vx = this.vx, vy = this.vy, vz = this.vz, metal = look === 'metal' || look === 'brushed_metal';
     let dr = 0, dg = 0, db = 0, sr = 0, sg = 0, sb = 0;
     const brushed = look === 'brushed_metal';
@@ -345,7 +389,7 @@ class Tracer {
     }
     const i0 = Math.max(0, Math.floor(bx0) - 1), i1 = Math.min(w - 1, Math.ceil(bx1) + 1), j0 = Math.max(0, Math.floor(by0) - 1), j1 = Math.min(h - 1, Math.ceil(by1) + 1);
     ht.fill(BIG);
-    const tv = B.tv, persp = this.f > 0, XS = new Float64Array(3), YS = new Float64Array(3);
+    const clip = !!this.mesh.tex?.clip, tv = B.tv, persp = this.f > 0, XS = new Float64Array(3), YS = new Float64Array(3);
     for (let s = 0; s < this.mesh.tris; s++) {
       const k = s * 9;
       for (let v = 0; v < 3; v++) {
@@ -364,6 +408,7 @@ class Tracer {
         if (v < -1e-6 || u + v > 1.000001) continue;
         const t = (e2x * qx + e2y * qy + e2z * qz) * inv, p = j * w + i;
         if (t <= 0 || t >= ht[p]) continue;
+        if (clip && !this.clipTest(s, u, v)) continue;
         hit[p] = s; hu[p] = u; hv[p] = v; ht[p] = t;
       }
     }
@@ -421,6 +466,7 @@ class Tracer {
         for (let sb = 0; sb < g; sb++) for (let sa = 0; sa < g; sa++) {
           this.ray(i + (sa + 0.5) / g, j + (sb + 0.5) / g);
           if (!intersect(B, this.rox, this.roy, this.roz, this.rdx, this.rdy, this.rdz, 0, BIG, false)) continue;
+          if (clip && !this.clipTest(hSlot, hU, hV)) continue;
           this.surf(hSlot, hU, hV);
           for (let li = 0; li < L; li++) this.vv[li] = this.lightVis(li, 1, i * g + sa, j * g + sb, sa + sb * g);
           this.combine(this.occlusion(Math.min(2, Q.ao), i * g + sa, j * g + sb, sa + sb * g), rgb);

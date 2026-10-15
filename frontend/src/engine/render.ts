@@ -513,7 +513,13 @@ const traceCanvas = new WeakMap<Uint8ClampedArray, HTMLCanvasElement | Offscreen
 function drawTraced(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): boolean {
   const region = visualBounds(rc.doc, n);
   if (isEmptyRect(region)) return false;
-  const t = ctx.getTransform(), r = rayTraceImage(rc.doc, n, region, Math.hypot(t.a, t.b), !!rc.printing);
+  const paint = (art: VNode, b: Rect, w: number, h: number): Uint8ClampedArray | null => {
+    const made = canvas2d(w, h);
+    made.ctx.setTransform(w / b.w, 0, 0, h / b.h, -b.x * (w / b.w), -b.y * (h / b.h));
+    renderNode(made.ctx, art, { ...rc, skip: undefined, outline: false });
+    return made.ctx.getImageData(0, 0, w, h).data;
+  };
+  const t = ctx.getTransform(), r = rayTraceImage(rc.doc, n, region, Math.hypot(t.a, t.b), !!rc.printing, paint);
   if (!r) return false;
   let cv = traceCanvas.get(r.data);
   if (!cv) {

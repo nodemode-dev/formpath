@@ -130,7 +130,7 @@ export class ThreeDPanel {
     setHidden(this.parts.get('perspective') as HTMLElement, k === '3d.inflate');
     setHidden(this.parts.get('map') as HTMLElement, k !== '3d.extrude' && k !== '3d.rotate');
     setHidden(this.parts.get('shadow') as HTMLElement, k === '3d.inflate');
-    setHidden(this.parts.get('render') as HTMLElement, k === '3d.inflate');
+    setHidden(this.parts.get('render') as HTMLElement, false);
     this.materials.setChoices(MATERIALS.filter(([id]) => (k === '3d.inflate' ? id === 'plastic' || id === 'matte' || id === 'metal' : k === '3d.rotate' || id !== 'flat')));
     const list = lightSpecs(p), cur = list[Math.max(0, Math.min(this.lightAt, list.length - 1))];
     this.lightAt = Math.max(0, Math.min(this.lightAt, list.length - 1));

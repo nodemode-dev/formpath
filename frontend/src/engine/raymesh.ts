@@ -1,4 +1,4 @@
-import type { RayMesh } from './raytrace';
+import type { RayMesh, RayTexture } from './raytrace';
 import type { Raw, Solid, TraceGeom, V3 } from './threed';
 
 interface Nd { i: number; x: number; y: number; prev: Nd; next: Nd }
@@ -117,16 +117,23 @@ export function triangulate(xs: number[], ys: number[], outerLen: number, holes:
   return out;
 }
 
-export function rayMesh(g: TraceGeom, solids: Solid[]): RayMesh {
-  const R = g.R, c = g.center, pos: number[] = [], nrm: number[] = [], obj: number[] = [], sol: number[] = [], eps = Math.max(1e-6, g.size * 1e-4);
+export interface RayMap { x: number; y: number; w: number; h: number; tex: RayTexture }
+
+export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null): RayMesh {
+  const R = g.R, c = g.center, pos: number[] = [], nrm: number[] = [], obj: number[] = [], sol: number[] = [], uvs: number[] = [], uvOn: number[] = [], eps = Math.max(1e-6, g.size * 1e-4);
   const view = (v: V3): V3 => { const x = v[0] - c[0], y = v[1] - c[1], z = v[2] - c[2]; return [R[0] * x + R[1] * y + R[2] * z, R[3] * x + R[4] * y + R[5] * z, R[6] * x + R[7] * y + R[8] * z]; };
   const turn = (v: V3): V3 => [R[0] * v[0] + R[1] * v[1] + R[2] * v[2], R[3] * v[0] + R[4] * v[1] + R[5] * v[2], R[6] * v[0] + R[7] * v[1] + R[8] * v[2]];
   const colors = new Float32Array(Math.max(1, solids.length) * 3), index = new Map<Solid, number>();
   solids.forEach((s, i) => { index.set(s, i); const b = s.fill ?? s.stroke ?? [0.6, 0.6, 0.6]; colors[i * 3] = b[0]; colors[i * 3 + 1] = b[1]; colors[i * 3 + 2] = b[2]; });
-  const emit = (si: number, a: V3, b: V3, d: V3, na: V3, nb: V3, nd: V3): void => {
-    for (const [v, n] of [[a, na], [b, nb], [d, nd]] as Array<[V3, V3]>) { pos.push(...view(v)); nrm.push(...turn(n)); obj.push(v[0] - c[0], v[1] - c[1], v[2] - c[2]); }
+  const emit = (si: number, a: V3, b: V3, d: V3, na: V3, nb: V3, nd: V3, textured = false): void => {
+    for (const [v, n] of [[a, na], [b, nb], [d, nd]] as Array<[V3, V3]>) {
+      pos.push(...view(v)); nrm.push(...turn(n)); obj.push(v[0] - c[0], v[1] - c[1], v[2] - c[2]);
+      if (map) { if (textured) uvs.push((v[0] - map.x) / map.w, (v[1] - map.y) / map.h); else uvs.push(0, 0); }
+    }
+    if (map) uvOn.push(textured ? 1 : 0);
     sol.push(si);
   };
+  const facing = R[8] >= 0;
   const sides: Array<{ raw: Raw; n: V3; si: number }> = [], at = new Map<string, number[]>();
   const key = (si: number, p: V3): string => `${si}|${Math.round(p[0] / eps)}|${Math.round(p[1] / eps)}|${Math.round(p[2] / eps)}`;
   for (const raw of g.raws) {
@@ -152,7 +159,8 @@ export function rayMesh(g: TraceGeom, solids: Solid[]): RayMesh {
       const group = [i, ...pts.map((__, j) => j).filter((j) => depth[j] % 2 === 1 && parent[j] === i)], xs: number[] = [], ys: number[] = [], vs: V3[] = [], holes: number[] = [];
       group.forEach((r, gi) => { if (gi) holes.push(xs.length); pts[r].forEach((p, k) => { xs.push(p[0]); ys.push(p[1]); vs.push(rings[r][k]); }); });
       const tris = triangulate(xs, ys, pts[i].length, holes);
-      for (let t = 0; t < tris.length; t += 3) emit(si, vs[tris[t]], vs[tris[t + 1]], vs[tris[t + 2]], n0, n0, n0);
+      const art = !!map && raw.role === 'front' && facing;
+      for (let t = 0; t < tris.length; t += 3) emit(si, vs[tris[t]], vs[tris[t + 1]], vs[tris[t + 2]], n0, n0, n0, art);
     });
   }
   for (const q of sides) {
@@ -165,5 +173,7 @@ export function rayMesh(g: TraceGeom, solids: Solid[]): RayMesh {
     emit(q.si, P[0], P[1], P[2], N[0], N[1], N[2]);
     emit(q.si, P[0], P[2], P[3], N[0], N[2], N[3]);
   }
-  return { tris: sol.length, pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), obj: Float32Array.from(obj), solid: Int32Array.from(sol), colors };
+  const mesh: RayMesh = { tris: sol.length, pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), obj: Float32Array.from(obj), solid: Int32Array.from(sol), colors };
+  if (map) { mesh.uv = Float32Array.from(uvs); mesh.uvOn = Uint8Array.from(uvOn); mesh.tex = map.tex; }
+  return mesh;
 }
