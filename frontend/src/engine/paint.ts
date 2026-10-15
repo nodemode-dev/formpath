@@ -1,4 +1,5 @@
 import type { Appearance, BlendMode, Color, Doc, Effect, FillItem, Gradient, GradientStop, Paint, RGB, StrokeItem } from './types';
+import { cmToCmyk, cmToRgb } from './color-management';
 
 export const rgb = (r: number, g: number, b: number): Color => ({ kind: 'rgb', r, g, b });
 export const cmyk = (c: number, m: number, y: number, k: number): Color => ({ kind: 'cmyk', c, m, y, k });
@@ -13,6 +14,8 @@ const clamp255 = (v: number): number => Math.max(0, Math.min(255, Math.round(v))
 export function toRgb(c: Color): RGB {
   if (c.kind === 'rgb') return { r: c.r, g: c.g, b: c.b };
   if (c.kind === 'gray') { const v = clamp255(255 * (1 - c.k / 100)); return { r: v, g: v, b: v }; }
+  const managed = cmToRgb(c);
+  if (managed) return managed;
   const C = c.c / 100, M = c.m / 100, Y = c.y / 100, K = c.k / 100;
   return { r: clamp255(255 * (1 - C) * (1 - K)), g: clamp255(255 * (1 - M) * (1 - K)), b: clamp255(255 * (1 - Y) * (1 - K)) };
 }
@@ -22,7 +25,7 @@ export function rgbToCmyk(r: number, g: number, b: number): Color {
   const f = (v: number): number => Math.round(((1 - v - K) / (1 - K)) * 1000) / 10;
   return cmyk(f(R), f(G), f(B), Math.round(K * 1000) / 10);
 }
-export function toCmyk(c: Color): Color { if (c.kind === 'cmyk') return c; const v = toRgb(c); return rgbToCmyk(v.r, v.g, v.b); }
+export function toCmyk(c: Color): Color { if (c.kind === 'cmyk') return c; const v = toRgb(c); return cmToCmyk(v) ?? rgbToCmyk(v.r, v.g, v.b); }
 export function toGray(c: Color): Color { if (c.kind === 'gray') return c; const v = toRgb(c); return gray(Math.round((1 - (0.299 * v.r + 0.587 * v.g + 0.114 * v.b) / 255) * 1000) / 10); }
 export function inMode(c: Color, mode: 'rgb' | 'cmyk'): Color { if (mode === 'cmyk') return c.kind === 'rgb' ? toCmyk(c) : c; if (c.kind === 'rgb') return c; const v = toRgb(c); return rgb(v.r, v.g, v.b); }
 

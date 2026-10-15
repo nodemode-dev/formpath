@@ -272,7 +272,12 @@ export interface Doc {
   perspView?: PerspView;
   linkPreviews?: boolean;
   bleed?: { t: number; b: number; l: number; r: number };
+  cm?: ColorSettings;
 }
+
+export interface ProfileRef { id: string; name: string }
+export interface ProofSetup { device?: ProfileRef; preserve?: boolean; paper?: boolean; blackInk?: boolean }
+export interface ColorSettings { rgb?: ProfileRef; cmyk?: ProfileRef; intent?: 0 | 1 | 2 | 3; bpc?: boolean; proof?: ProofSetup }
 
 export type VariableKind = 'text' | 'image' | 'visibility' | 'graph';
 export interface Variable { id: string; name: string; kind: VariableKind; node: string | null }

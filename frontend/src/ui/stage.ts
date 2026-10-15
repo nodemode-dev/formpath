@@ -7,6 +7,7 @@ import { layoutText, lineBaseline, pathBrackets } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
 import { envelopeFrame, envelopeGrid } from '../engine/live';
 import { cssColor } from '../engine/paint';
+import { activeProof, applyProof, type Lut } from '../engine/color-management';
 import { gridGeometry, gridOf, vanishing } from '../engine/perspective';
 import { latticeCopies, tileOutline } from '../engine/pattern';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
@@ -267,6 +268,8 @@ export class Stage {
     try { renderDocument(g, this.renderContext(p, v.zoom)); }
     catch (err) { console.error(err); }
     g.restore();
+    const proofing = activeProof();
+    if (proofing) this.proofPass(g, p, proofing, view);
     if (p.isolation) {
       const n = findNode(p.doc, p.isolation);
       g.fillStyle = pal.pasteboard;
@@ -311,6 +314,18 @@ export class Stage {
         g.strokeRect(x, y, x2 - x, y2 - y);
       });
       g.globalAlpha = 1;
+    }
+  }
+
+  private proofPass(g: CanvasRenderingContext2D, p: Project, lut: Lut, view: Mat): void {
+    const W = this.scene.width, H = this.scene.height, z = view[0];
+    for (const a of p.doc.artboards) {
+      const x0 = Math.max(0, Math.round(a.x * z + view[4])), y0 = Math.max(0, Math.round(a.y * z + view[5]));
+      const x1 = Math.min(W, Math.round((a.x + a.w) * z + view[4])), y1 = Math.min(H, Math.round((a.y + a.h) * z + view[5]));
+      if (x1 <= x0 || y1 <= y0) continue;
+      const img = g.getImageData(x0, y0, x1 - x0, y1 - y0);
+      applyProof(img.data, x1 - x0, 0, 0, x1 - x0, y1 - y0, lut);
+      g.putImageData(img, x0, y0);
     }
   }
 

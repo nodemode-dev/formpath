@@ -25,7 +25,9 @@ The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app ic
 | @tauri-apps/api | Apache-2.0 or MIT | native menus on macOS |
 | tauri, tauri-plugin-shell, tauri-plugin-dialog, tauri-plugin-updater, regex, serde_json | Apache-2.0 or MIT | desktop shell |
 | fastapi, uvicorn, python-multipart, httpx | MIT, BSD-3-Clause, Apache-2.0, BSD-3-Clause | engine |
+| Pillow 12.3.0, with LittleCMS 2 | MIT-CMU (HPND); LittleCMS is MIT | ICC profile reading and the colour lookup tables for Color Settings and Proof Colors |
 | keyring, with jaraco.classes, jaraco.context, jaraco.functools, more-itertools, jeepney and SecretStorage | MIT (SecretStorage: BSD-3-Clause) | API keys in the system's password store |
+| fonttools 4.67.0 | MIT | font subsets for live text in PDF export |
 
 ## Build tools, not distributed
 

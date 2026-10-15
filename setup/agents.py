@@ -33,6 +33,7 @@ GROUPS = [
     ("Transform and align", {"transform", "align", "puppet_warp"}),
     ("Path operations", {"pathfinder", "path_operation", "shape_builder", "shaper"}),
     ("Effects and live objects", {"apply_effect", "three_d", "expand", "make_blend", "envelope", "repeat", "symbol", "symbolism", "apply_brush", "new_brush", "brush_library", "image_trace", "live_paint", "intertwine", "gradient_mesh", "make_pattern", "edit_pattern", "recolor"}),
+    ("Colour management", {"list_color_profiles", "set_color_settings", "convert_to_profile", "proof_colors"}),
     ("Artboards", {"artboard"}),
     ("Type", {"set_text", "text_flow", "text_style", "find_font", "create_outlines", "retype"}),
     ("Generative", {"generative_shape_fill", "generate_patterns", "text_to_vector", "generative_recolor"}),
