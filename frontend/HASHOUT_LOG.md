@@ -2770,3 +2770,39 @@ Bleed and the other setup fields were wrapped in a gesture, which only merges ed
 - logged: v0.31.0 · 2026-10-15
 
 Preferences > Workspace "Show the side column as icons in a narrow window" came with the formvis shell and was stored but read by nothing, which the independent audit flagged. Below 1,100 px wide, with the preference on, the side dock now collapses to its icon strip; when the window widens again it expands, but only if it was collapsed automatically, so a person's own choice to keep it collapsed survives. With the preference off nothing happens.
+
+## src/ui/panels/text-to-vector.ts
+
+### src/ui/panels/text-to-vector.ts · Text to Vector Graphic panel
+- refers-to: src/ui/panels/text-to-vector.ts :: TextToVectorPanel; src/io/generative.ts :: textToVectorVariations, placeVector
+- kind: explainer
+- logged: v0.31.0 · 2026-10-15
+
+The panel reuses the Generative Shape Fill plumbing: ModelPanel for the model status, the same tile grid and preview painter, and the same SVG cleaner in io/generative.ts. All three tile slots stay in the layout from the start, so variations arriving only enable buttons and paint canvases and nothing moves. Place fits the picked art by one uniform scale into the first selected object's bounds, or the middle 70 percent of the active artboard, and adds it with one addNodes call, so one Undo removes it. The command and its panel tab are in the generative gate list in app.ts, so Show generative features hides and refuses them.
+
+## src/io/generative.ts
+
+### src/io/generative.ts · Text to Vector and Generative Recolor helpers
+- refers-to: src/io/generative.ts :: textToVectorVariations, vectorTarget, placeVector, generativePalettes, parsePalettes, recolorWithPalette
+- kind: explainer
+- logged: v0.31.0 · 2026-10-15
+
+Palettes are asked for in one request as JSON and parsed leniently: any array of strings inside the reply counts, and a reply with only hex codes on lines is accepted. Applying a palette uses the existing fitRowsToPalette and rowsFn with tints preserved, so the dialog and the generative_recolor tool give the same result. The tool refuses when the preference is off because the bridge reads loadPrefs, since the command gate only guards commands.
+
+## src/ui/panels/recolor.ts
+
+### src/ui/panels/recolor.ts · Generative Recolor inside Recolor Artwork
+- refers-to: src/ui/panels/recolor.ts :: RecolorDialog.generatePalettes, applyGenerated; src/styles/formpth.css :: cv-rc-gen
+- kind: explainer
+- logged: v0.31.0 · 2026-10-15
+
+A palette click only rewrites the dialog rows and previews through the open drag session, so OK commits one history step and Cancel restores the art. The section has a fixed height (single row of sample prompts, four strip buttons that are always present, a two line note) and the dialog grid is taller while it is shown, so palettes arriving move nothing. With the preference off the section is hidden before the dialog opens.
+
+## src/engine/ops/live-shapes.ts
+
+### src/engine/ops/live-shapes.ts · star corner radius
+- refers-to: src/engine/types.ts :: LiveShape star radius; src/engine/geometry.ts :: starPath; src/engine/ops/corner-ops.ts :: liveCorners; src/tools/select.ts :: cornerWidgets
+- kind: rationale
+- logged: v0.31.0 · 2026-10-15
+
+The star live shape gained an optional radius, generated with roundCorners the same way a polygon's is, and left out of the stored shape when it is zero so older files load and save unchanged. The Corners dialog keeps a star live by writing the radius, as it does for a polygon; a chamfer or inverted corner still expands it to a plain path because the star has no corner type. The widget sits on the top tip along the bisector, at the radius divided by the sine of the tip's half angle.

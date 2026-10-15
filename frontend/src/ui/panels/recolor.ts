@@ -4,6 +4,7 @@ import { collectColors, fitRowsToPalette, oklab, recolorDoc, reduceRows, rowRefe
 import { cssColor, hex, hsbToRgb, rgb, rgbToHsb, toCmyk, toRgb } from '../../engine/paint';
 import { libraryColors, SWATCH_LIBRARIES, type SwatchLibrary } from '../../engine/swatch-libraries';
 import type { Color, Doc, Engine, Pt, VNode } from '../../engine';
+import { generativePalettes, modelState, RECOLOR_SAMPLES } from '../../io/generative';
 import { Dialog } from '../dialogs';
 import { el, patchList, q, setClass, setDisabled, setHidden, setStyleVar, setText, setTitle } from '../dom';
 import { icon } from '../icons';
@@ -15,7 +16,7 @@ const SIZE = 240, R = 108;
 const hsbOf = (c: Color): [number, number, number] => { const v = toRgb(c); return rgbToHsb(v.r, v.g, v.b); };
 const fromHsb = (h: number, s: number, b: number, like: Color): Color => { const v = hsbToRgb(((h % 360) + 360) % 360, Math.max(0, Math.min(100, s)), Math.max(0, Math.min(100, b))), c = rgb(v.r, v.g, v.b); return like.kind === 'cmyk' ? toCmyk(c) : c; };
 
-export interface RecolorDeps { pickColor(c: Color, live?: (c: Color) => void): Promise<Color | null>; stagePoint(x: number, y: number): Pt | null; userLibraries(): SwatchLibrary[] }
+export interface RecolorDeps { pickColor(c: Color, live?: (c: Color) => void): Promise<Color | null>; stagePoint(x: number, y: number): Pt | null; userLibraries(): SwatchLibrary[]; generative(): boolean }
 
 export class RecolorDialog extends Dialog {
   private readonly wheel = el<HTMLCanvasElement>(`<canvas class="cv-rc-wheel" width="${SIZE * 2}" height="${SIZE * 2}" aria-label="Color wheel: drag a marker to change hue and saturation"></canvas>`);
@@ -33,6 +34,14 @@ export class RecolorDialog extends Dialog {
   private readonly count;
   private readonly lib;
   private readonly shape;
+  private readonly gen = el('<div class="cv-rc-gen"></div>');
+  private readonly genPrompt = el<HTMLInputElement>('<input class="cv-input cv-rc-gen-prompt" type="text" spellcheck="false" aria-label="Generative Recolor prompt" placeholder="Describe the mood, such as sunset over the ocean">');
+  private readonly genGo = el<HTMLButtonElement>('<button class="cv-btn cv-btn-primary" type="button">Generate</button>');
+  private readonly genNote = el('<p class="cv-note cv-rc-gen-note" role="status"></p>');
+  private readonly genStrips: HTMLButtonElement[] = [];
+  private genPalettes: Color[][] = [];
+  private genBusy = false;
+  private genMessage = '';
   private rows: Row[] = [];
   private start: Row[] = [];
   private colors: Color[] = [];
@@ -79,7 +88,20 @@ export class RecolorDialog extends Dialog {
     this.sepBtn = ab('Separate', 'Separate the selected row into one row per current color', () => this.separate());
     ab('Reset', 'Back to the artwork’s colors', () => { this.rows = this.start.map((r) => ({ ...r, from: [...r.from] })); this.base = 0; this.active = 0; this.sel.clear(); this.count.set('auto'); this.preset.set('custom'); this.lib.set(''); this.queue(true); });
     const head = el('<div class="cv-rc-headrow"><span>Current colors</span><span></span><span>New</span></div>');
-    right.append(this.preset.el, this.rule.el, this.count.el, this.lib.el, this.mode.el, actions, head, this.list, this.status);
+    const samples = el('<div class="cv-rc-gen-samples"></div>'), strips = el('<div class="cv-rc-gen-strips"></div>');
+    for (const s of RECOLOR_SAMPLES) { const b = el<HTMLButtonElement>('<button class="cv-rc-sample" type="button"></button>'); setText(b, s); b.addEventListener('click', () => { this.genPrompt.value = s; void this.generatePalettes(); }); samples.appendChild(b); }
+    for (let i = 0; i < 4; i++) {
+      const b = el<HTMLButtonElement>(`<button class="cv-rc-pal" type="button" disabled aria-label="Palette ${i + 1}"></button>`);
+      for (let k = 0; k < 8; k++) b.appendChild(el('<span class="cv-rc-pal-sw is-empty"></span>'));
+      b.addEventListener('click', () => this.applyGenerated(i));
+      this.genStrips.push(b); strips.appendChild(b);
+    }
+    this.genPrompt.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') void this.generatePalettes(); });
+    this.genGo.addEventListener('click', () => void this.generatePalettes());
+    const genRow = el('<div class="cv-rc-gen-row"></div>');
+    genRow.append(this.genPrompt, this.genGo);
+    this.gen.append(el('<span class="cv-pf-label">Generative Recolor</span>'), genRow, samples, strips, this.genNote);
+    right.append(this.preset.el, this.rule.el, this.count.el, this.lib.el, this.mode.el, this.gen, actions, head, this.list, this.status);
     const grid = el('<div class="cv-rc"></div>');
     grid.append(left, right);
     this.body.appendChild(grid);
@@ -94,7 +116,30 @@ export class RecolorDialog extends Dialog {
     };
   }
 
-  run(opts: { colors?: number; group?: string } = {}): Promise<boolean> {
+  private async generatePalettes(): Promise<void> {
+    const st = await modelState();
+    if (!st.ready) { this.genMessage = st.message; this.queue(false); return; }
+    if (this.genBusy) return;
+    this.genBusy = true; this.genPalettes = []; this.genMessage = `Asking ${st.model} for palettes.`;
+    this.queue(false);
+    try {
+      this.genPalettes = await generativePalettes(this.genPrompt.value, 4);
+      this.genMessage = `${this.genPalettes.length} palette${this.genPalettes.length === 1 ? '' : 's'} ready. Click one to recolor the artwork.`;
+    } catch (err) { this.genMessage = err instanceof Error ? err.message : String(err); }
+    this.genBusy = false;
+    this.queue(false);
+  }
+
+  private applyGenerated(i: number): void {
+    const pal = this.genPalettes[i];
+    if (!pal || this.settled) return;
+    this.rows = this.withIds(fitRowsToPalette(this.rows.map((r) => ({ ...r, to: r.from[0] })), pal));
+    this.active = 0; this.base = 0; this.sel.clear(); this.preserve = true; this.mode.set('tints'); this.preset.set('custom');
+    this.genMessage = `Applied palette ${i + 1}. OK keeps it, Cancel restores the artwork.`;
+    this.queue(true);
+  }
+
+  run(opts: { colors?: number; group?: string; generative?: boolean } = {}): Promise<boolean> {
     if (!this.settled) return Promise.resolve(false);
     const e = this.engine, p = e.current;
     if (!p) return Promise.resolve(false);
@@ -110,6 +155,9 @@ export class RecolorDialog extends Dialog {
     this.lib.set('');
     e.beginDrag('Recolor Artwork');
     this.settled = false;
+    this.genPalettes = []; this.genMessage = '';
+    setHidden(this.gen, !this.deps.generative());
+    if (opts.generative && this.deps.generative()) window.setTimeout(() => this.genPrompt.focus(), 60);
     if (opts.colors) { this.count.set(String(opts.colors)); this.reduce(opts.colors); }
     if (opts.group) { this.lib.set(opts.group); this.applyLibrary(opts.group); }
     this.queue(true);
@@ -389,6 +437,13 @@ export class RecolorDialog extends Dialog {
 
   private sync(): void {
     this.drawWheel();
+    setText(this.genNote, this.genMessage || 'Uses the language model set for the Assistant.');
+    setClass(this.genGo, 'is-busy', this.genBusy);
+    this.genStrips.forEach((b, i) => {
+      const pal = this.genPalettes[i];
+      setDisabled(b, !pal || this.genBusy);
+      Array.from(b.children).forEach((s, k) => { setStyleVar(s as HTMLElement, '--sw', pal?.[k] ? cssColor(pal[k]) : 'transparent'); setClass(s as HTMLElement, 'is-empty', !pal?.[k]); });
+    });
     const act = this.rows[this.active];
     const b = act ? Math.round(hsbOf(act.to)[2]) : 100;
     if (document.activeElement !== this.bright) this.bright.value = String(b);

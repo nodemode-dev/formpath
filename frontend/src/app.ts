@@ -82,6 +82,7 @@ import { ColorGuidePanel } from './ui/panels/color-guide';
 import { PatternOptionsPanel } from './ui/panels/pattern-options';
 import { ImageTracePanel } from './ui/panels/image-trace';
 import { PatternGenPanel, RetypePanel, ShapeFillPanel } from './ui/panels/generative';
+import { TextToVectorPanel } from './ui/panels/text-to-vector';
 import { AssetExportPanel } from './ui/panels/asset-export';
 import { GraphDataWindow } from './ui/panels/graph-data';
 import { VariablesPanel } from './ui/panels/variables';
@@ -160,7 +161,7 @@ const SHELL = `<div class="cv-app">
 <footer class="cv-status"></footer>
 </div>`;
 
-const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group', 'swatch-library': 'color-group', 'brush-library': 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', 'symbol-library': 'symbols-group', 'shape-fill': 'symbols-group', 'generate-patterns': 'symbols-group', retype: 'type-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
+const TAB_HOMES: Record<string, string> = { color: 'color-group', swatches: 'color-group', gradient: 'color-group', 'color-guide': 'color-group', stroke: 'stroke-group', transparency: 'stroke-group', brushes: 'stroke-group', attributes: 'stroke-group', 'swatch-library': 'color-group', 'brush-library': 'stroke-group', appearance: 'appearance-group', 'graphic-styles': 'appearance-group', 'three-d': 'appearance-group', symbols: 'symbols-group', artboards: 'symbols-group', links: 'symbols-group', 'image-trace': 'symbols-group', 'symbol-library': 'symbols-group', 'shape-fill': 'symbols-group', 'generate-patterns': 'symbols-group', 'text-to-vector': 'symbols-group', retype: 'type-group', navigator: 'navigator-group', info: 'navigator-group', history: 'navigator-group', actions: 'navigator-group', variables: 'navigator-group', 'asset-export': 'navigator-group', layers: 'layers-panel', properties: 'properties-group', transform: 'properties-group', align: 'properties-group', pathfinder: 'properties-group', 'pattern-options': 'properties-group', character: 'type-group', paragraph: 'type-group', 'character-styles': 'type-group', 'paragraph-styles': 'type-group', glyphs: 'type-group', tabs: 'type-group' };
 
 export function startApp(): void {
   registerBuiltinTools();
@@ -194,12 +195,12 @@ export function startApp(): void {
   stage.onType((r) => { if (!/^(type|areaType|typePath|typeVertical|areaTypeVertical|typePathVertical)$/.test(engine.tool)) engine.setTool('type'); typing.begin(r); });
 
   const late: { task: TaskBar | null } = { task: null };
-  const GENERATIVE = ['generative-shape-fill', 'generate-patterns', 'retype', 'panel-shape-fill', 'panel-generate-patterns', 'panel-retype'];
+  const GENERATIVE = ['generative-shape-fill', 'generate-patterns', 'retype', 'text-to-vector', 'generative-recolor', 'panel-shape-fill', 'panel-generate-patterns', 'panel-retype', 'panel-text-to-vector'];
   commands.gate = (cmd) => prefs.showGenerative || !GENERATIVE.includes(cmd.id);
   const applyUiPrefs = (pr: Prefs): void => {
     Stage.prefs = { ...Stage.prefs, zoomWheel: pr.zoomWheel, gridColor: pr.gridColor, guideColor: pr.guideColor, snapTol: pr.snapTolerance, gridInBack: pr.gridInBack, cell: CHECKER_CELL[pr.checkerSize], snapAngles: SNAP_ANGLES[pr.snapAngleSet] };
     anchorUi.scale = ANCHOR_SCALE[pr.anchorSize];
-    for (const t of ['shape-fill', 'generate-patterns', 'retype']) PanelGroup.setTabHidden(t, !pr.showGenerative);
+    for (const t of ['shape-fill', 'generate-patterns', 'retype', 'text-to-vector']) PanelGroup.setTabHidden(t, !pr.showGenerative);
     const rootEl = document.documentElement, helpOn = pr.helpBar ? 'on' : 'off';
     if (rootEl.getAttribute('data-fp-help') !== helpOn) rootEl.setAttribute('data-fp-help', helpOn);
     if (late.task) { late.task.enabled = pr.taskBar; late.task.schedule(); }
@@ -220,13 +221,13 @@ export function startApp(): void {
   const colorP = new ColorPanel(engine), swatchesP = new SwatchesPanel(engine, pickColor, (a) => openLibMenu(a, swatchLibItems()), () => void swatchInfo()), gradientP = new GradientPanel(engine, pickColor);
   const strokeP = new StrokePanel(engine), transP = new TransparencyPanel(engine), brushesP = new BrushesPanel(engine, (a) => openLibMenu(a, brushLibItems()));
   const swatchLibP = new SwatchLibraryPanel(engine, (a) => openLibMenu(a, swatchLibItems())), brushLibP = new BrushLibraryPanel(engine, (a) => openLibMenu(a, brushLibItems()));
-  const recolorD = new RecolorDialog(engine, { pickColor: (c, live) => picker.pick(c, live), stagePoint: (x, y) => stage.docPoint(x, y), userLibraries: userSwatchLibraries });
+  const recolorD = new RecolorDialog(engine, { pickColor: (c, live) => picker.pick(c, live), stagePoint: (x, y) => stage.docPoint(x, y), userLibraries: userSwatchLibraries, generative: () => prefs.showGenerative });
   const effectsMenu = new PopupMenu(commands, null, true);
   const appearanceP = new AppearancePanel(engine, pickColor, (anchor) => { effectsMenu.setItems(effectItems()); const r = anchor.getBoundingClientRect(); effectsMenu.openAt(r.left, r.top - 8); });
   const stylesP = new GraphicStylesPanel(engine);
   const symbolsP = new SymbolsPanel(engine, (c) => { commands.run(c); }, { library: (a) => openLibMenu(a, symbolLibItems()), panel: (a) => openLibMenu(a, ['symbol-edit', 'symbol-exit', '-', 'symbol-duplicate', 'symbol-redefine', 'symbol-replace', 'symbol-reset', '-', 'symbol-options', 'new-symbol', 'break-symbol', 'symbol-delete', '-', 'sym-lib-other', 'sym-lib-save']) }), artboardsP = new ArtboardsPanel(engine);
   const symbolLibP = new SymbolLibraryPanel(engine, (a) => openLibMenu(a, symbolLibItems()));
-  const shapeFillP = new ShapeFillPanel(engine), patternGenP = new PatternGenPanel(engine), retypeP = new RetypePanel(engine, ensureFace);
+  const textToVectorP = new TextToVectorPanel(engine), shapeFillP = new ShapeFillPanel(engine), patternGenP = new PatternGenPanel(engine), retypeP = new RetypePanel(engine, ensureFace);
   const relinkInput = el<HTMLInputElement>('<input type="file" accept="image/*" hidden>');
   document.body.appendChild(relinkInput);
   let relinkIds: string[] = [];
@@ -259,7 +260,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }, { id: 'swatch-library', label: 'Swatch Library', body: swatchLibP.body }], 'Color');
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }, { id: 'brush-library', label: 'Brush Library', body: brushLibP.body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
-  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }, { id: 'shape-fill', label: 'Generative Shape Fill', body: shapeFillP.body }, { id: 'generate-patterns', label: 'Generate Patterns', body: patternGenP.body }], 'Symbols');
+  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }, { id: 'shape-fill', label: 'Generative Shape Fill', body: shapeFillP.body }, { id: 'generate-patterns', label: 'Generate Patterns', body: patternGenP.body }, { id: 'text-to-vector', label: 'Text to Vector Graphic', body: textToVectorP.body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'variables', label: 'Variables', body: variablesP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
@@ -1465,6 +1466,8 @@ export function startApp(): void {
     { id: 'make-pattern', label: 'Make Pattern', enabled: () => sel() && !engine.patternSession, run: () => { if (engine.enterPatternEdit(null)) showPanel('pattern-options'); } },
     { id: 'generate-patterns', label: 'Generate Patterns...', enabled: has, run: () => showPanel('generate-patterns') },
     { id: 'generative-shape-fill', label: 'Shape Fill...', enabled: has, run: () => showPanel('shape-fill') },
+    { id: 'text-to-vector', label: 'Text to Vector Graphic...', group: 'Object', description: 'Opens the Text to Vector Graphic panel: describe art, pick Subject, Scene, Icon or Pattern, and place one of up to three variations as editable vector art fitted to the selection or the artboard.', enabled: has, run: () => showPanel('text-to-vector') },
+    { id: 'generative-recolor', label: 'Generative Recolor...', group: 'Edit', description: 'Opens Recolor Artwork with a prompt field: the language model proposes colour palettes for a mood or scene and one is applied to the selected artwork.', enabled: sel, run: () => void recolorD.run({ generative: true }) },
     { id: 'retype', label: 'Retype...', enabled: has, run: () => showPanel('retype') },
     { id: 'edit-pattern', label: 'Edit Pattern', enabled: () => !!selectedPattern() && !engine.patternSession, run: () => { const id = selectedPattern(); if (id && engine.enterPatternEdit(id)) showPanel('pattern-options'); } },
     { id: 'pattern-done', label: 'Exit Pattern Editing Mode', enabled: () => !!engine.patternSession, run: () => { if (engine.exitPatternEdit(true)) toast('The pattern is in the Swatches panel.'); } },
@@ -1708,7 +1711,7 @@ export function startApp(): void {
 
   const menus: MenuDef[] = [
     { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'package', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
-    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['auto-spell-check', 'check-spelling', 'spelling-dictionary'] }, '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
+    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['auto-spell-check', 'check-spelling', 'spelling-dictionary'] }, '-', { label: 'Edit Colors', items: ['recolor', ...(prefs.showGenerative ? ['generative-recolor'] : []), '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: () => [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },
       { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', '-', 'send-to-layer'] },
@@ -1719,7 +1722,7 @@ export function startApp(): void {
       { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'corners-dialog', 'expand-corners', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
       { label: 'Shape', items: ['expand-shape', 'shaper-expand'] },
       { label: 'Pattern', items: prefs.showGenerative ? ['make-pattern', 'edit-pattern', '-', 'generate-patterns'] : ['make-pattern', 'edit-pattern'] },
-      ...(prefs.showGenerative ? [{ label: 'Generative', items: ['generative-shape-fill'] }] : []),
+      ...(prefs.showGenerative ? [{ label: 'Generative', items: ['text-to-vector', 'generative-shape-fill'] }] : []),
       { label: 'Repeat', items: ['repeat-radial', 'repeat-grid', 'repeat-mirror', '-', 'release-live', 'repeat-options'] },
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'envelope-options', 'expand-object', '-', 'envelope-edit-contents', 'envelope-edit-envelope', '-', 'envelope-reset-warp', 'envelope-reset-mesh'] },
@@ -1740,7 +1743,7 @@ export function startApp(): void {
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype', 'text-to-vector'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);

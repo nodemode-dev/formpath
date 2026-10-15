@@ -9,7 +9,7 @@ import { renderRegion } from '../../io/raster';
 import { el, patchList, q, setClass, setDisabled, setHidden, setStyleVar, setText } from '../dom';
 import { check, page, row, section, seg, selectCtl, slider } from './kit';
 
-async function paintPreview(cv: HTMLCanvasElement, p: Project, node: VNode, tile: Rect | null = null): Promise<void> {
+export async function paintPreview(cv: HTMLCanvasElement, p: Project, node: VNode, tile: Rect | null = null): Promise<void> {
   const g = cv.getContext('2d');
   if (!g) return;
   const W = cv.width, H = cv.height;
@@ -32,7 +32,7 @@ async function paintPreview(cv: HTMLCanvasElement, p: Project, node: VNode, tile
   g.drawImage(c, (W - c.width) / 2, (H - c.height) / 2);
 }
 
-function textArea(label: string, placeholder: string): HTMLTextAreaElement {
+export function textArea(label: string, placeholder: string): HTMLTextAreaElement {
   const t = el<HTMLTextAreaElement>('<textarea class="cv-input cv-genp-prompt" rows="3"></textarea>');
   t.setAttribute('aria-label', label);
   t.placeholder = placeholder;
@@ -40,7 +40,7 @@ function textArea(label: string, placeholder: string): HTMLTextAreaElement {
   return t;
 }
 
-function tiles(count: number, cls: string): { grid: HTMLElement; items: Array<{ b: HTMLButtonElement; cv: HTMLCanvasElement; note: HTMLElement }> } {
+export function tiles(count: number, cls: string): { grid: HTMLElement; items: Array<{ b: HTMLButtonElement; cv: HTMLCanvasElement; note: HTMLElement }> } {
   const grid = el(`<div class="cv-genp-grid ${cls}"></div>`);
   const items = Array.from({ length: count }, (_, i) => {
     const b = el<HTMLButtonElement>(`<button class="cv-genp-tile" type="button" aria-label="Variation ${i + 1}" disabled><canvas width="160" height="160"></canvas><span class="cv-genp-tile-note"></span></button>`);
@@ -50,7 +50,7 @@ function tiles(count: number, cls: string): { grid: HTMLElement; items: Array<{ 
   return { grid, items };
 }
 
-abstract class ModelPanel {
+export abstract class ModelPanel {
   protected state: ModelState = { ready: false, vision: false, model: '', message: 'Checking the language model.' };
   private checked = 0;
   protected readonly status = el('<p class="cv-patp-status cv-genp-status" role="status"></p>');

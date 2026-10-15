@@ -14,6 +14,7 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `copy` (Edit > Copy): Copies the selection to the clipboard. Use when duplicating art or moving it between documents.
 - `cut` (Edit > Cut): Removes the selection and keeps it on the clipboard. Use when moving art elsewhere.
 - `find-replace` (Edit > Find and Replace): Finds text, fonts or colours and replaces them. Use when changing the same thing in many places.
+- `generative-recolor` (Edit > Edit Colors > Generative Recolor): Opens Recolor Artwork with a prompt field: the language model proposes colour palettes for a mood or scene and one is applied to the selected artwork.
 - `paste` (Edit > Paste): Pastes the clipboard into the centre of the view. Use when bringing copied art back in.
 - `paste-back` (Edit > Paste in Back): Pastes the clipboard at the same place, behind the selection. Use when the copy should sit under the original.
 - `paste-front` (Edit > Paste in Front): Pastes the clipboard at the same place, in front of the selection. Use when the copy should sit on top of the original.
@@ -302,6 +303,7 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `symbol-redefine` (Object > Symbol > Redefine Symbol): Redefine Symbol, as in Object > Symbol > Redefine Symbol.
 - `symbol-replace` (Object > Symbol > Replace Symbol): Replace Symbol, as in Object > Symbol > Replace Symbol.
 - `symbol-reset` (Object > Symbol > Reset Symbol Overrides): Reset Symbol Overrides, as in Object > Symbol > Reset Symbol Overrides.
+- `text-to-vector` (Object > Generative > Text to Vector Graphic): Opens the Text to Vector Graphic panel: describe art, pick Subject, Scene, Icon or Pattern, and place one of up to three variations as editable vector art fitted to the selection or the artboard.
 - `toggle-scale-corners` (Object > Transform > Scale Corners): Toggles whether scaling a live rectangle or a path with corner radii scales the radii; off keeps them.
 - `trace-expand` (Object > Image Trace > Expand Image Trace): Expand Image Trace, as in Object > Image Trace > Expand Image Trace.
 - `trace-release` (Object > Image Trace > Release Image Trace): Release Image Trace, as in Object > Image Trace > Release Image Trace.
@@ -588,6 +590,7 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `panel-swatches` (Window > Swatches): Swatches, as in Window > Swatches.
 - `panel-symbol-library` (Window > Symbol Library): Symbol Library, as in Window > Symbol Library.
 - `panel-symbols` (Window > Symbols): Symbols, as in Window > Symbols.
+- `panel-text-to-vector` (Window > Text To Vector): Text To Vector, as in Window > Text To Vector.
 - `panel-three-d` (Window > 3D and Materials): 3D and Materials, as in Window > 3D and Materials.
 - `panel-transform` (Window > Transform): Transform, as in Window > Transform.
 - `panel-transparency` (Window > Transparency): Transparency, as in Window > Transparency.

@@ -327,3 +327,12 @@ A shell in the dock is the person's own terminal inside the window they are usin
 - logged: v0.31.0 · 2026-10-15
 
 A bundled family such as JetBrains Mono has no installed file, so `resolve_fonts` found nothing and the Fonts folder was never written. `package-full` now accepts `font_files` (at most 32 uploads, 64 MiB each) and a `font_map` JSON of file name to "Family|Style"; the fonts service still wins, and an uploaded face is copied into Fonts only for a family it cannot find. The name must pass `safe_name`.
+
+## app/routers/mcp.py
+
+### app/routers/mcp.py · text_to_vector and generative_recolor
+- refers-to: app/routers/mcp.py :: TOOLS
+- kind: explainer
+- logged: v0.31.0 · 2026-10-15
+
+Two tools join the Generative group beside generative_shape_fill. Both run in the window through the bridge, call the language model set for the Assistant through the existing llm generate route, and refuse with a clear message when no model is set or Show generative features is off.

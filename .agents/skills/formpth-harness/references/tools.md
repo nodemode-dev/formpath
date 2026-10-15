@@ -15,7 +15,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `new_brush`, `brush_library`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
 - Artboards: `artboard`
 - Type: `retype`, `set_text`, `text_flow`, `text_style`, `find_font`, `create_outlines`
-- Generative: `generative_shape_fill`, `generate_patterns`
+- Generative: `generative_shape_fill`, `generate_patterns`, `text_to_vector`, `generative_recolor`
 - Graphs and data: `graph`, `variables`
 - Commands: `actions`, `list_commands`, `run_command`
 - History: `undo`, `redo`
@@ -209,7 +209,7 @@ Draws a live shape: x and y are the top-left of its bounds (for line and arc the
 
 ## edit_shape
 
-Changes a live shape after drawing, keeping its kind: a rectangle's width, height, corner radius (all, or radii top-left, top-right, bottom-right, bottom-left) and corner type; an ellipse's width, height and pie angles (degrees counter-clockwise from three o'clock); a polygon's radius, sides and corner radius; a star's points and outer and inner radius; a line's length and angle. get_object shows a shape's current values.
+Changes a live shape after drawing, keeping its kind: a rectangle's width, height, corner radius (all, or radii top-left, top-right, bottom-right, bottom-left) and corner type; an ellipse's width, height and pie angles (degrees counter-clockwise from three o'clock); a polygon's radius, sides and corner radius; a star's points, outer and inner radius and corner radius; a line's length and angle. get_object shows a shape's current values.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `width`: number
@@ -885,6 +885,29 @@ Text to Pattern: asks the language model set for the Assistant for seamless vect
 - `tile_size`: number; default 96; Tile width and height in points.
 - `name`: string; Base name of the swatches.
 - `fill_selection`: boolean; default false; Fill the objects in ids (or the selection) with the first pattern.
+- `ids`: array; Object ids from get_document; the selection when left out.
+
+Note: reaches outside this computer.
+
+## text_to_vector
+
+Text to Vector Graphic: asks the language model set for the Assistant (Preferences > Plugins) for clean standalone SVG from a prompt, up to 3 variations, and places the picked one as editable groups and paths (not an image) fitted into the selected object's bounds, or the centre of the active artboard, as one undo step. Fails with a clear message when no model is set or Show generative features is off.
+
+- `prompt`: string; required; What to draw.
+- `type`: string (subject | scene | icon | pattern); default "subject"
+- `detail`: string (low | medium | high); default "medium"
+- `variations`: integer; default 1; How many to ask for; one is placed.
+- `pick`: integer; Which variation to place; default the first that worked.
+
+Note: reaches outside this computer.
+
+## generative_recolor
+
+Generative Recolor: asks the language model set for the Assistant for colour palettes that match a prompt such as 'sunset over the ocean' and recolours the objects (or the selection) with one of them, mapping the artwork's colours to the palette by lightness, tints kept, as one undo step. Fails with a clear message when no model is set or Show generative features is off.
+
+- `prompt`: string; required; The mood or scene the colours should express.
+- `count`: integer; default 1; How many palettes to ask for; one is applied.
+- `pick`: integer; Which palette to apply; default the first.
 - `ids`: array; Object ids from get_document; the selection when left out.
 
 Note: reaches outside this computer.

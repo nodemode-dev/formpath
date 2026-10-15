@@ -35,7 +35,8 @@ import { attachPlace, gridOf, leafPlaneBounds, planeLocalRect, presetGrid, vanis
 import type { BrushDef, Doc, PerspPlane } from '../engine/types';
 import { DXF_UNITS, type DxfImportOptions, type DxfUnit } from '../io/dxf';
 import type { CadChoice } from '../ui/app-dialogs';
-import { modelState, PATTERN_PRESETS, patternVariations, shapeFillVariations } from '../io/generative';
+import { generativePalettes, modelState, PATTERN_PRESETS, patternVariations, placeVector, recolorWithPalette, shapeFillVariations, textToVectorVariations } from '../io/generative';
+import { loadPrefs } from '../ui/prefs';
 import { rankFonts, recognize, retypeNode, sourceFromImage, sourceFromOutlines } from '../io/retype';
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
@@ -492,6 +493,36 @@ export class AgentBridge {
     return text(`Filled ${n.id} with variation ${pick} of ${res.length} (${st.model}); the art is a clipping group ${id} whose last child is the original shape. get_image shows it.`, { id, shape: n.id, variations: res.map((r, i) => ({ index: i, ok: !!r.art, error: r.error })), picked: pick });
   }
 
+  private async textToVectorTool(num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    if (!loadPrefs().showGenerative) return fail('Generative features are hidden: turn on View > Generative Features first.');
+    const e = this.engine, st = await modelState();
+    if (!st.ready) return fail(st.message);
+    const type = str('type', 'subject');
+    if (!['subject', 'scene', 'icon', 'pattern'].includes(type)) return fail('type is subject, scene, icon or pattern.');
+    const detail = { low: 1, medium: 2, high: 3 }[str('detail', 'medium')] ?? 2;
+    const res = await textToVectorVariations({ prompt: str('prompt'), type, detail, variations: Math.round(num('variations', 1)) });
+    const ok = res.map((r, i) => (r.art ? i : -1)).filter((i) => i >= 0);
+    if (!ok.length) return fail(`The model gave no usable art: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
+    const pick = has('pick') && ok.includes(Math.round(num('pick', 0))) ? Math.round(num('pick', 0)) : ok[0];
+    const id = placeVector(e, res[pick].art as VNode);
+    if (!id) return fail('Could not place the art.');
+    return text(`Placed variation ${pick} of ${res.length} (${st.model}) as group ${id}, fitted to the selection or the artboard; every path is editable. get_image shows it.`, { id, variations: res.map((r, i) => ({ index: i, ok: !!r.art, error: r.error })), picked: pick });
+  }
+
+  private async generativeRecolorTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+    if (!loadPrefs().showGenerative) return fail('Generative features are hidden: turn on View > Generative Features first.');
+    const e = this.engine, p = e.current, st = await modelState();
+    if (!st.ready) return fail(st.message);
+    if (!p) return fail('No document is open.');
+    const ids = this.ids(a) ?? e.targetIds();
+    const nodes = ids.map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n);
+    if (!collectColors(nodes).length) return fail('Those objects have no colours to recolour: select or pass ids of painted objects.');
+    const palettes = await generativePalettes(str('prompt'), Math.round(num('count', 1)));
+    const pick = has('pick') && palettes[Math.round(num('pick', 0))] ? Math.round(num('pick', 0)) : 0;
+    e.edit('Generative Recolor', (d) => recolorWithPalette(d, ids, nodes, palettes[pick]));
+    return text(`Recolored ${ids.length} object(s) with palette ${pick} of ${palettes.length} (${st.model}).`, { palettes: palettes.map((pl) => pl.map((c) => hex(c))), picked: pick });
+  }
+
   private async patternsTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
     const e = this.engine, st = await modelState();
     if (!st.ready) return fail(st.message);
@@ -597,6 +628,8 @@ export class AgentBridge {
         case 'variables': return await this.variablesTool(a, num, str, has);
         case 'generative_shape_fill': return await this.shapeFillTool(a, num, str, has);
         case 'generate_patterns': return await this.patternsTool(a, num, str, has);
+        case 'text_to_vector': return await this.textToVectorTool(num, str, has);
+        case 'generative_recolor': return await this.generativeRecolorTool(a, num, str, has);
         case 'retype': return await this.retypeTool(a, num, str, has);
         case 'get_document': { const d = e.describe(Math.max(1, Math.min(32, Math.round(num('depth', 8))))); return text(JSON.stringify(d), d); }
         case 'get_image': {
