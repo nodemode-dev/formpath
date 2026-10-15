@@ -105,4 +105,31 @@ export const api = {
   async mcpResult(secret: string, id: string, result: unknown): Promise<void> { await fetch('/api/mcp/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json', [BRIDGE_HEADER]: secret }, body: JSON.stringify({ id, result }) }); },
   async mcpStop(secret: string): Promise<void> { try { await fetch('/api/mcp/bridge/stop', { method: 'POST', headers: { [BRIDGE_HEADER]: secret } }); } catch { } },
   async mcpStatus(): Promise<{ live: boolean; allowed: boolean; endpoint: string; tools: number } | null> { try { return await json(await request('/mcp/status')); } catch { return null; } },
+  async terminals(): Promise<TerminalInfo[]> { return (await json<{ terminals: TerminalInfo[] }>(await request('/terminal'))).terminals; },
+  async openTerminal(cols: number, rows: number, cwd?: string): Promise<TerminalInfo> { return json(await request('/terminal', post({ cols, rows, ...(cwd ? { cwd } : {}) }))); },
+  async writeTerminal(id: string, data: string): Promise<void> { await request(`/terminal/${encodeURIComponent(id)}/write`, post({ data })); },
+  async readTerminal(id: string, chars = 4000): Promise<{ id: string; alive: boolean; text: string }> { return json(await request(`/terminal/${encodeURIComponent(id)}/read?chars=${chars}`)); },
+  async restartTerminal(id: string): Promise<TerminalInfo> { return json(await request(`/terminal/${encodeURIComponent(id)}/restart`, { method: 'POST' })); },
+  async closeTerminal(id: string): Promise<void> { await request(`/terminal/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+  async claudeStatus(): Promise<ClaudeStatus> { return json(await request('/claude/status')); },
+  async claudePrefs(values: Partial<Record<'claudeBin' | 'claudeFolder' | 'claudeFirstMessage', string>>): Promise<Record<string, string>> { return json(await request('/claude/prefs', post(values))); },
+  async claudeOpen(body: { prompt?: string; cols?: number; rows?: number; fresh?: boolean; resume?: string }): Promise<TerminalInfo> { return json(await request('/claude/open', post(body))); },
+  async chatState<T>(): Promise<T> { return json(await request('/claude/chat')); },
+  async chatSend(text: string, context = '', note = ''): Promise<void> { await request('/claude/chat/send', post({ text, context, note })); },
+  async chatCancel(): Promise<void> { await request('/claude/chat/cancel', { method: 'POST' }); },
+  async chatReset(): Promise<void> { await request('/claude/chat/reset', { method: 'POST' }); },
+  async chatSessions(): Promise<{ sessions: Array<{ id: string; title: string; modified: number; current: boolean }>; folder: string }> { return json(await request('/claude/chat/sessions')); },
+  async chatAdopt(session: string): Promise<void> { await request('/claude/chat/adopt', post({ session })); },
+  chatImage(name: string): string { return `/api/claude/chat/image/${encodeURIComponent(name)}`; },
 };
+
+export interface TerminalInfo { id: string; title: string; cwd: string; alive: boolean; kind: 'shell' | 'claude' }
+export interface ClaudeStatus { installed: boolean; path: string | null; version: string | null; install: string; folder: string; terminal: TerminalInfo | null; binNote: string; firstMessage: string }
+
+function post(body: unknown): RequestInit {
+  return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+export function socketTo(path: string): WebSocket {
+  return new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api${path}`);
+}

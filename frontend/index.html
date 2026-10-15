@@ -66,6 +66,19 @@
   }
 })();
   </script>
+  <script>
+(function () {
+  var r = document.documentElement, open = 0, h = 280;
+  try {
+    var t = JSON.parse(localStorage.getItem('formpth.terminal') || '{}');
+    open = t.open === true ? 1 : 0;
+    if (typeof t.h === 'number' && t.h >= 120 && t.h <= 2000) h = Math.round(t.h);
+  } catch (e) { open = 0; }
+  r.setAttribute('data-ft-dock', open ? 'open' : 'closed');
+  r.setAttribute('data-ft-dock-h', String(h));
+  r.style.setProperty('--ft-dock-size', h + 'px');
+})();
+  </script>
   <link rel="stylesheet" href="/src/styles/fonts.css">
   <link rel="stylesheet" href="/src/styles/tokens.css">
   <link rel="stylesheet" href="/src/styles/shell.css">
@@ -74,6 +87,7 @@
   <link rel="stylesheet" href="/src/styles/formpth.css">
   <link rel="stylesheet" href="/src/styles/light-mode.css">
   <link rel="stylesheet" href="/src/styles/scrollbars.css">
+  <link rel="stylesheet" href="/src/styles/terminal.css">
 </head>
 <body>
   <div id="app"></div>

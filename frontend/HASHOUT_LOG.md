@@ -2452,3 +2452,33 @@ About 215 class rules came over with the formvis shell and are not used by formp
 - logged: v0.9.0 · 2026-10-07
 
 formvis's row controls (57 lines), superseded by `src/ui/panels/kit.ts` and imported by nothing; not shipped.
+
+## src/ui/terminal-dock.ts
+
+### src/ui/terminal-dock.ts · the dock
+- refers-to: src/ui/terminal-dock.ts :: TerminalDock, toggle, reveal, claude, showChat, send, mount, connect, isToggle; src/styles/terminal.css; index.html (dock boot script)
+- kind: explainer
+- logged: v0.24.0 · 2026-10-15
+
+The window's bottom band, formvis's layout with formlit's agent features: tabs of engine PTYs over `/api/terminal/{id}/stream` drawn by xterm.js, a Claude Code button that opens the person's `claude` in a tab already connected to formpth's tools, a Chat tab, Restart, Hide, and an ask bar that sends to Chat when Chat is the active tab and otherwise types into Claude Code (starting it if needed), adding the document name and selected node ids as context. The open state and height are written on `documentElement` (`data-ft-dock`, `data-ft-dock-h`, `--ft-dock-size`) by the boot script in `index.html` before the first paint, and `terminal.css` adds the dock's grid row from those, so opening and closing reserve or release one row without moving anything else in a frame. The shortcuts are Alt+Shift+Mod+T, C and H because Illustrator's Mod+J is Join and Alt+Mod+J is Average; a capture listener on `document` handles the toggle so it also works while focus is in xterm's textarea, and keys typed inside the dock do not reach the window's command handler.
+
+### src/ui/chat-pane.ts · the Chat tab
+- refers-to: src/ui/chat-pane.ts :: ChatPane, listen, on, load, adopt, handoff
+- kind: explainer
+- logged: v0.24.0 · 2026-10-15
+
+formlit's chat pane on formpth's transport: the engine's chat events arrive over `/api/claude/chat/stream` (formlit uses its SSE event bus, which formpth has not got), the history over `GET /api/claude/chat`, and replies stream into `MarkdownStream`, which appends finished blocks once and shows only the unfinished tail as text, so a long answer never re-renders. Tool calls show as chips that turn done or error in place.
+
+### src/ui/markdown.ts · from formlit
+- refers-to: src/ui/markdown.ts :: renderMarkdown, MarkdownStream
+- kind: explainer
+- logged: v0.24.0 · 2026-10-15
+
+Copied from formlit v0.45.3 (same owner, Apache-2.0) with its class names moved to the `ft-md` prefix. It builds DOM nodes from Markdown blocks (paragraphs, headings, lists, tables, fenced code and rules) and never parses HTML, so a reply cannot inject markup.
+
+### src/ui/icons.ts · agent icons
+- refers-to: src/ui/icons.ts :: terminal, agent, agentChat
+- kind: explainer
+- logged: v0.24.0 · 2026-10-15
+
+Drawn for formlit (same owner) and carried over unchanged; not from an outside set, so NOTICE needs no row.

@@ -89,6 +89,7 @@ import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './
 import { Rail } from './ui/rail';
 import { Stage } from './ui/stage';
 import { StatusBar } from './ui/status';
+import { TerminalDock } from './ui/terminal-dock';
 import { Tabs } from './ui/tabs';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
@@ -271,6 +272,17 @@ export function startApp(): void {
   new Rail(q(root, '.cv-rail'), engine);
   new OptionsBar(q(root, '.cv-options'), engine);
   const status = new StatusBar(q(root, '.cv-status'), engine);
+  const termDock = new TerminalDock();
+  root.insertBefore(termDock.root, q(root, '.cv-status'));
+  termDock.onFail = (err) => toast(message(err), 'error');
+  termDock.context = () => {
+    const p = engine.current;
+    if (!p) return 'formpth window: no document is open';
+    const ids = engine.selectedIds();
+    const where = `formpth window: document "${p.name}"`;
+    return ids.length ? `${where}; selection: ${ids.length === 1 ? 'node id' : 'node ids'} ${ids.slice(0, 200).join(', ')}${ids.length > 200 ? ` and ${ids.length - 200} more` : ''}` : where;
+  };
+  termDock.note = () => { const n = engine.selectedIds().length; return n ? `with ${n} selected ${n === 1 ? 'object' : 'objects'}` : ''; };
   stage.onPointerDoc = (pt) => { status.setPointer(pt); infoP.setPointer(pt); };
 
   const RECENT_KEY = 'formpth.recent';
@@ -1363,6 +1375,10 @@ export function startApp(): void {
     { id: 'toggle-panels', label: 'Show or Hide Panels', keys: ['Tab'], checked: () => !panelsHidden, run: () => { panelsHidden = !panelsHidden; applyScreen(); } },
 
     { id: 'assistant', label: 'Assistant', keys: ['Alt+Mod+I'], run: () => assistant.toggle() },
+    { id: 'terminal-toggle', label: 'Terminal', keys: ['Alt+Shift+Mod+T'], checked: () => termDock.isOpen(), run: () => termDock.toggle() },
+    { id: 'terminal-new', label: 'New Terminal', run: () => void termDock.newTerminal() },
+    { id: 'claude-code', label: 'Claude Code', keys: ['Alt+Shift+Mod+C'], run: () => void termDock.claude() },
+    { id: 'claude-chat', label: 'Chat with Claude', keys: ['Alt+Shift+Mod+H'], run: () => void termDock.showChat() },
     { id: 'manage-plugins', label: 'Manage Plugins...', run: () => void pluginsDialog.show() },
     ...Object.keys(TAB_HOMES).map((tab) => ({ id: `panel-${tab}`, label: tab.replace(/-/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase()), run: () => showPanel(tab) })).filter((c) => !['panel-character', 'panel-paragraph', 'panel-glyphs', 'panel-three-d'].includes(c.id)),
     { id: 'panel-properties-col', label: 'Properties Column', checked: () => propsShown(), run: () => { store('formpth.propsCol', propsShown() ? 'hidden' : 'shown'); syncPropsCol(); } },
@@ -1453,7 +1469,7 @@ export function startApp(): void {
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: () => ['assistant', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);
