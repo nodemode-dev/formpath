@@ -341,7 +341,7 @@ The library tabs are `swatch-library` and `brush-library`: TAB_HOMES keys become
 - kind: explainer
 - logged: v0.23.0 · 2026-10-10
 
-`readForeign` is the one door for .dxf, .eps, .epsf, .ps and .dwg, used by Open, Place, drop and the agent bridge: DWG throws the sentence that says it is not read and to save a DXF; DXF shows DXF Import Options (askForm, so it shows the drawing's version and layer count and offers its layouts) unless options are passed; EPS tries the embedded document first, then the interpreter, and the toast lists what was left out. Place takes the result as one group, like SVG. EPS export of All artboards is a ZIP, so `exportAs` names it .zip. The three generative panels live as dock tabs (Generative Shape Fill and Generate Patterns in the Symbols group, Retype in the Type group), and the new commands only show those tabs; no shortcut was added, since the free keys were taken by recent tools. Window lists them through TAB_HOMES.
+`readForeign` is the one door for .dxf, .eps, .epsf, .ps and .dwg, used by Open, Place, drop and the agent bridge: DWG is read by the native reader first and only a version it does not read goes to the converter route (see src/io/dwg.ts); DXF shows DXF Import Options (askForm, so it shows the drawing's version and layer count and offers its layouts) unless options are passed; EPS tries the embedded document first, then the interpreter, and the toast lists what was left out. Place takes the result as one group, like SVG. EPS export of All artboards is a ZIP, so `exportAs` names it .zip. The three generative panels live as dock tabs (Generative Shape Fill and Generate Patterns in the Symbols group, Retype in the Type group), and the new commands only show those tabs; no shortcut was added, since the free keys were taken by recent tools. Window lists them through TAB_HOMES.
 
 ## src/automation/agent-bridge.ts
 
@@ -3076,3 +3076,80 @@ A mesh may carry per-vertex UVs and one RGBA texture, with a per-triangle flag f
 - logged: v0.34.0 · 2026-10-15
 
 Inflate stays a raster filter. With `ray_trace` on it builds a heightfield mesh from the same height field the filter uses, on a coarse grid (about 6000, 14000 or 30000 cells for low, medium, high; 3000 while drafting), uses the pixel colours as a lit texture with alpha as the clip mask, and traces at the quality's pixel budget, upsampling bilinearly. Normals come from the height gradient. Shadow and AO distance is the smaller of the object's extent and max(24, 4 x height), with a bias of 0.7 grid steps and denoise of at least 2; without those, high quality showed speckle and hatching on the smooth surface. Face-on keeps the art's own alpha, tilted uses the traced alpha. Known gap: the traced Inflate has no side walls (the raster tilt does). Timings at print quality, one render: 420 / 700-1100 / 830 ms for low / medium / high at 1x, against 38-55 ms with ray tracing off.
+
+### src/engine/threed.ts · Graphic material: UV per face kind and surface shading
+- refers-to: src/engine/threed.ts :: textureOf, surfaceOf, impliedSurface, oriented, scene3dWith; src/engine/raymesh.ts :: rayMesh (MatMap, matUv); src/engine/raytrace.ts :: Tracer.sampleMat, shadeSurface
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+A 3D effect may carry a texture (an embedded image key, or a symbol by id or name) with scale, rotation, offset, and roughness and metallic from 0 to 1. UVs are generated only when ray tracing is on and a texture is set: planar on the front and back caps (the back mirrored in x), along the outline and the extrusion on extrude sides, u = angle x radius and v = cumulative profile length on revolve sides, planar from the axis on revolve end caps, and a projection from the front on inflate. `oriented` checks the handedness of each face against its outward normal and flips the coordinate so the image is never mirrored or upside down. A tile is the object's longer side times scale / 100, aspect kept, repeating with wrap; rotation is counter-clockwise about the tile centre. The texture mixes into the albedo after the material look (wood, rough, brushed) and before Map Art, then `shadeSurface` runs last: Blinn exponent 4 x 2^(8 x (1 - roughness)), highlight peak 1 up to roughness 0.8 falling to 0.2 at 1, and a metal mix of an environment reflection blurred by roughness. A material's own implied roughness and metallic (plastic 0.8/0, matte 1/0, metal 0.77/1, brushed 0.7/1, wood 1/0, rough 0.9/0, flat 1/0) is what the shading reproduces when the sliders are left unset, so unset keeps the legacy look. Roughness and metallic are text params whose default is '' (unset), so effect defaults stay inert: five extrude, revolve and plane cases, the inflate flat case and both vector cases rendered byte-identical against the previous build.
+
+### src/engine/effects.ts · Texture reference, texture_color and the pending protocol
+- refers-to: src/engine/effects.ts :: traceHash, traceMap, traceMat, textureArt, textureTile, threeDFaces, make; src/engine/render.ts :: drawTraced
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+The reference is resolved doc.images first, then a symbol; the bytes live in Project.assets and are decoded lazily by the stage. Filters and threeDFaces have no asset access, so the params also carry `texture_color`, the alpha-weighted 24 px average, which the vector fallback and the ray tracer's base albedo use. A bitmap that is not decoded yet makes the painter return 'pending'; make() then does not cache the trace, and the stage re-traces once the bitmap exists, so a cold open never freezes a texture-less image into the cache. traceHash gains a `|mat{ver}:{ref}` suffix only for textured effects. Known limits: a symbol texture's colour is a snapshot and goes stale if the symbol art is edited later, and an asset that is missing for good keeps the trace uncached.
+
+### src/engine/render.ts · Inflate texture
+- refers-to: src/engine/render.ts :: inflateTextured, bareVariants; src/engine/inflate-trace.ts :: inflateTrace
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+Inflate is a raster filter, so a texture is applied by pre-drawing the tiled texture clipped to the path and rendering the path without its first fill (a WeakMap keeps the bare variant stable so cache keys do not churn). It covers path and compound nodes only, not groups or text. Roughness and metallic reach inflate only through the ray traced branch (`inflateTrace(..., params)` then `surfaceOf`).
+
+### src/engine/texture.ts · Texture averages
+- refers-to: src/engine/texture.ts :: textureAverage, imageAverage, textureName
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+One place computes the average colour of an image or a symbol for `texture_color` and names a reference for messages, so the panel and the MCP tool store the same value.
+
+### src/io/svg.ts · Loose texture images
+- refers-to: src/io/svg.ts :: exportSvg, importSvg; src/engine/effects.ts :: textureImageKeys
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+A texture image is not placed anywhere, so it would be lost on a preserve export. exportSvg decodes texture bitmaps before baking and, with preserve, writes them in a hidden `<g display="none"><image data-formpth-src=...>` that importSvg restores into the assets. .fpth already writes every doc.images key, so it needed nothing; the PDF carries the editable document as before. Expand Appearance on a textured 3D object gives one history step and one image object.
+
+### src/automation/agent-bridge.ts · three_d texture, roughness and metallic
+- refers-to: src/automation/agent-bridge.ts :: three_d; backend/app/routers/mcp.py :: TOOLS three_d
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+three_d gains texture (image key, id of a placed image, or a symbol name or id; an empty string clears), texture_scale, texture_rotation, texture_offset_x and texture_offset_y, roughness and metallic (0 to 1, checked) and reset_surface, which clears both. The tool stores texture_color with the reference. Unknown references and out of range values fail with a message that lists what exists. The path is set3d, the same as the panel, so one call is one history step.
+
+### src/ui/panels/three-d.ts · Graphic section and surface sliders
+- refers-to: src/ui/panels/three-d.ts :: pickTexture, addFile, sync
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+Roughness and Metallic sit under Material and enable only with ray tracing; the Graphic section holds Source, Image from File, Texture Scale, Rotation and Offset X and Y, enabled only with a texture. A picked file is decoded, stored and referenced inside one gesture, so choosing it is one undo step, and slider drags merge into one step each. The source list is memoised on the identity of doc.images and doc.symbols, so no keyed node is rebuilt and the layout does not shift (measured 0.000 under 4x CPU throttle).
+
+### src/io/ai-legacy.ts · Patterns, symbols and brushes from private data
+- refers-to: src/io/ai-legacy.ts :: prepare (KEPT, Def), buildDefs, Reader.patternPaint, readAiLegacy; src/app.ts :: openFiles
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+Pattern, Symbol, BrushPattern and PluginObject blocks are captured instead of skipped, with the %_ prefix of private lines removed, and run through a second Reader that shares the main one's swatches, custom colours and pattern names. Verified on the real Pillow illu10 and illuCS6 files: `%AI3_BeginPattern: (name)` has the header `(name) llx lly urx ury` (a trailing `[matrix] Bp` is accepted if present), becomes a PatternDef (tile = that box flipped to the page, art = the block) plus a swatch; `%AI10_BeginSymbol` and `%AI14_BeginSymbol` blocks, named by the first string of the first line, become symbols with the art centred on its bounds (the formpth convention: reg 0,0); `%AI8_BeginBrushPattern` blocks are the brush tiles, found by name from the brush tool records `%AI8_BeginPluginObject (Adobe ... Brush Tool) (name) (params) .`. Brush records: calligraphic `1 size a b, roundness a b, angle a b, variation kinds` (fixed values are exact; a random range is reduced to its midpoint and reported, the angle is negated because formpth's y axis points down); art and pattern brushes split the params on '/' into version, side, outer corner, inner corner, start, end, then colorization and options. Tiles are named by block, so a brush is made only when every named tile exists; otherwise it is reported. Stroked tile art is expanded to outlines first because the brush engine bends filled outlines only. What is not decoded and takes formpth defaults: art brush stretch, flip and direction, pattern spacing and fit, and colorization methods other than 0 to 3 (those become none). Pattern fills `(name) px py sx sy angle rf r k ka [a b c d tx ty] p` (and P for strokes) use the matrix alone, as F M F^-1 on the flipped page; with no matrix the pattern keeps its natural place. That operator layout is from the AI file format notes and is tested only on hand-written fixtures, because none of the real files uses a pattern fill. Likewise no real file here shows how a symbol instance or a brushed stroke is recorded, so instances and brush use are not linked: the art stays as the expanded paths the file already holds, and both are named in the left-out list. Scatter brushes (their parameter layout is unknown) and patterns or symbols that hold placed images are also reported. The open message now says what was brought in.
+
+### src/io/dwg.ts · Native DWG reader, clean room
+- refers-to: src/io/dwg.ts :: parseDwg, build, entityRec, assemble; src/io/dwg-bits.ts :: Bits, lz77; src/io/dwg-file.ts :: readSections, objectMap, readClasses; src/io/dwg-header.ts :: readHeader; src/app.ts :: readForeign
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+DWG is read in the window, in TypeScript, from the layout of the ODA Open Design Specification for .dwg files (v5.4.1: bit-coded values, the R2000 locators, the R2004 and later encrypted header with page map and section map, the type 2 LZ77 compression, the object map, the classes section, the header variable list, and the object framing with its data, string and handle streams). It was written clean room: no GPL DWG source (LibreDWG or any other) was read, copied or paraphrased. LibreDWG 0.13.3 binaries were used only as a black box, `dwg2dxf -y` turning its sample DWGs into reference DXF files that the existing `parseDxf` reads, so the comparison is made on observable output and never on code. Where the specification was unclear (the exact extra fields of a few objects, the number of handles at the end of the header, where the data for INSUNITS sits), the answer was found by decoding the sample files and checking against the reference values, not by reading anybody's source. `parseDwg` returns the same structure as `parseDxf` (entities as group code pairs, layers, blocks, styles, header units) plus the linetype table, LTSCALE and the extents, so `dxfToDoc` is unchanged and a DWG and its DXF come in the same way. Versions: R2000 (AC1015), R2004 (AC1018), R2010 (AC1024), R2013 (AC1027) and R2018 (AC1032) natively. R2007 (AC1021) is not read: it wraps the file in Reed-Solomon interleaving and uses a different compression, and the specification text for those was not at hand, so it throws DwgUnsupportedError and goes to the converter like R13 and R14. Only that error falls back; a damaged file reports its own message. Objects: LAYER (colour, off, frozen, lineweight), LTYPE, STYLE, BLOCK_HEADER with BLOCK and ENDBLK, LINE, CIRCLE, ARC, ELLIPSE, LWPOLYLINE, POLYLINE 2D and 3D with VERTEX, SPLINE (control and fit, helix read as its spline), TEXT, MTEXT, ATTRIB and ATTDEF, INSERT with MINSERT arrays, SOLID, 3DFACE, HATCH (lines, arcs, ellipses, splines, polylines, solid and gradient fill), POINT, DIMENSION through its anonymous block, LEADER, VIEWPORT. Everything else (3D solids, surfaces, tables, proprietary classes such as Tangent objects) is counted as a left-out kind by the same list the DXF reader makes, and objects that fail to decode are counted in native.unreadable with the first messages in native.failures. Verified on the LibreDWG sample set (104 files of R2000 to R2018): block lists and layer tables identical on all, per-kind and per-layer entity counts identical except the kinds that are left out on purpose, coordinates within 3e-11 of the reference on every file where the reference is right. Known differences that are the reference's, not ours: zero bulges are written by the reference and omitted here, the reference mangles the degree sign in some R2000 text, and R2018 ATTDEF flags are read from a different field by the reference. Entities of a block follow the block's own list (R2004 and later), grouped as model space, then each layout. Left to do: R2007, multiline attributes, and the draw order table.
+
+### src/io/dwg-header.ts · Header variables by position
+- refers-to: src/io/dwg-header.ts :: readHeader, walk
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+Only LTSCALE, the model space extents and INSUNITS are used, but the header has no index, so every variable before them is stepped over in the order the specification gives. Facts that were not obvious and are now fixed by checks against 110 sample files: the colours of R2004 and later are three fields (BS, BL, RC) with names only when the flag bits say so; from R2007 the handles are in their own stream so they are skipped, while the handle seed stays in the data; menu name is present up to R2004; the paper space group comes before the model space group; R2000 has one more handle (the viewport entity header control) than R2004; after the three dictionaries come two shorts, two zero shorts (up to R2004), three handles (R2000) or five (R2004), then a 32-bit flags word and then INSUNITS. Metric is taken from the units because MEASUREMENT was not located. A header that cannot be walked leaves unitless and no extents, so the drawing itself still opens.
+
+### src/app.ts · readForeign reads DWG natively first
+- refers-to: src/app.ts :: readForeign; backend/app/routers/mcp.py :: _run
+- kind: rationale
+- logged: v0.35.0 · 2026-10-15
+
+`readForeign` tries `parseDwg` on the bytes. Only a DwgUnsupportedError sends the file to `api.dwgToDxf` and `parseDxf`; the toast says "natively" or "through <converter>". MCP open_file and place_image no longer convert in the engine: .dwg is in the openable and placeable lists and the bytes reach the window like any other file, which then has the same fallback, so an agent and a person get the same result. The open dialog note and the files-and-export skill text were rewritten because they said DWG does not open.

@@ -3,6 +3,7 @@ import { findNode, inDocOrder, nodeLabel, updateNodes } from '../engine/doc';
 import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES } from '../engine/effects';
 import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
 import { LIGHT_LIMIT, LIGHTING_PRESETS, lightsToParam, ROTATION_PRESETS } from '../engine/threed';
+import { textureAverage, textureName } from '../engine/texture';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, fitRowsToPalette, mapFn, nearestFn, oklab, RECOLOR, recolorDoc, reduceRows, rowReference, rowsFn } from '../engine/ops/recolor';
 import { libraryColors, swatchLibrary, SWATCH_LIBRARIES, type SwatchLibrary } from '../engine/swatch-libraries';
@@ -1118,7 +1119,7 @@ export class AgentBridge {
             if (a.lights.length > LIGHT_LIMIT) return fail(`lights holds at most ${LIGHT_LIMIT} lights.`);
             patch.lights = lightsToParam((a.lights as Array<Record<string, unknown>>).map((o) => { const q = o && typeof o === 'object' ? o : {}, n = (k: string, d: number): number => (typeof q[k] === 'number' ? (q[k] as number) : d), c = typeof q.color === 'string' ? parseColor(q.color) : null; return { color: c ? hex(c) : '#ffffff', intensity: n('intensity', 100), rotation: n('rotation', -45), height: n('height', 40), softness: n('softness', 0) }; }));
           }
-          for (const k of ['texture_scale', 'rx', 'ry', 'rz', 'perspective', 'depth', 'bevel_height', 'angle', 'offset', 'volume', 'intensity', 'ambient', 'highlight', 'map_scale', 'map_x', 'map_y', 'shadow_distance', 'shadow_softness', 'shadow_opacity']) if (has(k)) patch[k] = num(k, 0);
+          for (const k of ['texture_scale', 'texture_rotation', 'texture_offset_x', 'texture_offset_y', 'rx', 'ry', 'rz', 'perspective', 'depth', 'bevel_height', 'angle', 'offset', 'volume', 'intensity', 'ambient', 'highlight', 'map_scale', 'map_x', 'map_y', 'shadow_distance', 'shadow_softness', 'shadow_opacity']) if (has(k)) patch[k] = num(k, 0);
           for (const k of ['bevel', 'from', 'material', 'light', 'shadow_position', 'quality']) if (has(k)) patch[k] = str(k);
           for (const k of ['cap', 'shade_art', 'shadow', 'ray_trace']) if (has(k)) patch[k] = a[k] === true;
           if (has('map_symbol')) {
@@ -1126,13 +1127,23 @@ export class AgentBridge {
             if (want && !sym) return fail(syms.length ? `map_symbol is one of ${syms.map((s) => s.name).join(', ')}, or empty to clear it.` : 'The document has no symbols: make one with the symbol tool first.');
             patch.map_symbol = sym ? sym.id : '';
           }
+          if (has('texture')) {
+            const want = typeof a.texture === 'string' ? a.texture.trim() : '', d = e.doc, node = want ? e.nodeById(want) : null;
+            const ref = !want ? '' : d?.images[want] ? want : node?.kind === 'image' ? node.src : d?.symbols.find((s) => s.id === want || s.name === want)?.id ?? '';
+            if (want && !ref) return fail(`texture is an image object id (place one with place_image), an embedded image key, or a symbol name${d?.symbols.length ? ` (${d.symbols.map((s) => s.name).join(', ')})` : ''}; empty clears it.`);
+            const p = e.current, avg = ref && p ? await textureAverage(p, ref) : null;
+            patch.texture = ref;
+            patch.texture_color = avg ?? '';
+          }
+          for (const k of ['roughness', 'metallic']) if (has(k)) { const v = num(k, NaN); if (!Number.isFinite(v) || v < 0 || v > 1) return fail(`${k} is a number from 0 to 1.`); patch[k] = Math.round(v * 1000) / 1000; }
+          if (a.reset_surface === true) { patch.roughness = ''; patch.metallic = ''; }
           if (has('shading_color')) { const p = this.paint(a.shading_color, 'shading_color'); if (p.type === 'color') patch.shading_color = hex(p.color); }
           if (has('position')) { const r = ROTATION_PRESETS[str('position')]; if (!r) return fail(`position is one of ${Object.keys(ROTATION_PRESETS).join(', ')}.`); patch.rx = r[0]; patch.ry = r[1]; patch.rz = r[2]; }
           const targets = e.targetIds(ids), before = targets.map((id) => e.nodeById(id)).filter((n): n is VNode => !!n && n.ap.effects.some((x) => x.id.startsWith('3d.')));
           if (!targets.length) return fail('Select objects or pass ids.');
           if (!kind && !before.length) return fail('Pass kind (extrude, revolve, inflate or plane) to give the objects depth.');
           const ok = e.set3d(kind, patch, ids), n = e.nodeById(targets[0]), fx = n?.ap.effects.find((x) => x.id.startsWith('3d.'));
-          return ok && fx ? text(`${effectDef(fx.id)?.label ?? '3D'}: ${Object.entries(fx.params).map(([k, v]) => `${k} ${k === 'map_symbol' ? e.doc?.symbols.find((s) => s.id === v)?.name ?? v : v}`).join(', ')}. get_image shows it; expand makes it plain paths.`) : fail('Nothing changed.');
+          return ok && fx ? text(`${effectDef(fx.id)?.label ?? '3D'}: ${Object.entries(fx.params).filter(([k, v]) => v !== '' && k !== 'texture_color').map(([k, v]) => `${k} ${k === 'map_symbol' ? e.doc?.symbols.find((s) => s.id === v)?.name ?? v : k === 'texture' && e.current ? textureName(e.current, String(v)) : v}`).join(', ')}. get_image shows it; expand makes it plain paths.`) : fail('Nothing changed.');
         }
         case 'expand': { const what = str('what', 'all') as 'all' | 'object' | 'appearance', ok = e.expand(what, this.ids(a), what === 'object' ? undefined : await bakeTraced(e, this.ids(a))); return ok ? text('Expanded to plain objects.', { selection: e.selectedIds() }) : fail('Nothing to expand.'); }
         case 'make_blend': {

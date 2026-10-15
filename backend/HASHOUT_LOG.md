@@ -90,7 +90,7 @@ The first call queues `__consent__`; the window asks the person once. A refusal 
 - kind: rationale
 - logged: v0.9.0 · 2026-10-07
 
-Paths are checked here, not in the window: absolute, an allowed extension, the file present when reading, the folder present when writing. The window only produces or consumes bytes. Every error says what to do next.
+Paths are checked here, not in the window: absolute, an allowed extension, the file present when reading, the folder present when writing. The window only produces or consumes bytes. Every error says what to do next. A .dwg is now one of those files: it is passed through like a .dxf, and the window decides whether its native reader or the converter route reads it.
 
 ### app/routers/mcp.py · add_text description
 - refers-to: app/routers/mcp.py :: TOOLS, add_text
@@ -370,11 +370,11 @@ Pillow 12.3.0 (LittleCMS 2) is a new dependency, pinned in requirements.txt and 
 Every route uses origin_ok from terminal.py because uploads write to the data folder and the listing reads system folders. The table routes are POST with JSON and return raw bytes: RGB to CMYK is grid^3 by 4 (red slowest, blue fastest, 17 points), CMYK to RGB is grid^4 by 3 (cyan slowest, black fastest, 9 or 11 points), proof is grid^3 by 3 (17 or 33). Proof uses buildProofTransform with the document intent into the device and relative colorimetric (absolute with Simulate Paper Color) into sRGB; Simulate Black Ink drops black point compensation. The monitor is the built-in sRGB until the display profile is read. Transforms are cached by profile ids, intent and flags; the transform cache and the lock are reentrant because building a transform reads profile bytes through the same listing.
 
 ### app/services/dwg.py · DWG through an installed converter
-- refers-to: app/services/dwg.py :: converters, to_dxf; app/routers/io.py :: dwg_to_dxf; app/routers/mcp.py :: _run open_file
+- refers-to: app/services/dwg.py :: converters, to_dxf; app/routers/io.py :: dwg_to_dxf
 - kind: rationale
 - logged: v0.32.0 · 2026-10-15
 
-DWG is read by converting it to DXF with a program already on the computer, then through the existing DXF reader, bc no DWG library is under a licence formpth can ship (LibreDWG is GPL 3, the ODA SDK is commercial), and running either as a separate program keeps formpth Apache 2.0. The ODA File Converter is tried first (free, reads every DWG release, found on PATH, at FORMPTH_ODA_CONVERTER or at its default install folder per OS), then LibreDWG's dwg2dxf. Qt's offscreen platform is set on Linux without a display bc the ODA converter is a Qt program. Without a converter the call answers 422 with where to get one. The MCP open_file path converts in the engine and hands the window a .dxf, so agents and people go through the same reader.
+DWG is read by converting it to DXF with a program already on the computer, then through the existing DXF reader, bc no DWG library is under a licence formpth can ship (LibreDWG is GPL 3, the ODA SDK is commercial), and running either as a separate program keeps formpth Apache 2.0. The ODA File Converter is tried first (free, reads every DWG release, found on PATH, at FORMPTH_ODA_CONVERTER or at its default install folder per OS), then LibreDWG's dwg2dxf. Qt's offscreen platform is set on Linux without a display bc the ODA converter is a Qt program. Without a converter the call answers 422 with where to get one. Since v0.35.0 the window reads DWG itself (frontend src/io/dwg.ts) and only calls this route for a version the native reader does not cover (R2007 and older); the MCP open_file and place_image tools no longer convert in the engine, they hand the window the .dwg bytes like any other file and the window falls back to this route.
 
 
 ## app/services/display.py

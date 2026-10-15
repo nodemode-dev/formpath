@@ -18,6 +18,7 @@ import { exportPdf, readPdfNative } from './io/pdf';
 import { buildPrintPdf, printPdf } from './io/print';
 import { PrintDialog } from './ui/print-dialog';
 import { DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
+import { DwgUnsupportedError, parseDwg } from './io/dwg';
 import { exportEps, readEpsNative } from './io/eps';
 import { readEpsVector } from './io/ps-read';
 import { PdfPasswordError, readPdfVector } from './io/pdf-read';
@@ -412,12 +413,22 @@ export function startApp(): void {
     const lower = f.name.toLowerCase(), title = f.name.replace(/\.[^.]+$/, '');
     const isDwg = lower.endsWith('.dwg');
     if (isDwg || lower.endsWith('.dxf')) {
-      const conv = isDwg ? await api.dwgToDxf(f) : null;
-      const file = parseDxf(conv ? conv.text : await f.text());
+      let file: DxfFile, how = '';
+      if (isDwg) {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        try { file = parseDwg(bytes); how = ' natively'; }
+        catch (e) {
+          // only a version the native reader does not cover goes to the installed converter; a damaged file reports its own error
+          if (!(e instanceof DwgUnsupportedError)) throw e;
+          const conv = await api.dwgToDxf(f);
+          file = parseDxf(conv.text);
+          how = ` through ${conv.converter}`;
+        }
+      } else file = parseDxf(await f.text());
       const o = await dxfOptions(file, dxf);
       if (!o) return null;
       const r = dxfToDoc(file, o, title);
-      return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name}${conv ? ` through ${conv.converter}` : ''}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
+      return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name}${how}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
     }
     const data = await f.arrayBuffer(), native = readEpsNative(data);
     if (native) return { doc: docFromManifest(native.manifest), assets: native.assets, title, note: '' };
@@ -439,7 +450,7 @@ export function startApp(): void {
             if (lower.endsWith('.ai') && isLegacyAi(data)) {
               const r = await readAiLegacy(data, title);
               adopt(r.doc, title, r.assets);
-              toast(`Opened ${f.name}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
+              toast(`Opened ${f.name}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.kept.length ? ` Brought in ${r.kept.join(', ')}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
               continue;
             }
             const native = await readPdfNative(data);

@@ -1,18 +1,24 @@
 import { makeLayer, newDoc, newId } from '../engine/doc';
-import { anchor, mul } from '../engine/geometry';
+import { geomBounds } from '../engine/bounds';
+import { anchor, mul, translate } from '../engine/geometry';
+import { expandAppearance } from '../engine/ops/expand';
+import { transformNode } from '../engine/transform';
 import { fill as fillItem, linearGradient, radialGradient, solid, stop, stroke as strokeItem } from '../engine/paint';
 import { DEFAULT_CHAR, DEFAULT_PARA } from '../engine/text';
 import { zstdDecompress } from './ai-zstd';
-import type { Anchor, Appearance, BlendMode, Color, CompoundNode, Doc, GradientStop, ImageNode, LayerNode, Mat, Paint, PathData, PathNode, Span, SubPath, TextNode, Units, VNode } from '../engine';
+import type { Anchor, Appearance, BlendMode, BrushDef, Color, CompoundNode, Doc, GradientStop, ImageNode, LayerNode, Mat, Paint, PathData, PathNode, PatternDef, Span, SubPath, SymbolDef, TextNode, Units, VNode } from '../engine';
 
-export interface AiRead { doc: Doc; assets: Map<string, Blob>; skipped: string[]; unknown: string[]; version: string }
+export interface AiRead { doc: Doc; assets: Map<string, Blob>; skipped: string[]; unknown: string[]; version: string; kept: string[] }
+
+/** A private-data block the reader keeps instead of skipping: its lines with the %_ prefix removed and plain comments dropped. */
+interface Def { kind: 'pattern' | 'symbol' | 'brushart' | 'plugin'; block: string; head: string; lines: string[]; raster: boolean }
 
 type Tok = { t: 'n'; v: number } | { t: 's'; v: string } | { t: 'x'; v: string } | { t: 'a'; v: Tok[] } | { t: 'w'; v: string } | { t: 'd'; v: string };
 
 interface GradDef { type: number; stops: GradientStop[] }
 interface Meta {
   version: string; bbox: number[] | null; tile: number[] | null; artboards: number[][]; units: Units; cmyk: boolean;
-  customs: Map<string, Color>; gradients: Map<string, GradDef>; skipped: Set<string>; pages: number;
+  customs: Map<string, Color>; gradients: Map<string, GradDef>; skipped: Set<string>; pages: number; defs: Def[];
 }
 interface Ctx { kind: 'layer' | 'group' | 'clip' | 'compound'; nodes: VNode[]; clipper?: VNode; kids: PathNode[]; ap?: Appearance; rule?: 'nonzero' | 'evenodd'; clipped?: boolean; opacity?: number; blend?: BlendMode }
 interface LayerOut { name: string; hidden: boolean; locked: boolean; printable: boolean; color: string; nodes: VNode[] }
@@ -26,6 +32,7 @@ interface TextRun { name: string; size: number; leading: number | null; tracking
 const BLEND: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'soft_light', 'hard_light', 'color_dodge', 'color_burn', 'darken', 'lighten', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'];
 const UNITS: Units[] = ['in', 'mm', 'pt', 'pc', 'cm', 'pt', 'px'];
 const BLOCKS: Record<string, string> = { Pattern: 'patterns', BrushPattern: 'brushes', Brush: 'brushes', Symbol: 'symbols', SymbolList: '', ArtStyles: 'graphic styles', ArtStyleList: '', SVGFilter: 'SVG filters', PluginObject: 'live effects and plug-in objects', Palette: '', DocumentData: '', TextDocument: '', Mesh: 'gradient meshes' };
+const KEPT: Record<string, Def['kind']> = { Pattern: 'pattern', Symbol: 'symbol', BrushPattern: 'brushart', PluginObject: 'plugin' };
 const SILENT = new Set(['D', ',', ':', ';', 'Np', 'Ap', 'Ar', 'XW', 'Xw', 'XR', 'Xd', 'Bn', 'Bh', 'Bc', 'A', 'Pc', 'Pb', 'Xt', 'XT', 'Xe', 'XE', 'Xp', 'XP', 'Xi', 'XH', 'Ya', 'Yb', 'TC', 'TW', 'Ti', 'Th', 'Tq', 'TV', 'TA', 'Tt', 'Tk', 'Tw', 'Tl', 'Tr', 'Xo', 'XO', 'Xl', 'XL', 'XN', 'Xn', 'Bd', 'BD', 'Br', 'Bs', 'gsave', 'grestore', 'annotatepage', 'showpage', 'save', 'restore', 'get', 'exec']);
 
 const latin1 = (b: Uint8Array): string => {
@@ -158,8 +165,9 @@ function tokenize(s: string): Tok[] {
 interface Prep { ops: string; datas: string[]; meta: Meta }
 
 function prepare(text: string): Prep {
-  const meta: Meta = { version: '', bbox: null, tile: null, artboards: [], units: 'pt', cmyk: true, customs: new Map(), gradients: new Map(), skipped: new Set(), pages: 1 };
+  const meta: Meta = { version: '', bbox: null, tile: null, artboards: [], units: 'pt', cmyk: true, customs: new Map(), gradients: new Map(), skipped: new Set(), pages: 1, defs: [] };
   const lines = text.split(/\r\n|\r|\n/), keep: string[] = [], datas: string[] = [];
+  let cap: Def | null = null;
   const num = (s: string): number[] => (s.match(/[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?/g) ?? []).map(Number);
   let skipEnd: string | null = null, nonPrint = 0, grad: { name: string; lines: string[] } | null = null, inData: string[] | null = null, lastCustom = false;
   const customs = (l: string): void => {
@@ -197,11 +205,18 @@ function prepare(text: string): Prep {
       continue;
     }
     let m: RegExpExecArray | null;
+    if (cap) {
+      if (new RegExp(`^%AI\\d+_End${cap.block}\\b`).test(l)) { meta.defs.push(cap); cap = null; continue; }
+      if (l.startsWith('%_')) cap.lines.push(l.slice(2)); else if (!l.startsWith('%')) cap.lines.push(l);
+      if (/(^|\s)XI\s*$/.test(l.replace(/^%_/, ''))) cap.raster = true;
+      continue;
+    }
     if ((m = /^%AI\d+_BeginGradient:\s*\((.*)\)/.exec(l))) { grad = { name: m[1], lines: [] }; continue; }
     if (skipEnd) { if (new RegExp(`^%AI\\d+_End${skipEnd}\\b`).test(l)) skipEnd = null; continue; }
     if (/^%AI5_Begin_NonPrinting/.test(l)) { nonPrint++; continue; }
     if (/^%AI5_End_NonPrinting/.test(l)) { nonPrint = Math.max(0, nonPrint - 1); continue; }
     if ((m = /^%AI\d+_Begin(\w+)/.exec(l)) && m[1] !== 'Layer' && m[1] !== 'Gradient' && m[1] !== 'Setup' && m[1] !== 'Prolog') {
+      if (m[1] in KEPT) { cap = { kind: KEPT[m[1]], block: m[1], head: l, lines: [], raster: false }; continue; }
       if (m[1] in BLOCKS) { if (BLOCKS[m[1]]) meta.skipped.add(BLOCKS[m[1]]); skipEnd = m[1]; continue; }
       if (/^(Encoding|Procedure|Resource)/.test(m[1])) continue;
       meta.skipped.add(`${m[1]} blocks`); skipEnd = m[1];
@@ -266,6 +281,7 @@ class Reader {
   grad: GradPending | null = null;
   swatches = new Map<string, string>();
   swatchDefs: Doc['swatches'] = [];
+  patterns = new Map<string, string>();
   unknown = new Set<string>();
   skipped: Set<string>;
   images: Array<{ node: ImageNode; w: number; h: number; comps: number; bits: number; data: string }> = [];
@@ -362,6 +378,29 @@ class Reader {
     const g = linearGradient(def.stops.map((s) => ({ ...s })));
     g.geom = { x1: q0.x, y1: q0.y, x2: q1.x, y2: q1.y };
     return { type: 'gradient', gradient: g };
+  }
+
+  /**
+   * (name) px py sx sy angle rf r k ka [a b c d tx ty] p. The matrix carries the whole pattern transform
+   * (origin, scale, rotation, reflection, shear), so only it is used; with no matrix the pattern keeps its
+   * natural place. The matrix maps pattern space to page space, which becomes F M F^-1 on the flipped page.
+   */
+  patternPaint(): Paint {
+    const id = this.patterns.get(this.str());
+    if (!id) { this.skipped.add('pattern fills whose tile is missing'); return solid({ kind: 'gray', k: 50 }); }
+    const arr = [...this.stack].reverse().find((t) => t.t === 'a');
+    const k = arr && arr.t === 'a' ? arr.v.filter((t): t is { t: 'n'; v: number } => t.t === 'n').map((t) => t.v) : [];
+    let xf: Mat = [1, 0, 0, 1, 0, 0];
+    if (k.length >= 6 && k.every((v) => Number.isFinite(v))) {
+      const M: Mat = [k[0], k[1], k[2], k[3], k[4], k[5]];
+      const a0 = this.P(0, 0);
+      const q = (x: number, y: number): { x: number; y: number } => { const t = apt(M, x, y); return this.P(t.x, t.y); };
+      const b0 = q(0, 0), b1 = q(1, 0), b2 = q(0, 1);
+      // P maps the page unit x to +1 and the page unit y to -1, so the columns of the new matrix are b1-b0 and -(b2-b0)
+      const a = b1.x - b0.x, b = b1.y - b0.y, c = b0.x - b2.x, d = b0.y - b2.y;
+      xf = [a, b, c, d, b0.x - (a * a0.x + c * a0.y), b0.y - (b * a0.x + d * a0.y)];
+    }
+    return { type: 'pattern', pattern: id, xf };
   }
 
   add(n: VNode): void {
@@ -559,8 +598,8 @@ class Reader {
         break;
       }
       case 'p': case 'P': {
-        this.skipped.add('pattern fills');
-        if (w === 'p') g.fill = solid({ kind: 'gray', k: 50 }); else g.stroke = solid({ kind: 'gray', k: 50 });
+        const paint = this.patternPaint();
+        if (w === 'p') g.fill = paint; else g.stroke = paint;
         break;
       }
       case 'To': this.textBegin(n(-1)); break;
@@ -644,6 +683,110 @@ async function rasterPng(w: number, h: number, comps: number, bits: number, hex:
   return cv.convertToBlob({ type: 'image/png' });
 }
 
+const group = (nodes: VNode[]): VNode => ({ id: newId('g'), kind: 'group', clip: false, children: nodes, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } });
+const isIdentity = (m: number[]): boolean => m.length >= 6 && [1, 0, 0, 1, 0, 0].every((v, i) => Math.abs(m[i] - v) < 1e-6);
+const firstString = (line: string): string => { const t = tokenize(line).find((k) => k.t === 's'); return t && t.t === 's' ? t.v : ''; };
+
+/** Runs the lines of a kept block through a reader of its own that shares the main reader's swatches and patterns. */
+function artOf(rd: Reader, lines: string[]): VNode[] {
+  const r = new Reader(rd.meta, [], rd.ox, rd.oy);
+  r.swatches = rd.swatches; r.swatchDefs = rd.swatchDefs; r.unknown = rd.unknown; r.patterns = rd.patterns;
+  r.go(tokenize(lines.join('\n')));
+  return r.pre;
+}
+
+/**
+ * Pattern definitions become pattern swatches, symbol definitions become symbols and the brush tool records
+ * (calligraphic, art, pattern) become brushes whose tiles are the %AI8_BeginBrushPattern blocks they name.
+ * Returns what was brought in, for the open message; whatever could not be read is added to meta.skipped.
+ */
+function buildDefs(rd: Reader, doc: Doc): string[] {
+  const sk = rd.meta.skipped, defs = rd.meta.defs.filter((d) => d.lines.some((l) => l.trim()) || d.kind === 'plugin');
+  const lines = (d: Def): string[] => d.lines.filter((l) => l.trim());
+  const patterns: PatternDef[] = [], swatches: Doc['swatches'] = [], symbols: SymbolDef[] = [], brushes: BrushDef[] = [];
+  for (const d of defs) {
+    if (d.kind !== 'pattern') continue;
+    if (d.raster) { sk.add('patterns that hold placed images'); continue; }
+    const ls = lines(d), head = tokenize(ls[0] ?? '');
+    const name = firstString(ls[0] ?? '') || /\((.*)\)/.exec(d.head)?.[1] || `Pattern ${patterns.length + 1}`;
+    const nums = head.filter((t): t is { t: 'n'; v: number } => t.t === 'n').map((t) => t.v);
+    const mat = head.find((t) => t.t === 'a');
+    if (nums.length < 4) { sk.add('patterns with no tile box'); continue; }
+    const x0 = Math.min(nums[0], nums[2]), x1 = Math.max(nums[0], nums[2]), y0 = Math.min(nums[1], nums[3]), y1 = Math.max(nums[1], nums[3]);
+    if (!(x1 - x0 > 0 && y1 - y0 > 0)) { sk.add('patterns with no tile box'); continue; }
+    if (mat && mat.t === 'a') {
+      const k = mat.v.filter((t): t is { t: 'n'; v: number } => t.t === 'n').map((t) => t.v);
+      if (k.length >= 6 && !isIdentity(k)) sk.add('transforms on pattern tiles');
+    }
+    const nodes = artOf(rd, ls.slice(1));
+    if (!nodes.length) { sk.add('patterns with no visible art'); continue; }
+    const def: PatternDef = { id: newId('pt'), name, tile: { x: x0 - rd.ox, y: rd.oy - y1, w: x1 - x0, h: y1 - y0 }, art: group(nodes), type: 'grid', hs: 0, vs: 0 };
+    patterns.push(def);
+    swatches.push({ id: newId('s'), name, paint: { type: 'pattern', pattern: def.id, xf: [1, 0, 0, 1, 0, 0] }, global: false, spot: false });
+    rd.patterns.set(name, def.id);
+  }
+  for (const d of defs) {
+    if (d.kind !== 'symbol') continue;
+    if (d.raster) { sk.add('symbols that hold placed images'); continue; }
+    const ls = lines(d), name = firstString(ls[0] ?? '') || `Symbol ${symbols.length + 1}`;
+    const nodes = artOf(rd, ls);
+    if (!nodes.length) { sk.add('symbols with no visible art'); continue; }
+    const art = group(nodes), b = geomBounds(doc, art);
+    symbols.push({ id: newId('y'), name, art: transformNode(art, translate(-(b.x + b.w / 2), -(b.y + b.h / 2))), reg: { x: 0, y: 0 }, type: 'dynamic' });
+  }
+  const tiles = new Map<string, VNode | null>();
+  // brush tiles are bent along a path as filled outlines, so stroked art becomes filled shapes first
+  const outlined = (n: VNode): VNode[] => {
+    if (n.kind === 'path' || n.kind === 'compound') return n.ap.items.some((i) => i.kind === 'stroke' && i.visible && i.paint.type !== 'none') ? expandAppearance(doc, n) : [n];
+    return n.kind === 'group' ? [{ ...n, children: n.children.flatMap(outlined) }] : [n];
+  };
+  for (const d of defs) {
+    if (d.kind !== 'brushart') continue;
+    const ls = lines(d), name = firstString(ls[0] ?? '');
+    if (!name) continue;
+    const nodes = d.raster ? [] : artOf(rd, ls).flatMap(outlined);
+    tiles.set(name, nodes.length ? group(nodes) : null);
+  }
+  for (const d of defs) {
+    if (d.kind !== 'plugin') continue;
+    const s = tokenize(d.lines.join('\n')).filter((t) => t.t === 's').map((t) => (t.t === 's' ? t.v : ''));
+    const tool = s[0] ?? '';
+    if (!/Brush Tool$/.test(tool)) { if (!/Brush Manager/.test(tool)) sk.add('live effects and plug-in objects'); continue; }
+    const name = s[1] ?? '', params = s.slice(2).join('');
+    const bad = (): void => { sk.add('brushes whose definition is incomplete'); };
+    if (/Calligraphic/.test(tool)) {
+      const n = params.trim().split(/\s+/).map(Number);
+      if (!name || n.length < 10 || n.some((v) => !Number.isFinite(v))) { bad(); continue; }
+      // version, size a b, roundness a b, angle a b, then the variation kind of size, roundness and angle (0 is fixed)
+      const mid = (a: number, b: number): number => (a + b) / 2, varies = (i: number, a: number, b: number): boolean => n[7 + i] !== 0 && Math.abs(a - b) > 1e-6;
+      if (varies(0, n[1], n[2]) || varies(1, n[3], n[4]) || varies(2, n[5], n[6])) sk.add('random and pressure variation in calligraphic brushes');
+      brushes.push({ id: newId('br'), name, brush: { type: 'calligraphic', angle: 0 - mid(n[5], n[6]), roundness: Math.max(0, Math.min(100, mid(n[3], n[4]))), size: Math.max(0.1, mid(n[1], n[2])) }, colorize: 'none' });
+      continue;
+    }
+    const art = /ArtOnPath/.test(tool), pat = /PatternOnPath/.test(tool);
+    if (!art && !pat) { sk.add(`${/Scatter/.test(tool) ? 'scatter' : 'other'} brushes`); continue; }
+    // version / side / outer corner / inner corner / start / end / colorization and key colour / options
+    const seg = params.split('/');
+    if (!name || seg.length !== 8) { bad(); continue; }
+    const slots = seg.slice(1, 6).map((x) => x.trim()), want = pat ? slots : slots.slice(0, 1);
+    if (!slots[0] || want.some((x) => x && !tiles.get(x))) { bad(); continue; }
+    const m = Number(seg[6].trim().split(/\s+/)[0]), colorize: BrushDef['colorize'] = m === 1 ? 'tints' : m === 2 ? 'tints_shades' : m === 3 ? 'hue_shift' : 'none';
+    const side = tiles.get(slots[0]) as VNode, tile = (x: string): VNode | null => (x ? tiles.get(x) ?? null : null);
+    brushes.push({ id: newId('br'), name, colorize, brush: art ? { type: 'art', art: side, stretch: true, flip: false, width: 100 } : { type: 'pattern', art: side, spacing: 0, fit: 'stretch', outer: tile(slots[1]), inner: tile(slots[2]), start: tile(slots[3]), end: tile(slots[4]) } });
+  }
+  doc.patterns = [...doc.patterns, ...patterns];
+  doc.swatches = [...doc.swatches, ...swatches];
+  doc.symbols = [...doc.symbols, ...symbols];
+  doc.brushes = [...doc.brushes, ...brushes];
+  if (symbols.length) sk.add('which artwork is an instance of which symbol (placed symbols stay as their artwork)');
+  if (brushes.length) sk.add('which strokes use each brush (brushed strokes stay as expanded paths)');
+  const kept: string[] = [];
+  if (patterns.length) kept.push(`${patterns.length} pattern swatch${patterns.length === 1 ? '' : 'es'}`);
+  if (symbols.length) kept.push(`${symbols.length} symbol${symbols.length === 1 ? '' : 's'}`);
+  if (brushes.length) kept.push(`${brushes.length} brush${brushes.length === 1 ? '' : 'es'}`);
+  return kept;
+}
+
 export async function readAiLegacy(data: ArrayBuffer, title: string): Promise<AiRead> {
   const src = aiSource(data);
   if (!/^\s*%!PS/.test(src)) throw new Error('This file is not an Illustrator document with PostScript art.');
@@ -655,8 +798,9 @@ export async function readAiLegacy(data: ArrayBuffer, title: string): Promise<Ai
   const boxes: number[][] = meta.artboards.length ? meta.artboards : meta.tile ? [meta.tile] : meta.bbox ? [meta.bbox] : [[0, 0, 612, 792]];
   const ox = Math.min(...boxes.map((b) => b[0])), oy = Math.max(...boxes.map((b) => b[3]));
   const rd = new Reader(meta, prep.datas, ox, oy);
-  rd.go(tokenize(prep.ops));
   const doc = newDoc(Math.max(1, boxes[0][2] - boxes[0][0]), Math.max(1, boxes[0][3] - boxes[0][1]), { title, units: meta.units, colorMode: meta.cmyk ? 'cmyk' : 'rgb' });
+  const kept = buildDefs(rd, doc);
+  rd.go(tokenize(prep.ops));
   doc.artboards = boxes.map((b, i) => ({ id: newId('a'), name: `Artboard ${i + 1}`, x: Math.min(b[0], b[2]) - ox, y: oy - Math.max(b[1], b[3]), w: Math.max(1, Math.abs(b[2] - b[0])), h: Math.max(1, Math.abs(b[3] - b[1])), bg: null }));
   let outs = rd.layers;
   if (!outs.length) outs = [{ name: 'Layer 1', hidden: false, locked: false, printable: true, color: '', nodes: rd.pre }];
@@ -686,5 +830,5 @@ export async function readAiLegacy(data: ArrayBuffer, title: string): Promise<Ai
   const unknown = [...rd.unknown];
   const skipped = [...meta.skipped];
   if (unknown.length) skipped.push(`${unknown.length} operator${unknown.length === 1 ? '' : 's'} it does not know`);
-  return { doc, assets, skipped, unknown, version: meta.version };
+  return { doc, assets, skipped, unknown, version: meta.version, kept };
 }

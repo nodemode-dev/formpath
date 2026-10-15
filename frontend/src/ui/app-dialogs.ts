@@ -99,7 +99,7 @@ export class OpenDialog extends Dialog {
     super('Open', 520);
     this.body.append(this.status, this.list, this.empty);
     const r = el(`<div class="cv-welcome-actions"><button class="cv-btn" type="button">${icon('upload', 14)}From disk (.fpth, .svg, .pdf, .ai, .eps, .dxf, images)</button></div>`);
-    this.body.append(r, el('<p class="cv-note">DWG is a closed binary format that formpth does not read. Save the drawing as DXF in your CAD program and open the DXF.</p>'), this.fileInput);
+    this.body.append(r, el('<p class="cv-note">DWG drawings from R2000 to R2018 (except R2007) open directly. For other DWG versions, install a DWG converter or save the drawing as DXF in your CAD program.</p>'), this.fileInput);
     q(r, 'button').addEventListener('click', () => this.fileInput.click());
     this.deleteBtn = this.button('Delete', 'danger', () => void this.deleteSelected());
     this.button('Cancel', 'ghost', () => this.close());
