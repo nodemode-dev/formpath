@@ -83,7 +83,7 @@ export type LiveShape =
   | { kind: 'rect'; x: number; y: number; w: number; h: number; radii: [number, number, number, number]; corner: 'round' | 'inverted' | 'chamfer'; xf: Mat }
   | { kind: 'ellipse'; x: number; y: number; w: number; h: number; start: number; end: number; xf: Mat }
   | { kind: 'polygon'; cx: number; cy: number; r: number; sides: number; radius: number; xf: Mat }
-  | { kind: 'star'; cx: number; cy: number; r1: number; r2: number; points: number; xf: Mat }
+  | { kind: 'star'; cx: number; cy: number; r1: number; r2: number; points: number; radius?: number; xf: Mat }
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number };
 
 export interface NodeBase {

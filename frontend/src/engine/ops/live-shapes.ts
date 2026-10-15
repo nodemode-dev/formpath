@@ -18,7 +18,7 @@ export function normalizeLive(l: LiveShape): LiveShape {
     case 'rect': return { ...l, x: l.x * sx, y: l.y * sy, w: l.w * sx, h: l.h * sy, radii: l.radii.map((r) => r * m) as [number, number, number, number], xf };
     case 'ellipse': return { ...l, x: l.x * sx, y: l.y * sy, w: l.w * sx, h: l.h * sy, xf };
     case 'polygon': return { ...l, cx: l.cx * sx, cy: l.cy * sy, r: l.r * s, radius: l.radius * m, xf };
-    case 'star': return { ...l, cx: l.cx * sx, cy: l.cy * sy, r1: l.r1 * s, r2: l.r2 * s, xf };
+    case 'star': return { ...l, cx: l.cx * sx, cy: l.cy * sy, r1: l.r1 * s, r2: l.r2 * s, ...(l.radius ? { radius: l.radius * m } : {}), xf };
   }
 }
 
@@ -27,7 +27,7 @@ export function liveShapePath(l: LiveShape): PathData {
     case 'rect': return transformPath(rectPath(l.x, l.y, l.w, l.h, l.radii, l.corner), l.xf);
     case 'ellipse': return transformPath(Math.abs(l.end - l.start) % 360 < 1e-6 ? ellipsePath(l.x, l.y, l.w, l.h) : piePath(l.x, l.y, l.w, l.h, -l.end, -l.start), l.xf);
     case 'polygon': return transformPath(polygonPath(l.cx, l.cy, l.r, l.sides, l.radius), l.xf);
-    case 'star': return transformPath(starPath(l.cx, l.cy, l.r1, l.r2, l.points), l.xf);
+    case 'star': return transformPath(starPath(l.cx, l.cy, l.r1, l.r2, l.points, l.radius ?? 0), l.xf);
     case 'line': return linePath(l.x1, l.y1, l.x2, l.y2);
   }
 }
@@ -42,7 +42,11 @@ export function patchLive(l0: LiveShape, p: LivePatch): LiveShape {
     }
     case 'ellipse': return { ...l, w: pos(p.w, l.w), h: pos(p.h, l.h), start: p.start ?? l.start, end: p.end ?? l.end };
     case 'polygon': { const r = pos(p.r, l.r); return { ...l, r, sides: Math.max(3, Math.min(1000, Math.round(p.sides ?? l.sides))), radius: Math.max(0, Math.min(r, p.radius ?? l.radius)) }; }
-    case 'star': return { ...l, points: Math.max(3, Math.min(1000, Math.round(p.points ?? l.points))), r1: pos(p.r1, l.r1), r2: pos(p.r2, l.r2) };
+    case 'star': {
+      const r1 = pos(p.r1, l.r1), radius = Math.max(0, Math.min(r1, p.radius ?? l.radius ?? 0));
+      const { radius: old, ...rest } = l; void old;
+      return { ...rest, points: Math.max(3, Math.min(1000, Math.round(p.points ?? l.points))), r1, r2: pos(p.r2, l.r2), ...(radius > 0 ? { radius } : {}) };
+    }
     case 'line': {
       const len0 = Math.hypot(l.x2 - l.x1, l.y2 - l.y1), a0 = Math.atan2(-(l.y2 - l.y1), l.x2 - l.x1);
       const len = pos(p.length, len0), a = p.angle !== undefined ? (p.angle * Math.PI) / 180 : a0;
@@ -63,7 +67,7 @@ export function liveParams(l0: LiveShape): Record<string, number | string> {
     case 'rect': return { w: l.w, h: l.h, r0: l.radii[0], r1: l.radii[1], r2: l.radii[2], r3: l.radii[3], corner: l.corner };
     case 'ellipse': return { w: l.w, h: l.h, start: l.start, end: l.end };
     case 'polygon': return { r: l.r, sides: l.sides, radius: l.radius };
-    case 'star': return { points: l.points, r1: l.r1, r2: l.r2 };
+    case 'star': return { points: l.points, r1: l.r1, r2: l.r2, radius: l.radius ?? 0 };
     case 'line': return { length: Math.hypot(l.x2 - l.x1, l.y2 - l.y1), angle: (Math.atan2(-(l.y2 - l.y1), l.x2 - l.x1) * 180) / Math.PI };
   }
 }

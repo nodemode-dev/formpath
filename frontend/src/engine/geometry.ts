@@ -389,13 +389,13 @@ export function polygonPath(cx: number, cy: number, r: number, sides: number, co
   return cornerRadius > 0 ? roundCorners([{ closed: true, pts }], cornerRadius) : [{ closed: true, pts }];
 }
 
-export function starPath(cx: number, cy: number, r1: number, r2: number, points: number): PathData {
+export function starPath(cx: number, cy: number, r1: number, r2: number, points: number, cornerRadius = 0): PathData {
   const pts: Anchor[] = [];
   for (let i = 0; i < points * 2; i++) {
     const a = -Math.PI / 2 + (i * Math.PI) / points, r = i % 2 === 0 ? r1 : r2;
     pts.push(anchor(cx + r * Math.cos(a), cy + r * Math.sin(a)));
   }
-  return [{ closed: true, pts }];
+  return cornerRadius > 0 ? roundCorners([{ closed: true, pts }], cornerRadius) : [{ closed: true, pts }];
 }
 
 export function spiralPath(cx: number, cy: number, radius: number, decay: number, segmentsCount: number, clockwise: boolean): PathData {

@@ -56,7 +56,7 @@ function rectCornerOf(l: Extract<LiveShape, { kind: 'rect' }>): number[] {
 
 function liveCorners(n: PathNode, which: Set<number> | null, patch: Partial<CornerSpec> | null): PathNode | null {
   const live = n.live;
-  if (!live || (live.kind !== 'rect' && live.kind !== 'polygon') || patch?.mode === 'relative') return null;
+  if (!live || (live.kind !== 'rect' && live.kind !== 'polygon' && live.kind !== 'star') || patch?.mode === 'relative') return null;
   const l = normalizeLive(live);
   if (l.kind === 'rect') {
     const owner = rectCornerOf(l), hit = new Set<number>();
@@ -68,12 +68,10 @@ function liveCorners(n: PathNode, which: Set<number> | null, patch: Partial<Corn
     if (corner === l.corner && radii.every((r, i) => r === l.radii[i])) return n;
     return editLive(n, { radii, corner });
   }
-  if (l.kind === 'polygon') {
-    if (patch && patch.type && patch.type !== 'round') return null;
-    const radius = patch === null ? 0 : patch.r ?? l.radius;
-    return radius === l.radius ? n : editLive(n, { radius });
-  }
-  return null;
+  if (patch && patch.type && patch.type !== 'round') return null;
+  const cur = l.kind === 'polygon' ? l.radius : (l as Extract<LiveShape, { kind: 'star' }>).radius ?? 0;
+  const radius = patch === null ? 0 : patch.r ?? cur;
+  return radius === cur ? n : editLive(n, { radius });
 }
 
 export function setCornersOp(doc: Doc, targets: CornerTargets, patch: Partial<CornerSpec> | null): Doc {
@@ -97,6 +95,7 @@ export function firstCorner(doc: Doc, targets: CornerTargets): CornerSpec | null
     if (n?.kind !== 'path') continue;
     if (n.live?.kind === 'rect') { const l = normalizeLive(n.live) as Extract<LiveShape, { kind: 'rect' }>, r = l.radii.find((v) => v >= EPS); if (r !== undefined) return { type: l.corner, r }; }
     if (n.live?.kind === 'polygon' && n.live.radius >= EPS) return { type: 'round', r: n.live.radius };
+    if (n.live?.kind === 'star' && (n.live.radius ?? 0) >= EPS) return { type: 'round', r: n.live.radius ?? 0 };
     let k = 0;
     for (const sp of n.d) for (const a of sp.pts) { if (a.corner && (!set || set.has(k))) return a.corner; k++; }
   }

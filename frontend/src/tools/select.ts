@@ -200,8 +200,14 @@ function cornerWidgets(ctx: ToolContext): Widget[] {
   const e = ctx.engine, pr = e.current;
   if (!pr || !e.view.cornerWidget || pr.selection.size !== 1 || pr.anchors.size) return [];
   const n = findNode(pr.doc, [...pr.selection][0]);
-  if (n?.kind !== 'path' || !n.live || (n.live.kind !== 'rect' && n.live.kind !== 'polygon')) return [];
-  const l = normalizeLive(n.live) as Extract<LiveShape, { kind: 'rect' | 'polygon' }>, zoom = ctx.view().zoom, min = 14 / zoom;
+  if (n?.kind !== 'path' || !n.live || (n.live.kind !== 'rect' && n.live.kind !== 'polygon' && n.live.kind !== 'star')) return [];
+  const l = normalizeLive(n.live) as Extract<LiveShape, { kind: 'rect' | 'polygon' | 'star' }>, zoom = ctx.view().zoom, min = 14 / zoom;
+  if (l.kind === 'star') {
+    if (l.r1 * zoom < 24) return [];
+    const sp = Math.sin(Math.PI / l.points), tip = { x: 0, y: -l.r1 }, ab = { x: l.r2 * sp, y: l.r1 - l.r2 * Math.cos(Math.PI / l.points) }, sinH = Math.max(0.05, Math.abs(ab.x) / Math.hypot(ab.x, ab.y));
+    const d = Math.max(l.radius ?? 0, min) / sinH;
+    return [{ id: n.id, at: apply(l.xf, l.cx, l.cy - l.r1 + d), corner: -1, dir: { x: 0, y: 1 }, origin: { x: l.cx + tip.x, y: l.cy + tip.y }, xf: l.xf, k: 1 / sinH, max: l.r1 }];
+  }
   if (l.kind === 'rect') {
     const cs: Array<[number, number, number, number]> = [[l.x, l.y, 1, 1], [l.x + l.w, l.y, -1, 1], [l.x + l.w, l.y + l.h, -1, -1], [l.x, l.y + l.h, 1, -1]];
     if (Math.min(Math.abs(l.w), Math.abs(l.h)) * zoom < 40) return [];

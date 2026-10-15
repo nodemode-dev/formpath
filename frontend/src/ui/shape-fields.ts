@@ -30,7 +30,7 @@ export class ShapeFields {
     const polygon = el('<div class="cv-shapef-group"></div>');
     polygon.append(row(len('pr', 'Radius', (v) => ({ r: v }), { min: 0.01 }).el, plain('sides', 'Sides', '', (v) => ({ sides: v }), { min: 3, max: 1000 }).el), len('pc', 'Corner radius', (v) => ({ radius: v })).el);
     const star = el('<div class="cv-shapef-group"></div>');
-    star.append(plain('points', 'Points', '', (v) => ({ points: v }), { min: 3, max: 1000 }).el, row(len('r1s', 'Radius 1', (v) => ({ r1: v }), { min: 0.01 }).el, len('r2s', 'Radius 2', (v) => ({ r2: v }), { min: 0.01 }).el));
+    star.append(plain('points', 'Points', '', (v) => ({ points: v }), { min: 3, max: 1000 }).el, row(len('r1s', 'Radius 1', (v) => ({ r1: v }), { min: 0.01 }).el, len('r2s', 'Radius 2', (v) => ({ r2: v }), { min: 0.01 }).el), len('sc', 'Corner radius', (v) => ({ radius: v })).el);
     const line = el('<div class="cv-shapef-group"></div>');
     line.append(row(len('length', 'Length', (v) => ({ length: v }), { min: 0.01 }).el, plain('angle', 'Angle', '°', (v) => ({ angle: v }), { min: -360, max: 360 }).el));
     for (const [kind, g] of [['rect', rect], ['ellipse', ellipse], ['polygon', polygon], ['star', star], ['line', line]] as const) { this.groups.set(kind, g); this.el.appendChild(g); }
@@ -49,7 +49,7 @@ export class ShapeFields {
       rect: [['w', 'w', true], ['h', 'h', true], ['r0', 'r0', true], ['r1', 'r1', true], ['r2', 'r2', true], ['r3', 'r3', true]],
       ellipse: [['ew', 'w', true], ['eh', 'h', true], ['start', 'start', false], ['end', 'end', false]],
       polygon: [['pr', 'r', true], ['sides', 'sides', false], ['pc', 'radius', true]],
-      star: [['points', 'points', false], ['r1s', 'r1', true], ['r2s', 'r2', true]],
+      star: [['points', 'points', false], ['r1s', 'r1', true], ['r2s', 'r2', true], ['sc', 'radius', true]],
       line: [['length', 'length', true], ['angle', 'angle', false]],
     };
     for (const [field, key, unit] of map[kind]) this.f[field].set(r(p[key], unit));
