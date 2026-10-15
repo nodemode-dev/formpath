@@ -3,14 +3,17 @@ import { parseColor, toRgb } from './paint';
 import type { Effect, FillRule, PathData, Pt } from './types';
 
 export type RGB3 = [number, number, number];
-type V3 = [number, number, number];
+export type V3 = [number, number, number];
 type Params = Effect['params'];
 export interface Solid { d: PathData; rule: FillRule; fill: RGB3 | null; stroke: RGB3 | null; strokeWidth: number }
 export interface Face { d: PathData; rule: FillRule; fill: RGB3 | null; stroke: RGB3 | null; strokeWidth: number; depth: number; solid: number; cap: boolean; t: number; s: number; role?: 'front' | 'back'; facing?: boolean }
-export interface Scene { faces: Face[]; project: (x: number, y: number, z: number) => Pt; center: Pt }
-export interface Lighting { light: V3; intensity: number; ambient: number; highlight: number; shade: RGB3; material: string }
+export interface TraceGeom { raws: Raw[]; R: number[]; f: number; center: V3; size: number }
+export interface Scene { faces: Face[]; project: (x: number, y: number, z: number) => Pt; center: Pt; trace: TraceGeom | null }
+export interface LightSrc { dir: V3; color: RGB3; intensity: number; softness: number }
+export interface Lighting { light: V3; intensity: number; ambient: number; highlight: number; shade: RGB3; material: string; look: string; srcs: LightSrc[] | null }
 
 export const VECTOR_3D = new Set(['3d.extrude', '3d.revolve', '3d.rotate']);
+export const rayTraced = (e: Effect): boolean => e.visible && VECTOR_3D.has(e.id) && e.params.ray_trace === true && !['wireframe', 'flat'].includes(str(e.params, 'material', e.id === '3d.rotate' ? 'flat' : 'plastic'));
 export const ROTATION_PRESETS: Record<string, V3> = {
   off_axis_front: [-18, -26, 8], off_axis_back: [-18, 154, -8], off_axis_left: [-18, -64, 8], off_axis_right: [-18, 64, -8], off_axis_top: [-72, -26, 8], off_axis_bottom: [72, -26, -8],
   front: [0, 0, 0], back: [0, 180, 0], left: [0, -90, 0], right: [0, 90, 0], top: [-90, 0, 0], bottom: [90, 0, 0],
@@ -33,12 +36,80 @@ export function rgbParam(p: Params, k: string, d: string): RGB3 {
   return [v.r / 255, v.g / 255, v.b / 255];
 }
 
+export const LIGHT_LIMIT = 8;
+const MATERIAL_BASE: Record<string, string> = { brushed_metal: 'metal', wood: 'matte', rough: 'matte' };
+
+export function lightDir(rotation: number, height: number): V3 {
+  const th = (rotation * Math.PI) / 180, ph = (clamp(height, 0, 90) * Math.PI) / 180;
+  return [Math.cos(ph) * Math.sin(th), -Math.cos(ph) * Math.cos(th), -Math.sin(ph)];
+}
+
+export function lightSources(p: Params): LightSrc[] | null {
+  const raw = p.lights;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const list: unknown = JSON.parse(raw);
+    if (!Array.isArray(list)) return null;
+    return list.slice(0, LIGHT_LIMIT).map((o: Record<string, unknown>) => {
+      const q = o && typeof o === 'object' ? o : {}, n = (k: string, d: number): number => (typeof q[k] === 'number' && Number.isFinite(q[k] as number) ? (q[k] as number) : d);
+      return { dir: lightDir(n('r', -45), n('h', 40)), color: rgbParam({ c: typeof q.c === 'string' ? q.c : '#ffffff' }, 'c', '#ffffff'), intensity: clamp(n('i', 100), 0, 200) / 100, softness: clamp(n('s', 0), 0, 100) / 100 };
+    });
+  } catch { return null; }
+}
+
+export interface LightSpec { color: string; intensity: number; rotation: number; height: number; softness: number }
+export const LIGHTING_PRESETS: Record<string, { label: string; ambient: number; lights: LightSpec[] }> = {
+  standard: { label: 'Standard', ambient: 40, lights: [{ color: '#ffffff', intensity: 100, rotation: -40, height: 45, softness: 20 }, { color: '#ffffff', intensity: 35, rotation: 140, height: 25, softness: 60 }] },
+  diffuse: { label: 'Diffuse', ambient: 55, lights: [{ color: '#ffffff', intensity: 70, rotation: 0, height: 65, softness: 80 }, { color: '#ffffff', intensity: 45, rotation: -90, height: 35, softness: 80 }, { color: '#ffffff', intensity: 45, rotation: 90, height: 35, softness: 80 }] },
+  top_left: { label: 'Top Left', ambient: 40, lights: [{ color: '#ffffff', intensity: 100, rotation: -45, height: 40, softness: 0 }] },
+  right: { label: 'Right', ambient: 40, lights: [{ color: '#ffffff', intensity: 100, rotation: 90, height: 35, softness: 0 }] },
+};
+export const lightsToParam = (list: LightSpec[]): string => JSON.stringify(list.slice(0, LIGHT_LIMIT).map((l) => ({ c: l.color, i: Math.round(l.intensity), r: Math.round(l.rotation), h: Math.round(l.height), s: Math.round(l.softness) })));
+
+export function lightSpecs(p: Params): LightSpec[] {
+  const raw = p.lights;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const list: unknown = JSON.parse(raw);
+      if (Array.isArray(list)) return list.slice(0, LIGHT_LIMIT).map((o: Record<string, unknown>) => { const q = o && typeof o === 'object' ? o : {}, n = (k: string, d: number): number => (typeof q[k] === 'number' && Number.isFinite(q[k] as number) ? (q[k] as number) : d); return { color: typeof q.c === 'string' ? q.c : '#ffffff', intensity: clamp(n('i', 100), 0, 200), rotation: n('r', -45), height: clamp(n('h', 40), 0, 90), softness: clamp(n('s', 0), 0, 100) }; });
+    } catch { }
+  }
+  const d = norm(LIGHT_DIRS[str(p, 'light', 'top_left')] ?? LIGHT_DIRS.top_left);
+  return [{ color: '#ffffff', intensity: num(p, 'intensity', 100), rotation: Math.round((Math.atan2(d[0], -d[1] || 0) * 180) / Math.PI), height: Math.round((Math.asin(clamp(-d[2], -1, 1)) * 180) / Math.PI), softness: 0 }];
+}
+
+export function lightingPreset(p: Params): string {
+  const list = lightSpecs(p), amb = num(p, 'ambient', 40);
+  for (const [id, pr] of Object.entries(LIGHTING_PRESETS)) {
+    if (pr.lights.length !== list.length || Math.abs(pr.ambient - amb) > 0.5) continue;
+    if (pr.lights.every((l, i) => { const o = list[i], dr = Math.abs((((l.rotation - o.rotation) % 360) + 540) % 360 - 180); return o.color.toLowerCase() === l.color && Math.abs(o.intensity - l.intensity) < 1.5 && dr < 1.5 && Math.abs(o.height - l.height) < 1.6 && Math.abs(o.softness - l.softness) < 1.5; })) return id;
+  }
+  return 'custom';
+}
+
 export function lighting(p: Params): Lighting {
-  return { light: norm(LIGHT_DIRS[str(p, 'light', 'top_left')] ?? LIGHT_DIRS.top_left), intensity: num(p, 'intensity', 100) / 100, ambient: num(p, 'ambient', 40) / 100, highlight: num(p, 'highlight', 60) / 100, shade: rgbParam(p, 'shading_color', '#000000'), material: str(p, 'material', 'plastic') };
+  const srcs = lightSources(p), main = srcs?.reduce((m: LightSrc | null, s) => (!m || s.intensity > m.intensity ? s : m), null) ?? null, mat = str(p, 'material', 'plastic');
+  return { light: main ? main.dir : norm(LIGHT_DIRS[str(p, 'light', 'top_left')] ?? LIGHT_DIRS.top_left), intensity: num(p, 'intensity', 100) / 100, ambient: num(p, 'ambient', 40) / 100, highlight: num(p, 'highlight', 60) / 100, shade: rgbParam(p, 'shading_color', '#000000'), material: MATERIAL_BASE[mat] ?? mat, look: mat, srcs };
+}
+
+function lit(n: V3, L: Lighting): { d: RGB3; s: RGB3 } {
+  const d: RGB3 = [0, 0, 0], s: RGB3 = [0, 0, 0], metal = L.material === 'metal';
+  for (const l of L.srcs ?? []) {
+    const diffuse = Math.max(0, dot(n, l.dir));
+    if (diffuse <= 0) continue;
+    const h = norm([l.dir[0], l.dir[1], l.dir[2] - 1]), nh = Math.max(0, dot(n, h)), spec = metal ? Math.pow(nh, 14) * L.highlight * 1.4 : L.material === 'matte' ? 0 : Math.pow(nh, 36) * L.highlight;
+    for (let c = 0; c < 3; c++) { d[c] += l.color[c] * l.intensity * diffuse; s[c] += l.color[c] * l.intensity * spec; }
+  }
+  return { d, s };
 }
 
 export function shadeRgb(base: RGB3, n: V3, L: Lighting): RGB3 {
   if (L.material === 'flat') return base;
+  if (L.srcs) {
+    const { d, s } = lit(n, L);
+    if (L.material === 'metal') return base.map((b, c) => clamp(b * clamp(0.3 * L.ambient + 0.75 * d[c]) + b * s[c] + s[c] * 0.25)) as RGB3;
+    return base.map((b, c) => { const k = L.shade[c] + (b - L.shade[c]) * clamp(L.ambient + (1 - L.ambient) * d[c]); return clamp(k + (1 - k) * clamp(s[c])); }) as RGB3;
+  }
   const diffuse = Math.max(0, dot(n, L.light)), h = norm([L.light[0], L.light[1], L.light[2] - 1]), nh = Math.max(0, dot(n, h));
   if (L.material === 'metal') {
     const k = clamp(0.3 * L.ambient + 0.75 * diffuse * L.intensity), s = Math.pow(nh, 14) * L.highlight * 1.4;
@@ -51,6 +122,10 @@ export function shadeRgb(base: RGB3, n: V3, L: Lighting): RGB3 {
 
 export function lightFactors(n: V3, L: Lighting): { t: number; s: number } {
   if (L.material === 'flat' || L.material === 'wireframe') return { t: 1, s: 0 };
+  if (L.srcs) {
+    const { d, s } = lit(n, L), dm = (d[0] + d[1] + d[2]) / 3, sm = (s[0] + s[1] + s[2]) / 3;
+    return L.material === 'metal' ? { t: clamp(0.3 * L.ambient + 0.75 * dm), s: clamp(sm * 0.43) } : { t: clamp(L.ambient + (1 - L.ambient) * dm), s: clamp(sm) };
+  }
   const diffuse = Math.max(0, dot(n, L.light)), h = norm([L.light[0], L.light[1], L.light[2] - 1]), nh = Math.max(0, dot(n, h));
   if (L.material === 'metal') return { t: clamp(0.3 * L.ambient + 0.75 * diffuse * L.intensity), s: clamp(Math.pow(nh, 14) * L.highlight * 0.6) };
   return { t: clamp(L.ambient + (1 - L.ambient) * diffuse * L.intensity), s: L.material === 'matte' ? 0 : clamp(Math.pow(nh, 36) * L.highlight) };
@@ -81,17 +156,28 @@ function inset(pts: Pt[], d: number, sign: number): Pt[] {
   });
 }
 
-interface Raw { pts: V3[]; normal: V3; solid: Solid; cap: boolean; rings?: V3[][]; role?: 'front' | 'back' }
+export interface Raw { pts: V3[]; normal: V3; solid: Solid; cap: boolean; rings?: V3[][]; role?: 'front' | 'back'; hint?: V3 }
+
+function ringSigns(list: Array<{ pts: Pt[]; closed: boolean }>): number[] {
+  const inside = (p: Pt, ring: Pt[]): boolean => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c; } return c; };
+  return list.map((q, i) => {
+    if (!q.closed || q.pts.length < 3) return 0;
+    let depth = 0;
+    list.forEach((o, j) => { if (j !== i && o.closed && o.pts.length > 2 && inside(q.pts[0], o.pts)) depth++; });
+    return (area(q.pts) >= 0 ? 1 : -1) * (depth % 2 ? -1 : 1);
+  });
+}
 
 export function scene3d(solids: Solid[], e: Effect): Face[] { return scene3dWith(solids, e).faces; }
 
-export function scene3dWith(solids: Solid[], e: Effect): Scene {
+export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
   const p = e.params, kind = e.id;
   let b = emptyRect();
   for (const s of solids) b = unionRect(b, pathBounds(s.d));
-  if (!Number.isFinite(b.x)) return { faces: [], project: (x, y) => ({ x, y }), center: { x: 0, y: 0 } };
+  if (!Number.isFinite(b.x)) return { faces: [], project: (x, y) => ({ x, y }), center: { x: 0, y: 0 }, trace: null };
   const size = Math.max(b.w, b.h, 1), tol = Math.max(0.2, size / 300), raws: Raw[] = [];
-  const polys = (s: Solid): Array<{ pts: Pt[]; closed: boolean }> => s.d.map((sp) => ({ pts: flattenSub(sp, tol), closed: sp.closed })).filter((q) => q.pts.length > 1);
+  const memo = new Map<Solid, Array<{ pts: Pt[]; closed: boolean }>>();
+  const polys = (s: Solid): Array<{ pts: Pt[]; closed: boolean }> => { let l = memo.get(s); if (!l) { l = s.d.map((sp) => ({ pts: flattenSub(sp, tol), closed: sp.closed })).filter((q) => q.pts.length > 1); memo.set(s, l); } return l; };
   let center: V3 = [b.x + b.w / 2, b.y + b.h / 2, 0];
   if (kind === '3d.extrude' || kind === '3d.rotate') {
     const depth = kind === '3d.rotate' ? 0 : Math.max(0, num(p, 'depth', 50)), caps = kind === '3d.rotate' || flag(p, 'cap', true);
@@ -102,7 +188,8 @@ export function scene3dWith(solids: Solid[], e: Effect): Scene {
       const outer = list.reduce((m, q) => (Math.abs(area(q.pts)) > Math.abs(m) ? area(q.pts) : m), 0), sign = outer >= 0 ? 1 : -1;
       const steps = bh > 0 ? (bevel === 'rounded' ? 4 : 1) : 0;
       const ring = (pts: Pt[], k: number): { pts: Pt[]; z: number } => { if (!steps) return { pts, z: 0 }; const t = k / steps, th = (t * Math.PI) / 2, inAmt = bevel === 'rounded' ? bh * (1 - Math.sin(th)) : bh * (1 - t), z = bevel === 'rounded' ? bh * (1 - Math.cos(th)) : bh * t; return { pts: inAmt > 1e-6 ? inset(pts, inAmt, sign) : pts, z }; };
-      for (const q of list) {
+      const hs = trace ? ringSigns(list) : [];
+      for (const [qi, q] of list.entries()) {
         if (depth > 0 || bh > 0) {
           const rings = Array.from({ length: steps + 1 }, (_, k) => ring(q.pts, k));
           rings.push({ pts: q.pts, z: depth });
@@ -113,7 +200,8 @@ export function scene3dWith(solids: Solid[], e: Effect): Scene {
             for (let i = 0; i < segN; i++) {
               const j = (i + 1) % q.pts.length, a0 = A.pts[i], a1 = A.pts[j], b0 = B.pts[i], b1 = B.pts[j];
               const P: V3[] = [[a0.x, a0.y, A.z], [a1.x, a1.y, A.z], [b1.x, b1.y, B.z], [b0.x, b0.y, B.z]];
-              raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false });
+              const sg = hs[qi] ?? 0, ex = q.pts[j].x - q.pts[i].x, ey = q.pts[j].y - q.pts[i].y;
+              raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false, ...(sg ? { hint: [ey * sg, -ex * sg, 0] as V3 } : {}) });
             }
           }
         }
@@ -132,11 +220,14 @@ export function scene3dWith(solids: Solid[], e: Effect): Scene {
     const steps = Math.max(6, Math.ceil((ang / 360) * 48)), th = (k: number): number => ((k / steps) * ang * Math.PI) / 180;
     center = [axis, b.y + b.h / 2, 0];
     const rev = (v: Pt, t: number): V3 => { const r = v.x - axis; return [axis + r * Math.cos(t), v.y, -r * Math.sin(t)]; };
-    for (const s of solids) for (const q of polys(s)) {
-      const segN = q.closed ? q.pts.length : q.pts.length - 1;
+    const signs = new Map<Solid, number[]>();
+    for (const s of solids) for (const [qi, q] of polys(s).entries()) {
+      if (trace && !signs.has(s)) signs.set(s, ringSigns(polys(s)));
+      const segN = q.closed ? q.pts.length : q.pts.length - 1, sg = signs.get(s)?.[qi] ?? 0;
       for (let k = 0; k < steps; k++) for (let i = 0; i < segN; i++) {
         const a = q.pts[i], c = q.pts[(i + 1) % q.pts.length], P: V3[] = [rev(a, th(k)), rev(c, th(k)), rev(c, th(k + 1)), rev(a, th(k + 1))];
-        raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false });
+        const ox = (c.y - a.y) * sg, oy = -(c.x - a.x) * sg, tm = (th(k) + th(k + 1)) / 2;
+        raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false, ...(sg ? { hint: [ox * Math.cos(tm), oy, -ox * Math.sin(tm)] as V3 } : {}) });
       }
       if (ang < 360 && flag(p, 'cap', true) && q.closed && q.pts.length > 2) {
         raws.push({ pts: [], rings: [q.pts.map((v) => rev(v, 0))], normal: [0, 0, -1], solid: s, cap: true });
@@ -170,7 +261,7 @@ export function scene3dWith(solids: Solid[], e: Effect): Scene {
     return { list, depth: list.reduce((m, f) => m + f.depth, 0) / Math.max(1, list.length) };
   });
   ordered.sort((a, c) => c.depth - a.depth);
-  return { faces: ordered.flatMap((o) => o.list), project: (x, y, z) => { const q = project([x, y, z]); return { x: q.x, y: q.y }; }, center: { x: b.x + b.w / 2, y: b.y + b.h / 2 } };
+  return { faces: ordered.flatMap((o) => o.list), project: (x, y, z) => { const q = project([x, y, z]); return { x: q.x, y: q.y }; }, center: { x: b.x + b.w / 2, y: b.y + b.h / 2 }, trace: trace ? { raws, R, f, center, size } : null };
 }
 
 export function outline3d(d: PathData, e: Effect): PathData {

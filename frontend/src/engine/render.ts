@@ -1,9 +1,10 @@
 import { selectionBounds, strokeReach, visualBounds } from './bounds';
 import { childrenOf } from './doc';
-import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, threeDFaces, type RasterFx } from './effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, rayTraceImage, strokeOutline, threeDFaces, TRACE_ID, type RasterFx } from './effects';
 import { emptyRect, inflate, isEmptyRect, pathBounds, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
+import { rayTraced } from './threed';
 import { cssColor, freeformPixels, gray, gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from './paint';
 import { liveFaceNodes } from './livepaint';
 import { derivedArt } from './shaper';
@@ -503,8 +504,34 @@ function drawFreeform(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Pa
   ctx.restore();
 }
 
+function drawnFx(n: VNode): RasterFx[] {
+  const fx = rasterEffects(n);
+  return fx.some((f) => f.filter?.id === TRACE_ID) ? fx.filter((f) => f.filter?.id !== TRACE_ID) : fx;
+}
+
+const traceCanvas = new WeakMap<Uint8ClampedArray, HTMLCanvasElement | OffscreenCanvas>();
+function drawTraced(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): boolean {
+  const region = visualBounds(rc.doc, n);
+  if (isEmptyRect(region)) return false;
+  const t = ctx.getTransform(), r = rayTraceImage(rc.doc, n, region, Math.hypot(t.a, t.b), !!rc.printing);
+  if (!r) return false;
+  let cv = traceCanvas.get(r.data);
+  if (!cv) {
+    const made = canvas2d(r.w, r.h);
+    made.ctx.putImageData(new ImageData(r.data as Uint8ClampedArray<ArrayBuffer>, r.w, r.h), 0, 0);
+    cv = made.canvas;
+    traceCanvas.set(r.data, cv);
+  }
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(cv as CanvasImageSource, region.x, region.y, region.w, region.h);
+  ctx.restore();
+  return true;
+}
+
 function needsLayer(n: VNode, multi: boolean, rc: RenderContext): boolean {
-  return (n.opacity < 1 && multi) || n.blend !== 'normal' || !!(n.mask && !n.mask.disabled) || rasterEffects(n).length > 0 || !!n.isolate || knocksOut(n, !!rc.knockout);
+  return (n.opacity < 1 && multi) || n.blend !== 'normal' || !!(n.mask && !n.mask.disabled) || drawnFx(n).length > 0 || !!n.isolate || knocksOut(n, !!rc.knockout);
 }
 
 const shapeVariants = new WeakMap<VNode, VNode>();
@@ -544,7 +571,7 @@ function drawKids(ctx: CanvasRenderingContext2D, n: VNode, kids: VNode[], rc: Re
 export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): void {
   if (n.hidden || rc.skip?.has(n.id)) return;
   if (rc.printing && n.kind === 'layer' && (n.printable === false || n.template)) return;
-  const fx = rc.outline ? [] : rasterEffects(n);
+  const fx = rc.outline ? [] : drawnFx(n);
   const ch = n.kind === 'compound' ? null : childrenOf(n);
   const multi = !!ch || n.ap.items.filter((i) => i.visible).length > 1 || n.kind === 'text' || n.kind === 'symbol' || n.kind === 'mesh' || has3d(n);
   if (!rc.outline && needsLayer(n, multi, rc)) {
@@ -563,6 +590,7 @@ export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderCo
 
 function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): void {
   if (!rc.outline && n.kind !== 'layer' && has3d(n)) {
+    if (n.ap.effects.some((e) => rayTraced(e)) && drawTraced(ctx, n, rc)) return;
     const faces = threeDFaces(rc.doc, n);
     if (faces) { for (const f of faces) renderNode(ctx, f, rc); return; }
   }

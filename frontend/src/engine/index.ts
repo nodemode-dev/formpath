@@ -1,7 +1,8 @@
 import { geomBounds, invalidateBounds, nodePath, selectionBounds, visualBounds } from './bounds';
 import { artGuides, bristleKind, defaultBrushes, TILE_KEYS } from './brushes';
 import { allNodes, ancestors, childrenOf, cloneNode, findNode, inDocOrder, insertInto, isContainer, isLocked, isVisible, layerOf, makeLayer, newDoc, newId, nodeAt, nodeLabel, pathOf, removeNodes, topObjects, topSelectable, updateNodes, walk, type IndexPath } from './doc';
-import { EFFECT_IDS, effectDef, effectDefaults, has3d, WIDTH_PROFILES } from './effects';
+import { EFFECT_IDS, effectDef, effectDefaults, has3d, onTraceReady, setTraceDraft, WIDTH_PROFILES } from './effects';
+import { invalidateLayers } from './render';
 import { Emitter } from './events';
 import { detachFrames, reflow, threadChains } from './flow';
 import { harmonyColors, isNeutral } from './harmony';
@@ -116,6 +117,12 @@ export class Engine extends Emitter<EngineEvents> {
   private gestureEdits = 0;
   private dragBase: Doc | null = null;
   private dragName = '';
+  private bakes: ReadonlyMap<string, VNode> | null = null;
+
+  constructor() {
+    super();
+    onTraceReady(() => { invalidateLayers(); this.emit('render', null); });
+  }
 
   get current(): Project | null { return this.projects.find((p) => p.id === this.currentId) ?? null; }
   get doc(): Doc | null { return this.current?.doc ?? null; }
@@ -202,8 +209,11 @@ export class Engine extends Emitter<EngineEvents> {
     if (this.symbolPart && !p.selection.has(this.symbolPart.instance)) this.symbolPart = null;
   }
 
-  beginGesture(): void { if (this.gestureDepth++ === 0) this.gestureEdits = 0; }
-  endGesture(): void { this.gestureDepth = Math.max(0, this.gestureDepth - 1); }
+  beginGesture(): void { if (this.gestureDepth++ === 0) { this.gestureEdits = 0; setTraceDraft(true); } }
+  endGesture(): void {
+    this.gestureDepth = Math.max(0, this.gestureDepth - 1);
+    if (this.gestureDepth === 0 && setTraceDraft(false)) { invalidateLayers(); this.emit('render', null); }
+  }
   private step: { p: Project; at: number } | null = null;
   beginStep(): void { const p = this.current; this.step = p ? { p, at: p.history.mark() } : null; }
   endStep(): void { const s = this.step; this.step = null; if (s && s.p.history.squash(s.at)) this.emit('history', null); }
@@ -1547,20 +1557,24 @@ export class Engine extends Emitter<EngineEvents> {
       return { doc: out, ids: res };
     }, ids);
   }
-  expand(what: 'appearance' | 'object' | 'all' = 'all', ids?: string[]): boolean {
+  expand(what: 'appearance' | 'object' | 'all' = 'all', ids?: string[], baked?: ReadonlyMap<string, VNode>): boolean {
     const p = this.current; if (!p) return false;
-    return this.run('Expand', (d, t) => {
-      let out = d;
-      const res: string[] = [];
-      for (const id of t) {
-        const n = findNode(out, id);
-        if (!n) continue;
-        const rep = this.expandNode(out, n, what);
-        out = updateNodes(out, [id], () => rep);
-        res.push(...rep.map((r) => r.id));
-      }
-      return { doc: out, ids: res };
-    }, ids);
+    this.bakes = baked && baked.size ? baked : null;
+    try {
+      return this.run('Expand', (d, t) => {
+        let out = d;
+        const res: string[] = [];
+        for (const v of this.bakes?.values() ?? []) if (v.kind === 'image') out = { ...out, images: { ...out.images, [v.src]: { mime: 'image/png', w: v.w, h: v.h } } };
+        for (const id of t) {
+          const n = findNode(out, id);
+          if (!n) continue;
+          const rep = this.expandNode(out, n, what);
+          out = updateNodes(out, [id], () => rep);
+          res.push(...rep.map((r) => r.id));
+        }
+        return { doc: out, ids: res };
+      }, ids);
+    } finally { this.bakes = null; }
   }
   private expandNode(doc: Doc, n: VNode, what: 'appearance' | 'object' | 'all'): VNode[] {
     const obj = what !== 'appearance', app = what !== 'object';
@@ -1576,6 +1590,8 @@ export class Engine extends Emitter<EngineEvents> {
     if (obj && n.kind === 'group' && n.intertwine) return this.expandNode(doc, expandedIntertwine(n), what);
     if (obj && n.kind === 'group' && n.shaper) return this.expandNode(doc, expandedShaper(n), what);
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
+    const baked = app ? this.bakes?.get(n.id) : undefined;
+    if (baked) return [baked];
     if (app && n.kind !== 'layer' && has3d(n)) return expandAppearance(doc, n);
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
     if (app && (n.kind === 'path' || n.kind === 'compound')) return expandAppearance(doc, n);

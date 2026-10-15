@@ -1,9 +1,10 @@
 import { renderNode, type RenderContext } from '../engine/render';
-import { selectionBounds } from '../engine/bounds';
-import { findNode, makeLayer } from '../engine/doc';
-import { isEmptyRect } from '../engine/geometry';
+import { selectionBounds, visualBounds } from '../engine/bounds';
+import { childrenOf, findNode, makeLayer, newId } from '../engine/doc';
+import { inflate, isEmptyRect } from '../engine/geometry';
 import { BLACK, hex, toRgb, WHITE } from '../engine/paint';
-import type { Color, Project, Rect, VNode } from '../engine';
+import { rayTraced } from '../engine/threed';
+import type { Color, Engine, Project, Rect, VNode } from '../engine';
 import { exportRegion, exportSvg } from './svg';
 import { zipFiles } from './zip';
 import { encodeTiff, type TiffCompression } from './tiff';
@@ -109,6 +110,26 @@ export async function renderRegion(p: Project, o: Omit<RasterOpts, 'format' | 'q
   for (const n of o.only ?? p.doc.layers) renderNode(g, n, rc);
   if (o.dither) ditherCanvas(c, o.dither);
   return c;
+}
+
+export async function bakeTraced(engine: Engine, ids?: string[]): Promise<Map<string, VNode>> {
+  const p = engine.current, out = new Map<string, VNode>();
+  if (!p) return out;
+  const found: VNode[] = [];
+  const walk = (n: VNode): void => {
+    if (n.hidden) return;
+    if (n.kind !== 'layer' && n.ap.effects.some((e) => rayTraced(e))) { found.push(n); return; }
+    for (const c of childrenOf(n) ?? []) walk(c);
+  };
+  for (const id of engine.targetIds(ids)) { const n = findNode(p.doc, id); if (n) walk(n); }
+  for (const n of found) {
+    const b = inflate(visualBounds(p.doc, n), 1);
+    if (isEmptyRect(b) || b.w <= 0 || b.h <= 0) continue;
+    const c = await renderRegion(p, { region: b, scale: (p.doc.rasterPpi || 300) / 72, transparent: true, only: [{ ...n, opacity: 1, blend: 'normal' } as VNode] }), blob = await canvasBlob(c, 'png', 1), key = `img-${newId('').replace(/[^a-z0-9]/gi, '')}.png`;
+    p.assets.set(key, blob);
+    out.set(n.id, { id: newId('im'), kind: 'image', src: key, w: c.width, h: c.height, xf: [b.w / c.width, 0, 0, b.h / c.height, b.x, b.y], opacity: n.opacity, blend: n.blend, ap: { items: [], effects: [] }, name: n.name ?? '3D' });
+  }
+  return out;
 }
 
 export async function canvasBlob(c: HTMLCanvasElement, format: RasterFormat, quality: number, tiff?: Partial<TiffChoice>, transparent = false): Promise<Blob> {
