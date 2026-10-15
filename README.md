@@ -2,7 +2,7 @@
 <h1 align="center">formpth</h1>
 <p align="center"><b>Vector illustration for the web and the desktop, in the NodeMode design system.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-0.33.0-f97316" alt="version 0.33.0">
+<img src="https://img.shields.io/badge/version-0.34.0-f97316" alt="version 0.34.0">
 <img src="https://img.shields.io/badge/node-22-339933" alt="node 22">
 <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
 <img src="https://img.shields.io/badge/tauri-2-24C8DB" alt="tauri 2">
@@ -13,7 +13,7 @@
 
 formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, variable fonts and Touch Type, symbols and the symbolism tools, blends, repeats, Live Paint, gradient meshes, pattern editing, live image trace, the Perspective Grid, Puppet Warp, Shaper, graphs and data merge. It saves its own `.fpth` projects, reads and writes SVG, PDF, EPS and DXF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 92 tools, and Claude Code runs inside its own terminal dock.
 
-**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 43,200 lines of TypeScript, 1,900 of CSS, 5,200 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
+**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 45,900 lines of TypeScript, 1,900 of CSS, 5,400 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
 
 ## Highlights
 
@@ -120,7 +120,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 73.5 of 76 rows against Illustrator 30 (71 Full, 5 Partial, 0 None), 96.7 percent. An independent audit of the code at v0.30.0 graded 71; the three rows it found short (star corners, Text to Vector Graphic, Generative Recolor) were built in v0.31.0 and re-traced. v0.32.0 added ICC colour management, live PDF text, PDF/X-4, an `.ai` writer, DWG through an installed converter, several lights and ray-traced 3D; each of the five rows still lacks a named part. Partial: colour management (no Print dialog or display profile), PDF (import skips soft masks, meshes and tiling patterns), `.ai` (no reading without PDF compatibility), DWG (needs a converter), and 3D (no Substance materials). The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
+- **Parity.** 74.5 of 76 rows against Illustrator 30 (73 Full, 3 Partial, 0 None), 98.0 percent, self-graded since the last independent audit (71 at v0.30.0); the next audit is plan v0.6.0 phase 31. v0.32.0 and v0.33.0 added ICC colour management, File > Print, live PDF text, PDF/X-4, vector masks, meshes and patterns in PDF and their import, encrypted PDFs, an `.ai` writer and reader for files without PDF compatibility, DWG through an installed converter, and ray-traced 3D. Partial: `.ai` (no Illustrator private data in the writer; symbols, brushes and live effects dropped when reading), DWG (needs a converter), and 3D (no Substance materials). The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors

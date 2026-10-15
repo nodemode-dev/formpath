@@ -2,6 +2,24 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.34.0 · 2026-10-15
+
+Plan v0.6.0 phase 30: printing, import and 3D.
+
+### Added
+
+- File > Print: paper and orientation, fit, percent or tiled scaling, printer's marks and bleed, composite or separations, colour handling by formpth or the printer, live page preview.
+- Proofing uses the display profile the engine detects (colord, X11, ColorSync, Windows, or FORMPTH_DISPLAY_PROFILE); Preserve CMYK Numbers works.
+- PDF import: soft masks, image masks, mesh shadings, tiling patterns, and encrypted files (Standard handler R2 to R6) with a password prompt; `open_file` takes `password`.
+- `.ai` files saved without PDF compatibility open, including AI9 private data compressed with Deflate or ZStandard.
+- 3D: Inflate and Map Art under ray tracing.
+- 65 new strings in all 25 languages.
+
+### Changed
+
+- The content security policy allows blob: frames and objects, so printing can load the generated PDF.
+- `docs/PARITY.md`: 74.5 of 76 (98.0 percent), self-graded; colour management and print and PDF in and out are Full.
+
 ## 0.33.0 · 2026-10-15
 
 Plan v0.6.0 phase 29: vector PDF, translations, verification and a steady window.

@@ -680,7 +680,15 @@ ask it questions.
   rendering intent and black point compensation; Edit > Assign Profile and Convert to Profile change the document's
   profile; View > Proof Setup and Proof Colors preview the art on the chosen press profile.
 - 3D and Materials: Lighting takes a preset or up to eight lights; Render with Ray Tracing, at Low, Medium or High,
-  adds soft shadows and ambient occlusion and shows the brushed metal, wood and rough materials.
+  adds soft shadows and ambient occlusion and shows the brushed metal, wood and rough materials. Inflate and Map Art
+  are ray traced too.
+- File > Print (Ctrl+P) sets paper, orientation, scaling (fit, percent or tiled pages), printer's marks and bleed,
+  composite or separations, and whether formpth or the printer manages colour; the printer itself is chosen in the
+  system print dialog that opens next. Proof Setup shows the display profile proofing uses; Preserve CMYK Numbers
+  shows CMYK colours as the press would print their numbers.
+- Opening files: encrypted PDFs ask for their password; `.ai` files saved without PDF compatibility (Illustrator 3
+  to CS6 and later) open with their layers, paths, gradients, spot colours and type; symbols, brushes and live
+  effects are named in the message as left out.
 - File > Send to NodeMode sends the active artboard as an image to a NodeMode canvas (Preferences > Plugins sets its
   address).
 

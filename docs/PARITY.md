@@ -14,7 +14,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 
 ## Score at v0.31.0
 
-**73.5 of 76 scored rows, 96.7 percent:** 71 Full, 5 Partial, 0 None. A third independent audit graded every row from a snapshot of the code at commit 85dbe07 (v0.30.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed: 71 of 76 (68 Full, 6 Partial, 2 None), plus 11.5 of 12 for the plan v0.5.0 additions. It raised Smart Guides to Full, lowered Rectangle to Star to Partial (stars had no live corner radius), and graded Text to Vector Graphic and Generative Recolor None, since the Assistant is not those features. All three gaps were then built in v0.31.0 and re-traced here, not by the auditor; the rows say so. The tally is at the end.
+**74.5 of 76 scored rows, 98.0 percent:** 73 Full, 3 Partial, 0 None. Colour management and print and PDF in and out were raised to Full in v0.33.0 on work re-traced here; the next independent audit (plan v0.6.0 phase 31) grades them again. A third independent audit graded every row from a snapshot of the code at commit 85dbe07 (v0.30.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed: 71 of 76 (68 Full, 6 Partial, 2 None), plus 11.5 of 12 for the plan v0.5.0 additions. It raised Smart Guides to Full, lowered Rectangle to Star to Partial (stars had no live corner radius), and graded Text to Vector Graphic and Generative Recolor None, since the Assistant is not those features. All three gaps were then built in v0.31.0 and re-traced here, not by the auditor; the rows say so. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -128,15 +128,15 @@ formpth has no generative model of its own. Every row here runs on the language 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
 | Native projects | Full | `.fpth` with the whole document and its images, library with conflict copies, recovery, session restore |
-| Illustrator .ai files | Partial | `.ai` files saved with PDF compatibility open through the PDF reader, so Illustrator-only data is lost. Since v0.32.0 Export writes a PDF-compatible `.ai` (every artboard a page) that Illustrator opens as PDF content and formpth reopens fully editable. Missing: Illustrator's private data stream, and reading `.ai` saved without PDF compatibility |
+| Illustrator .ai files | Partial | `.ai` files saved with PDF compatibility open through the PDF reader, so Illustrator-only data is lost. Since v0.32.0 Export writes a PDF-compatible `.ai` (every artboard a page) that Illustrator opens as PDF content and formpth reopens fully editable. Since v0.33.0 `.ai` saved without PDF compatibility (Illustrator 3 to 8, and later files whose AI9 private data is plain, Deflate or ZStandard compressed) opens with layers, paths, compound paths, clip groups, gradients, spot colours, type and embedded rasters. Missing: Illustrator's private data stream in the writer, and symbols, brushes, patterns and live effects from the private data when reading |
 | SVG in and out | Full | Gradients, patterns, clipping, masks, symbols, type, images; editing data embedded for exact round trips |
-| PDF in and out | Partial | The v0.23.0 audit graded this Full; it is held at Partial because these gaps are confirmed in `io/pdf.ts`. Missing: import refuses encrypted files and drops soft masks, mesh shadings and tiling patterns. Built since v0.33.0: opacity masks as soft masks, gradient meshes as Coons patch shadings, patterns as tiling patterns and freeform gradients as triangle shadings, so only raster effects are rasterised, as in Illustrator. Built: export with vectors, shadings, transparency and CMYK, one page per artboard; live, searchable type with embedded font subsets since v0.32.0 (type with gradients, effects or an unavailable font is outlined); bleed and printer's marks since v0.30.0; PDF/X-4 with the document CMYK profile as the output intent since v0.32.0; formpth's own PDFs and `.ai` files reopen exactly; any other PDF or PDF-compatible `.ai` opens one artboard per page with paths, gradients, clipping, images and point type in installed fonts, and reports what it left out |
+| PDF in and out | Full | Raised from Partial in v0.33.0 and re-traced here, not by an auditor. Import since v0.33.0: soft masks as opacity masks, image soft masks and stencil masks as alpha, grid-shaped mesh shadings as gradient meshes (other meshes as a picture of the region, reported), tiling patterns as pattern swatches, and encrypted files through the Standard security handler R2 to R6 with a password prompt. Still left out on import: function-based shadings, public-key encryption. Export since v0.33.0: opacity masks as soft masks, gradient meshes as Coons patch shadings, patterns as tiling patterns and freeform gradients as triangle shadings, so only raster effects are rasterised, as in Illustrator. Built: export with vectors, shadings, transparency and CMYK, one page per artboard; live, searchable type with embedded font subsets since v0.32.0 (type with gradients, effects or an unavailable font is outlined); bleed and printer's marks since v0.30.0; PDF/X-4 with the document CMYK profile as the output intent since v0.32.0; formpth's own PDFs and `.ai` files reopen exactly; any other PDF or PDF-compatible `.ai` opens one artboard per page with paths, gradients, clipping, images and point type in installed fonts, and reports what it left out |
 | EPS, DXF and DWG | Partial | DXF R12 to 2018 import (entities, blocks, layers, units and scale) and AutoCAD 2000 or R12 export; EPS Level 3 export per artboard in RGB or CMYK, formpth's own EPS reopened editable, other EPS read by a PostScript path reader. DWG opens since v0.32.0 through the ODA File Converter or LibreDWG's dwg2dxf when one is installed. Missing: reading DWG without a converter, writing DWG, and images in foreign EPS and in DXF |
 | Raster export | Full | PNG, JPEG, WebP of an artboard, all artboards or the selection, at any scale, with transparency |
 | Export for Screens and asset export | Full | Export for Screens with artboards, scales, suffixes and formats in a zip; the Asset Export panel with Collect for Export as single or multiple assets, renaming, and each asset cropped to its art in PNG, JPEG, WebP, SVG or PDF |
 | Placed images and links | Full | Place Linked keeps a path or file handle; the Links panel shows Linked, Modified and Missing and checks on focus; Relink, Relink All Instances, Relink Missing from Folder, Update, Update All, Go To Link, Embed, Unembed and Link Info; `.fpth` keeps links with a cached preview; exports use the full pixels |
 | History and Actions | Full | History panel with every step, New Document from State and History Options; Actions record menu commands, dialog values, transforms (tool drags included), drawn shapes, fills, strokes, opacity and styles, with per-step toggles, modal dialogs, stops, editing and reordering; action sets saved as `.fpaction` files with a Default Actions set; Batch over a folder or over data sets with a log. Dialogs outside the common form (Export, Effect Gallery) open during playback instead of replaying |
-| Colour management and print | Partial | CMYK document mode and CMYK PDF; Overprint and Separations Preview, printer's marks and bleed since v0.30.0. Since v0.32.0, on LittleCMS: Color Settings with RGB and CMYK working spaces from installed, system or loaded ICC profiles, four intents and black point compensation; Assign Profile; Convert to Profile; Proof Setup and Proof Colors; PDF/X-4 output intent; formpth Generic CMYK when no press profile is loaded. Missing: a Print dialog to a printer, the display profile (proofing assumes sRGB), and Preserve CMYK Numbers in proofing |
+| Colour management and print | Full | Raised from Partial in v0.33.0 and re-traced here, not by an auditor. CMYK document mode and CMYK PDF; Overprint and Separations Preview, printer's marks and bleed since v0.30.0. Since v0.32.0, on LittleCMS: Color Settings with RGB and CMYK working spaces from installed, system or loaded ICC profiles, four intents and black point compensation; Assign Profile; Convert to Profile; Proof Setup and Proof Colors; PDF/X-4 output intent; formpth Generic CMYK when no press profile is loaded. Since v0.33.0: File > Print (paper, orientation, fit, percent or tiled scaling, marks and bleed, composite or separations, colour managed by formpth with a printer profile or by the printer; the printer is picked in the system dialog), proofing on the detected display profile, and Preserve CMYK Numbers. Limits: display detection was run on Linux only; separation plates print as raster pages |
 | Variables and data merge | Full | Variables panel with text, image, visibility and graph variables bound to objects; data sets captured, updated, deleted and stepped through live; CSV and JSON import; Export Variations as PNG, SVG, PDF or `.fpth` per data set to a folder or a zip |
 
 ## Platforms and access (not scored)
@@ -160,22 +160,18 @@ formpth has no generative model of its own. Every row here runs on the language 
 | Effects and live objects | 9.5 | 10 |
 | Type | 8 | 8 |
 | Generative AI | 5 | 5 |
-| Files, colour and output | 9 | 11 |
-| **Total** | **73.5** | **76** |
+| Files, colour and output | 10 | 11 |
+| **Total** | **74.5** | **76** |
 
-71 rows Full, 5 Partial, 0 None: 96.7 percent.
+73 rows Full, 3 Partial, 0 None: 98.0 percent.
 
 ## Next to close
 
-Every row is built. The five Partial rows, by what each lacks, ranked by the audit's view of their impact:
+Every row is built. The three Partial rows, by what each lacks:
 
-v0.32.0 built ICC colour management, PDF live text and PDF/X-4, the `.ai` writer, DWG through a converter, several lights and ray tracing. Each row still lacks a named part, so the grades stand:
-
-1. Colour management and print: a Print dialog to a printer, the display profile, Preserve CMYK Numbers.
-2. PDF: import of encrypted files, soft masks, mesh shadings and tiling patterns (export writes all of these as vectors since v0.33.0).
-3. Illustrator `.ai`: reading files saved without PDF compatibility; Illustrator's private data.
-4. EPS, DXF and DWG: reading DWG without an installed converter.
-5. 3D and Materials: Substance materials; Inflate and Map Art under ray tracing.
+1. Illustrator `.ai`: Illustrator's private data in the writer; symbols, brushes, patterns and live effects from the private data when reading.
+2. EPS, DXF and DWG: reading DWG without an installed converter; writing DWG.
+3. 3D and Materials: Substance materials (Inflate and Map Art are ray traced since v0.33.0).
 
 The generative rows run on the model the person sets up for the Assistant; formpth ships no image or vector model of its own.
 
