@@ -46,7 +46,11 @@ export const api = {
     return json(await request('/projects/folder', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder, move }) }));
   },
   async package(manifest: object, files: FilePart[], root = ''): Promise<Blob> { return (await request('/projects/package', { method: 'POST', body: form({ manifest: JSON.stringify(manifest), ...(root ? { root } : {}) }, files) })).blob(); },
-  async packageFull(fields: Record<string, string>, files: FilePart[]): Promise<Response> { return request('/projects/package-full', { method: 'POST', body: form(fields, files) }); },
+  async packageFull(fields: Record<string, string>, files: FilePart[], fontFiles: FilePart[] = []): Promise<Response> {
+    const body = form(fields, files);
+    for (const part of fontFiles) body.append('font_files', part.blob, part.name);
+    return request('/projects/package-full', { method: 'POST', body });
+  },
   async openLibrary(name: string): Promise<OpenedProject> { return json(await request(`/projects/library/${encodeURIComponent(name)}`)); },
   async deleteLibrary(name: string): Promise<void> { await request(`/projects/library/${encodeURIComponent(name)}`, { method: 'DELETE' }); },
   async importProject(files: File[], paths: string[] = []): Promise<OpenedProject> {

@@ -49,8 +49,8 @@ def resolve_links(paths: list[str]) -> tuple[list[tuple[str, Path]], list[str]]:
     return found, missing
 
 
-def resolve_fonts(wanted: list[dict]) -> tuple[list[tuple[str, str, Path]], list[str]]:
-    found: list[tuple[str, str, Path]] = []
+def resolve_fonts(wanted: list[dict], bundled: dict[str, tuple[str, bytes]] | None = None) -> tuple[list[tuple[str, str, Path | tuple[str, bytes]]], list[str]]:
+    found: list[tuple[str, str, Path | tuple[str, bytes]]] = []
     missing: list[str] = []
     seen: set[str] = set()
     for w in wanted:
@@ -61,6 +61,8 @@ def resolve_fonts(wanted: list[dict]) -> tuple[list[tuple[str, str, Path]], list
         hit = fonts_service.find(family, style)
         if hit and Path(hit["path"]).is_file():
             found.append((family, style, Path(hit["path"])))
+        elif bundled and f"{family}|{style}" in bundled:
+            found.append((family, style, bundled[f"{family}|{style}"]))
         else:
             missing.append(f"{family} {style}")
     return found, missing
@@ -101,6 +103,7 @@ def build(
     separate_links: bool,
     relink_copies: bool,
     destination: Path | None,
+    bundled: dict[str, tuple[str, bytes]] | None = None,
 ) -> tuple[bytes | None, dict]:
     stem = clean(name)
     plan = Plan()
@@ -110,9 +113,12 @@ def build(
     for raw, src in links:
         rel = plan.add(link_folder, clean(src.name), src)
         mapping[raw] = rel
-    fonts, missing_fonts = resolve_fonts(font_wanted) if copy_fonts else ([], [])
+    fonts, missing_fonts = resolve_fonts(font_wanted, bundled) if copy_fonts else ([], [])
     for _, _, src in fonts:
-        plan.add("Fonts", clean(src.name), src)
+        if isinstance(src, tuple):
+            plan.add("Fonts", clean(src[0]), src[1])
+        else:
+            plan.add("Fonts", clean(src.name), src)
     doc = json.loads(json.dumps(manifest))
     if relink_copies and destination is not None and mapping:
         relink(doc, {raw: str(destination / rel) for raw, rel in mapping.items()})

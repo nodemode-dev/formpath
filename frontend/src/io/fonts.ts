@@ -23,6 +23,16 @@ function bundledLoader(family: string, style: string): (() => Promise<string>) |
   return null;
 }
 
+export async function bundledFontFile(family: string, style: string): Promise<{ name: string; blob: Blob } | null> {
+  const load = bundledLoader(family, style);
+  if (!load) return null;
+  try {
+    const url = await load(), res = await fetch(url);
+    if (!res.ok) return null;
+    return { name: decodeURIComponent(url.split('?')[0].split('/').pop() ?? 'font.woff'), blob: await res.blob() };
+  } catch { return null; }
+}
+
 const faces = new Set<string>();
 let onFace: (() => void) | null = null;
 export function onFontsLoaded(fn: () => void): void { onFace = fn; }

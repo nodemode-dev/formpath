@@ -184,6 +184,8 @@ def package_full(
     files: list[UploadFile] = File(default=[]),
     links: str = Form("[]"),
     fonts: str = Form("[]"),
+    font_files: list[UploadFile] = File(default=[]),
+    font_map: str = Form("{}"),
     report: str = Form(""),
     folder: str = Form(""),
     copy_links: bool = Form(True),
@@ -199,6 +201,17 @@ def package_full(
     data, assets = _manifest(manifest), _assets(files)
     _validated(data, assets)
     stem = pkg.clean(name)
+    try:
+        mapped = json.loads(font_map)
+    except ValueError:
+        mapped = {}
+    bundled: dict[str, tuple[str, bytes]] = {}
+    for upload in font_files[:32]:
+        fname = Path(upload.filename or "").name
+        key = mapped.get(fname) if isinstance(mapped, dict) else None
+        blob = upload.file.read(config.MAX_ASSET_BYTES + 1)
+        if key and pf.safe_name(fname) and len(blob) <= 64 * 1024 * 1024:
+            bundled[str(key)] = (fname, blob)
     destination = None
     if not as_zip:
         base = Path(folder).expanduser() if folder.strip() else config.exports_dir()
@@ -208,7 +221,7 @@ def package_full(
         if destination.exists():
             raise HTTPException(status_code=409, detail=f"{destination} already exists. Choose another folder or remove it first.")
     try:
-        blob, summary = pkg.build(stem, data, assets, [str(x) for x in _json_list(links, "links")], [x for x in _json_list(fonts, "fonts") if isinstance(x, dict)], report, copy_links, copy_fonts, separate_links, relink_copies, destination)
+        blob, summary = pkg.build(stem, data, assets, [str(x) for x in _json_list(links, "links")], [x for x in _json_list(fonts, "fonts") if isinstance(x, dict)], report, copy_links, copy_fonts, separate_links, relink_copies, destination, bundled)
     except OSError as exc:
         raise HTTPException(status_code=400, detail=f"formpth could not write the package: {exc.strerror or exc}. Choose a folder you can write to.") from exc
     if blob is not None:
