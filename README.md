@@ -13,7 +13,7 @@
 
 formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, variable fonts and Touch Type, symbols and the symbolism tools, blends, repeats, Live Paint, gradient meshes, pattern editing, live image trace, the Perspective Grid, Puppet Warp, Shaper, graphs and data merge. It saves its own `.fpth` projects, reads and writes SVG, PDF, EPS and DXF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 86 tools, and Claude Code runs inside its own terminal dock.
 
-**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 38,900 lines of TypeScript, 1,800 of CSS, 3,600 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
+**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 38,900 lines of TypeScript, 1,800 of CSS, 3,800 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
 
 ## Highlights
 
@@ -26,6 +26,7 @@ formpth is the vector member of the form family: an Illustrator alternative with
 - **Files.** `.fpth` projects with a library, conflict copies and crash recovery; SVG in and out with exact round trips; PDF out with real vectors, shadings, transparency and CMYK, and in from any PDF or PDF-compatible `.ai` with one artboard per page; PNG, JPEG and WebP; Export for Screens and the Asset Export panel; placed and linked images.
 - **Agents.** `./formpth mcp` gives Claude Code, Codex and Cursor 86 tools, from `get_image` to `pathfinder` to `run_command` and `run_commands` over the whole command catalogue. The window asks the person once. The `formpth-harness` skill pack teaches agents to look, plan, build, check and deliver.
 - **Terminal and Claude Code inside the window.** Window > Terminal opens a dock of real shells; its Claude Code button starts your own `claude` already connected to formpth's tools, and the Chat tab answers in plain words while it draws. `./formpth cli` lists, describes and runs any of the 649 catalogue commands from a terminal.
+- **26 languages.** English by default, with Spanish (Spain and Mexico), Portuguese (Brazil), French (France and Canada), German, Italian, Dutch, Danish, Finnish, Norwegian, Swedish, Russian, Polish, Czech, Hungarian, Ukrainian, Turkish, Chinese (Simplified and Traditional), Japanese, Korean, Indonesian, Thai and Vietnamese in Preferences > Interface, using Illustrator's own terms in each.
 - **Live Corners on any path.** Direct Selection shows a corner widget at every corner point: drag to round, Alt-click for inverted or chamfer, double-click for the Corners dialog.
 - **The assistant and plugins.** Window > Assistant edits through the same tools on the language model you choose; sandboxed JavaScript plugins add commands.
 - **Zero-flash UI.** Keyed DOM patching, guarded writes, a pre-paint theme boot, reveal after fonts; every interface change is checked in a throttled browser.

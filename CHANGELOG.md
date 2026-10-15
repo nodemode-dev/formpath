@@ -2,6 +2,15 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.27.0 · 2026-10-15
+
+The interface in 26 languages.
+
+### Added
+
+- Preferences > Interface > Language: English (the default) and 25 more, from Spanish and Brazilian Portuguese to Japanese, Chinese, Korean, Thai and Vietnamese, using Illustrator's localized terms. The window reloads in the chosen language and shows it from the first frame; document content, layer names, the terminal and chat replies stay as typed.
+- `./formpth i18n extract|check|missing|export|import` to harvest the interface's strings, check every language and review one through CSV.
+
 ## 0.26.0 · 2026-10-15
 
 The agent inside the window, the command catalogue, a one-run desktop build and Live Corners on any path.

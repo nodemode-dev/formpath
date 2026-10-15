@@ -18,6 +18,8 @@ ask it questions.
   Download Project writes the .fpth to your downloads.
 - The documents open when formpth closes reopen at the next start (Preferences > File Handling). With that off, only
   unsaved work is kept, and formpth offers to recover it after a crash.
+- Language: Preferences > Interface > Language switches the interface to one of 26 languages; formpth reloads in it.
+  Your documents, layer names and typed text are never translated.
 - The engine: if a message says it is offline, start it with `./formpth boot` (or `formpth.bat boot` on Windows).
 
 ## The workspace
