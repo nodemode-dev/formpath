@@ -1,7 +1,7 @@
 import { nodeLabel } from '../engine/doc';
 import type { Engine, Pt } from '../engine';
 import { getTool } from '../extensions/registry';
-import { el, q, setDisabled, setHidden, setText, setTitle, setValue } from './dom';
+import { el, q, setDisabled, setText, setTitle, setValue } from './dom';
 import { icon } from './icons';
 
 const UNIT: Record<string, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
@@ -91,7 +91,6 @@ export class StatusBar {
     setDisabled(this.next, boards.length < 2);
     setText(this.tool, getTool(e.tool)?.label ?? '');
     const sel = e.selected();
-    setHidden(this.sel, !sel.length);
     setText(this.sel, sel.length === 1 ? nodeLabel(sel[0]) : sel.length ? `${sel.length} objects` : '');
     this.syncPos();
   }

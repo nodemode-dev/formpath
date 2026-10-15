@@ -3,7 +3,7 @@ import { firstFill, firstStroke } from '../engine/paint';
 import type { Engine, Rect, Units } from '../engine';
 import type { AlignAction } from '../engine/ops/objects';
 import type { PathfinderOp } from '../engine/ops/paths';
-import { el, q, setClass, setHidden, setHtml, setStyleVar, setText } from './dom';
+import { el, q, setClass, setDisabled, setHidden, setHtml, setStyleVar, setText } from './dom';
 import { icon } from './icons';
 import { paintCss } from './rail';
 import { check, iconButton, numField, row, section, seg, selectCtl, slider } from './panels/kit';
@@ -94,6 +94,10 @@ export class PropertiesPanel {
   private readonly xform: TransformFields;
   private readonly selBox = el('<div class="cv-propsp-sel"></div>');
   private readonly docBox = el('<div class="cv-propsp-doc"></div>');
+  private readonly stack = el('<div class="cv-propsp-stack"></div>');
+  private floor = 0;
+  private readonly docCtls: Array<{ enable(on: boolean): void }> = [];
+  private readonly docButtons: HTMLButtonElement[] = [];
   private readonly quick = el('<div class="cv-propsp-quick"></div>');
   private readonly fillChip: HTMLButtonElement;
   private readonly strokeChip: HTMLButtonElement;
@@ -118,19 +122,28 @@ export class PropertiesPanel {
     this.weight = numField('', 'pt', (v) => engine.setStroke({ width: v }), { min: 0, max: 1000, step: 0.5 });
     q(app, '.cv-propsp-paint:last-child').appendChild(this.weight.el);
     this.opacity = slider(engine, 'Opacity', 0, 100, (v) => engine.setObjectProps({ opacity: v / 100 }), { unit: '%' });
-    this.selBox.append(section('Transform'), this.xform.el, this.shapeHead, this.shape.el, section('Appearance'), app, this.opacity.el, section('Quick Actions'), this.quick);
+    this.selBox.append(section('Transform'), this.xform.el, section('Appearance'), app, this.opacity.el, section('Quick Actions'), this.quick, this.shapeHead, this.shape.el);
     this.units = selectCtl('Units', [['pt', 'Points'], ['px', 'Pixels'], ['in', 'Inches'], ['mm', 'Millimeters'], ['cm', 'Centimeters'], ['pc', 'Picas']], (v) => engine.documentSetup({ units: v as Units }));
     this.boards = selectCtl('Artboard', [], (v) => { engine.setActiveArtboard(Number(v)); engine.fit(); });
     const flagsBox = el('<div class="cv-propsp-flags"></div>');
     for (const [key, label] of [['rulers', 'Rulers'], ['grid', 'Grid'], ['guides', 'Guides'], ['smartGuides', 'Smart Guides'], ['snapGrid', 'Snap to Grid'], ['snapPoint', 'Snap to Point'], ['outline', 'Outline View'], ['transparencyGrid', 'Transparency Grid']] as const) {
       const c = check(label, (v) => engine.setView({ [key]: v } as Partial<Engine['view']>));
       this.flags.push({ c, key });
+      this.docCtls.push(c);
       flagsBox.appendChild(c.el);
     }
     const docActions = el('<div class="cv-propsp-buttons"></div>');
-    for (const [label, cmd] of [['Document Setup', 'document-setup'], ['Edit Artboards', 'tool-artboard'], ['Preferences', 'settings']] as const) { const b = el<HTMLButtonElement>('<button class="cv-btn" type="button"></button>'); setText(b, label); b.addEventListener('click', () => run(cmd)); docActions.appendChild(b); }
+    for (const [label, cmd] of [['Document Setup', 'document-setup'], ['Edit Artboards', 'tool-artboard'], ['Preferences', 'settings']] as const) { const b = el<HTMLButtonElement>('<button class="cv-btn" type="button"></button>'); setText(b, label); b.addEventListener('click', () => run(cmd)); docActions.appendChild(b); if (cmd !== 'settings') this.docButtons.push(b); }
     this.docBox.append(section('Document'), this.units.el, this.boards.el, section('Rulers & Grids'), flagsBox, section('Quick Actions'), docActions);
-    this.body.append(this.head, this.selBox, this.docBox);
+    this.docCtls.push(this.units, this.boards);
+    this.stack.append(this.selBox, this.docBox);
+    this.body.append(this.head, this.stack);
+    const ro = new ResizeObserver(() => {
+      const h = Math.max(this.selBox.offsetHeight, this.docBox.offsetHeight);
+      if (h > this.floor) { this.floor = h; setStyleVar(this.stack, '--cv-props-floor', `${h}px`); }
+    });
+    ro.observe(this.selBox);
+    ro.observe(this.docBox);
     for (const k of ['selection', 'doc', 'active', 'options', 'colors', 'projects', 'tool'] as const) engine.on(k, () => this.queue());
     this.sync();
   }
@@ -158,10 +171,24 @@ export class PropertiesPanel {
     return out;
   }
 
+  private readonly widest: Array<[string, string]> = [['Group', 'group'], ['Make Clipping Mask', 'make-clip'], ['Unite', 'pf-unite'], ['Minus Front', 'pf-minus_front'], ['Intersect', 'pf-intersect'], ['Exclude', 'pf-exclude'], ['Make Blend', 'blend-make'], ['Make Compound Path', 'compound-make'], ['Arrange', 'bring-to-front'], ['Recolor', 'recolor'], ['Expand Appearance', 'expand-appearance']];
+
+  private fillQuick(acts: Array<[string, string]>): void {
+    const key = acts.map((a) => a[1]).join(',');
+    if (key === this.quickKey) return;
+    this.quickKey = key;
+    this.quick.textContent = '';
+    for (const [label, cmd] of acts) { const b = el<HTMLButtonElement>('<button class="cv-btn cv-quick-btn" type="button"></button>'); setText(b, label); b.addEventListener('click', () => this.run(cmd)); this.quick.appendChild(b); }
+  }
+
   private sync(): void {
     const e = this.engine, sel = e.selected(), n = sel[0], has = sel.length > 0, p = e.current;
-    setHidden(this.selBox, !has);
-    setHidden(this.docBox, has || !p);
+    setClass(this.selBox, 'is-off', !has);
+    setClass(this.docBox, 'is-off', has);
+    if (this.selBox.inert !== !has) this.selBox.inert = !has;
+    if (this.docBox.inert !== has) this.docBox.inert = has;
+    for (const c of this.docCtls) c.enable(!!p);
+    for (const b of this.docButtons) setDisabled(b, !p);
     const tile = q(this.head, '.cv-props-tile');
     setHtml(tile, icon(!p ? 'newFile' : !has ? 'pArtboards' : sel.length > 1 ? 'layers' : n.kind === 'text' ? 'vType' : n.kind === 'group' ? 'folder' : n.kind === 'image' ? 'image' : n.kind === 'symbol' ? 'pSymbols' : 'vPen', 18), !p ? 'none' : !has ? 'doc' : sel.length > 1 ? 'many' : n.kind);
     setText(q(this.head, '.cv-props-name'), !p ? 'No Document' : !has ? 'Document' : sel.length > 1 ? `${sel.length} Objects` : nodeLabel(n));
@@ -174,13 +201,13 @@ export class PropertiesPanel {
       const st = n.kind === 'text' ? null : firstStroke(n.ap);
       this.weight.set(n.kind === 'text' ? n.spans[0]?.style.strokeWidth ?? 0 : st?.width ?? 0);
       this.opacity.set(Math.round(n.opacity * 100));
-      const acts = this.actionsFor(), key = acts.map((a) => a[1]).join(',');
-      if (key !== this.quickKey) {
-        this.quickKey = key;
-        this.quick.textContent = '';
-        for (const [label, cmd] of acts) { const b = el<HTMLButtonElement>('<button class="cv-btn cv-quick-btn" type="button"></button>'); setText(b, label); b.addEventListener('click', () => this.run(cmd)); this.quick.appendChild(b); }
-      }
-    } else if (p) {
+      this.fillQuick(this.actionsFor());
+    } else {
+      setHidden(this.shapeHead, false);
+      this.shape.reserve();
+      this.fillQuick(this.widest);
+    }
+    if (!has && p) {
       this.units.set(p.doc.units);
       this.boards.setChoices(p.doc.artboards.map((a, i) => [String(i), `${i + 1} ${a.name}`] as const));
       this.boards.set(String(p.activeArtboard));

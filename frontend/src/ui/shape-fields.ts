@@ -38,6 +38,11 @@ export class ShapeFields {
 
   node(): PathNode | null { const s = this.engine.selected(); const n = s.length === 1 ? s[0] : null; return n?.kind === 'path' && n.live ? n : null; }
 
+  reserve(): void {
+    setHidden(this.el, false);
+    for (const [key, g] of this.groups) setHidden(g, key !== 'rect');
+  }
+
   sync(): boolean {
     const n = this.node();
     if (!n?.live) { setHidden(this.el, true); return false; }
