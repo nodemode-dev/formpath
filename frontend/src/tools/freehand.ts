@@ -280,12 +280,17 @@ registerTool({
   icon: () => 'vKnife',
   hint: () => 'Drag across closed shapes to slice them; with a selection only the selected shapes are cut.',
   cursor: () => CURSORS.knife,
-  down: (_ctx, p) => begin(p),
-  move: (ctx, p) => { if (F.on) collect(ctx, p); },
-  up: (ctx) => {
+  down: (ctx, p) => begin(ctx.engine.view.smartGuides ? { ...p, doc: ctx.snap(p.doc).p } : p),
+  move: (ctx, p) => {
+    if (!F.on) return;
+    collect(ctx, p);
+    if (ctx.engine.view.smartGuides) ctx.snap(p.doc);
+  },
+  up: (ctx, p) => {
     if (!F.on) return;
     F.on = false;
     const e = ctx.engine, pr = e.current;
+    if (e.view.smartGuides && F.pts.length > 1) { F.pts[F.pts.length - 1] = ctx.snap(p.doc).p; e.clearOverlay(); }
     if (!pr || F.pts.length < 2) { ctx.redraw(); return; }
     const rb = pathBounds(polyToPath(F.pts, false));
     const pool = e.hasSelection ? e.targetIds() : allNodes(pr.doc).filter((n) => (n.kind === 'path' || n.kind === 'compound') && isVisible(pr.doc, n.id) && !isLocked(pr.doc, n.id)).map((n) => n.id);

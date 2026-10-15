@@ -272,6 +272,7 @@ registerTool({
   move: (ctx, p) => {
     const e = ctx.engine, origin = e.dragOrigin;
     if (!A.id || !origin) return;
+    if (!A.moved && Math.hypot(p.doc.x - A.down.x, p.doc.y - A.down.y) * ctx.view().zoom < 3) return;
     A.moved = true;
     const n = pathNode(origin, A.id);
     if (!n) return;

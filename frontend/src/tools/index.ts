@@ -3,6 +3,7 @@ import './pen';
 import './draw';
 import './freehand';
 import './transform';
+import './liquify-detail';
 import './puppet';
 import './dimension';
 import './paint';

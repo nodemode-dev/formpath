@@ -2,7 +2,7 @@ import { geomBounds } from '../engine/bounds';
 import { findNode, layerOf, topObjects } from '../engine/doc';
 import { apply, flatIndex, hasIn, hasOut, tracePath, transformPath } from '../engine/geometry';
 import { cachedPath, invalidateLayers, renderDocument, renderNode, type RenderContext } from '../engine/render';
-import { collectTargets, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
+import { collectTargets, DEFAULT_SNAP_ANGLES, snapLine, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
 import { layoutText, lineBaseline, pathBrackets } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
 import { envelopeFrame, envelopeGrid } from '../engine/live';
@@ -54,7 +54,7 @@ export class Stage {
   private readonly perspFaces = new Map<string, Element>();
   onPointerDoc: ((p: Pt | null) => void) | null = null;
 
-  static prefs: { zoomWheel: boolean; gridColor: string; guideColor: string; snapTol: number; gridInBack: boolean; cell: number } = { zoomWheel: false, gridColor: '', guideColor: '', snapTol: 4, gridInBack: true, cell: 8 };
+  static prefs: { zoomWheel: boolean; gridColor: string; guideColor: string; snapTol: number; gridInBack: boolean; cell: number; snapAngles?: number[] } = { zoomWheel: false, gridColor: '', guideColor: '', snapTol: 4, gridInBack: true, cell: 8, snapAngles: DEFAULT_SNAP_ANGLES };
 
   constructor(private readonly host: HTMLElement, private readonly engine: Engine) {
     this.scene = q<HTMLCanvasElement>(host, '.cv-scene');
@@ -154,14 +154,8 @@ export class Stage {
     const r = snapPoint(p, this.targets.t, { tol, smart: v.smartGuides, point: v.snapPoint, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
     let out: SnapAt = { p: r.p, lines: r.lines, label: r.label };
     if (opts.from && v.smartGuides && r.hit !== 'spot') {
-      const f = opts.from;
-      let best: { q: Pt; d: number; deg: number } | null = null;
-      for (const deg of [0, 45, 90, 135]) {
-        const a = (deg * Math.PI) / 180, ux = Math.cos(a), uy = Math.sin(a);
-        const t = (p.x - f.x) * ux + (p.y - f.y) * uy, qx = f.x + ux * t, qy = f.y + uy * t, d = Math.hypot(p.x - qx, p.y - qy);
-        if (d <= tol && (!best || d < best.d)) best = { q: { x: qx, y: qy }, d, deg };
-      }
-      if (best) out = { p: best.q, lines: [{ x1: f.x, y1: f.y, x2: best.q.x, y2: best.q.y }], label: `${best.deg}°` };
+      const s = snapLine(p, opts.from, this.targets.t, tol, Stage.prefs.snapAngles);
+      if (s) out = { p: s.p, lines: s.lines, label: s.label };
     }
     if (out.lines.length || out.label) this.engine.setOverlay({ lines: out.lines, label: out.label, at: out.p });
     else this.engine.clearOverlay();

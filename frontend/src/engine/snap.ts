@@ -1,19 +1,20 @@
 import { geomBounds } from './bounds';
 import { walk } from './doc';
+import { bezDeriv, bezPoint, isLineSeg, segments, type Seg } from './geometry';
 import type { Doc, Pt, Rect } from './types';
 
 export interface SnapLine { x1: number; y1: number; x2: number; y2: number }
 export type SnapKind = 'guide' | 'side' | 'anchor' | 'artboard' | 'center';
 interface Rule { at: number; lo: number; hi: number; kind: SnapKind }
 interface Spot { x: number; y: number; kind: SnapKind }
-export interface SnapTargets { cell: number; spots: Map<number, Spot[]>; cols: Rule[]; rows: Rule[]; frames: Rect[] }
+export interface SnapTargets { cell: number; spots: Map<number, Spot[]>; cols: Rule[]; rows: Rule[]; frames: Rect[]; curves: Seg[] }
 export interface SnapResult { p: Pt; lines: SnapLine[]; label: string | null; hit: 'spot' | 'axis' | 'grid' | null }
 
 const RANK: Record<SnapKind, number> = { anchor: 0, artboard: 1, center: 2, side: 3, guide: 3 };
 const cellKey = (i: number, j: number): number => (i + 32768) * 65536 + (j + 32768);
 
 export function collectTargets(doc: Doc, exclude: Set<string>, anchorObjects = 6000): SnapTargets {
-  const t: SnapTargets = { cell: 64, spots: new Map(), cols: [], rows: [], frames: [] };
+  const t: SnapTargets = { cell: 64, spots: new Map(), cols: [], rows: [], frames: [], curves: [] };
   const spot = (x: number, y: number, kind: SnapKind): void => {
     const k = cellKey(Math.floor(x / t.cell), Math.floor(y / t.cell)), list = t.spots.get(k);
     if (list) list.push({ x, y, kind }); else t.spots.set(k, [{ x, y, kind }]);
@@ -35,7 +36,10 @@ export function collectTargets(doc: Doc, exclude: Set<string>, anchorObjects = 6
     }
     if (++objects <= anchorObjects) {
       const subs = n.kind === 'path' ? n.d : n.kind === 'compound' ? n.children.flatMap((c) => c.d) : [];
-      for (const sp of subs) for (const a of sp.pts) spot(a.x, a.y, 'anchor');
+      for (const sp of subs) {
+        for (const a of sp.pts) spot(a.x, a.y, 'anchor');
+        if (t.curves.length < 6000) t.curves.push(...segments(sp));
+      }
     }
     return n.kind === 'group' ? undefined : false;
   });
@@ -141,6 +145,63 @@ export function snapRect(r: Rect, t: SnapTargets, o: SnapOpts): { dx: number; dy
   if (useSx && sx) lines.push(...sx.lines);
   if (useSy && sy) lines.push(...sy.lines);
   return { dx, dy, lines };
+}
+
+export const DEFAULT_SNAP_ANGLES = [0, 45, 90, 135];
+
+function roots(f: (t: number) => number, steps = 14): number[] {
+  const out: number[] = [];
+  let t0 = 0, f0 = f(0);
+  for (let i = 1; i <= steps; i++) {
+    const t1 = i / steps, f1 = f(t1);
+    if (f0 === 0) out.push(t0);
+    else if (f0 * f1 < 0) {
+      let a = t0, b = t1, fa = f0;
+      for (let k = 0; k < 22; k++) { const m = (a + b) / 2, fm = f(m); if (fa * fm <= 0) b = m; else { a = m; fa = fm; } }
+      out.push((a + b) / 2);
+    }
+    t0 = t1; f0 = f1;
+  }
+  return out;
+}
+
+export function snapLine(p: Pt, from: Pt, t: SnapTargets, tol: number, angles: number[] = DEFAULT_SNAP_ANGLES): SnapResult | null {
+  let best: { q: Pt; d: number; label: string; lines: SnapLine[] } | null = null;
+  const take = (q: Pt, label: string, lines: SnapLine[], bias: number): void => {
+    const d = Math.hypot(p.x - q.x, p.y - q.y) + bias;
+    if (d <= tol && (!best || d < best.d)) best = { q, d, label, lines };
+  };
+  for (const deg of angles) {
+    const a = (deg * Math.PI) / 180, ux = Math.cos(a), uy = Math.sin(a), s = (p.x - from.x) * ux + (p.y - from.y) * uy;
+    const q = { x: from.x + ux * s, y: from.y + uy * s };
+    take(q, `${deg}°`, [{ x1: from.x, y1: from.y, x2: q.x, y2: q.y }], 0);
+  }
+  const reach = tol * 6;
+  for (const s of t.curves) {
+    const x0 = Math.min(s[0].x, s[1].x, s[2].x, s[3].x), x1 = Math.max(s[0].x, s[1].x, s[2].x, s[3].x);
+    const y0 = Math.min(s[0].y, s[1].y, s[2].y, s[3].y), y1 = Math.max(s[0].y, s[1].y, s[2].y, s[3].y);
+    if (p.x < x0 - reach || p.x > x1 + reach || p.y < y0 - reach || p.y > y1 + reach) continue;
+    const line = isLineSeg(s);
+    for (const u of roots((k) => { const b = bezPoint(s, k), v = bezDeriv(s, k); return (b.x - from.x) * v.x + (b.y - from.y) * v.y; })) {
+      const q = bezPoint(s, u), v = bezDeriv(s, u), len = Math.hypot(v.x, v.y), r = Math.hypot(q.x - from.x, q.y - from.y);
+      if (!len || r < tol) continue;
+      const k = Math.min(tol * 1.5, r / 3), wx = v.x / len, wy = v.y / len, dx = (from.x - q.x) / r, dy = (from.y - q.y) / r;
+      const m = [
+        { x1: q.x + dx * k, y1: q.y + dy * k, x2: q.x + (dx + wx) * k, y2: q.y + (dy + wy) * k },
+        { x1: q.x + wx * k, y1: q.y + wy * k, x2: q.x + (dx + wx) * k, y2: q.y + (dy + wy) * k },
+      ];
+      take(q, 'perpendicular', [{ x1: from.x, y1: from.y, x2: q.x, y2: q.y }, ...m], -tol * 0.05);
+    }
+    if (line) continue;
+    for (const u of roots((k) => { const b = bezPoint(s, k), v = bezDeriv(s, k); return (b.x - from.x) * v.y - (b.y - from.y) * v.x; })) {
+      const q = bezPoint(s, u);
+      if (Math.hypot(q.x - from.x, q.y - from.y) < tol) continue;
+      take(q, 'tangent', [{ x1: from.x, y1: from.y, x2: q.x, y2: q.y }], -tol * 0.05);
+    }
+  }
+  if (!best) return null;
+  const b = best as { q: Pt; label: string; lines: SnapLine[] };
+  return { p: b.q, lines: b.lines, label: b.label, hit: 'axis' };
 }
 
 export function constrainAngle(origin: Pt, p: Pt, step = 45): Pt {
