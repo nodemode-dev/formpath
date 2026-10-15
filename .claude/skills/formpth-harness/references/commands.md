@@ -159,7 +159,7 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `place` (File > Place): Places an image or vector file into the document, embedded. Use when adding a picture or logo to the artwork.
 - `place-linked` (File > Place Linked): Places a file as a link that updates when the source changes. Use when the source file is still being edited elsewhere.
 - `play-action` (File > Automate > Play Action): Play Action, as in File > Automate > Play Action.
-- `print` (File > Print): Prints the document. Use when a paper proof is needed.
+- `print` (File > Print): Opens the Print dialog for paper size, scale, marks, separations and colour handling, then sends the document to the system print dialog. Use when a paper proof or press proof is needed.
 - `save` (File > Save): Saves the document to the library under its current name. Use when keeping the latest changes.
 - `save-as` (File > Save As): Saves the document under a new name. Use when branching a copy of the work.
 - `send-nodemode` (File > Send to NodeMode): Send to NodeMode, as in File > Send to NodeMode.

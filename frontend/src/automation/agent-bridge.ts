@@ -38,7 +38,7 @@ import { DXF_UNITS, type DxfImportOptions, type DxfUnit } from '../io/dxf';
 import type { CadChoice } from '../ui/app-dialogs';
 import { generativePalettes, modelState, PATTERN_PRESETS, patternVariations, placeVector, recolorWithPalette, shapeFillVariations, textToVectorVariations } from '../io/generative';
 import { loadPrefs } from '../ui/prefs';
-import { colorManaged, colorSettled, INTENTS, isProofing, proofDevice, refOf, refreshProfiles, resolveSettings, setProofing, type ProfileInfo } from '../engine/color-management';
+import { colorManaged, colorSettled, INTENTS, isProofing, proofDevice, refOf, refreshDisplayProfile, refreshProfiles, resolveSettings, setProofing, type ProfileInfo } from '../engine/color-management';
 import { applySettings, convertToProfile, findProfile, settingsPatch } from '../io/color-ops';
 import { rankFonts, recognize, retypeNode, sourceFromImage, sourceFromOutlines } from '../io/retype';
 
@@ -47,7 +47,7 @@ export interface AgentDeps {
   ask(title: string, text: string): Promise<boolean>;
   note(text: string): void;
   allow(): void;
-  openFile(file: File, dxf?: Partial<DxfImportOptions> | null): Promise<void>;
+  openFile(file: File, dxf?: Partial<DxfImportOptions> | null, password?: string): Promise<void>;
   placeFile(file: File, at: Pt | null, width: number | null, dxf?: Partial<DxfImportOptions> | null): Promise<string | null>;
   placeLinked?(path: string, at: Pt | null, width: number | null): Promise<string | null>;
   links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
@@ -538,7 +538,8 @@ export class AgentBridge {
     const line = (p: ProfileInfo): string => `${p.name} [${p.space}, ${p.class}, ${p.source}] id ${p.id}`;
     if (name === 'list_color_profiles') {
       const s = resolveSettings(doc.cm);
-      return text(`${list.length} colour profiles. The document uses RGB ${s.rgb?.name ?? 'none'}, CMYK ${s.cmyk?.name ?? 'none (formula)'}, intent ${INTENTS[s.intent][1]}, black point compensation ${s.bpc ? 'on' : 'off'}; Proof Colors is ${isProofing() ? 'on' : 'off'}.\n${list.map(line).join('\n')}`, { profiles: list, settings: { rgb: s.rgb?.name ?? null, cmyk: s.cmyk?.name ?? null, intent: s.intent, bpc: s.bpc, proof: isProofing() } });
+      const shown = await refreshDisplayProfile();
+      return text(`${list.length} colour profiles. The document uses RGB ${s.rgb?.name ?? 'none'}, CMYK ${s.cmyk?.name ?? 'none (formula)'}, intent ${INTENTS[s.intent][1]}, black point compensation ${s.bpc ? 'on' : 'off'}; Proof Colors is ${isProofing() ? 'on' : 'off'}; the display profile is ${shown ? `${shown.name} (from ${shown.via})` : 'unknown, so proofs use sRGB'}.\n${list.map(line).join('\n')}`, { profiles: list, settings: { rgb: s.rgb?.name ?? null, cmyk: s.cmyk?.name ?? null, intent: s.intent, bpc: s.bpc, proof: isProofing() }, display: shown ? { name: shown.name, id: shown.id, via: shown.via } : null });
     }
     if (name === 'set_color_settings') {
       const s = resolveSettings(doc.cm);
@@ -645,7 +646,7 @@ export class AgentBridge {
       }
       if (name === '__open') {
         const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
-        await this.deps.openFile(file, this.dxfArgs(a, false));
+        await this.deps.openFile(file, this.dxfArgs(a, false), typeof a.password === 'string' ? a.password : undefined);
         const q = e.current;
         return q ? text(`Opened ${file.name} as ${q.name}: ${q.doc.artboards.length} artboard(s), ${q.doc.layers.length} layer(s).`, { name: q.name }) : fail(`Could not open ${file.name}.`);
       }

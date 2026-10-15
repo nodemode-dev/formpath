@@ -169,3 +169,38 @@ export function promptName(title: string, value: string, okLabel = 'OK'): Promis
   promptDialog ??= new Prompt();
   return promptDialog.ask(title, value, okLabel);
 }
+
+class PasswordAsk extends Dialog {
+  private readonly input = el<HTMLInputElement>('<input class="cv-input" type="password" autocomplete="off" spellcheck="false">');
+  private readonly note = el('<p class="cv-note"></p>');
+  private readonly ok: HTMLButtonElement;
+  private resolve: ((v: string | null) => void) | null = null;
+  constructor() {
+    super('Password', 400);
+    this.body.appendChild(this.note);
+    this.field('Password', this.input);
+    this.button('Cancel', 'ghost', () => this.finish(null));
+    this.ok = this.button('Open', 'primary', () => this.finish(this.input.value));
+    this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.ok.click(); } });
+    this.onClose = () => this.finish(null);
+  }
+  ask(file: string, again: boolean): Promise<string | null> {
+    setText(this.note, again ? `That password did not open ${file}. Try another.` : `${file} is protected. Enter its password to open it.`);
+    this.input.value = '';
+    this.open(this.input);
+    return new Promise((r) => { this.resolve = r; });
+  }
+  private finish(v: string | null): void {
+    const r = this.resolve;
+    this.resolve = null;
+    if (this.isOpen) this.close();
+    r?.(v);
+  }
+}
+
+let passwordDialog: PasswordAsk | null = null;
+
+export function askPassword(file: string, again = false): Promise<string | null> {
+  passwordDialog ??= new PasswordAsk();
+  return passwordDialog.ask(file, again);
+}

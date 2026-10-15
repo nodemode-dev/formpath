@@ -375,3 +375,20 @@ Every route uses origin_ok from terminal.py because uploads write to the data fo
 - logged: v0.32.0 · 2026-10-15
 
 DWG is read by converting it to DXF with a program already on the computer, then through the existing DXF reader, bc no DWG library is under a licence formpth can ship (LibreDWG is GPL 3, the ODA SDK is commercial), and running either as a separate program keeps formpth Apache 2.0. The ODA File Converter is tried first (free, reads every DWG release, found on PATH, at FORMPTH_ODA_CONVERTER or at its default install folder per OS), then LibreDWG's dwg2dxf. Qt's offscreen platform is set on Linux without a display bc the ODA converter is a Qt program. Without a converter the call answers 422 with where to get one. The MCP open_file path converts in the engine and hands the window a .dxf, so agents and people go through the same reader.
+
+
+## app/services/display.py
+
+### app/services/display.py · finding the display profile
+- refers-to: app/services/display.py :: detect, _colord, _xatom, _mac, _windows; app/services/color.py :: display_profile, _monitor, preserve; app/routers/color.py :: display_profile
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+Order: FORMPTH_DISPLAY_PROFILE (a path, for people whose desktop does not report one), then the platform. Windows asks GetICMProfileW for the primary display through ctypes. macOS asks CoreGraphics for the main display's colour space and its ICC data (ColorSync). Linux asks colord first (`colormgr get-devices-by-kind display`, then the first device's profile file) and falls back to the `_ICC_PROFILE` X11 root atom through xprop. All of them are wrapped, return None on any failure, and the answer is cached for 30 s because the route is hit when proofing starts. GET /api/color/display-profile returns `{"profile": null}` when nothing was found and the proof then uses the built-in sRGB monitor. Verified here: the env path, and the colord and X11 parsers against stand-in colormgr and xprop scripts; no real colord, ColorSync or Windows display was available, so the macOS and Windows paths and the real colormgr output format are untested.
+
+### app/services/color.py · the preserve table
+- refers-to: app/services/color.py :: preserve; app/routers/color.py :: lut_preserve
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+POST /api/color/lut/preserve returns a CMYK grid (grid^4 by 3, cyan slowest) of working-RGB pre-images: one transform takes the device CMYK to the monitor with the proof intent, a second takes the monitor back to the working RGB with the same intent and black point compensation. The browser draws CMYK colours through it so that the proof pass, which goes the other way, lands near the raw CMYK-to-monitor colour. It is limited to the working RGB gamut (values clip at 0 and 255).

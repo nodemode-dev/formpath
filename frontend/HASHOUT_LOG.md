@@ -188,6 +188,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/svg.ts
 - src/io/pdf.ts
 - src/io/pdf-read.ts
+- src/io/pdf-crypt.ts
+- src/io/pdf-mesh.ts
 - src/io/raster.ts
 - src/io/fonts.ts
 - src/io/trace.ts
@@ -1700,7 +1702,35 @@ Each text-showing operator becomes one point type object with the text decoded t
 - kind: explainer
 - logged: v0.13.0 · 2026-10-07
 
-DeviceGray, DeviceRGB and DeviceCMYK map to formpth's gray, rgb and cmyk colours so a CMYK document stays CMYK. ICCBased spaces use their alternate by component count, Indexed looks up its palette, and Separation and DeviceN evaluate their tint transform. Axial and radial shadings become linear and radial gradients sampled from their function; mesh shadings and tiling patterns are reported and filled grey, because formpth has no faithful equivalent to translate them to.
+DeviceGray, DeviceRGB and DeviceCMYK map to formpth's gray, rgb and cmyk colours so a CMYK document stays CMYK. ICCBased spaces use their alternate by component count, Indexed looks up its palette, and Separation and DeviceN evaluate their tint transform. Axial and radial shadings become linear and radial gradients sampled from their function. Mesh shadings and tiling patterns were once reported and filled grey; since v0.34.0 they import (see the three entries below), and function-based shadings (type 1) are still reported.
+
+### src/io/pdf-read.ts · soft masks
+- refers-to: src/io/pdf-read.ts :: Painter.softMask, whiten, Painter.raster
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+An ExtGState `/SMask` opens a group that collects everything painted until the mask is reset with `/None` or the graphics state is restored; the group carries formpth's opacity mask, so many objects share one mask. The mask art is the `/G` form run with the CTM in force when `gs` ran, clipped to the form's BBox. formpth's mask value is art alpha times luminosity, which is exactly a luminosity mask over the default black backdrop, so `/Luminosity` needs nothing more; a `/BC` that is not black adds a backdrop rectangle of that colour under the art, `/TR` is read only as invert (a function that falls from above half to below half) and any other curve is reported, and `/Alpha` masks paint the art in white so luminosity is 1 and only alpha is left (images inside an alpha mask keep their colours). Image `/SMask` and stencil `/Mask` streams of any size, depth and `/Decode` become the image's alpha; when the mask is larger than the image the picture is upscaled to the mask so no mask detail is lost.
+
+### src/io/pdf-read.ts · tiling patterns
+- refers-to: src/io/pdf-read.ts :: Painter.pattern, Painter.tiling; src/engine/pattern.ts :: patternLattice
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+A PatternType 1 pattern becomes a pattern definition: the tile is the BBox, the lattice gaps are XStep minus the BBox width and YStep minus its height (negative when tiles overlap), and the art is the pattern stream run in pattern space and clipped to the BBox. The paint's matrix is the pattern Matrix times the matrix of the stream that selected it (the page, or the form), and carries the page flip, so the art stays in PDF's y-up pattern space. Uncoloured patterns (PaintType 2) are painted with the colour from the `scn` operands, one definition per pattern and colour; colour operators inside them are not forbidden here but the current colour is what they start with. A pattern used inside its own art is cut with a grey fill and reported; nested patterns work because the tile art is run through the same painter. Tile art is built before the page's clip groups are closed and relies on that happening by reference, so definitions are never cloned. The canvas renders tiles at a whole number of pixels and drifts by up to a pixel per tile at non-integer scales (known, see pdf.ts · patterns); at 144 ppi, where a 25 pt step is exactly 50 px, the imported render matches pdftoppm to the pixel.
+
+### src/io/pdf-mesh.ts · mesh shadings
+- refers-to: src/io/pdf-mesh.ts :: readTriangles, readLattice, readPatches, gridMesh, latticeMesh, rasterTriangles; src/io/pdf-read.ts :: Painter.meshShading
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+Types 4 to 7 are decoded with their own bit width for flag, coordinate and component, padding at the byte boundary after each vertex (types 4 and 5) or patch (types 6 and 7), the Decode ranges, edge flags 1 to 3 (shared first edge and its two colours taken from the previous patch) and `/Function` colours (one parametric value per vertex). Type 6 and 7 patches that form a rectangular grid, found by walking shared edges and trying the eight rotations and reflections of each neighbour, with matching corner colours and no gaps, become one formpth gradient mesh; the 12 boundary points give the point handles and a type 7 patch's four inner points are dropped (formpth meshes are Coons patches, so only a patch with interior points off the Coons position changes). A type 5 lattice becomes a mesh with straight cells (handles a third of the way along each edge), which equals the Gouraud result for parallelogram cells. Everything else (free-form triangles, patches that are not a grid, discontinuous corner colours, any mesh with a Function) is rasterised in document space to a PNG of exactly the mesh region (at most 2048 px on the long side, up to 6 px per point) by Gouraud triangles, patches subdivided from their tensor surface, and placed as one image; with a Function the parametric value is interpolated and looked up in a 257 entry table, which is exact. `sh` paints the nodes; a shading pattern clips copies of them (fresh ids, shared image asset) to the filled shape. Strokes with a mesh pattern get grey.
+
+### src/io/pdf-crypt.ts · Standard security handler
+- refers-to: src/io/pdf-crypt.ts :: openCrypt, PdfCrypt, md5, rc4; src/io/pdf-read.ts :: PdfFile.unlock, PdfFile.shield, PdfFile.decode, PdfPasswordError; src/ui/dialogs.ts :: askPassword
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+Revisions 2 to 4 derive the key by the MD5 algorithm (RC4 40 and 128, crypt filters V2 and AESV2), revisions 5 and 6 validate and unwrap the 256 bit key from U/UE or O/OE (R6 uses the iterated hash with SHA-256/384/512 and AES-128-CBC, R5 plain SHA-256); the empty user password is tried first and an owner password also opens the file. MD5 and RC4 are written out because WebCrypto has neither; AES and SHA use WebCrypto, and unpadded AES-CBC decrypt (key unwrap) appends one encrypted padding block so WebCrypto's padding check passes. After the trailer is known every object parsed in the clear has its strings decrypted once, the Encrypt dictionary excepted; streams are decrypted in `decode` by object and generation number, XRef streams, streams with a Crypt filter and unencrypted metadata are left alone, and the strings inside object streams are not decrypted again because the stream already was. A password that is needed and absent or wrong throws PdfPasswordError; the open flow asks for it in a small dialog and asks again on a wrong one, and the MCP open_file tool's `password` parameter is tried once and, if wrong, fails without a dialog. Public-key (Adobe.PubSec) handlers still throw.
 
 ## src/io/raster.ts
 
@@ -2968,3 +2998,81 @@ The on-canvas colour is an inverse distance cubed blend (points, or segments in 
 - logged: v0.33.0 · 2026-10-15
 
 Page information was drawn in an unembedded Helvetica, which every PDF/X preflight rejects. It now uses a subset of the bundled Inter as a simple TrueType font with WinAnsiEncoding over codes 32 to 126, bc the information line is printable ASCII by construction (pdfString replaces anything else) and a simple font keeps marksContent's literal strings unchanged. Widths come from the font. Helvetica stays as the fallback only when the engine cannot subset, so an offline export still prints marks.
+
+### src/io/ai-legacy.ts · legacy Illustrator reader
+- refers-to: src/io/ai-legacy.ts :: readAiLegacy, isLegacyAi; src/app.ts :: openFiles
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+Non-PDF .ai files (AI3 to AI8 PostScript, and AI9+ files whose art sits in Ascii85 zlib, AI12 deflate or AI24 ZStandard private data) are read by a line tokenizer over the operator set, not by a PostScript interpreter. Semantics come from the real Pillow illu10 and illuCS6 samples and from Skencil's ailoader: lowercase c v y are smooth points, D is a direction flag and is ignored, XR gives the fill rule, and the last painted subpath decides a compound's appearance. Gradients use the Bd/Bs definitions and the Bb, Bg, Xm/Bm, BB instance order; the first matrix after Bg overrides the Bg matrix. Art before the first Lb is definition art and is dropped when layers exist. Patterns, brushes, symbols, SVG filters, graphic styles, plug-in objects and meshes are skipped and named in the toast; pattern fills fall back to 50 percent gray. XI raster layout, area and path text frames (Tp to TP) and XR are inferred and not verified against Illustrator output. openFiles routes a .ai to this reader only when isLegacyAi finds no PDF header and no PDF objects, so PDF-compatible files keep the PDF path. MCP open_file goes through the same openFiles.
+
+### src/io/ai-zstd.ts · pure TypeScript ZStandard decoder
+- refers-to: src/io/ai-zstd.ts :: zstdDecompress
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+Browsers have no ZStandard, so a small decoder (FSE, Huffman with one or four streams, sequences with repeat offsets, predefined tables, skippable and multiple frames) lives beside the reader. It matched the reference encoder on 464 of 464 generated cases after the literal-length default table was corrected to the RFC 8878 values. Dictionaries throw, checksums are not verified.
+
+
+## src/io/print.ts
+
+### src/io/print.ts · printing through a PDF in a hidden frame
+- refers-to: src/io/print.ts :: buildPrintPdf, printPdf; src/ui/print-dialog.ts :: PrintDialog; src/app.ts :: printDocument; index.html :: meta http-equiv Content-Security-Policy
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+File > Print builds a PDF with exportPdf and prints that, because @tauri-apps/api 2.12.1 has no print call and a webview prints its own page, not a document. The PDF goes in a hidden 1px iframe (blob URL) and `contentWindow.print()` runs on its load event, or after 2.5 s if load never fires (a headless browser with no PDF viewer). If print() throws, or there is no window, the PDF is saved with deliver() and the person is told where. A WKWebView that has no PDF viewer in frames cannot be told apart from one that printed, so on macOS the dialog may do nothing; the saved-PDF route is the way out there and is not detected. The page policy had to change for this: `frame-src 'none'; object-src 'none'` became `frame-src blob:; object-src blob:`. Blob documents inherit the policy of the page that made them, and a PDF viewer is an embed, so object-src needs blob: too. The plugin argument in the entry above still holds: a plugin frame cannot read the parent's blob URLs and blob: is not a place a document can be sent to, so navigations to http(s) stay refused.
+
+### src/io/print-layout.ts · sheet geometry shared by the dialog and the PDF
+- refers-to: src/io/print-layout.ts :: sheetFor, scaleFor, tilesFor; src/io/pdf-sheet.ts :: sheetPages, inCopies; src/io/pdf.ts :: exportPdf (sheet option)
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+One page of art (artboard plus bleed plus marks) is written once as a Form XObject and each sheet is a paper-sized page that places it with `q k 0 0 k tx ty cm /Fm Do Q`. Fit, custom percent and tiling are only different (k, tx, ty) lists from tilesFor, so the preview canvas draws the same numbers the PDF uses. Tiling steps by sheet minus overlap and refuses more than 64 sheets with a message instead of writing a thousand-page file. Copies repeat the page objects, not the content; collate repeats the whole set, uncollated repeats each page. Orientation `auto` picks landscape when the art is wider than tall. The UserUnit scale of a very large artboard is folded into k so a tiled giant artboard prints at the size the person chose. The dialog reserves its space by construction (fixed-height grid, panes stacked in one grid cell with visibility, rows disabled rather than hidden), so no option changes its size: layout shift stayed 0.000 under a 4x CPU throttle while switching sections and options.
+
+### src/io/pdf-plates.ts · separations are raster plates
+- refers-to: src/io/pdf-plates.ts :: exportPlates, platesOf
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+Each ink prints as one 8-bit DeviceGray page, rendered with the same `rc.separation` path as the Separations Preview panel (so the plates match what the panel shows), at 150, 300 or 600 ppi over artboard plus bleed. Plates with no ink are left out (K is kept if every plate is blank so the file never has zero pages). They are raster, not vector, on purpose: the panel's plate colours come from the canvas renderer, which has no vector twin for overprint, blends or effects. Marks use the existing marksContent with a Separation /All gray space, the colour bar is replaced by an 11-step gray wedge (the CMYK tints would print on a gray plate), and the page info line carries the plate name. Colour handling does not apply to plates.
+
+### src/io/print.ts · colour management at print time
+- refers-to: src/io/print.ts :: managed
+- kind: decision
+- logged: v0.34.0 · 2026-10-15
+
+"Let formpth determine colors" converts a cloned Project (Object.create with its own doc, so the open document and its history are untouched) through the chosen printer profile with the same convertDoc, throughCmykFn and toRgbFn Convert to Profile uses. A CMYK profile also writes PDF/X-4 with that profile as the output intent; an RGB profile does not. "Let the printer determine colors" prints the document as it is. The dialog's profile and intent rows are disabled, not hidden, when the printer decides.
+
+## src/engine/color-management.ts (display profile and Preserve CMYK Numbers)
+
+### src/engine/color-management.ts · the proof uses the display profile
+- refers-to: src/engine/color-management.ts :: refreshDisplayProfile, displayProfileInfo, setPreviewRender, loadProof, cmToRgb; src/ui/stage.ts :: applyProof; src/ui/color-settings.ts :: proofSetupDialog
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+The proof LUT's last step (device to what the screen shows) used a built-in sRGB monitor. It now sends the display profile id as `monitor` and keys the LUT body with it, so changing display or profile fetches a new table instead of reusing a stale one. With no display profile the id is the built-in sRGB one and the table is the same as before. Proof Setup shows a Display line saying which profile is used and where it came from. The display is looked up once per proof load, not per frame.
+
+### src/engine/color-management.ts · Preserve CMYK Numbers is a pre-image LUT
+- refers-to: src/engine/color-management.ts :: preserveLut, previewRender, GRID.preserve; src/ui/stage.ts :: previewRender flag
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+The proof pass maps canvas pixels working RGB to device to monitor, so a CMYK colour is shown as the device would print it after its numbers were converted. To show the numbers as they are, CMYK colours are drawn through a 9-point CMYK grid whose entries are the working-RGB value that the proof pass then maps back to about the monitor colour of the raw CMYK numbers (device to monitor, then monitor to working RGB). Colours outside the working RGB gamut clip, so very saturated device inks are approximate; that limit is the price of doing it as one pass on pixels. The flag `previewRender` is set only around the stage's own render, so exports and the PDF never use the pre-image grid. RGB colours are unchanged by it. Measured with FOGRA39: cyan 0/255/255 became 84/153/207 with preserve on, against 177/215/218 with the plain proof.
+
+
+## src/engine/raytrace.ts (textures) and src/engine/inflate-trace.ts
+
+### src/engine/raytrace.ts · textured triangles and the alpha clip
+- refers-to: src/engine/raytrace.ts :: RayTexture, RayMesh.uv, Tracer.sample, clipTest, combine; src/engine/raymesh.ts :: rayMesh (RayMap); src/engine/effects.ts :: traceMap, traceHash
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+A mesh may carry per-vertex UVs and one RGBA texture, with a per-triangle flag for which triangles use it. The tracer interpolates UV in `surf`, samples bilinearly with alpha weighting, and mixes the texture into the albedo before lighting when the texture is `lit`, after lighting (unlit blend) when it is not; that is how Map Art's `shade_art` false stays vivid. A texture may also be a `clip` mask: a hit whose sampled alpha is under 0.5 is rejected in the primary pass and the edge supersampling, which is how a flat-bottomed heightfield gets a silhouette that follows the art instead of a grid edge. Map Art draws the symbol into the texture with a painter callback from drawTraced (the symbol art, rasterised at up to 2048 px a side), and the front-cap triangles get UVs from object-space xy against the art bounds, so placement matches the vector layout. traceHash only gains an `|art...` suffix when Map Art exists, so every existing cache key is unchanged. With ray tracing off nothing here runs: the vector path output was byte-identical against the baseline build on extrude, revolve, inflate, tilted inflate and a plane.
+
+### src/engine/inflate-trace.ts · Inflate under ray tracing
+- refers-to: src/engine/inflate-trace.ts :: inflateTrace; src/engine/filters.ts :: RUNS['3d.inflate'] (ray_trace branch); src/ui/panels/three-d.ts
+- kind: rationale
+- logged: v0.34.0 · 2026-10-15
+
+Inflate stays a raster filter. With `ray_trace` on it builds a heightfield mesh from the same height field the filter uses, on a coarse grid (about 6000, 14000 or 30000 cells for low, medium, high; 3000 while drafting), uses the pixel colours as a lit texture with alpha as the clip mask, and traces at the quality's pixel budget, upsampling bilinearly. Normals come from the height gradient. Shadow and AO distance is the smaller of the object's extent and max(24, 4 x height), with a bias of 0.7 grid steps and denoise of at least 2; without those, high quality showed speckle and hatching on the smooth surface. Face-on keeps the art's own alpha, tilted uses the traced alpha. Known gap: the traced Inflate has no side walls (the raster tilt does). Timings at print quality, one render: 420 / 700-1100 / 830 ms for low / medium / high at 1x, against 38-55 ms with ray tracing off.

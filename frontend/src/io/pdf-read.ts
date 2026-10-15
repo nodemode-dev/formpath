@@ -2,15 +2,21 @@ import { makeLayer, newDoc, newId } from '../engine/doc';
 import { apply, IDENTITY, mul } from '../engine/geometry';
 import { cmyk, fill, gray, rgb, solid, stroke as strokeItem, NONE, stop } from '../engine/paint';
 import { cssFont, DEFAULT_CHAR, DEFAULT_PARA, layoutText } from '../engine/text';
-import type { Anchor, BlendMode, Cap, CharStyle, Color, Doc, Gradient, GroupNode, ImageAsset, Join, Mat, Paint, PathData, PathNode, Span, SubPath, TextNode, VNode } from '../engine';
+import type { Anchor, BlendMode, Cap, CharStyle, Color, Doc, Gradient, GroupNode, ImageAsset, ImageNode, Join, Mat, MeshNode, Paint, PathData, PathNode, PatternDef, Pt, Span, SubPath, TextNode, VNode } from '../engine';
 import { families, systemFonts } from './fonts';
 import type { FontInfo as InstalledFont } from './api';
+import { openCrypt, type CryptMethod, type CryptParams, type PdfCrypt } from './pdf-crypt';
+import { gridMesh, latticeMesh, patchTriangles, rasterTriangles, readLattice, readPatches, readTriangles, type MeshSpec, type Patch, type RV } from './pdf-mesh';
+
+export class PdfPasswordError extends Error {
+  constructor(readonly wrong: boolean) { super(wrong ? 'the password is not right' : 'it needs a password'); }
+}
 
 class Name { constructor(readonly v: string) {} }
 class Ref { constructor(readonly n: number, readonly g: number) {} }
 class Op { constructor(readonly v: string) {} }
 class Str { constructor(readonly b: Uint8Array) {} }
-class Stream { constructor(readonly dict: PDict, readonly raw: Uint8Array) {} }
+class Stream { num = 0; gen = 0; constructor(readonly dict: PDict, readonly raw: Uint8Array) {} }
 type PDict = Map<string, Val>;
 type Val = number | boolean | null | Name | Str | Ref | Op | Stream | PDict | Val[];
 
@@ -163,6 +169,9 @@ class PdfFile {
   private readonly offsets = new Map<number, number>();
   private readonly cache = new Map<number, Val>();
   private readonly packed = new Map<number, Val>();
+  private readonly gens = new Map<number, number>();
+  private crypt: PdfCrypt | null = null;
+  private encryptObj = -1;
   readonly trailer: PDict = new Map();
   readonly text: string;
 
@@ -170,27 +179,66 @@ class PdfFile {
     this.text = latin(bytes);
     const re = /(\d+)\s+(\d+)\s+obj\b/g;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(this.text))) this.offsets.set(Number(m[1]), m.index + m[0].length);
+    while ((m = re.exec(this.text))) { this.offsets.set(Number(m[1]), m.index + m[0].length); this.gens.set(Number(m[1]), Number(m[2])); }
     for (let at = this.text.lastIndexOf('trailer'); at >= 0; at = this.text.lastIndexOf('trailer', at - 1)) {
       const v = new Lexer(bytes, at + 7).value();
       if (v instanceof Map) { for (const [k, x] of v) if (!this.trailer.has(k)) this.trailer.set(k, x); if (this.trailer.has('Root')) break; }
     }
   }
 
-  async init(): Promise<void> {
-    for (const n of [...this.offsets.keys()]) {
+  async init(password?: string): Promise<void> {
+    const keys = [...this.offsets.keys()];
+    for (const n of keys) {
+      const o = this.raw(n);
+      if (o instanceof Stream && nameOf(o.dict.get('Type')) === 'XRef') for (const k of ['Root', 'Encrypt', 'ID']) if (!this.trailer.has(k) && o.dict.has(k)) this.trailer.set(k, o.dict.get(k) as Val);
+    }
+    if (this.trailer.has('Encrypt')) await this.unlock(password);
+    for (const n of keys) {
       const o = this.raw(n);
       if (!(o instanceof Stream)) continue;
-      const type = nameOf(o.dict.get('Type'));
-      if (type === 'XRef') for (const k of ['Root', 'Encrypt']) if (!this.trailer.has(k) && o.dict.has(k)) this.trailer.set(k, o.dict.get(k) as Val);
-      if (type !== 'ObjStm') continue;
+      if (nameOf(o.dict.get('Type')) !== 'ObjStm') continue;
       try {
         const data = await this.decode(o), count = num(o.dict.get('N')), first = num(o.dict.get('First')), lx = new Lexer(data, 0, false), pairs: number[] = [];
         for (let k = 0; k < count * 2; k++) pairs.push(num(lx.value()));
         for (let k = 0; k < count; k++) if (!this.offsets.has(pairs[k * 2])) this.packed.set(pairs[k * 2], new Lexer(data, first + pairs[k * 2 + 1]).value() ?? null);
       } catch { continue; }
     }
-    if (this.trailer.has('Encrypt')) throw new Error('it is encrypted; save an unencrypted copy and open that');
+  }
+
+  private async unlock(password: string | undefined): Promise<void> {
+    const ev = this.trailer.get('Encrypt'), enc = this.dict(ev);
+    if (ev instanceof Ref) this.encryptObj = ev.n;
+    if (!enc) throw new Error('its encryption could not be read');
+    const filter = nameOf(enc.get('Filter'));
+    if (filter && filter !== 'Standard') throw new Error(`it uses the ${filter} security handler`);
+    const v = this.n(enc.get('V')), r = this.n(enc.get('R'), 2), bytes = (x: Val | undefined): Uint8Array => { const s = this.get(x); return s instanceof Str ? s.b : new Uint8Array(); };
+    const cf = this.dict(enc.get('CF')), method = (name: string): CryptMethod => {
+      if (v < 4) return 'V2';
+      const m = nameOf(this.get(this.dict(cf?.get(name))?.get('CFM')));
+      return name === 'Identity' || !name ? 'None' : m === 'AESV2' || m === 'AESV3' || m === 'V2' ? m : 'None';
+    };
+    const ids = this.arr(this.trailer.get('ID')), idv = this.get(ids[0]);
+    const params: CryptParams = {
+      v, r, length: v === 1 ? 40 : v === 4 ? 128 : v >= 5 ? 256 : this.n(enc.get('Length'), 40), o: bytes(enc.get('O')), u: bytes(enc.get('U')), oe: bytes(enc.get('OE')), ue: bytes(enc.get('UE')), p: this.n(enc.get('P')),
+      id: idv instanceof Str ? idv.b : new Uint8Array(), encryptMetadata: this.get(enc.get('EncryptMetadata')) !== false, stm: method(nameOf(this.get(enc.get('StmF'))) || 'Identity'), str: method(nameOf(this.get(enc.get('StrF'))) || 'Identity'),
+    };
+    const c = await openCrypt(params, password ?? '');
+    if (!c) throw new PdfPasswordError(!!password);
+    this.crypt = c;
+    for (const [n, val] of [...this.cache]) {
+      if (n === this.encryptObj || (val instanceof Stream && nameOf(val.dict.get('Type')) === 'XRef')) continue;
+      this.cache.set(n, await this.shield(n, val));
+    }
+  }
+
+  private async shield(n: number, v: Val, depth = 0): Promise<Val> {
+    const c = this.crypt;
+    if (!c || depth > 24) return v;
+    if (v instanceof Str) return new Str(await c.string(n, this.gens.get(n) ?? 0, v.b));
+    if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) v[i] = await this.shield(n, v[i], depth + 1); return v; }
+    const d = v instanceof Map ? v : v instanceof Stream ? v.dict : null;
+    if (d) for (const [k, x] of [...d]) d.set(k, await this.shield(n, x, depth + 1));
+    return v;
   }
 
   private raw(n: number): Val {
@@ -214,7 +262,10 @@ class PdfFile {
           if (end > p && this.bytes[end - 1] === 10) end--;
           if (end > p && this.bytes[end - 1] === 13) end--;
         }
-        out = new Stream(v, this.bytes.subarray(p, Math.max(p, end)));
+        const st = new Stream(v, this.bytes.subarray(p, Math.max(p, end)));
+        st.num = n;
+        st.gen = this.gens.get(n) ?? 0;
+        out = st;
       }
     }
     this.cache.set(n, out);
@@ -230,9 +281,11 @@ class PdfFile {
 
   async decode(s: Stream): Promise<Uint8Array> {
     let data = s.raw;
-    const fs = this.filters(s), pv = this.get(s.dict.get('DecodeParms')), ps = Array.isArray(pv) ? pv.map((x) => this.dict(x)) : [this.dict(pv)];
+    const fs = this.filters(s), pv = this.get(s.dict.get('DecodeParms')), ps = Array.isArray(pv) ? pv.map((x) => this.dict(x)) : [this.dict(pv)], type = nameOf(this.get(s.dict.get('Type')));
+    if (this.crypt && !fs.includes('Crypt') && type !== 'XRef' && !(type === 'Metadata' && !this.crypt.encryptMetadata)) data = await this.crypt.stream(s.num, s.gen, data);
     for (let k = 0; k < fs.length; k++) {
       const f = fs[k];
+      if (f === 'Crypt') continue;
       if (f === 'FlateDecode' || f === 'Fl') data = unpredict(await inflate(data), ps[k] ?? null);
       else if (f === 'ASCIIHexDecode' || f === 'AHx') { const t = latin(data).replace(/[^0-9a-fA-F]/g, ''), out = new Uint8Array(Math.floor(t.length / 2)); for (let i = 0; i < out.length; i++) out[i] = parseInt(t.slice(i * 2, i * 2 + 2), 16); data = out; }
       else if (f === 'ASCII85Decode' || f === 'A85') data = ascii85(data);
@@ -246,7 +299,7 @@ class PdfFile {
 interface FontInfo { family: string; style: string; widths: Map<number, number>; dw: number; two: boolean; uni: Map<number, string> | null; enc: Map<number, string> | null; type3: { matrix: Mat; procs: PDict; res: PDict | null; names: Map<number, string> } | null }
 interface GS {
   ctm: Mat; fill: Paint; stroke: Paint; fa: number; sa: number; lw: number; cap: Cap; join: Join; miter: number; dash: number[]; phase: number; blend: BlendMode;
-  fcs: Val[]; scs: Val[]; target: VNode[]; font: FontInfo | null; size: number; tc: number; tw: number; th: number; tl: number; rise: number; tr: number;
+  fcs: Val[]; scs: Val[]; target: VNode[]; sm: { g: GroupNode; outer: VNode[] } | null; font: FontInfo | null; size: number; tc: number; tw: number; th: number; tl: number; rise: number; tr: number;
 }
 
 const BM: Record<string, BlendMode> = { Normal: 'normal', Multiply: 'multiply', Screen: 'screen', Overlay: 'overlay', Darken: 'darken', Lighten: 'lighten', ColorDodge: 'color_dodge', ColorBurn: 'color_burn', HardLight: 'hard_light', SoftLight: 'soft_light', Difference: 'difference', Exclusion: 'exclusion', Hue: 'hue', Saturation: 'saturation', Color: 'color', Luminosity: 'luminosity' };
@@ -311,9 +364,9 @@ class FontNames {
 
 export interface PdfImport { doc: Doc; assets: Map<string, Blob>; pages: number; skipped: string[]; fonts: Array<[string, string]> }
 
-export async function readPdfVector(data: ArrayBuffer, title: string): Promise<PdfImport> {
+export async function readPdfVector(data: ArrayBuffer, title: string, password?: string): Promise<PdfImport> {
   const pdf = new PdfFile(new Uint8Array(data));
-  await pdf.init();
+  await pdf.init(password);
   const catalog = pdf.dict(pdf.trailer.get('Root')) ?? findCatalog(pdf);
   if (!catalog) throw new Error('no page tree was found in it');
   const pages: Array<{ page: PDict; res: PDict | null; box: number[] }> = [];
@@ -327,7 +380,7 @@ export async function readPdfVector(data: ArrayBuffer, title: string): Promise<P
   if (!pages.length) throw new Error('it has no pages');
   const doc = newDoc(612, 792, { title });
   doc.artboards = [];
-  const layer = makeLayer('Layer 1', 0), assets = new Map<string, Blob>(), images: Record<string, ImageAsset> = {}, skipped = new Set<string>();
+  const layer = makeLayer('Layer 1', 0), assets = new Map<string, Blob>(), images: Record<string, ImageAsset> = {}, skipped = new Set<string>(), patterns: PatternDef[] = [];
   const installed = await systemFonts().catch((): InstalledFont[] => []);
   const names = new FontNames(families(), installed);
   if (pages.length > 200) skipped.add(`pages 201 to ${pages.length}`);
@@ -343,12 +396,14 @@ export async function readPdfVector(data: ArrayBuffer, title: string): Promise<P
     const painter = new Painter(pdf, assets, images, skipped, names);
     try { await painter.run(await contentsOf(pdf, pg.page), pg.res, P, group.children, 0); } catch (err) { skipped.add(err instanceof Error ? err.message : String(err)); }
     painter.finish();
+    patterns.push(...painter.patterns);
     group.children = prune(group.children);
     if (group.children.length) layer.children.push(group);
     x0 += aw + 40;
   }
   doc.layers = [layer];
   doc.images = images;
+  doc.patterns = patterns;
   return { doc, assets, pages: pages.length, skipped: [...skipped], fonts: [...names.substituted] };
 }
 
@@ -361,6 +416,19 @@ function prune(list: VNode[]): VNode[] {
     out.push({ ...n, children: kids });
   }
   return out;
+}
+
+function freshIds(n: VNode): VNode {
+  const c = { ...n, id: newId(n.kind === 'group' ? 'g' : n.kind === 'image' ? 'im' : n.kind === 'mesh' ? 'm' : 'p') } as VNode;
+  if ('children' in c && Array.isArray(c.children)) (c as GroupNode).children = c.children.map(freshIds);
+  return c;
+}
+
+function whiten(n: VNode): void {
+  const white = solid(rgb(255, 255, 255));
+  n.ap = { ...n.ap, items: n.ap.items.map((it) => (it.paint.type === 'none' ? it : { ...it, paint: white })) };
+  if (n.kind === 'text') n.spans = n.spans.map((s) => ({ ...s, style: { ...s.style, fill: s.style.fill.type === 'none' ? s.style.fill : white, stroke: s.style.stroke.type === 'none' ? s.style.stroke : white } }));
+  if ('children' in n && Array.isArray(n.children)) n.children.forEach(whiten);
 }
 
 function findCatalog(pdf: PdfFile): PDict | null {
@@ -381,16 +449,46 @@ async function contentsOf(pdf: PdfFile, page: PDict): Promise<Uint8Array> {
 class Painter {
   private readonly clips: Array<{ g: GroupNode; clip: PathNode }> = [];
   private readonly fonts = new Map<PDict, FontInfo>();
+  readonly patterns: PatternDef[] = [];
+  private readonly meshOf = new WeakMap<Paint, VNode[]>();
+  private readonly tiles = new Map<string, string>();
+  private readonly meshCache = new Map<PDict, Map<string, VNode[]>>();
+  private readonly building = new Set<PDict>();
 
   constructor(private readonly pdf: PdfFile, private readonly assets: Map<string, Blob>, private readonly images: Record<string, ImageAsset>, private readonly skipped: Set<string>, private readonly names: FontNames) {}
 
   finish(): void { for (const c of this.clips) c.g.children.push(c.clip); }
 
+  private async softMask(sm: PDict, ctm: Mat, res: PDict | null, depth: number): Promise<GroupNode | null> {
+    const pdf = this.pdf, xo = pdf.get(sm.get('G'));
+    if (!(xo instanceof Stream)) return null;
+    const alpha = nameOf(pdf.get(sm.get('S'))) === 'Alpha', m = mul(ctm, mat6(pdf.nums(xo.dict.get('Matrix'))) ?? IDENTITY), bb = pdf.nums(xo.dict.get('BBox')), kids: VNode[] = [];
+    const rect = (pts: Array<{ x: number; y: number }>, color: Paint | null): PathNode => ({ id: newId('p'), kind: 'path', d: [{ closed: true, pts: pts.map(corner) }], rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items: color ? [fill(color)] : [], effects: [] } });
+    try { await this.run(await pdf.decode(xo), pdf.dict(xo.dict.get('Resources')) ?? res, m, kids, depth + 1); } catch (err) { this.skipped.add(err instanceof Error ? err.message : String(err)); }
+    let body: VNode[] = kids;
+    if (bb.length === 4) body = [{ id: newId('g'), kind: 'group', clip: true, children: [...kids, rect([apply(m, bb[0], bb[1]), apply(m, bb[2], bb[1]), apply(m, bb[2], bb[3]), apply(m, bb[0], bb[3])], null)], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } }];
+    if (alpha) body.forEach(whiten);
+    else {
+      const bc = pdf.nums(sm.get('BC')), csv = pdf.get(pdf.dict(xo.dict.get('Group'))?.get('CS'));
+      const cs = Array.isArray(csv) ? csv.map((y) => pdf.get(y)) : csv instanceof Name ? this.space(csv, res) : [new Name(bc.length === 4 ? 'DeviceCMYK' : bc.length === 3 ? 'DeviceRGB' : 'DeviceGray')];
+      const col = bc.length ? this.toColor(cs, bc) : null;
+      if (col) { const [r, g, b] = toRgbLocal(col); if (0.3 * r + 0.59 * g + 0.11 * b > 1) body = [rect([{ x: -2e4, y: -2e4 }, { x: 2e4, y: -2e4 }, { x: 2e4, y: 2e4 }, { x: -2e4, y: 2e4 }], solid(col)), ...body]; }
+    }
+    let invert = false;
+    const tr = pdf.get(sm.get('TR')), fd = tr instanceof Name ? null : pdf.dict(tr), lo = fd ? evalFn(pdf, fd, [0]) : null, hi = fd ? evalFn(pdf, fd, [1]) : null;
+    if (lo && hi) {
+      if (lo[0] > 0.5 && hi[0] < 0.5) invert = true;
+      else if (Math.abs(lo[0]) > 0.05 || Math.abs(hi[0] - 1) > 0.05) this.skipped.add('soft mask transfer curves');
+    }
+    const art: GroupNode = { id: newId('g'), kind: 'group', clip: false, children: body, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+    return { id: newId('g'), kind: 'group', clip: false, children: [], opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, mask: { art, clip: false, invert, disabled: false, linked: true } };
+  }
+
   async run(content: Uint8Array, res: PDict | null, base: Mat, target: VNode[], depth: number, inherit?: Partial<GS>): Promise<void> {
     if (depth > 12) return;
     const pdf = this.pdf, lx = new Lexer(content, 0, false);
     await this.prepareFonts(res);
-    let gs: GS = { ctm: base, fill: solid(gray(100)), stroke: solid(gray(100)), fa: 1, sa: 1, lw: 1, cap: 'butt', join: 'miter', miter: 10, dash: [], phase: 0, blend: 'normal', fcs: [new Name('DeviceGray')], scs: [new Name('DeviceGray')], font: null, size: 12, tc: 0, tw: 0, th: 1, tl: 0, rise: 0, tr: 0, ...inherit, target };
+    let gs: GS = { ctm: base, fill: solid(gray(100)), stroke: solid(gray(100)), fa: 1, sa: 1, lw: 1, cap: 'butt', join: 'miter', miter: 10, dash: [], phase: 0, blend: 'normal', fcs: [new Name('DeviceGray')], scs: [new Name('DeviceGray')], sm: null, font: null, size: 12, tc: 0, tw: 0, th: 1, tl: 0, rise: 0, tr: 0, ...inherit, target };
     const stack: GS[] = [];
     let path: SubPath[] = [], cur: Anchor[] | null = null, clip: 'nonzero' | 'evenodd' | null = null, tm: Mat = IDENTITY, tlm: Mat = IDENTITY;
     const ops: Val[] = [];
@@ -401,8 +499,9 @@ class Painter {
       flush(false);
       const d: PathData = path;
       if (d.length && (doFill || doStroke)) {
-        const items = [];
-        if (doFill && gs.fill.type !== 'none') items.push({ ...fill(gs.fill), opacity: gs.fa });
+        const items = [], mesh = doFill ? this.meshOf.get(gs.fill) : undefined;
+        if (mesh) gs.target.push({ id: newId('g'), kind: 'group', clip: true, children: [...mesh.map(freshIds), { id: newId('p'), kind: 'path', d, rule, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } } as PathNode], opacity: gs.fa, blend: gs.blend, ap: { items: [], effects: [] } } as GroupNode);
+        if (doFill && !mesh && gs.fill.type !== 'none') items.push({ ...fill(gs.fill), opacity: gs.fa });
         if (doStroke && gs.stroke.type !== 'none') { const k = scale(); items.push({ ...strokeItem(gs.stroke, Math.max(0.05, gs.lw * k), { cap: gs.cap, join: gs.join, miter: gs.miter, dash: gs.dash.map((v) => v * k), dashOffset: gs.phase * k }), opacity: gs.sa }); }
         if (items.length) gs.target.push({ id: newId('p'), kind: 'path', d, rule, opacity: 1, blend: gs.blend, ap: { items, effects: [] } } as PathNode);
       }
@@ -438,7 +537,15 @@ class Painter {
           if (eg.has('LW')) gs.lw = pdf.n(eg.get('LW'), 1);
           const bm = pdf.get(eg.get('BM')), bmn = Array.isArray(bm) ? nameOf(pdf.get(bm[0])) : nameOf(bm);
           if (bmn) gs.blend = BM[bmn] ?? 'normal';
-          if (eg.has('SMask') && nameOf(pdf.get(eg.get('SMask'))) !== 'None') this.skipped.add('soft masks');
+          if (eg.has('SMask')) {
+            const sm = pdf.get(eg.get('SMask'));
+            if (gs.sm && gs.target === gs.sm.g.children) gs.target = gs.sm.outer;
+            gs.sm = null;
+            if (sm instanceof Map) {
+              const g = await this.softMask(sm, gs.ctm, res, depth);
+              if (g) { gs.target.push(g); gs.sm = { g, outer: gs.target }; gs.target = g.children; }
+            }
+          }
           break;
         }
         case 'm': flush(false); cur = [corner(P(n(0), n(1)))]; break;
@@ -478,9 +585,14 @@ class Painter {
         case 'K': gs.scs = [new Name('DeviceCMYK')]; gs.stroke = this.color(gs.scs, [n(0), n(1), n(2), n(3)]); break;
         case 'cs': gs.fcs = await this.unpackLut(this.space(a[0], res)); gs.fill = this.color(gs.fcs, this.initial(gs.fcs)); break;
         case 'CS': gs.scs = await this.unpackLut(this.space(a[0], res)); gs.stroke = this.color(gs.scs, this.initial(gs.scs)); break;
-        case 'sc': case 'scn': gs.fill = a[a.length - 1] instanceof Name ? this.pattern(nameOf(a[a.length - 1]), res, base) : this.color(gs.fcs, a.filter((x): x is number => typeof x === 'number')); break;
-        case 'SC': case 'SCN': gs.stroke = a[a.length - 1] instanceof Name ? this.pattern(nameOf(a[a.length - 1]), res, base) : this.color(gs.scs, a.filter((x): x is number => typeof x === 'number')); break;
-        case 'sh': { const sh = this.shading(pdf.get(pdf.dict(res?.get('Shading'))?.get(nameOf(a[0]))), gs.ctm); if (sh) gs.target.push({ id: newId('p'), kind: 'path', d: sh.d, rule: 'nonzero', opacity: 1, blend: gs.blend, ap: { items: [{ ...fill(sh.paint), opacity: gs.fa }], effects: [] } } as PathNode); break; }
+        case 'sc': case 'scn': gs.fill = a[a.length - 1] instanceof Name ? await this.pattern(nameOf(a[a.length - 1]), res, base, gs.fcs, a.filter((x): x is number => typeof x === 'number'), depth) : this.color(gs.fcs, a.filter((x): x is number => typeof x === 'number')); break;
+        case 'SC': case 'SCN': gs.stroke = a[a.length - 1] instanceof Name ? await this.pattern(nameOf(a[a.length - 1]), res, base, gs.scs, a.filter((x): x is number => typeof x === 'number'), depth) : this.color(gs.scs, a.filter((x): x is number => typeof x === 'number')); break;
+        case 'sh': {
+          const sh = await this.shading(pdf.get(pdf.dict(res?.get('Shading'))?.get(nameOf(a[0]))), gs.ctm);
+          if (sh && 'nodes' in sh) for (const k of sh.nodes) gs.target.push({ ...freshIds(k), opacity: gs.fa, blend: gs.blend } as VNode);
+          else if (sh) gs.target.push({ id: newId('p'), kind: 'path', d: sh.d, rule: 'nonzero', opacity: 1, blend: gs.blend, ap: { items: [{ ...fill(sh.paint), opacity: gs.fa }], effects: [] } } as PathNode);
+          break;
+        }
         case 'Do': {
           const xo = pdf.get(pdf.dict(res?.get('XObject'))?.get(nameOf(a[0])));
           if (!(xo instanceof Stream)) break;
@@ -646,21 +758,116 @@ class Painter {
     return null;
   }
 
-  private pattern(name: string, res: PDict | null, base: Mat): Paint {
+  private async pattern(name: string, res: PDict | null, base: Mat, space: Val[], comps: number[], depth: number): Promise<Paint> {
     const pdf = this.pdf, p = pdf.get(pdf.dict(res?.get('Pattern'))?.get(name)), d = p instanceof Stream ? p.dict : p instanceof Map ? p : null;
-    if (d && pdf.n(d.get('PatternType')) === 2) {
-      const sh = this.shading(pdf.get(d.get('Shading')), mul(base, mat6(pdf.nums(d.get('Matrix'))) ?? IDENTITY));
-      if (sh) return sh.paint;
+    const grey = (): Paint => solid(gray(50));
+    if (!d) return grey();
+    const xf = mul(base, mat6(pdf.nums(d.get('Matrix'))) ?? IDENTITY), type = pdf.n(d.get('PatternType'));
+    if (type === 2) {
+      const sh = await this.shading(pdf.get(d.get('Shading')), xf);
+      if (sh && 'paint' in sh) return sh.paint;
+      const out = grey();
+      if (sh) this.meshOf.set(out, sh.nodes);
+      return out;
     }
-    this.skipped.add('tiling patterns, filled with grey');
-    return solid(gray(50));
+    if (type === 1 && p instanceof Stream) return this.tiling(p, xf, space, comps, depth);
+    this.skipped.add('patterns of an unknown type');
+    return grey();
   }
 
-  private shading(v: Val, m: Mat): { paint: Paint; d: PathData } | null {
+  private async tiling(st: Stream, xf: Mat, space: Val[], comps: number[], depth: number): Promise<Paint> {
+    const pdf = this.pdf, d = st.dict, bb = pdf.nums(d.get('BBox')), uncoloured = pdf.n(d.get('PaintType'), 1) === 2, grey = (): Paint => solid(gray(50));
+    const bw = Math.abs((bb[2] ?? 0) - (bb[0] ?? 0)), bh = Math.abs((bb[3] ?? 0) - (bb[1] ?? 0)), bx = Math.min(bb[0] ?? 0, bb[2] ?? 0), by = Math.min(bb[1] ?? 0, bb[3] ?? 0);
+    if (!(bw > 0 && bh > 0)) return grey();
+    let ink: Paint | null = null;
+    if (uncoloured) {
+      const under = pdf.get(space[1]), cs = Array.isArray(under) ? under.map((y) => pdf.get(y)) : [under ?? new Name('DeviceGray')];
+      ink = this.color(cs, comps);
+    }
+    const tag = `${st.num}:${ink ? JSON.stringify(ink) : ''}`, known = this.tiles.get(tag);
+    if (known) return { type: 'pattern', pattern: known, xf };
+    if (this.building.has(d)) { this.skipped.add('a pattern that paints itself'); return grey(); }
+    this.building.add(d);
+    const kids: VNode[] = [];
+    try { await this.run(await pdf.decode(st), pdf.dict(d.get('Resources')), IDENTITY, kids, depth + 1, ink ? { fill: ink, stroke: ink } : undefined); } catch (err) { this.skipped.add(err instanceof Error ? err.message : String(err)); } finally { this.building.delete(d); }
+    const xs = Math.abs(pdf.n(d.get('XStep'), bw)) || bw, ys = Math.abs(pdf.n(d.get('YStep'), bh)) || bh;
+    const clip: PathNode = { id: newId('p'), kind: 'path', d: [{ closed: true, pts: [{ x: bx, y: by }, { x: bx + bw, y: by }, { x: bx + bw, y: by + bh }, { x: bx, y: by + bh }].map(corner) }], rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+    const art: GroupNode = { id: newId('g'), kind: 'group', clip: true, children: [...kids, clip], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+    const id = newId('pat');
+    this.patterns.push({ id, name: `Pattern ${this.patterns.length + 1}`, tile: { x: bx, y: by, w: bw, h: bh }, art, type: 'grid', hs: xs - bw, vs: ys - bh });
+    this.tiles.set(tag, id);
+    return { type: 'pattern', pattern: id, xf };
+  }
+
+  private compCount(cs: Val[]): number {
+    const k = nameOf(cs[0]), pdf = this.pdf;
+    if (k === 'DeviceCMYK' || k === 'CMYK') return 4;
+    if (k === 'DeviceRGB' || k === 'RGB' || k === 'CalRGB' || k === 'Lab') return 3;
+    if (k === 'ICCBased') { const s = pdf.get(cs[1]); return s instanceof Stream ? pdf.n(s.dict.get('N'), 3) : 3; }
+    if (k === 'DeviceN') return pdf.arr(cs[1]).length || 1;
+    return 1;
+  }
+
+  private async meshShading(st: Stream, cs: Val[], type: 4 | 5 | 6 | 7, m: Mat): Promise<VNode[] | null> {
+    const pdf = this.pdf, d = st.dict, tag = m.join(','), hit = this.meshCache.get(d)?.get(tag);
+    if (hit) return hit;
+    const fnv = pdf.get(d.get('Function')), fns = (Array.isArray(fnv) ? fnv : fnv ? [fnv] : []).map((x) => pdf.dict(x)).filter((x): x is PDict => !!x), nc = fns.length ? 1 : this.compCount(cs);
+    const spec: MeshSpec = { type, bpCoord: pdf.n(d.get('BitsPerCoordinate'), 8), bpComp: pdf.n(d.get('BitsPerComponent'), 8), bpFlag: pdf.n(d.get('BitsPerFlag'), 8), decode: pdf.nums(d.get('Decode')), ncomp: nc, perRow: pdf.n(d.get('VerticesPerRow'), 0) };
+    if (spec.decode.length < 4 + nc * 2 || !spec.bpCoord || !spec.bpComp) return null;
+    const data = await pdf.decode(st), xf = (x: number, y: number): Pt => apply(m, x, y), t0 = spec.decode[4], t1 = spec.decode[5];
+    const colorOf = (c: number[]): Color => {
+      if (!fns.length) return this.toColor(cs, c) ?? gray(50);
+      const out = fns.length === 1 ? evalFn(pdf, fns[0], [c[0]]) : fns.map((f) => (evalFn(pdf, f, [c[0]]) ?? [0])[0]);
+      return this.toColor(cs, out ?? [0]) ?? gray(50);
+    };
+    const rgbOf = (c: number[]): number[] => toRgbLocal(colorOf(c));
+    const lut = fns.length ? Array.from({ length: 257 }, (_, i) => toRgbLocal(colorOf([t0 + ((t1 - t0) * i) / 256]))) : null;
+    const finish = (c: number[]): [number, number, number] => { if (lut) return lut[Math.max(0, Math.min(256, Math.round(((c[0] - t0) / (t1 - t0 || 1)) * 256)))]; return [c[0], c[1], c[2]]; };
+    const prep = (v: RV): RV => (lut ? v : { x: v.x, y: v.y, c: rgbOf(v.c) });
+    let nodes: VNode[] | null = null, tris: Array<[RV, RV, RV]> = [];
+    const mesh = (g: { rows: number; cols: number; points: MeshNode['points'] }): VNode[] => [{ id: newId('m'), kind: 'mesh', rows: g.rows, cols: g.cols, points: g.points, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } } as MeshNode];
+    if (type === 4) tris = readTriangles(data, spec, xf).map((t) => t.map(prep) as [RV, RV, RV]);
+    else if (type === 5) {
+      const rows = readLattice(data, spec, xf), g = lut ? null : latticeMesh(rows, colorOf);
+      if (g) nodes = mesh(g);
+      else for (let r = 0; r + 1 < rows.length; r++) for (let c = 0; c + 1 < spec.perRow; c++) { const a = prep(rows[r][c]), b = prep(rows[r][c + 1]), e = prep(rows[r + 1][c + 1]), f = prep(rows[r + 1][c]); tris.push([a, b, e], [a, e, f]); }
+    } else {
+      const patches: Patch[] = readPatches(data, spec, xf), g = lut ? null : gridMesh(patches, colorOf);
+      if (g) nodes = mesh(g);
+      else {
+        const n = patches.length <= 16 ? 24 : patches.length <= 256 ? 12 : patches.length <= 2000 ? 6 : 4;
+        for (const p of patches) tris.push(...patchTriangles(lut ? p : { ...p, c: p.c.map(rgbOf) }, n));
+        this.skipped.add('mesh shadings that are not a patch grid (set as a picture of the region)');
+      }
+    }
+    if (!nodes && type === 4) this.skipped.add('free-form triangle meshes (set as a picture of the region)');
+    if (!nodes && type === 5) this.skipped.add('lattice meshes with function colours (set as a picture of the region)');
+    if (!nodes) {
+      const r = rasterTriangles(tris, 4, finish);
+      if (!r) return null;
+      const cv = new OffscreenCanvas(r.w, r.h), g = cv.getContext('2d');
+      if (!g) return null;
+      g.putImageData(new ImageData(new Uint8ClampedArray(r.data), r.w, r.h), 0, 0);
+      const blob = await cv.convertToBlob({ type: 'image/png' }), key = `img-${newId('').replace(/[^a-z0-9]/gi, '')}.png`;
+      this.assets.set(key, blob);
+      this.images[key] = { mime: 'image/png', w: r.w, h: r.h };
+      nodes = [{ id: newId('im'), kind: 'image', src: key, w: r.w, h: r.h, xf: [1 / r.scale, 0, 0, 1 / r.scale, r.x, r.y], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } } as ImageNode];
+    }
+    const per = this.meshCache.get(d) ?? new Map<string, VNode[]>();
+    per.set(tag, nodes);
+    this.meshCache.set(d, per);
+    return nodes;
+  }
+
+  private async shading(v: Val, m: Mat): Promise<{ paint: Paint; d: PathData } | { nodes: VNode[] } | null> {
     const pdf = this.pdf, d = v instanceof Stream ? v.dict : v instanceof Map ? v : null;
     if (!d) return null;
     const type = pdf.n(d.get('ShadingType')), csv = pdf.get(d.get('ColorSpace')), cs = Array.isArray(csv) ? csv.map((y) => pdf.get(y)) : [csv];
-    if (type !== 2 && type !== 3) { this.skipped.add('mesh and function shadings'); return null; }
+    if (type >= 4 && type <= 7) {
+      if (!(v instanceof Stream)) return null;
+      try { const nodes = await this.meshShading(v, cs, type as 4 | 5 | 6 | 7, m); return nodes ? { nodes } : null; } catch (err) { this.skipped.add(`a mesh shading (${err instanceof Error ? err.message : String(err)})`); return null; }
+    }
+    if (type !== 2 && type !== 3) { this.skipped.add('function-based shadings'); return null; }
     const c = pdf.nums(d.get('Coords')), dom = pdf.nums(d.get('Domain')), fnv = pdf.get(d.get('Function'));
     const fns = (Array.isArray(fnv) ? fnv : [fnv]).map((x) => pdf.dict(x)).filter((x): x is PDict => !!x);
     const t0 = dom[0] ?? 0, t1 = dom[1] ?? 1;
@@ -679,17 +886,21 @@ class Painter {
     const pdf = this.pdf, d = xo.dict, w = pdf.n(d.get('Width')), h = pdf.n(d.get('Height'));
     if (!(w > 0 && h > 0) || w * h > 64e6) return null;
     const dct = pdf.filters(xo).includes('DCTDecode') || pdf.filters(xo).includes('DCT');
-    let blob: Blob | null = null;
+    let blob: Blob | null = null, ow = w, oh = h;
     try {
       const plainJpeg = dct && !d.has('SMask') && !d.has('Mask') && !/CMYK|ICCBased|Indexed/.test(nameOf(pdf.get(d.get('ColorSpace'))) || 'x') && nameOf(pdf.get(d.get('ColorSpace'))) !== 'DeviceCMYK';
       blob = plainJpeg ? new Blob([(await pdf.decode(xo)) as unknown as BlobPart], { type: 'image/jpeg' }) : await this.raster(xo, w, h, dct);
+      if (!plainJpeg) { ow = this.rw; oh = this.rh; }
     } catch (err) { this.skipped.add(`an image (${err instanceof Error ? err.message : String(err)})`); return null; }
     if (!blob) return null;
     const key = `img-${newId('').replace(/[^a-z0-9]/gi, '')}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`;
     this.assets.set(key, blob);
-    this.images[key] = { mime: blob.type, w, h };
-    return { id: newId('im'), kind: 'image', src: key, w, h, xf: mul(ctm, [1 / w, 0, 0, -1 / h, 0, 1]), opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+    this.images[key] = { mime: blob.type, w: ow, h: oh };
+    return { id: newId('im'), kind: 'image', src: key, w: ow, h: oh, xf: mul(ctm, [1 / ow, 0, 0, -1 / oh, 0, 1]), opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
   }
+
+  private rw = 0;
+  private rh = 0;
 
   private async raster(xo: Stream, w: number, h: number, dct: boolean): Promise<Blob | null> {
     const pdf = this.pdf, d = xo.dict, c = new OffscreenCanvas(w, h), g = c.getContext('2d');
@@ -721,10 +932,35 @@ class Painter {
         px[o] = r; px[o + 1] = gg; px[o + 2] = b; px[o + 3] = 255;
       }
     }
-    const sm = pdf.get(d.get('SMask'));
-    if (sm instanceof Stream && pdf.n(sm.dict.get('Width')) === w && pdf.n(sm.dict.get('Height')) === h && pdf.n(sm.dict.get('BitsPerComponent'), 8) === 8) {
-      const md = await pdf.decode(sm);
-      for (let i = 0; i < w * h; i++) img.data[i * 4 + 3] = md[i] ?? 255;
+    const sm = pdf.get(d.get('SMask')), em = pdf.get(d.get('Mask')), ms = sm instanceof Stream ? sm : em instanceof Stream ? em : null;
+    this.rw = w; this.rh = h;
+    if (ms) {
+      const mw = pdf.n(ms.dict.get('Width')), mh = pdf.n(ms.dict.get('Height')), stencil = ms !== sm, mb = pdf.n(ms.dict.get('BitsPerComponent'), stencil ? 1 : 8);
+      if (mw > 0 && mh > 0 && mw * mh <= 64e6 && !pdf.filters(ms).some((f) => f === 'DCTDecode' || f === 'DCT')) {
+        const md = await pdf.decode(ms), dec = pdf.nums(ms.dict.get('Decode')), flip = dec.length === 2 && dec[0] > dec[1], row = Math.ceil((mw * mb) / 8), mmax = (1 << Math.min(mb, 8)) - 1;
+        const alphaAt = (x: number, y: number): number => {
+          const bit = x * mb, byte = md[y * row + (bit >> 3)] ?? 0;
+          const v = mb === 8 ? byte : mb === 16 ? byte : (byte >> (8 - mb - (bit & 7))) & mmax;
+          const a = stencil ? (v ? 0 : 255) : (v * 255) / mmax;
+          return flip ? 255 - a : a;
+        };
+        const W = Math.max(w, mw), H = Math.max(h, mh);
+        let out = img;
+        if (W !== w || H !== h) {
+          const big = new OffscreenCanvas(W, H), bg = big.getContext('2d');
+          if (bg) {
+            g.putImageData(img, 0, 0);
+            bg.imageSmoothingEnabled = true;
+            bg.drawImage(c, 0, 0, w, h, 0, 0, W, H);
+            out = bg.getImageData(0, 0, W, H);
+          }
+        }
+        if (out.width === W && out.height === H) {
+          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) out.data[(y * W + x) * 4 + 3] = alphaAt(Math.min(mw - 1, Math.floor((x * mw) / W)), Math.min(mh - 1, Math.floor((y * mh) / H)));
+          const oc = new OffscreenCanvas(W, H), og = oc.getContext('2d');
+          if (og) { og.putImageData(out, 0, 0); this.rw = W; this.rh = H; return oc.convertToBlob({ type: 'image/png' }); }
+        }
+      }
     }
     g.putImageData(img, 0, 0);
     return c.convertToBlob({ type: 'image/png' });

@@ -15,10 +15,13 @@ import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
 import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
 import { exportPdf, readPdfNative } from './io/pdf';
+import { buildPrintPdf, printPdf } from './io/print';
+import { PrintDialog } from './ui/print-dialog';
 import { DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
 import { exportEps, readEpsNative } from './io/eps';
 import { readEpsVector } from './io/ps-read';
-import { readPdfVector } from './io/pdf-read';
+import { PdfPasswordError, readPdfVector } from './io/pdf-read';
+import { isLegacyAi, readAiLegacy } from './io/ai-legacy';
 import { docFromManifest, serialize } from './io/project-io';
 import { bakeTraced, canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
@@ -32,7 +35,7 @@ import { typeDefaults } from './tools/type';
 import { AboutDialog, ExportDialog, NewDocumentDialog, OpenDialog, ScreensDialog, SettingsDialog, ShortcutsDialog, type ExportChoice } from './ui/app-dialogs';
 import { brandMark } from './ui/brand';
 import { Commands } from './ui/commands';
-import { anyDialogOpen, askSaveChanges, confirmAction, promptName } from './ui/dialogs';
+import { anyDialogOpen, askPassword, askSaveChanges, confirmAction, promptName } from './ui/dialogs';
 import { Dock, ALL_PANELS } from './ui/dock';
 import { el, mountOnce, q, revealApp, setDisabled, setHidden, setStyleVar, setText, setTitle } from './ui/dom';
 import { enhanceAllSelects } from './ui/dropdown';
@@ -422,7 +425,7 @@ export function startApp(): void {
     return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name} by running its PostScript: paths, fills, strokes, clipping, gradients and text.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
   }
 
-  async function openFiles(files: File[], dxf: Partial<DxfImportOptions> | null = null): Promise<void> {
+  async function openFiles(files: File[], dxf: Partial<DxfImportOptions> | null = null, password?: string): Promise<void> {
     await engine.task(async () => {
       for (const f of files) {
         try {
@@ -433,9 +436,23 @@ export function startApp(): void {
           else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, clipping, type and images; filters and masks it cannot match are left out.`); }
           else if (lower.endsWith('.pdf') || lower.endsWith('.ai')) {
             const data = await f.arrayBuffer(), title = f.name.replace(/\.(pdf|ai)$/i, '');
+            if (lower.endsWith('.ai') && isLegacyAi(data)) {
+              const r = await readAiLegacy(data, title);
+              adopt(r.doc, title, r.assets);
+              toast(`Opened ${f.name}: ${r.doc.layers.length} layer${r.doc.layers.length === 1 ? '' : 's'}.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
+              continue;
+            }
             const native = await readPdfNative(data);
             if (native) { adopt(docFromManifest(native.manifest), title, native.assets); continue; }
-            const r = await readPdfVector(data, title);
+            let r: Awaited<ReturnType<typeof readPdfVector>> | null = null, pw = password;
+            while (!r) {
+              try { r = await readPdfVector(data, title, pw); } catch (err) {
+                if (!(err instanceof PdfPasswordError) || password !== undefined) throw err;
+                const next = await askPassword(f.name, err.wrong);
+                if (next === null) throw err;
+                pw = next;
+              }
+            }
             adopt(r.doc, title, r.assets);
             const subs = r.fonts.slice(0, 4).map(([from, to]) => `${from} as ${to}`).join(', ') + (r.fonts.length > 4 ? ` and ${r.fonts.length - 4} more` : '');
             toast(`Opened ${f.name}: ${r.pages === 1 ? 'one page as an artboard' : `${r.pages} pages as artboards`}.${r.fonts.length ? ` Fonts not installed, set in their nearest match: ${subs}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
@@ -706,6 +723,22 @@ export function startApp(): void {
   }
 
   const exportDialog = new ExportDialog(), screensDialog = new ScreensDialog();
+  let printDialog: PrintDialog | null = null;
+  async function printDocument(): Promise<void> {
+    const p = engine.current;
+    if (!p) return;
+    typing.end();
+    printDialog ??= new PrintDialog();
+    const s = await printDialog.ask(p);
+    if (!s) return;
+    await engine.task(async () => {
+      try {
+        const blob = await buildPrintPdf(p, s, VERSION);
+        const how = await printPdf(blob, async (b) => { await deliver(b, `${p.name}.pdf`); toast('This computer could not open its print dialog from here, so the PDF was saved instead. Open it and print from there.'); });
+        if (how === 'printed') toast('Sent to the print dialog.');
+      } catch (err) { toast(message(err), 'error'); }
+    });
+  }
   async function exportAs(format: ExportChoice['format']): Promise<void> {
     const p = engine.current;
     if (!p) return;
@@ -845,7 +878,7 @@ export function startApp(): void {
     ask: (title, text) => agentConfirm.ask(title, text),
     note: (t) => status.setEngine(t),
     allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpth:agents', { detail: true })); },
-    openFile: (f, dxf) => openFiles([f], dxf ?? { merge: false }),
+    openFile: (f, dxf, password) => openFiles([f], dxf ?? { merge: false }, password),
     placeFile: (f, at, w, dxf) => placeFile(f, at, w, dxf ?? { merge: true }),
     placeLinked: async (path, at, width) => placeLinked(await links.readPath(path), at, width),
     links: (a) => linkTool(a),
@@ -1388,7 +1421,7 @@ export function startApp(): void {
     { id: 'export-webp', label: 'WebP...', enabled: has, run: () => void exportAs('webp') },
     { id: 'export-eps', label: 'EPS...', enabled: has, run: () => void exportAs('eps') },
     { id: 'export-dxf', label: 'AutoCAD Interchange (DXF)...', enabled: has, run: () => void exportAs('dxf') },
-    { id: 'print', label: 'Print...', keys: ['Mod+P'], enabled: has, run: () => void engine.task(async () => { const p = engine.current; if (!p) return; const b = await exportPdf(p, { artboards: p.doc.artboards.map((_, i) => i), preserve: false, ppi: 300, version: VERSION }); const url = URL.createObjectURL(b); const w = window.open(url, '_blank'); if (!w) await deliver(b, `${p.name}.pdf`); window.setTimeout(() => URL.revokeObjectURL(url), 120000); }) },
+    { id: 'print', label: 'Print...', keys: ['Mod+P'], enabled: has, run: () => void printDocument() },
     { id: 'document-setup', label: 'Document Setup...', keys: ['Alt+Mod+P'], enabled: has, run: () => void documentSetup() },
     { id: 'mode-rgb', label: 'RGB Color', enabled: has, checked: () => engine.doc?.colorMode === 'rgb', run: () => engine.documentSetup({ colorMode: 'rgb' }) },
     { id: 'mode-cmyk', label: 'CMYK Color', enabled: has, checked: () => engine.doc?.colorMode === 'cmyk', run: () => engine.documentSetup({ colorMode: 'cmyk' }) },
