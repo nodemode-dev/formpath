@@ -670,8 +670,17 @@ ask it questions.
   as short segments, no fills). Choose the units and the scale (drawing units per unit of art, so 100 writes a 1:100
   drawing at full size), type as TEXT objects or outlines, and whether lineweights scale with the drawing. Each layer
   stays a DXF layer.
-- DWG is a closed binary format and formpth does not read or write it. Save the drawing as DXF in your CAD program
-  and open the DXF.
+- DWG opens through a converter installed on your computer: the free ODA File Converter or LibreDWG's dwg2dxf
+  (set FORMPTH_ODA_CONVERTER to the converter's path if it is somewhere unusual). Without one, formpth says where to
+  get it. formpth does not write DWG; export DXF instead.
+- PDF export writes type as live, searchable text with the fonts embedded (Preserve text as live text); type with
+  gradients, effects or a font formpth cannot read is outlined. Standard: PDF/X-4 embeds the document's CMYK profile
+  as the output intent. Illustrator (.ai) writes a PDF-compatible .ai that reopens fully editable in formpth.
+- Edit > Color Settings picks the RGB and CMYK working profiles (installed, system or loaded .icc files), the
+  rendering intent and black point compensation; Edit > Assign Profile and Convert to Profile change the document's
+  profile; View > Proof Setup and Proof Colors preview the art on the chosen press profile.
+- 3D and Materials: Lighting takes a preset or up to eight lights; Render with Ray Tracing, at Low, Medium or High,
+  adds soft shadows and ambient occlusion and shows the brushed metal, wood and rough materials.
 - File > Send to NodeMode sends the active artboard as an image to a NodeMode canvas (Preferences > Plugins sets its
   address).
 

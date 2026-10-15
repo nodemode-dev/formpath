@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.32.0 · 2026-10-15
+
+Plan v0.6.0 phase 28: the five Partial rows, first pass.
+
+### Added
+
+- Colour management on LittleCMS: Edit > Color Settings, Assign Profile, Convert to Profile; View > Proof Setup and Proof Colors; installed, system and loaded ICC profiles; formpth Generic CMYK when no press profile is loaded. MCP `list_color_profiles`, `set_color_settings`, `convert_to_profile`, `proof_colors`. 92 MCP tools.
+- PDF export writes live, searchable type with embedded font subsets (fontTools); PDF/X-4 with the CMYK profile as the output intent (`export_file` `pdf_standard`).
+- Export > Illustrator (.ai): PDF-compatible, every artboard a page, reopens fully editable.
+- DWG opens through the ODA File Converter or LibreDWG's dwg2dxf when installed, in the window and through `open_file`.
+- 3D and Materials: lighting presets and up to eight lights, Render with Ray Tracing at three qualities, brushed metal, wood and rough materials.
+
+### Known
+
+- 68 new interface strings show in English in the other 25 languages until the next translation pass.
+
 ## 0.31.0 · 2026-10-15
 
 The re-grade, and the rows it found short.
