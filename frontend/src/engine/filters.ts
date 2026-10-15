@@ -722,7 +722,7 @@ const RUNS: Record<string, Run> = {
     const H = new Float32Array(n);
     for (let i = 0; i < n; i++) { const t = Math.min(1, dist[i] / R); H[i] = R * Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t))) * vol; }
     const S = blurPlane(H, w, h, Math.max(0.8, R * 0.12)), L = lighting(p), rx = num(p, 'rx', 0), ry = num(p, 'ry', 0), rz = num(p, 'rz', 0);
-    if (p.ray_trace === true) return inflateTrace(px, S, p.quality, F, L, rx, ry, rz);
+    if (p.ray_trace === true) return inflateTrace(px, S, p.quality, F, L, rx, ry, rz, p);
     if (rx || ry || rz) {
       const turn = rotator(rx, ry, rz), cx = F.x + F.w / 2, cy = F.y + F.h / 2, out = like(px, new Float32Array(n)), dir = turn.inv([0, 0, 1]);
       let top = 0, bx0 = w, by0 = h, bx1 = -1, by1 = -1;

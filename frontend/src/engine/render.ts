@@ -1,10 +1,10 @@
 import { selectionBounds, strokeReach, visualBounds } from './bounds';
 import { childrenOf } from './doc';
-import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, rayTraceImage, strokeOutline, threeDFaces, TRACE_ID, type RasterFx } from './effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, rayTraceImage, strokeOutline, textureArt, textureTile, threeDFaces, TRACE_ID, type RasterFx } from './effects';
 import { emptyRect, inflate, isEmptyRect, pathBounds, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
-import { rayTraced } from './threed';
+import { rayTraced, textureOf } from './threed';
 import { cssColor, freeformPixels, gray, gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from './paint';
 import { liveFaceNodes } from './livepaint';
 import { derivedArt } from './shaper';
@@ -425,6 +425,35 @@ function gradientStroke(ctx: CanvasRenderingContext2D, rc: RenderContext, art: G
   ctx.restore();
 }
 
+const bareVariants = new WeakMap<VNode, VNode>();
+function inflateTextured(ctx: CanvasRenderingContext2D, rc: RenderContext, n: VNode, d: PathData, rule: CanvasFillRule): VNode {
+  if (rc.outline) return n;
+  const fx = n.ap.effects.find((e) => e.visible && e.id === '3d.inflate'), T = fx ? textureOf(fx.params) : null;
+  if (!T) return n;
+  const ta = textureArt(rc.doc, T.ref), b = pathBounds(d);
+  if (!ta || isEmptyRect(b)) return n;
+  const fillItem = n.ap.items.find((i) => i.visible && i.kind === 'fill'), tile = textureTile(ta.b, Math.max(b.w, b.h, 1), T.scale), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  const half = Math.min(10, Math.ceil((Math.hypot(b.w, b.h) / 2 + Math.hypot(T.ox, T.oy)) / Math.min(tile.w, tile.h))), near = Math.hypot(b.w, b.h) / 2 + Math.hypot(tile.w, tile.h) / 2 + Math.hypot(T.ox, T.oy);
+  ctx.save();
+  ctx.clip(cachedPath(d), rule);
+  if (fillItem) ctx.globalAlpha *= fillItem.opacity;
+  for (let j = -half; j <= half; j++) for (let i = -half; i <= half; i++) {
+    if (Math.hypot(i * tile.w, j * tile.h) > near) continue;
+    ctx.save();
+    ctx.translate(cx + T.ox, cy + T.oy);
+    ctx.rotate((-T.rot * Math.PI) / 180);
+    ctx.translate(i * tile.w, j * tile.h);
+    ctx.scale(tile.w / ta.b.w, tile.h / ta.b.h);
+    ctx.translate(-(ta.b.x + ta.b.w / 2), -(ta.b.y + ta.b.h / 2));
+    renderNode(ctx, ta.art, { ...rc, skip: undefined });
+    ctx.restore();
+  }
+  ctx.restore();
+  let v = bareVariants.get(n);
+  if (!v) { v = { ...n, ap: { ...n.ap, items: n.ap.items.filter((i) => i !== fillItem) } } as VNode; bareVariants.set(n, v); }
+  return v;
+}
+
 function drawShapeItems(ctx: CanvasRenderingContext2D, rc: RenderContext, n: VNode, d: PathData, rule: CanvasFillRule): void {
   const path = cachedPath(d), b = selectionBounds(rc.doc, [n]);
   if (rc.outline) { outlineStroke(ctx, rc, path); return; }
@@ -513,11 +542,12 @@ const traceCanvas = new WeakMap<Uint8ClampedArray, HTMLCanvasElement | Offscreen
 function drawTraced(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): boolean {
   const region = visualBounds(rc.doc, n);
   if (isEmptyRect(region)) return false;
-  const paint = (art: VNode, b: Rect, w: number, h: number): Uint8ClampedArray | null => {
+  const paint = (art: VNode, b: Rect, w: number, h: number): Uint8ClampedArray | null | 'pending' => {
     const made = canvas2d(w, h);
+    let missing = false;
     made.ctx.setTransform(w / b.w, 0, 0, h / b.h, -b.x * (w / b.w), -b.y * (h / b.h));
-    renderNode(made.ctx, art, { ...rc, skip: undefined, outline: false });
-    return made.ctx.getImageData(0, 0, w, h).data;
+    renderNode(made.ctx, art, { ...rc, skip: undefined, outline: false, assets: (k) => { const a = rc.assets(k); if (!a) missing = true; return a; } });
+    return missing ? 'pending' : made.ctx.getImageData(0, 0, w, h).data;
   };
   const t = ctx.getTransform(), r = rayTraceImage(rc.doc, n, region, Math.hypot(t.a, t.b), !!rc.printing, paint);
   if (!r) return false;
@@ -623,12 +653,12 @@ function drawBody(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): v
     case 'path': {
       const d = effectPath(n.d, n.ap.effects);
       if (n.guide) return;
-      drawShapeItems(ctx, rc, n, d, n.rule);
+      drawShapeItems(ctx, rc, inflateTextured(ctx, rc, n, d, n.rule), d, n.rule);
       return;
     }
     case 'compound': {
       const d = effectPath(n.children.flatMap((c) => c.d), n.ap.effects);
-      drawShapeItems(ctx, rc, n, d, n.rule);
+      drawShapeItems(ctx, rc, inflateTextured(ctx, rc, n, d, n.rule), d, n.rule);
       return;
     }
     case 'text': {

@@ -7,9 +7,9 @@ import { mapPathNonlinear, warpPoint } from './live';
 import { parseColor, cssColor, BLACK, effect, fill, gradientAt, resolvePaint, rgb, solid, stroke, toRgb } from './paint';
 import { childrenOf } from './doc';
 import { textBounds, textOutline, textEpoch } from './text';
-import { rayMesh, type RayMap } from './raymesh';
+import { rayMesh, type MatMap, type RayMap } from './raymesh';
 import { RAY_DRAFT_PX, RAY_QUALITY, rayDraftTaken, rayTrace, setRayDraft, type RayLight, type RayQuality, type RayResult } from './raytrace';
-import { lighting, outline3d, rayTraced, scene3dWith, VECTOR_3D, type Lighting, type RGB3, type Scene, type Solid, type TraceGeom } from './threed';
+import { lighting, outline3d, rayTraced, scene3dWith, surfaceOf, textureOf, VECTOR_3D, type Lighting, type RGB3, type Scene, type Solid, type SurfaceProps, type TextureRef, type TraceGeom } from './threed';
 import { transformNode } from './transform';
 import type { Anchor, BlendMode, BrushDef, Doc, Effect, GroupNode, Mat, Paint, PathData, PathNode, Pt, Rect, StrokeItem, VNode, WidthPoint } from './types';
 
@@ -39,12 +39,13 @@ const light = (materials = MATERIALS, material = 'plastic'): EffectParam[] => [s
 const txt = (key: string, label: string, def: string): EffectParam => ({ key, label, kind: 'text', def });
 const tracing = (): EffectParam[] => [bool('ray_trace', 'Ray Tracing', false), sel('quality', 'Quality', 'medium', ['low', 'medium', 'high']), num('texture_scale', 'Texture Scale', 100, 10, 400, '%')];
 const mapArt = (): EffectParam[] => [txt('map_symbol', 'Map Art Symbol', ''), num('map_scale', 'Map Art Scale', 100, 5, 400, '%'), num('map_x', 'Map Art X', 0, -2000, 2000, 'pt'), num('map_y', 'Map Art Y', 0, -2000, 2000, 'pt'), bool('shade_art', 'Shade Artwork', true)];
+const graphic = (scale: boolean): EffectParam[] => [txt('texture', 'Texture', ''), txt('texture_color', 'Texture Color', ''), ...(scale ? [num('texture_scale', 'Texture Scale', 100, 10, 400, '%')] : []), num('texture_rotation', 'Texture Rotation', 0, -180, 180, 'deg'), num('texture_offset_x', 'Texture Offset X', 0, -2000, 2000, 'pt'), num('texture_offset_y', 'Texture Offset Y', 0, -2000, 2000, 'pt'), txt('roughness', 'Roughness', ''), txt('metallic', 'Metallic', '')];
 const shadows = (): EffectParam[] => [bool('shadow', 'Shadow', false), sel('shadow_position', 'Shadow Position', 'behind', ['behind', 'below']), num('shadow_distance', 'Shadow Distance', 20, 0, 500, 'pt'), num('shadow_softness', 'Shadow Softness', 8, 0, 100, 'pt'), num('shadow_opacity', 'Shadow Opacity', 40, 0, 100, '%')];
 const THREE_D: EffectDef[] = [
-  { id: '3d.extrude', label: 'Extrude & Bevel', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('depth', 'Depth', 50, 0, 2000, 'pt'), bool('cap', 'Cap', true), sel('bevel', 'Bevel', 'none', ['none', 'classic', 'rounded']), num('bevel_height', 'Bevel Height', 4, 0, 100, 'pt'), ...light(), ...tracing(), ...mapArt(), ...shadows()] },
-  { id: '3d.revolve', label: 'Revolve', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('angle', 'Revolve Angle', 360, 1, 360, 'deg'), num('offset', 'Offset', 0, 0, 1000, 'pt'), sel('from', 'From', 'left', ['left', 'right']), bool('cap', 'Cap', true), ...light(), ...tracing(), ...shadows()] },
-  { id: '3d.inflate', label: 'Inflate', menu: '3D and Materials', raster: true, params: [num('depth', 'Depth', 20, 1, 500, 'pt'), num('volume', 'Volume', 100, 10, 100, '%'), num('rx', 'X Rotation', 0, -180, 180, 'deg'), num('ry', 'Y Rotation', 0, -180, 180, 'deg'), num('rz', 'Z Rotation', 0, -180, 180, 'deg'), ...light(['plastic', 'matte', 'metal']), bool('ray_trace', 'Ray Tracing', false), sel('quality', 'Quality', 'medium', ['low', 'medium', 'high'])] },
-  { id: '3d.rotate', label: 'Rotate', menu: '3D and Materials', params: [...turn(-18, -26, 8), ...light([...MATERIALS, 'flat'], 'flat'), ...tracing(), ...mapArt(), ...shadows()] },
+  { id: '3d.extrude', label: 'Extrude & Bevel', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('depth', 'Depth', 50, 0, 2000, 'pt'), bool('cap', 'Cap', true), sel('bevel', 'Bevel', 'none', ['none', 'classic', 'rounded']), num('bevel_height', 'Bevel Height', 4, 0, 100, 'pt'), ...light(), ...tracing(), ...graphic(false), ...mapArt(), ...shadows()] },
+  { id: '3d.revolve', label: 'Revolve', menu: '3D and Materials', params: [...turn(-18, -26, 8), num('angle', 'Revolve Angle', 360, 1, 360, 'deg'), num('offset', 'Offset', 0, 0, 1000, 'pt'), sel('from', 'From', 'left', ['left', 'right']), bool('cap', 'Cap', true), ...light(), ...tracing(), ...graphic(false), ...shadows()] },
+  { id: '3d.inflate', label: 'Inflate', menu: '3D and Materials', raster: true, params: [num('depth', 'Depth', 20, 1, 500, 'pt'), num('volume', 'Volume', 100, 10, 100, '%'), num('rx', 'X Rotation', 0, -180, 180, 'deg'), num('ry', 'Y Rotation', 0, -180, 180, 'deg'), num('rz', 'Z Rotation', 0, -180, 180, 'deg'), ...light(['plastic', 'matte', 'metal']), bool('ray_trace', 'Ray Tracing', false), sel('quality', 'Quality', 'medium', ['low', 'medium', 'high']), ...graphic(true)] },
+  { id: '3d.rotate', label: 'Rotate', menu: '3D and Materials', params: [...turn(-18, -26, 8), ...light([...MATERIALS, 'flat'], 'flat'), ...tracing(), ...graphic(false), ...mapArt(), ...shadows()] },
 ];
 
 const GALLERY: EffectDef[] = [
@@ -302,8 +303,9 @@ export function effectPath(d0: PathData, effects: Effect[]): PathData {
 }
 
 interface TraceArt { art: VNode; b: Rect; scale: number; dx: number; dy: number; lit: boolean; sym: string }
-interface TraceInfo { geom: TraceGeom; solids: Solid[]; fx: Effect; L: Lighting; ground: { m: Mat; blur: number; opacity: number } | null; art: TraceArt | null; hash?: string }
-export type ArtPainter = (art: VNode, bounds: Rect, w: number, h: number) => Uint8ClampedArray | null;
+interface TraceMat { art: VNode; b: Rect; ref: TextureRef; sym: string }
+interface TraceInfo { geom: TraceGeom; solids: Solid[]; fx: Effect; L: Lighting; ground: { m: Mat; blur: number; opacity: number } | null; art: TraceArt | null; mat: TraceMat | null; surface: SurfaceProps | null; hash?: string }
+export type ArtPainter = (art: VNode, bounds: Rect, w: number, h: number) => Uint8ClampedArray | null | 'pending';
 const artVersion = new WeakMap<object, number>();
 let artCount = 0;
 const facesCache = new WeakMap<VNode, { epoch: number; symbols: Doc['symbols']; swatches: Doc['swatches']; faces: VNode[]; trace: TraceInfo | null }>();
@@ -326,7 +328,10 @@ export function threeDFaces(doc: Doc, n: VNode): VNode[] | null {
   add(n, n.ap.effects.slice(0, at));
   if (!solids.length) return null;
   const col = (c: RGB3): Paint => solid(rgb(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)));
-  const fx = n.ap.effects[at], p = fx.params, L = lighting(p), keep = L.material !== 'wireframe', scene = scene3dWith(solids, fx, rayTraced(fx)), out: VNode[] = [];
+  const fx = n.ap.effects[at], p = fx.params, L = lighting(p), keep = L.material !== 'wireframe', texRef = textureOf(p), out: VNode[] = [];
+  const texArt = texRef ? textureArt(doc, texRef.ref) : null;
+  if (texRef && texRef.color) for (let i = 0; i < solids.length; i++) { solids[i] = { ...solids[i], fill: texRef.color }; paints[i] = null; }
+  const scene = scene3dWith(solids, fx, rayTraced(fx));
   let ground: TraceInfo['ground'] = null;
   const path = (id: string, d: PathData, rule: PathNode['rule'], items: PathNode['ap']['items']): PathNode => ({ id, kind: 'path', d, rule, opacity: 1, blend: 'normal', ap: { items, effects: [] } });
   const shade = (f: { t: number; s: number }): PathNode['ap']['items'] => [...(f.t < 0.998 ? [fill(col(L.shade), 1 - f.t)] : []), ...(f.s > 0.002 ? [fill(solid(rgb(255, 255, 255)), f.s)] : [])];
@@ -352,7 +357,8 @@ export function threeDFaces(doc: Doc, n: VNode): VNode[] | null {
   });
   const artB = scene.trace && sym ? artBounds(doc, sym.art) : null;
   const traceArt: TraceArt | null = artB && sym ? { art: sym.art, b: artB, scale: P(fx, 'map_scale', 100) / 100, dx: P(fx, 'map_x', 0), dy: P(fx, 'map_y', 0), lit: p.shade_art !== false, sym: sym.id } : null;
-  facesCache.set(n, { epoch: ep, symbols: doc.symbols, swatches: doc.swatches, faces: out, trace: scene.trace ? { geom: scene.trace, solids, fx, L, ground, art: traceArt } : null });
+  const traceMat: TraceMat | null = scene.trace && texRef && texArt ? { art: texArt.art, b: texArt.b, ref: texRef, sym: texRef.ref } : null;
+  facesCache.set(n, { epoch: ep, symbols: doc.symbols, swatches: doc.swatches, faces: out, trace: scene.trace ? { geom: scene.trace, solids, fx, L, ground, art: traceArt, mat: traceMat, surface: surfaceOf(p) } : null });
   return out;
 }
 
@@ -398,27 +404,45 @@ function traceHash(info: TraceInfo): string {
   const art = info.art;
   let ver = 0;
   if (art) { ver = artVersion.get(art.art) ?? 0; if (!ver) { ver = ++artCount; artVersion.set(art.art, ver); } }
-  const tex = art ? `|art${ver}:${art.sym}:${art.scale}:${art.dx}:${art.dy}:${art.lit ? 1 : 0}` : '';
-  return (info.hash = `${h >>> 0}|${info.fx.id}|${keys.map((k) => `${k}=${info.fx.params[k]}`).join(',')}${tex}`);
+  let tex = art ? `|art${ver}:${art.sym}:${art.scale}:${art.dx}:${art.dy}:${art.lit ? 1 : 0}` : '';
+  if (info.mat) { let mv = artVersion.get(info.mat.art) ?? 0; if (!mv) { mv = ++artCount; artVersion.set(info.mat.art, mv); } tex += `|mat${mv}:${info.mat.sym}`; }
+  return (info.hash =`${h >>> 0}|${info.fx.id}|${keys.map((k) => `${k}=${info.fx.params[k]}`).join(',')}${tex}`);
 }
 
-function traceMap(info: TraceInfo, region: Rect, k: { w: number; h: number }, paint: ArtPainter | undefined): RayMap | null {
+function traceMap(info: TraceInfo, region: Rect, k: { w: number; h: number }, paint: ArtPainter | undefined, wait: { on: boolean }): RayMap | null {
   const a = info.art;
   if (!a || !paint) return null;
   const w = a.b.w * a.scale, h = a.b.h * a.scale;
   if (!(w > 0) || !(h > 0)) return null;
   const dens = Math.max(k.w / region.w, k.h / region.h) * 1.25, tw = Math.max(16, Math.min(2048, Math.ceil(w * dens))), th = Math.max(16, Math.min(2048, Math.ceil(h * dens)));
   const data = paint(a.art, a.b, tw, th);
-  if (!data) return null;
+  if (data === 'pending') wait.on = true;
+  if (!data || data === 'pending') return null;
   return { x: info.geom.center[0] + a.dx - w / 2, y: info.geom.center[1] + a.dy - h / 2, w, h, tex: { w: tw, h: th, data, lit: a.lit } };
 }
 
-function traceInput(info: TraceInfo, region: Rect, k: { w: number; h: number }, quality: RayQuality, map: RayMap | null = null): Parameters<typeof rayTrace>[0] {
+export function textureTile(b: Rect, size: number, scale: number): { w: number; h: number } {
+  const asp = b.w / Math.max(1e-6, b.h), k = Math.max(0.0001, size * (scale / 100));
+  return asp >= 1 ? { w: k, h: k / asp } : { w: k * asp, h: k };
+}
+
+function traceMat(info: TraceInfo, region: Rect, k: { w: number; h: number }, paint: ArtPainter | undefined, wait: { on: boolean }): MatMap | null {
+  const m = info.mat;
+  if (!m || !paint || !(m.b.w > 0) || !(m.b.h > 0)) return null;
+  const tile = textureTile(m.b, info.geom.size, m.ref.scale), dens = Math.max(k.w / region.w, k.h / region.h) * 1.1;
+  const tw = Math.max(16, Math.min(2048, Math.ceil(tile.w * dens))), th = Math.max(16, Math.min(2048, Math.ceil(tile.h * dens)));
+  const data = paint(m.art, m.b, tw, th);
+  if (data === 'pending') wait.on = true;
+  if (!data || data === 'pending') return null;
+  return { tex: { w: tw, h: th, data, lit: true }, tw: tile.w, th: tile.h, rot: m.ref.rot, ox: m.ref.ox, oy: m.ref.oy };
+}
+
+function traceInput(info: TraceInfo, region: Rect, k: { w: number; h: number }, quality: RayQuality, map: RayMap | null = null, mat: MatMap | null = null): Parameters<typeof rayTrace>[0] {
   const g = info.geom, L = info.L, cx = g.center[0], cy = g.center[1];
   const lights: RayLight[] = L.srcs ? L.srcs.map((s) => ({ dir: s.dir, color: s.color, intensity: s.intensity, softness: s.softness })) : [{ dir: L.light, color: [1, 1, 1], intensity: L.intensity, softness: 0 }];
   const m = info.ground?.m;
   return {
-    mesh: rayMesh(g, info.solids, map), w: k.w, h: k.h, sx: k.w / region.w, sy: k.h / region.h, ox: cx - region.x, oy: cy - region.y, f: g.f, rot: g.R, axis: [g.R[0], g.R[3], g.R[6]],
+    mesh: rayMesh(g, info.solids, map, mat), surface: info.surface, w: k.w, h: k.h, sx: k.w / region.w, sy: k.h / region.h, ox: cx - region.x, oy: cy - region.y, f: g.f, rot: g.R, axis: [g.R[0], g.R[3], g.R[6]],
     lights, ambient: L.ambient, highlight: L.highlight, shade: L.shade, look: L.look, texScale: P(info.fx, 'texture_scale', 100), quality, size: g.size,
     ground: info.ground && m ? { m: [m[0], m[1], m[2], m[3], m[0] * cx + m[2] * cy + m[4] - cx, m[1] * cx + m[3] * cy + m[5] - cy], blur: info.ground.blur, opacity: info.ground.opacity } : null,
   };
@@ -434,7 +458,11 @@ export function rayTraceImage(doc: Doc, n: VNode, region: Rect, scale: number, p
     return { w, h, tag: `${w}x${h}` };
   };
   const base = `${traceHash(info)}|${Math.round((info.geom.center[0] - region.x) * 100)}|${Math.round((info.geom.center[1] - region.y) * 100)}|`;
-  const make = (q: RayQuality, px: number, key: string, dims: { w: number; h: number }): RayResult => { const r = rayTrace(traceInput(info, region, dims, q, traceMap(info, region, dims, paint))); remember(key, r); return r; };
+  const make = (q: RayQuality, px: number, key: string, dims: { w: number; h: number }): RayResult => {
+    const wait = { on: false }, map = traceMap(info, region, dims, paint, wait), mat = traceMat(info, region, dims, paint, wait), r = rayTrace(traceInput(info, region, dims, q, map, mat));
+    if (!wait.on) remember(key, r);
+    return r;
+  };
   const dd = size(drafting ? RAY_DRAFT_PX : RAY_QUALITY[full].px), key = `${base}${dd.tag}|${qual}|${drafting ? 'd' : 'f'}`;
   const hit = traceImages.get(key);
   if (drafting) { traceDraftUsed = true; return hit ?? make('low', RAY_DRAFT_PX, key, dd); }
@@ -460,6 +488,33 @@ function artBounds(doc: Doc, art: VNode): Rect | null {
   walk(art);
   void doc;
   return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
+const textureNodes = new Map<string, VNode>();
+export function textureArt(doc: Doc, ref: string): { art: VNode; b: Rect } | null {
+  const im = doc.images[ref];
+  if (im && im.w > 0 && im.h > 0) {
+    const key = `${ref}|${im.w}x${im.h}`;
+    let node = textureNodes.get(key);
+    if (!node) {
+      node = { id: '~texture', kind: 'image', src: ref, w: im.w, h: im.h, xf: [1, 0, 0, 1, 0, 0], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } } as VNode;
+      textureNodes.set(key, node);
+      if (textureNodes.size > 64) textureNodes.delete(textureNodes.keys().next().value as string);
+    }
+    return { art: node, b: { x: 0, y: 0, w: im.w, h: im.h } };
+  }
+  const sym = doc.symbols.find((s) => s.id === ref || s.name === ref), b = sym ? artBounds(doc, sym.art) : null;
+  return sym && b && b.w > 0 && b.h > 0 ? { art: sym.art, b } : null;
+}
+
+export function textureImageKeys(doc: Doc): Set<string> {
+  const out = new Set<string>();
+  const walkNode = (x: VNode): void => {
+    for (const e of x.ap.effects) if (e.id.startsWith('3d.') && typeof e.params.texture === 'string' && doc.images[e.params.texture]) out.add(e.params.texture);
+    childrenOf(x)?.forEach(walkNode);
+  };
+  doc.layers.forEach(walkNode);
+  return out;
 }
 
 function reid(x: VNode, prefix: string): VNode {

@@ -1,12 +1,13 @@
 import { RAY_DRAFT_PX, RAY_QUALITY, rayDrafting, rayTrace, type RayLight, type RayMesh, type RayQuality } from './raytrace';
-import { rotator, type Lighting, type V3 } from './threed';
+import { rotator, surfaceOf, type Lighting, type V3 } from './threed';
+import type { Effect } from './types';
 
 export interface InflatePlanes { w: number; h: number; r: Float32Array; g: Float32Array; b: Float32Array; a: Float32Array }
 export interface InflateFrame { x: number; y: number; w: number; h: number; scale: number }
 
 const CELLS: Record<RayQuality, number> = { low: 6000, medium: 14000, high: 30000 };
 
-export function inflateTrace(px: InflatePlanes, S: Float32Array, quality: unknown, F: InflateFrame, L: Lighting, rx: number, ry: number, rz: number): InflatePlanes {
+export function inflateTrace(px: InflatePlanes, S: Float32Array, quality: unknown, F: InflateFrame, L: Lighting, rx: number, ry: number, rz: number, params?: Effect['params']): InflatePlanes {
   const { w, h } = px, n = w * h, out: InflatePlanes = { w, h, r: new Float32Array(n), g: new Float32Array(n), b: new Float32Array(n), a: new Float32Array(n) };
   let bx0 = w, by0 = h, bx1 = -1, by1 = -1, count = 0;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px.a[y * w + x] > 0.5) { count++; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
@@ -68,7 +69,7 @@ export function inflateTrace(px: InflatePlanes, S: Float32Array, quality: unknow
   const lights: RayLight[] = L.srcs ? L.srcs.map((s) => ({ dir: s.dir, color: s.color, intensity: s.intensity, softness: s.softness })) : [{ dir: L.light, color: [1, 1, 1], intensity: L.intensity, softness: 0 }];
   const area = (bx1 - bx0 + 5) * (by1 - by0 + 5), budget = rayDrafting() ? RAY_DRAFT_PX : RAY_QUALITY[q].px, k = area > budget ? Math.sqrt(budget / area) : 1;
   const tw = Math.max(1, Math.ceil(w * k)), th = Math.max(1, Math.ceil(h * k)), sx = tw / w, sy = th / h;
-  const res = rayTrace({ mesh, w: tw, h: th, sx, sy, ox: cx, oy: cy, f: 0, rot: R, axis: [R[0], R[3], R[6]], lights, ambient: L.ambient, highlight: L.highlight, shade: L.shade, look: L.look, texScale: 100, quality: q, size: reach, ground: null, bias: Math.max(0.5, g * 0.7), denoise: Math.max(RAY_QUALITY[q].denoise, 2) });
+  const res = rayTrace({ mesh, w: tw, h: th, sx, sy, ox: cx, oy: cy, f: 0, rot: R, axis: [R[0], R[3], R[6]], lights, ambient: L.ambient, highlight: L.highlight, shade: L.shade, look: L.look, texScale: 100, quality: q, size: reach, ground: null, surface: params ? surfaceOf(params) : null, bias: Math.max(0.5, g * 0.7), denoise: Math.max(RAY_QUALITY[q].denoise, 2) });
   const d = res.data, px4 = [0, 0, 0, 0];
   const read = (i: number, j: number): void => {
     const fx = (i + 0.5) * sx - 0.5, fy = (j + 0.5) * sy - 0.5, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;

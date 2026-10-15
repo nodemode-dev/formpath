@@ -1,5 +1,7 @@
 import type { Effect, Engine, VNode } from '../../engine';
-import { LIGHT_LIMIT, LIGHTING_PRESETS, lightingPreset, lightSpecs, lightsToParam, ROTATION_PRESETS, type LightSpec } from '../../engine/threed';
+import { LIGHT_LIMIT, LIGHTING_PRESETS, impliedSurface, lightingPreset, lightSpecs, lightsToParam, ROTATION_PRESETS, surfaceOf, type LightSpec } from '../../engine/threed';
+import { allNodes, newId } from '../../engine/doc';
+import { imageAverage, textureAverage, textureName } from '../../engine/texture';
 import { el, setDisabled, setHidden, setValue } from '../dom';
 import { check, empty, page, row, section, seg, selectCtl, slider } from './kit';
 
@@ -24,6 +26,9 @@ export class ThreeDPanel {
   private readonly ctl: Record<string, Settable> = {};
   private readonly shade = el<HTMLInputElement>('<input class="cv-color" type="color" aria-label="Shading color">');
   private readonly symbols: ReturnType<typeof selectCtl>;
+  private readonly textures: ReturnType<typeof selectCtl>;
+  private readonly picker = el<HTMLInputElement>('<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>');
+  private listed: { images: unknown; symbols: unknown; choices: Array<readonly [string, string]> } | null = null;
   private readonly lightColor = el<HTMLInputElement>('<input class="cv-color" type="color" aria-label="Light color">');
   private readonly materials: ReturnType<typeof selectCtl>;
   private readonly lightPreset: ReturnType<typeof selectCtl>;
@@ -79,6 +84,12 @@ export class ThreeDPanel {
     remove.addEventListener('click', () => engine.set3d(null, {}));
     this.symbols = selectCtl('Symbol', [['', 'None']], (v) => set({ map_symbol: v }));
     this.ctl.map_symbol = this.symbols;
+    this.textures = selectCtl('Source', [['', 'None']], (v) => { void this.pickTexture(v); });
+    this.ctl.texture = this.textures;
+    const fromFile = el<HTMLButtonElement>('<button class="cv-btn" type="button">Image from File</button>');
+    fromFile.addEventListener('click', () => this.picker.click());
+    this.picker.addEventListener('change', () => { const f = this.picker.files?.[0]; this.picker.value = ''; if (f) void this.addFile(f); });
+    const fine = (key: string, label: string): HTMLElement => { const c = slider(engine, label, 0, 1, (v) => set({ [key]: Math.round(v * 100) / 100 }), { step: 0.01 }); this.ctl[key] = c; return c.el; };
     const shadeArt = check('Shade Artwork', (v) => set({ shade_art: v })), shadow = check('Shadow', (v) => set({ shadow: v }));
     this.ctl.shade_art = shadeArt;
     this.ctl.shadow = shadow;
@@ -87,7 +98,8 @@ export class ThreeDPanel {
       part('revolve', section('Revolve'), sl('angle', 'Angle', 1, 360, '°'), sl('offset', 'Offset', 0, 500, 'pt'), pick('from', 'From', [['left', 'Left Edge'], ['right', 'Right Edge']])),
       part('inflate', section('Inflate'), inflate.el, sl('volume', 'Volume', 10, 100, '%')),
       part('rotation', section('Rotation'), row(preset.el), sl('rx', 'X', -180, 180, '°'), sl('ry', 'Y', -180, 180, '°'), sl('rz', 'Z', -180, 180, '°'), part('perspective', sl('perspective', 'Perspective', 0, 160, '°'))),
-      section('Material'), row(material.el), sl('texture_scale', 'Texture Scale', 10, 400, '%'),
+      section('Material'), row(material.el), fine('roughness', 'Roughness'), fine('metallic', 'Metallic'),
+      section('Graphic'), row(this.textures.el), row(fromFile, this.picker), sl('texture_scale', 'Texture Scale', 10, 400, '%'), sl('texture_rotation', 'Texture Rotation', -180, 180, '°'), sl('texture_offset_x', 'Texture Offset X', -500, 500, 'pt'), sl('texture_offset_y', 'Texture Offset Y', -500, 500, 'pt'),
       part('map', section('Map Art'), row(this.symbols.el), sl('map_scale', 'Scale', 5, 400, '%'), sl('map_x', 'Offset X', -500, 500, 'pt'), sl('map_y', 'Offset Y', -500, 500, 'pt'), row(shadeArt.el)),
       section('Lighting'), row(this.lightPreset.el), row(this.lightPick.el), row(addLight, dupLight, delLight), row(lightColorRow), lsl('intensity', 'Intensity', 0, 200, '%'), lsl('rotation', 'Rotation', -180, 180, '°'), lsl('height', 'Height', 0, 90, '°'), lsl('softness', 'Softness', 0, 100, '%'),
       sl('ambient', 'Ambient', 0, 100, '%'), sl('highlight', 'Highlight', 0, 100, '%'), row(shadeRow),
@@ -98,6 +110,27 @@ export class ThreeDPanel {
     this.body.append(row(this.kind.el), this.none, this.form);
     for (const k of ['selection', 'doc', 'active'] as const) engine.on(k, () => this.queue());
     this.sync();
+  }
+
+  private async pickTexture(ref: string): Promise<void> {
+    const p = this.engine.current;
+    if (!p) return;
+    const avg = ref ? await textureAverage(p, ref) : null;
+    this.engine.set3d(null, { texture: ref, texture_color: avg ?? '' });
+  }
+
+  private async addFile(f: File): Promise<void> {
+    const p = this.engine.current;
+    if (!p) return;
+    let bmp: ImageBitmap;
+    try { bmp = await createImageBitmap(f); } catch { this.engine.notice(`${f.name} is not an image formpth can read.`, 'error'); return; }
+    const ext = (f.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '') || 'png', base = f.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'image';
+    const key = `img-tex${newId('').replace(/[^a-z0-9]/gi, '')}-${base}.${ext}`, avg = imageAverage(bmp, bmp.width, bmp.height);
+    p.bitmaps.set(key, bmp);
+    this.engine.beginGesture();
+    this.engine.addImageAsset(key, f, bmp.width, bmp.height);
+    this.engine.set3d(null, { texture: key, texture_color: avg ?? '' });
+    this.engine.endGesture();
   }
 
   private queue(): void { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.sync(); }); }
@@ -146,7 +179,24 @@ export class ThreeDPanel {
     this.ctl.ray_trace?.set(ray);
     this.ctl.quality?.set(str(p, 'quality', 'medium'));
     this.ctl.quality?.enable?.(ray);
-    this.ctl.texture_scale?.enable?.(ray && TEXTURED.has(str(p, 'material', 'plastic')));
+    const doc = this.engine.doc, ref = str(p, 'texture', '').trim(), proj = this.engine.current;
+    this.ctl.texture_scale?.enable?.(ref !== '' || (ray && TEXTURED.has(str(p, 'material', 'plastic'))));
+    for (const key of ['texture_rotation', 'texture_offset_x', 'texture_offset_y']) this.ctl[key]?.enable?.(ref !== '');
+    this.ctl.roughness?.enable?.(ray);
+    this.ctl.metallic?.enable?.(ray);
+    const surf = surfaceOf(p) ?? impliedSurface(str(p, 'material', 'plastic'));
+    this.ctl.roughness?.set(surf.rough);
+    this.ctl.metallic?.set(surf.metal);
+    if (doc && proj) {
+      if (!this.listed || this.listed.images !== doc.images || this.listed.symbols !== doc.symbols) {
+        const names = new Map<string, string>();
+        for (const x of allNodes(doc)) if (x.kind === 'image' && !names.has(x.src)) names.set(x.src, x.name ?? x.linked?.name ?? x.link ?? '');
+        this.listed = { images: doc.images, symbols: doc.symbols, choices: [['', 'None'], ...Object.keys(doc.images).map((k) => [k, `Image: ${names.get(k) || textureName(proj, k)}`] as const), ...doc.symbols.map((s) => [s.id, `Symbol: ${s.name}`] as const)] };
+      }
+      const pick = doc.symbols.find((s) => s.id === ref || s.name === ref)?.id ?? ref;
+      this.textures.setChoices(!pick || this.listed.choices.some(([id]) => id === pick) ? this.listed.choices : [...this.listed.choices, [pick, 'Missing source']]);
+      this.textures.set(pick);
+    }
     const c = this.ctl, syms = this.engine.doc?.symbols ?? [], ms = str(p, 'map_symbol', '');
     this.symbols.setChoices([['', 'None'], ...syms.map((s) => [s.id, s.name] as const)]);
     c.map_symbol?.set(syms.find((s) => s.id === ms || s.name === ms)?.id ?? '');
@@ -157,7 +207,7 @@ export class ThreeDPanel {
     c.shadow_distance?.set(num(p, 'shadow_distance', 20));
     c.shadow_softness?.set(num(p, 'shadow_softness', 8));
     c.shadow_opacity?.set(num(p, 'shadow_opacity', 40));
-    for (const key of ['bevel_height', 'angle', 'offset', 'volume', 'rx', 'ry', 'rz', 'perspective', 'ambient', 'highlight', 'map_x', 'map_y']) c[key]?.set(num(p, key, 0));
+    for (const key of ['bevel_height', 'angle', 'offset', 'volume', 'rx', 'ry', 'rz', 'perspective', 'ambient', 'highlight', 'map_x', 'map_y', 'texture_rotation', 'texture_offset_x', 'texture_offset_y']) c[key]?.set(num(p, key, 0));
     c.texture_scale?.set(num(p, 'texture_scale', 100));
     c.depth?.set(num(p, 'depth', 50));
     c.inflate_depth?.set(num(p, 'depth', 20));

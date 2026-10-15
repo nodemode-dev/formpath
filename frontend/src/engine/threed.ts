@@ -156,7 +156,44 @@ function inset(pts: Pt[], d: number, sign: number): Pt[] {
   });
 }
 
-export interface Raw { pts: V3[]; normal: V3; solid: Solid; cap: boolean; rings?: V3[][]; role?: 'front' | 'back'; hint?: V3 }
+export interface Raw { pts: V3[]; normal: V3; solid: Solid; cap: boolean; rings?: V3[][]; role?: 'front' | 'back'; hint?: V3; uv?: number[]; ruv?: Array<Array<[number, number]>> }
+
+export interface TextureRef { ref: string; scale: number; rot: number; ox: number; oy: number; color: RGB3 | null }
+export interface SurfaceProps { rough: number; metal: number }
+const IMPLIED_SURFACE: Record<string, [number, number]> = { plastic: [0.8, 0], matte: [1, 0], metal: [0.77, 1], brushed_metal: [0.7, 1], wood: [1, 0], rough: [0.9, 0], flat: [1, 0] };
+
+export function textureOf(p: Params): TextureRef | null {
+  const ref = str(p, 'texture', '').trim();
+  if (!ref) return null;
+  return { ref, scale: clamp(num(p, 'texture_scale', 100), 10, 400), rot: num(p, 'texture_rotation', 0), ox: num(p, 'texture_offset_x', 0), oy: num(p, 'texture_offset_y', 0), color: str(p, 'texture_color', '').trim() ? rgbParam(p, 'texture_color', '#808080') : null };
+}
+
+export function impliedSurface(material: string): SurfaceProps {
+  const v = IMPLIED_SURFACE[material] ?? IMPLIED_SURFACE.plastic;
+  return { rough: v[0], metal: v[1] };
+}
+
+export function surfaceOf(p: Params): SurfaceProps | null {
+  const r = num(p, 'roughness', NaN), m = num(p, 'metallic', NaN);
+  if (Number.isNaN(r) && Number.isNaN(m)) return null;
+  const im = impliedSurface(str(p, 'material', 'plastic'));
+  return { rough: Number.isNaN(r) ? im.rough : clamp(r), metal: Number.isNaN(m) ? im.metal : clamp(m) };
+}
+
+function oriented(P: V3[], st: number[], out: V3 | undefined): number[] {
+  if (!out) return st;
+  const e1 = sub3(P[1], P[0]), e3 = sub3(P[3], P[0]), d1s = st[2] - st[0], d1t = st[3] - st[1], d3s = st[6] - st[0], d3t = st[7] - st[1], det = d1s * d3t - d1t * d3s;
+  if (Math.abs(det) < 1e-12) return st;
+  const du: V3 = [0, 1, 2].map((k) => (d3t * e1[k] - d1t * e3[k]) / det) as V3, dv: V3 = [0, 1, 2].map((k) => (d1s * e3[k] - d3s * e1[k]) / det) as V3;
+  const mirror = dot(cross(du, dv), out) > 0, down = dv[1] < 0 && Math.abs(dv[1]) > 0.5 * Math.hypot(dv[0], dv[1], dv[2]);
+  return st.map((v, i) => (i % 2 === 0 ? (mirror ? -v : v) : v)).map((v) => (down ? -v : v));
+}
+
+function cumLen(pts: Pt[]): number[] {
+  const n = pts.length, out = [0];
+  for (let k = 1; k <= n; k++) out.push(out[k - 1] + Math.hypot(pts[k % n].x - pts[k - 1].x, pts[k % n].y - pts[k - 1].y));
+  return out;
+}
 
 function ringSigns(list: Array<{ pts: Pt[]; closed: boolean }>): number[] {
   const inside = (p: Pt, ring: Pt[]): boolean => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c; } return c; };
@@ -171,7 +208,7 @@ function ringSigns(list: Array<{ pts: Pt[]; closed: boolean }>): number[] {
 export function scene3d(solids: Solid[], e: Effect): Face[] { return scene3dWith(solids, e).faces; }
 
 export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
-  const p = e.params, kind = e.id;
+  const p = e.params, kind = e.id, texUv = trace && textureOf(p) !== null;
   let b = emptyRect();
   for (const s of solids) b = unionRect(b, pathBounds(s.d));
   if (!Number.isFinite(b.x)) return { faces: [], project: (x, y) => ({ x, y }), center: { x: 0, y: 0 }, trace: null };
@@ -191,6 +228,7 @@ export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
       const hs = trace ? ringSigns(list) : [];
       for (const [qi, q] of list.entries()) {
         if (depth > 0 || bh > 0) {
+          const cum = texUv ? cumLen(q.pts) : null, zc = depth / 2;
           const rings = Array.from({ length: steps + 1 }, (_, k) => ring(q.pts, k));
           rings.push({ pts: q.pts, z: depth });
           const segN = q.closed ? q.pts.length : q.pts.length - 1;
@@ -201,7 +239,7 @@ export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
               const j = (i + 1) % q.pts.length, a0 = A.pts[i], a1 = A.pts[j], b0 = B.pts[i], b1 = B.pts[j];
               const P: V3[] = [[a0.x, a0.y, A.z], [a1.x, a1.y, A.z], [b1.x, b1.y, B.z], [b0.x, b0.y, B.z]];
               const sg = hs[qi] ?? 0, ex = q.pts[j].x - q.pts[i].x, ey = q.pts[j].y - q.pts[i].y;
-              raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false, ...(sg ? { hint: [ey * sg, -ex * sg, 0] as V3 } : {}) });
+              raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false, ...(sg ? { hint: [ey * sg, -ex * sg, 0] as V3 } : {}), ...(cum ? { uv: oriented(P, [cum[i], A.z - zc, cum[i + 1], A.z - zc, cum[i + 1], B.z - zc, cum[i], B.z - zc], sg ? [ey * sg, -ex * sg, 0] : undefined) } : {}) });
             }
           }
         }
@@ -209,9 +247,9 @@ export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
       if (caps) {
         const closed = list.filter((q) => q.closed && q.pts.length > 2);
         if (closed.length) {
-          const front = closed.map((q) => ring(q.pts, 0)), z0 = front[0]?.z ?? 0;
-          raws.push({ pts: [], rings: front.map((f) => f.pts.map((v): V3 => [v.x, v.y, z0])), normal: [0, 0, -1], solid: s, cap: true, role: 'front' });
-          if (depth > 0) raws.push({ pts: [], rings: closed.map((q) => q.pts.map((v): V3 => [v.x, v.y, depth])), normal: [0, 0, 1], solid: s, cap: true, role: 'back' });
+          const front = closed.map((q) => ring(q.pts, 0)), z0 = front[0]?.z ?? 0, tcx = b.x + b.w / 2, tcy = b.y + b.h / 2;
+          raws.push({ pts: [], rings: front.map((f) => f.pts.map((v): V3 => [v.x, v.y, z0])), normal: [0, 0, -1], solid: s, cap: true, role: 'front', ...(texUv ? { ruv: front.map((f) => f.pts.map((v): [number, number] => [v.x - tcx, v.y - tcy])) } : {}) });
+          if (depth > 0) raws.push({ pts: [], rings: closed.map((q) => q.pts.map((v): V3 => [v.x, v.y, depth])), normal: [0, 0, 1], solid: s, cap: true, role: 'back', ...(texUv ? { ruv: closed.map((q) => q.pts.map((v): [number, number] => [tcx - v.x, v.y - tcy])) } : {}) });
         }
       }
     }
@@ -221,18 +259,22 @@ export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
     center = [axis, b.y + b.h / 2, 0];
     const rev = (v: Pt, t: number): V3 => { const r = v.x - axis; return [axis + r * Math.cos(t), v.y, -r * Math.sin(t)]; };
     const signs = new Map<Solid, number[]>();
+    let radius = 1;
+    if (texUv) for (const s of solids) for (const q of polys(s)) for (const v of q.pts) radius = Math.max(radius, Math.abs(v.x - axis));
+    const tcy = b.y + b.h / 2;
     for (const s of solids) for (const [qi, q] of polys(s).entries()) {
       if (trace && !signs.has(s)) signs.set(s, ringSigns(polys(s)));
-      const segN = q.closed ? q.pts.length : q.pts.length - 1, sg = signs.get(s)?.[qi] ?? 0;
+      const segN = q.closed ? q.pts.length : q.pts.length - 1, sg = signs.get(s)?.[qi] ?? 0, cum = texUv ? cumLen(q.pts) : null;
       for (let k = 0; k < steps; k++) for (let i = 0; i < segN; i++) {
         const a = q.pts[i], c = q.pts[(i + 1) % q.pts.length], P: V3[] = [rev(a, th(k)), rev(c, th(k)), rev(c, th(k + 1)), rev(a, th(k + 1))];
         const ox = (c.y - a.y) * sg, oy = -(c.x - a.x) * sg, tm = (th(k) + th(k + 1)) / 2;
-        raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false, ...(sg ? { hint: [ox * Math.cos(tm), oy, -ox * Math.sin(tm)] as V3 } : {}) });
+        raws.push({ pts: P, normal: norm(cross(sub3(P[2], P[0]), sub3(P[3], P[1]))), solid: s, cap: false, ...(sg ? { hint: [ox * Math.cos(tm), oy, -ox * Math.sin(tm)] as V3 } : {}), ...(cum ? { uv: oriented(P, [th(k) * radius, cum[i], th(k) * radius, cum[i + 1], th(k + 1) * radius, cum[i + 1], th(k + 1) * radius, cum[i]], sg ? [ox * Math.cos(tm), oy, -ox * Math.sin(tm)] : undefined) } : {}) });
       }
       if (ang < 360 && flag(p, 'cap', true) && q.closed && q.pts.length > 2) {
-        raws.push({ pts: [], rings: [q.pts.map((v) => rev(v, 0))], normal: [0, 0, -1], solid: s, cap: true });
+        const flat = texUv ? { ruv: [q.pts.map((v): [number, number] => [v.x - axis, v.y - tcy])] } : {};
+        raws.push({ pts: [], rings: [q.pts.map((v) => rev(v, 0))], normal: [0, 0, -1], solid: s, cap: true, ...flat });
         const t = th(steps);
-        raws.push({ pts: [], rings: [q.pts.map((v) => rev(v, t))], normal: [Math.sin(t), 0, Math.cos(t)], solid: s, cap: true });
+        raws.push({ pts: [], rings: [q.pts.map((v) => rev(v, t))], normal: [Math.sin(t), 0, Math.cos(t)], solid: s, cap: true, ...flat });
       }
     }
   }

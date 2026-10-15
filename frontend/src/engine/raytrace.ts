@@ -1,13 +1,13 @@
 export type V3 = [number, number, number];
 
 export interface RayTexture { w: number; h: number; data: Uint8ClampedArray; lit: boolean; clip?: boolean }
-export interface RayMesh { tris: number; pos: Float32Array; nrm: Float32Array; obj: Float32Array; solid: Int32Array; colors: Float32Array; uv?: Float32Array; uvOn?: Uint8Array; tex?: RayTexture }
+export interface RayMesh { tris: number; pos: Float32Array; nrm: Float32Array; obj: Float32Array; solid: Int32Array; colors: Float32Array; uv?: Float32Array; uvOn?: Uint8Array; tex?: RayTexture; uvm?: Float32Array; mat?: RayTexture }
 export interface RayLight { dir: V3; color: V3; intensity: number; softness: number }
 export interface RayGround { m: number[]; blur: number; opacity: number }
 export type RayQuality = 'low' | 'medium' | 'high';
 export interface RayInput {
   mesh: RayMesh; w: number; h: number; sx: number; sy: number; ox: number; oy: number; f: number; rot: number[]; axis: V3;
-  lights: RayLight[]; ambient: number; highlight: number; shade: V3; look: string; texScale: number; quality: RayQuality; size: number; ground: RayGround | null; bias?: number; denoise?: number;
+  lights: RayLight[]; ambient: number; highlight: number; shade: V3; look: string; texScale: number; quality: RayQuality; size: number; ground: RayGround | null; bias?: number; denoise?: number; surface?: { rough: number; metal: number } | null;
 }
 export interface RayResult { data: Uint8ClampedArray; w: number; h: number }
 
@@ -195,12 +195,15 @@ class Tracer {
   private px = 0; private py = 0; private pz = 0; private nx = 0; private ny = 0; private nz = 0; private gx = 0; private gy = 0; private gz = 0; private vx = 0; private vy = 0; private vz = -1; private qx = 0; private qy = 0; private qz = 0; private sol = 0;
   private readonly vv: Float64Array;
   private tal = 0; private tu = 0; private tvv = 0; private texOn = false; private tcr = 0; private tcg = 0; private tcb = 0; private tca = 0;
+  private mu = 0; private mv = 0; private matOn = false; private mcr = 0; private mcg = 0; private mcb = 0; private mca = 0;
+  private readonly sf: { rough: number; metal: number } | null;
 
   constructor(private readonly inp: RayInput) {
     this.Q = inp.denoise === undefined ? RAY_QUALITY[inp.quality] : { ...RAY_QUALITY[inp.quality], denoise: inp.denoise };
     this.mesh = inp.mesh; this.w = inp.w; this.h = inp.h; this.sx = inp.sx; this.sy = inp.sy; this.ox = inp.ox; this.oy = inp.oy; this.f = inp.f;
     this.lights = inp.lights; this.ambient = inp.ambient; this.highlight = inp.highlight; this.shade = inp.shade; this.look = inp.look; this.sc = Math.max(0.05, inp.texScale / 100);
     this.rot = inp.rot; this.axis = inp.axis; this.size = Math.max(1, inp.size); this.eps = inp.bias ?? this.size * 0.0012; this.aoDist = this.size * 0.16;
+    this.sf = inp.surface ?? null;
     this.bvh = build(inp.mesh);
     this.vv = new Float64Array(Math.max(1, inp.lights.length));
     let z = Infinity;
@@ -237,6 +240,53 @@ class Tracer {
       this.tu = w0 * uv[q] + u * uv[q + 2] + v * uv[q + 4]; this.tvv = w0 * uv[q + 1] + u * uv[q + 3] + v * uv[q + 5];
       this.texOn = true;
     } else this.texOn = false;
+    if (this.mesh.mat) {
+      const um = this.mesh.uvm as Float32Array, q6 = tri * 6;
+      this.mu = w0 * um[q6] + u * um[q6 + 2] + v * um[q6 + 4]; this.mv = w0 * um[q6 + 1] + u * um[q6 + 3] + v * um[q6 + 5];
+      this.matOn = true;
+    }
+  }
+
+  private sampleMat(): void {
+    const T = this.mesh.mat as RayTexture, W = T.w, H = T.h, d = T.data;
+    const x = this.mu * W - 0.5, y = this.mv * H - 0.5, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+    let r = 0, g = 0, b = 0, a = 0;
+    for (let k = 0; k < 4; k++) {
+      const xi = (((x0 + (k & 1)) % W) + W) % W, yi = (((y0 + (k >> 1)) % H) + H) % H, wt = (k & 1 ? fx : 1 - fx) * (k & 2 ? fy : 1 - fy), o = (yi * W + xi) * 4, al = (d[o + 3] / 255) * wt;
+      r += d[o] * al; g += d[o + 1] * al; b += d[o + 2] * al; a += al;
+    }
+    if (a < 1e-6) { this.mca = 0; return; }
+    this.mcr = r / (a * 255); this.mcg = g / (a * 255); this.mcb = b / (a * 255); this.mca = a;
+  }
+
+  private shadeSurface(ao: number, out: Float64Array, br: number, bg: number, bb: number, nx: number, ny: number, nz: number): void {
+    const S = this.sf as { rough: number; metal: number }, rough = S.rough, metal = S.metal, gloss = 1 - rough, hard = 4 * Math.pow(2, 8 * gloss), peak = rough <= 0.8 ? 1 : 1 - (0.8 * (rough - 0.8)) / 0.2;
+    const vx = this.vx, vy = this.vy, vz = this.vz;
+    let dr = 0, dg = 0, db = 0, sr = 0, sg = 0, sb = 0;
+    for (let i = 0; i < this.lights.length; i++) {
+      const vis = this.vv[i];
+      if (vis <= 0) continue;
+      const Lt = this.lights[i], lx = Lt.dir[0], ly = Lt.dir[1], lz = Lt.dir[2], ndl = nx * lx + ny * ly + nz * lz;
+      if (ndl <= 0) continue;
+      const k = vis * Lt.intensity;
+      dr += Lt.color[0] * k * ndl; dg += Lt.color[1] * k * ndl; db += Lt.color[2] * k * ndl;
+      let hx = lx + vx, hy = ly + vy, hz = lz + vz;
+      const hl = len3(hx, hy, hz) || 1;
+      hx /= hl; hy /= hl; hz /= hl;
+      const s = Math.pow(Math.max(0, nx * hx + ny * hy + nz * hz), hard) * peak * this.highlight * k;
+      sr += Lt.color[0] * s; sg += Lt.color[1] * s; sb += Lt.color[2] * s;
+    }
+    const amb = this.ambient, a = amb * ao, mix = (1 - amb) * (0.65 + 0.35 * ao), sh = this.shade;
+    const tr = clamp(a + mix * dr), tg = clamp(a + mix * dg), tb = clamp(a + mix * db);
+    const cr = sh[0] + (br - sh[0]) * tr, cg = sh[1] + (bg - sh[1]) * tg, cb = sh[2] + (bb - sh[2]) * tb;
+    const d0 = clamp(cr + (1 - cr) * clamp(sr)), d1 = clamp(cg + (1 - cg) * clamp(sg)), d2 = clamp(cb + (1 - cb) * clamp(sb));
+    if (metal <= 0) { out[0] = d0; out[1] = d1; out[2] = d2; return; }
+    const dn = nx * vx + ny * vy + nz * vz, rx = 2 * dn * nx - vx, ry = 2 * dn * ny - vy;
+    let env = 0.12 + 0.93 * smooth(0.36, 0.64, 0.5 - 0.5 * ry) + 0.1 * (1 - Math.abs(rx));
+    env = 0.55 + (env - 0.55) * (1 - 0.8 * rough);
+    const ke = 0.62 * (0.5 + 0.5 * ao) * env * (0.6 + 0.4 * gloss), sp = 0.35 * gloss;
+    const m0 = clamp(br * (0.3 * a + 0.75 * mix * dr + ke) + br * sr * 1.4 + sr * sp), m1 = clamp(bg * (0.3 * a + 0.75 * mix * dg + ke) + bg * sg * 1.4 + sg * sp), m2 = clamp(bb * (0.3 * a + 0.75 * mix * db + ke) + bb * sb * 1.4 + sb * sp);
+    out[0] = d0 + (m0 - d0) * metal; out[1] = d1 + (m1 - d1) * metal; out[2] = d2 + (m2 - d2) * metal;
   }
 
   private sample(): void {
@@ -328,7 +378,9 @@ class Tracer {
       nx /= l; ny /= l; nz /= l;
       hard = 9;
     }
+    if (this.matOn) { this.sampleMat(); if (this.mca > 0) { const t = this.mca; br += (this.mcr - br) * t; bg += (this.mcg - bg) * t; bb += (this.mcb - bb) * t; } }
     if (lit && this.tca > 0) { const t = this.tca; br += (this.tcr - br) * t; bg += (this.tcg - bg) * t; bb += (this.tcb - bb) * t; }
+    if (this.sf) { this.shadeSurface(ao, out, br, bg, bb, nx, ny, nz); return; }
     const vx = this.vx, vy = this.vy, vz = this.vz, metal = look === 'metal' || look === 'brushed_metal';
     let dr = 0, dg = 0, db = 0, sr = 0, sg = 0, sb = 0;
     const brushed = look === 'brushed_metal';

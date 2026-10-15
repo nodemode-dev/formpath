@@ -2254,7 +2254,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (!t.length) return;
     const nodes = t.map((id) => findNode(p.doc, id) as VNode);
     const syms = new Set<string>(), imgs = new Set<string>(), pats = new Set<string>();
-    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
+    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const e of n.ap.effects) if (e.id.startsWith('3d.') && typeof e.params.texture === 'string') { const t = e.params.texture, s = p.doc.symbols.find((x) => x.id === t || x.name === t); if (p.doc.images[t]) imgs.add(t); else if (s) syms.add(s.id); } for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
     const assets = new Map<string, Blob>();
     for (const k of imgs) { const b = p.assets.get(k); if (b) assets.set(k, b); }
     this.clipboard = {
@@ -2315,6 +2315,11 @@ export class Engine extends Emitter<EngineEvents> {
     return this.addNodes('Place', [node])[0] ?? '';
   }
 
+  addImageAsset(key: string, blob: Blob, w: number, h: number): boolean {
+    const p = this.current; if (!p) return false;
+    p.assets.set(key, blob);
+    return this.edit('3D and Materials', (d) => ({ ...d, images: { ...d.images, [key]: { mime: blob.type || 'image/png', w, h } } }));
+  }
   documentSetup(patch: Partial<Pick<Doc, 'units' | 'colorMode' | 'title' | 'rasterPpi'>>): void { this.edit('Document Setup', (d) => ({ ...d, ...patch })); }
   setGrid(spacing: number, subdivisions: number): void { this.edit('Grid', (d) => ({ ...d, grid: { spacing, subdivisions } })); }
 

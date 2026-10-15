@@ -118,16 +118,23 @@ export function triangulate(xs: number[], ys: number[], outerLen: number, holes:
 }
 
 export interface RayMap { x: number; y: number; w: number; h: number; tex: RayTexture }
+export interface MatMap { tex: RayTexture; tw: number; th: number; rot: number; ox: number; oy: number }
 
-export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null): RayMesh {
-  const R = g.R, c = g.center, pos: number[] = [], nrm: number[] = [], obj: number[] = [], sol: number[] = [], uvs: number[] = [], uvOn: number[] = [], eps = Math.max(1e-6, g.size * 1e-4);
+export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null, mat: MatMap | null = null): RayMesh {
+  const R = g.R, c = g.center, pos: number[] = [], nrm: number[] = [], obj: number[] = [], sol: number[] = [], uvs: number[] = [], uvOn: number[] = [], uvm: number[] = [], eps = Math.max(1e-6, g.size * 1e-4);
+  const mr = mat ? (mat.rot * Math.PI) / 180 : 0, mcos = Math.cos(mr), msin = Math.sin(mr);
+  const matUv = (s: number, t: number): void => {
+    const a = s - (mat as MatMap).ox, b = t - (mat as MatMap).oy;
+    uvm.push((a * mcos - b * msin) / (mat as MatMap).tw + 0.5, (a * msin + b * mcos) / (mat as MatMap).th + 0.5);
+  };
   const view = (v: V3): V3 => { const x = v[0] - c[0], y = v[1] - c[1], z = v[2] - c[2]; return [R[0] * x + R[1] * y + R[2] * z, R[3] * x + R[4] * y + R[5] * z, R[6] * x + R[7] * y + R[8] * z]; };
   const turn = (v: V3): V3 => [R[0] * v[0] + R[1] * v[1] + R[2] * v[2], R[3] * v[0] + R[4] * v[1] + R[5] * v[2], R[6] * v[0] + R[7] * v[1] + R[8] * v[2]];
   const colors = new Float32Array(Math.max(1, solids.length) * 3), index = new Map<Solid, number>();
   solids.forEach((s, i) => { index.set(s, i); const b = s.fill ?? s.stroke ?? [0.6, 0.6, 0.6]; colors[i * 3] = b[0]; colors[i * 3 + 1] = b[1]; colors[i * 3 + 2] = b[2]; });
-  const emit = (si: number, a: V3, b: V3, d: V3, na: V3, nb: V3, nd: V3, textured = false): void => {
-    for (const [v, n] of [[a, na], [b, nb], [d, nd]] as Array<[V3, V3]>) {
+  const emit = (si: number, a: V3, b: V3, d: V3, na: V3, nb: V3, nd: V3, textured = false, st?: Array<[number, number] | undefined>): void => {
+    for (const [v, n, k] of [[a, na, 0], [b, nb, 1], [d, nd, 2]] as Array<[V3, V3, number]>) {
       pos.push(...view(v)); nrm.push(...turn(n)); obj.push(v[0] - c[0], v[1] - c[1], v[2] - c[2]);
+      if (mat) { const q = st?.[k]; if (q) matUv(q[0], q[1]); else matUv(v[0] - c[0], v[1] - c[1]); }
       if (map) { if (textured) uvs.push((v[0] - map.x) / map.w, (v[1] - map.y) / map.h); else uvs.push(0, 0); }
     }
     if (map) uvOn.push(textured ? 1 : 0);
@@ -147,7 +154,7 @@ export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null
       for (const p of raw.pts) { const k = key(si, p), l = at.get(k); if (l) { if (l[l.length - 1] !== qi) l.push(qi); } else at.set(k, [qi]); }
       continue;
     }
-    const rings = (raw.rings ?? []).filter((r) => r.length > 2), n0 = raw.normal;
+    const keep = (raw.rings ?? []).flatMap((r, i) => (r.length > 2 ? [i] : [])), rings = keep.map((i) => (raw.rings as V3[][])[i]), n0 = raw.normal;
     if (!rings.length) continue;
     const helper: V3 = Math.abs(n0[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0], e1 = unit(cross(helper, n0)), e2 = cross(n0, e1);
     const pts = rings.map((r) => r.map((v) => [dot(v, e1), dot(v, e2)] as [number, number]));
@@ -156,11 +163,11 @@ export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null
     const parent = pts.map((r, i) => { let best = -1; pts.forEach((o, j) => { if (j !== i && depth[j] === depth[i] - 1 && insideRing(r[0], o)) best = j; }); return best; });
     pts.forEach((_, i) => {
       if (depth[i] % 2) return;
-      const group = [i, ...pts.map((__, j) => j).filter((j) => depth[j] % 2 === 1 && parent[j] === i)], xs: number[] = [], ys: number[] = [], vs: V3[] = [], holes: number[] = [];
-      group.forEach((r, gi) => { if (gi) holes.push(xs.length); pts[r].forEach((p, k) => { xs.push(p[0]); ys.push(p[1]); vs.push(rings[r][k]); }); });
+      const group = [i, ...pts.map((__, j) => j).filter((j) => depth[j] % 2 === 1 && parent[j] === i)], xs: number[] = [], ys: number[] = [], vs: V3[] = [], holes: number[] = [], sts: Array<[number, number] | undefined> = [];
+      group.forEach((r, gi) => { if (gi) holes.push(xs.length); pts[r].forEach((p, k) => { xs.push(p[0]); ys.push(p[1]); vs.push(rings[r][k]); sts.push(raw.ruv?.[keep[r]]?.[k]); }); });
       const tris = triangulate(xs, ys, pts[i].length, holes);
       const art = !!map && raw.role === 'front' && facing;
-      for (let t = 0; t < tris.length; t += 3) emit(si, vs[tris[t]], vs[tris[t + 1]], vs[tris[t + 2]], n0, n0, n0, art);
+      for (let t = 0; t < tris.length; t += 3) emit(si, vs[tris[t]], vs[tris[t + 1]], vs[tris[t + 2]], n0, n0, n0, art, [sts[tris[t]], sts[tris[t + 1]], sts[tris[t + 2]]]);
     });
   }
   for (const q of sides) {
@@ -170,10 +177,12 @@ export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null
       for (const o of l) { const m = sides[o].n; if (dot(m, q.n) > 0.84) { x += m[0]; y += m[1]; z += m[2]; } }
       return Math.hypot(x, y, z) > 1e-9 ? unit([x, y, z]) : q.n;
     });
-    emit(q.si, P[0], P[1], P[2], N[0], N[1], N[2]);
-    emit(q.si, P[0], P[2], P[3], N[0], N[2], N[3]);
+    const U = q.raw.uv, at4 = (i: number): [number, number] | undefined => (U ? [U[i * 2], U[i * 2 + 1]] : undefined);
+    emit(q.si, P[0], P[1], P[2], N[0], N[1], N[2], false, [at4(0), at4(1), at4(2)]);
+    emit(q.si, P[0], P[2], P[3], N[0], N[2], N[3], false, [at4(0), at4(2), at4(3)]);
   }
   const mesh: RayMesh = { tris: sol.length, pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), obj: Float32Array.from(obj), solid: Int32Array.from(sol), colors };
   if (map) { mesh.uv = Float32Array.from(uvs); mesh.uvOn = Uint8Array.from(uvOn); mesh.tex = map.tex; }
+  if (mat) { mesh.uvm = Float32Array.from(uvm); mesh.mat = mat.tex; }
   return mesh;
 }

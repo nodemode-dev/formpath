@@ -1,6 +1,6 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf, findNode, newDoc, newId } from '../engine/doc';
-import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, threeDFaces, type RasterFx } from '../engine/effects';
+import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, textureImageKeys, threeDFaces, type RasterFx } from '../engine/effects';
 import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
@@ -357,6 +357,7 @@ export function exportRegion(p: Project, which: SvgOptions['artboard']): Rect {
 export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
   const images = new Map<string, string>();
   for (const key of Object.keys(p.doc.images)) { const b = p.assets.get(key); if (b) images.set(key, await blobToDataUrl(b)); }
+  for (const key of textureImageKeys(p.doc)) { const b = p.assets.get(key); if (b && !p.bitmaps.has(key)) try { p.bitmaps.set(key, await createImageBitmap(b)); } catch { } }
   const outlines = new Map<string, PathData>();
   if (o.outlineText) {
     const visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
@@ -373,6 +374,10 @@ export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     meta = `<metadata id="formpth-data">${btoa(bin)}</metadata>`;
+    const used = new Set<string>(), seen = (x: VNode): void => { if (x.kind === 'image') used.add(x.src); childrenOf(x)?.forEach(seen); };
+    p.doc.layers.forEach(seen);
+    const loose = [...textureImageKeys(p.doc)].filter((k) => !used.has(k) && images.has(k));
+    if (loose.length) meta += `<g display="none">${loose.map((k) => `<image data-formpth-src="${esc(k)}" width="1" height="1" href="${images.get(k)}"/>`).join('')}</g>`;
   }
   const bg = typeof o.artboard === 'number' ? p.doc.artboards[o.artboard]?.bg : null;
   const bgRect = bg ? `<rect x="${num(r.x)}" y="${num(r.y)}" width="${num(r.w)}" height="${num(r.h)}" fill="${hex(bg)}"/>` : '';
