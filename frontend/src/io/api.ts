@@ -4,6 +4,8 @@ export interface OpenedProject { session: string; name: string; manifest: Record
 export interface LibraryFolder { folder: string; default: string; custom: boolean; fixed: boolean; synced: Array<{ label: string; base: string; suggested: string }> }
 export interface FilePart { name: string; blob: Blob }
 export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string; variable?: boolean }
+export interface SpellHit { word: string; suggestions: string[] }
+export interface SimilarFont { id: string; family: string; style: string; score: number }
 export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file'; vision?: boolean }
 export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown>; inapp?: boolean }
 const BRIDGE_HEADER = 'X-Formpth-Bridge';
@@ -67,6 +69,10 @@ export const api = {
   async statFiles(paths: string[]): Promise<Array<{ path: string; exists: boolean; size: number; mtime: number }>> { return (await json<{ files: Array<{ path: string; exists: boolean; size: number; mtime: number }> }>(await request('/files/stat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths }) }))).files; },
   async writeFile(folder: string, name: string, blob: Blob): Promise<string> { return (await json<{ path: string }>(await request('/files/write', { method: 'POST', body: form({ folder, name }, [{ name, blob }], 'file') }))).path; },
 
+  async spellCheck(words: string[], lang: string): Promise<SpellHit[]> { return (await json<{ unknown: SpellHit[] }>(await request('/spell/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ words, lang }) }))).unknown; },
+  async spellDictionary(): Promise<string[]> { return (await json<{ words: string[] }>(await request('/spell/dictionary'))).words; },
+  async spellDictionaryEdit(add: string[], remove: string[] = []): Promise<string[]> { return (await json<{ words: string[] }>(await request('/spell/dictionary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ add, remove }) }))).words; },
+  async similarFonts(id: string, limit = 10): Promise<SimilarFont[]> { try { return (await json<{ fonts: SimilarFont[] }>(await request(`/fonts/similar?id=${encodeURIComponent(id)}&limit=${limit}`))).fonts; } catch { return []; } },
   async fonts(): Promise<FontInfo[]> { try { return await json<FontInfo[]>(await request('/fonts')); } catch { return []; } },
   async findFont(family: string, style: string): Promise<FontInfo | null> { try { return await json<FontInfo>(await request(`/fonts/find?family=${encodeURIComponent(family)}&style=${encodeURIComponent(style)}`)); } catch { return null; } },
   async fontFile(id: string): Promise<ArrayBuffer> { return (await request(`/fonts/file/${encodeURIComponent(id)}`)).arrayBuffer(); },

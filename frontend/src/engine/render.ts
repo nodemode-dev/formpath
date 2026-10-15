@@ -4,7 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterE
 import { emptyRect, inflate, isEmptyRect, pathBounds, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
-import { cssColor, freeformPixels, gradientAt, resolvePaint, toRgb } from './paint';
+import { cssColor, freeformPixels, gradientAt, perceptualStops, resolvePaint, toRgb } from './paint';
 import { liveFaceNodes } from './livepaint';
 import { derivedArt } from './shaper';
 import { latticeCopies, patternLattice } from './pattern';
@@ -52,6 +52,8 @@ export function canvas2d(w: number, h: number): { canvas: HTMLCanvasElement | Of
 function addStops(g: CanvasGradient, gr: Gradient, alpha: number): void {
   const stops = [...gr.stops].sort((a, b) => a.offset - b.offset);
   if (!stops.length) return;
+  const pst = perceptualStops(gr);
+  if (pst) { for (const s of pst) g.addColorStop(Math.max(0, Math.min(1, s.t)), cssColor(s.color, s.opacity * alpha)); return; }
   const put = (o: number): void => { const v = gradientAt(gr, o); g.addColorStop(Math.max(0, Math.min(1, o)), cssColor(v.color, v.opacity * alpha)); };
   for (let i = 0; i < stops.length; i++) {
     put(stops[i].offset);
@@ -71,6 +73,51 @@ export function gradientGeom(gr: Gradient, b: Rect): { x1: number; y1: number; x
 
 export type Style = string | CanvasGradient | CanvasPattern;
 
+const BAYER8 = (() => {
+  const m = new Float32Array(64);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    const lv = (b: number): number => { const xb = (x >> b) & 1, yb = (y >> b) & 1; return xb ? (yb ? 1 : 2) : yb ? 3 : 0; };
+    m[y * 8 + x] = (16 * lv(0) + 4 * lv(1) + lv(2) + 0.5) / 64 - 0.5;
+  }
+  return m;
+})();
+const ditherCache = new Map<string, HTMLCanvasElement | OffscreenCanvas>();
+
+function ditheredPattern(ctx: CanvasRenderingContext2D, rc: RenderContext, gr: Gradient, b: Rect, g: { x1: number; y1: number; x2: number; y2: number; fx?: number; fy?: number }, alpha: number): CanvasPattern | null {
+  if (gr.kind === 'freeform' || g.fx !== undefined || b.w <= 0 || b.h <= 0) return null;
+  let k = rc.scale * (rc.pixelRatio ?? 1);
+  const px = (s: number): number => Math.max(1, Math.ceil(s * k));
+  if (px(b.w) * px(b.h) > 16_000_000) k *= Math.sqrt(16_000_000 / (px(b.w) * px(b.h)));
+  const w = px(b.w), h = px(b.h), key = JSON.stringify([gr.kind, gr.stops, gr.blend, gr.aspect, g, b, w, h, alpha]);
+  let cv = ditherCache.get(key);
+  if (!cv) {
+    const N = 1024, lut = new Float32Array((N + 1) * 4);
+    for (let i = 0; i <= N; i++) { const v = gradientAt(gr, i / N), c = toRgb(v.color); lut[i * 4] = c.r; lut[i * 4 + 1] = c.g; lut[i * 4 + 2] = c.b; lut[i * 4 + 3] = v.opacity * alpha * 255; }
+    const made = canvas2d(w, h), img = made.ctx.createImageData(w, h), d = img.data;
+    const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L2 = Math.max(1e-9, dx * dx + dy * dy), R = Math.max(1e-9, Math.hypot(dx, dy)), asp = gr.aspect && gr.aspect > 0 ? gr.aspect : 1, kx = w / b.w, ky = h / b.h;
+    for (let y = 0; y < h; y++) {
+      const wy = b.y + (y + 0.5) / ky;
+      for (let x = 0; x < w; x++) {
+        const wx = b.x + (x + 0.5) / kx;
+        const t = gr.kind === 'linear' ? ((wx - g.x1) * dx + (wy - g.y1) * dy) / L2 : Math.hypot(wx - g.x1, (wy - g.y1) / asp) / R;
+        const f = Math.max(0, Math.min(1, t)) * N, i = Math.min(N - 1, Math.floor(f)), u = f - i, o = (y * w + x) * 4, th = BAYER8[(y & 7) * 8 + (x & 7)], a = i * 4, c = a + 4;
+        d[o] = Math.round(lut[a] + (lut[c] - lut[a]) * u + th);
+        d[o + 1] = Math.round(lut[a + 1] + (lut[c + 1] - lut[a + 1]) * u + th);
+        d[o + 2] = Math.round(lut[a + 2] + (lut[c + 2] - lut[a + 2]) * u + th);
+        d[o + 3] = Math.round(lut[a + 3] + (lut[c + 3] - lut[a + 3]) * u + th);
+      }
+    }
+    made.ctx.putImageData(img, 0, 0);
+    cv = made.canvas;
+    if (ditherCache.size >= 6) ditherCache.delete(ditherCache.keys().next().value as string);
+    ditherCache.set(key, cv);
+  }
+  const pat = ctx.createPattern(cv as CanvasImageSource, 'repeat');
+  if (!pat) return null;
+  pat.setTransform(new DOMMatrix([b.w / w, 0, 0, b.h / h, b.x, b.y]));
+  return pat;
+}
+
 export function paintStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, raw: Paint, b: Rect, alpha = 1): Style | null {
   const p = resolvePaint(rc.doc, raw);
   if (p.type === 'none') return null;
@@ -79,6 +126,7 @@ export function paintStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, raw
     const gr = p.gradient;
     if (gr.kind === 'freeform') { const v = gradientAt(gr, 0.5); return cssColor(v.color, alpha); }
     const g = gradientGeom(gr, b);
+    if (gr.dither) { const dp = ditheredPattern(ctx, rc, gr, b, g, alpha); if (dp) return dp; }
     let cg: CanvasGradient;
     if (gr.kind === 'linear') cg = ctx.createLinearGradient(g.x1, g.y1, g.x2, g.y2);
     else { const r = Math.hypot(g.x2 - g.x1, g.y2 - g.y1); cg = ctx.createRadialGradient(g.fx ?? g.x1, g.fy ?? g.y1, 0, g.x1, g.y1, Math.max(1e-3, r)); }

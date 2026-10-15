@@ -1,5 +1,6 @@
 import { basicAppearance, BLACK, defaultSwatches, emptyAppearance, NONE, solid, WHITE } from './paint';
 import type { Artboard, ContainerNode, Doc, LayerNode, Units, VNode } from './types';
+import { clampArtboardSide } from './types';
 
 export const LAYER_COLORS = ['#4f80ff', '#ff4f4f', '#4fbf4f', '#4f4fff', '#ffd400', '#ff4fff', '#4fdfff', '#9f9f9f', '#ff8f2f', '#2f9f8f', '#9f4fff', '#bf8f4f'];
 
@@ -17,7 +18,8 @@ export function makeLayer(name: string, index: number): LayerNode {
   return { id: newId('l'), kind: 'layer', name, children: [], color: LAYER_COLORS[index % LAYER_COLORS.length], opacity: 1, blend: 'normal', ap: emptyAppearance(), printable: true };
 }
 
-export function newDoc(w: number, h: number, opts: { title?: string; units?: Units; colorMode?: 'rgb' | 'cmyk'; artboards?: number } = {}): Doc {
+export function newDoc(w0: number, h0: number, opts: { title?: string; units?: Units; colorMode?: 'rgb' | 'cmyk'; artboards?: number } = {}): Doc {
+  const w = clampArtboardSide(w0), h = clampArtboardSide(h0);
   const count = Math.max(1, Math.min(100, opts.artboards ?? 1)), gap = 20, cols = Math.ceil(Math.sqrt(count));
   const artboards: Artboard[] = [];
   for (let i = 0; i < count; i++) artboards.push({ id: newId('a'), name: `Artboard ${i + 1}`, x: (i % cols) * (w + gap), y: Math.floor(i / cols) * (h + gap), w, h, bg: null });

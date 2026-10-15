@@ -7,7 +7,7 @@ import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { derivedArt } from '../engine/shaper';
 import { instanceArt } from '../engine/symbolism';
-import { gradientAt, resolvePaint, toCmyk, toRgb } from '../engine/paint';
+import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
 import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import type { BlendMode, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, Project, Rect, StrokeItem, VNode } from '../engine';
@@ -18,6 +18,8 @@ import { serialize } from './project-io';
 export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string }
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
+export const PDF_MAX_SIDE = 14400;
+const f6 = (v: number): string => { const r = Math.round(v * 1e6) / 1e6; return Object.is(r, -0) ? '0' : String(r); };
 const f = (v: number): string => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? '0' : String(r); };
 const pdfName = (s: string): string => (s || 'Spot').replace(/[^\x21-\x7e]|[#()<>[\]{}/%]/g, (ch) => [...new TextEncoder().encode(ch)].map((b) => `#${b.toString(16).padStart(2, '0')}`).join(''));
 const pdfString = (s: string): string => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).replace(/[^\x20-\x7e]/g, '?')})`;
@@ -93,7 +95,9 @@ class Painter {
     const comp = (c: Color): string => { if (this.cmyk) { const k = toCmyk(c); return k.kind === 'cmyk' ? `${f(k.c / 100)} ${f(k.m / 100)} ${f(k.y / 100)} ${f(k.k / 100)}` : '0 0 0 1'; } const v = toRgb(c); return `${f(v.r / 255)} ${f(v.g / 255)} ${f(v.b / 255)}`; };
     const pts: Array<{ t: number; c: Color }> = [];
     if (stops[0].offset > 0) pts.push({ t: 0, c: stops[0].color });
-    stops.forEach((s, i) => { pts.push({ t: s.offset, c: s.color }); const nx = stops[i + 1]; if (nx && Math.abs(s.mid - 0.5) > 0.01) { const t = s.offset + (nx.offset - s.offset) * s.mid; pts.push({ t, c: gradientAt(gr, t).color }); } });
+    const pst = perceptualStops(gr);
+    if (pst) for (const s of pst) pts.push({ t: s.t, c: s.color });
+    else stops.forEach((s, i) => { pts.push({ t: s.offset, c: s.color }); const nx = stops[i + 1]; if (nx && Math.abs(s.mid - 0.5) > 0.01) { const t = s.offset + (nx.offset - s.offset) * s.mid; pts.push({ t, c: gradientAt(gr, t).color }); } });
     if (stops[stops.length - 1].offset < 1) pts.push({ t: 1, c: stops[stops.length - 1].color });
     const fns: string[] = [], bounds: string[] = [], encode: string[] = [];
     for (let i = 0; i < pts.length - 1; i++) {
@@ -108,7 +112,7 @@ class Painter {
     const g = gradientGeom(gr, b), cs = this.cmyk ? '/DeviceCMYK' : '/DeviceRGB';
     const coords = gr.kind === 'radial' ? `[${f(g.fx ?? g.x1)} ${f(g.fy ?? g.y1)} 0 ${f(g.x1)} ${f(g.y1)} ${f(Math.hypot(g.x2 - g.x1, g.y2 - g.y1))}]` : `[${f(g.x1)} ${f(g.y1)} ${f(g.x2)} ${f(g.y2)}]`;
     const sh = this.pdf.add(`<< /ShadingType ${gr.kind === 'radial' ? 3 : 2} /ColorSpace ${cs} /Coords ${coords} /Function ${this.fnFor(gr)} /Extend [true true] >>`);
-    const id = this.pdf.add(`<< /Type /Pattern /PatternType 2 /Shading ${sh} 0 R /Matrix [${page.map(f).join(' ')}] >>`);
+    const id = this.pdf.add(`<< /Type /Pattern /PatternType 2 /Shading ${sh} 0 R /Matrix [${page.map(f6).join(' ')}] >>`);
     this.patterns.set(`P${id}`, id);
     return id;
   }
@@ -342,12 +346,13 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   for (const i of o.artboards.length ? o.artboards : p.doc.artboards.map((_, k) => k)) {
     const a = p.doc.artboards[i];
     if (!a) continue;
-    const page: Mat = [1, 0, 0, -1, -a.x, a.y + a.h];
-    const parts: string[] = [`1 0 0 -1 ${f(-a.x)} ${f(a.y + a.h)} cm`];
+    const uu = Math.max(1, Math.ceil((Math.max(a.w, a.h) / PDF_MAX_SIDE) * 1000) / 1000), s = 1 / uu;
+    const page: Mat = [s, 0, 0, -s, -a.x * s, (a.y + a.h) * s];
+    const parts: string[] = [`${f6(s)} 0 0 ${f6(-s)} ${f6(-a.x * s)} ${f6((a.y + a.h) * s)} cm`];
     if (a.bg) parts.push(`q ${painter.color(a.bg, false)} ${f(a.x)} ${f(a.y)} ${f(a.w)} ${f(a.h)} re f Q`);
     for (const l of p.doc.layers) parts.push(await painter.node(l, page));
     const content = pdf.add('<< /Filter /FlateDecode >>', await deflate(new TextEncoder().encode(parts.filter(Boolean).join('\n'))));
-    pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(a.w)} ${f(a.h)}] /TrimBox [0 0 ${f(a.w)} ${f(a.h)}] /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
+    pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(a.w * s)} ${f(a.h * s)}] /TrimBox [0 0 ${f(a.w * s)} ${f(a.h * s)}]${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
   }
   const res = (m: Map<string, number>, pre: string): string => [...m.values()].map((id) => `/${pre}${id} ${id} 0 R`).join(' ');
   pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${painter.spaces.size ? ` /ColorSpace << ${res(painter.spaces, 'CS')} >>` : ''} >>`);

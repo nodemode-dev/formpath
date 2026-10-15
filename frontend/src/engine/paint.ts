@@ -146,12 +146,39 @@ export function gradientAt(g: Gradient, t: number): { color: Color; opacity: num
       let u = (t - a.offset) / Math.max(1e-9, b.offset - a.offset);
       const mid = Math.max(0.01, Math.min(0.99, a.mid));
       u = u < mid ? (u / mid) * 0.5 : 0.5 + ((u - mid) / (1 - mid)) * 0.5;
-      return { color: mixColor(a.color, b.color, u), opacity: a.opacity + (b.opacity - a.opacity) * u };
+      return { color: g.blend === 'perceptual' ? mixOklab(a.color, b.color, u) : mixColor(a.color, b.color, u), opacity: a.opacity + (b.opacity - a.opacity) * u };
     }
   }
   const last = s[s.length - 1];
   return { color: last.color, opacity: last.opacity };
 }
+
+const srgbToLin = (v: number): number => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+const linToSrgb = (v: number): number => clamp255(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.max(0, v) ** (1 / 2.4) - 0.055));
+export function mixOklab(a: Color, b: Color, t: number): Color {
+  const lab = (c: Color): [number, number, number] => {
+    const v = toRgb(c), r = srgbToLin(v.r), g = srgbToLin(v.g), bl = srgbToLin(v.b);
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * bl), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * bl), s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * bl);
+    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+  };
+  const p = lab(a), q = lab(b), L = p[0] + (q[0] - p[0]) * t, A = p[1] + (q[1] - p[1]) * t, B = p[2] + (q[2] - p[2]) * t;
+  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3, m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3, s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+  return rgb(linToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s), linToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s), linToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s));
+}
+
+export function perceptualStops(g: Gradient, perSegment = 16): Array<{ t: number; color: Color; opacity: number }> | null {
+  if (g.blend !== 'perceptual') return null;
+  const s = [...g.stops].sort((a, b) => a.offset - b.offset), out: Array<{ t: number; color: Color; opacity: number }> = [];
+  s.forEach((st, i) => {
+    out.push({ t: st.offset, color: st.color, opacity: st.opacity });
+    const nx = s[i + 1];
+    if (nx) for (let k = 1; k < perSegment; k++) { const t = st.offset + ((nx.offset - st.offset) * k) / perSegment, v = gradientAt(g, t); out.push({ t, color: v.color, opacity: v.opacity }); }
+  });
+  return out;
+}
+
+export function setGradientBlend(g: Gradient, blend: 'linear' | 'perceptual'): Gradient { const { blend: _b, ...rest } = g; return blend === 'perceptual' ? { ...rest, blend } : rest; }
+export function setGradientDither(g: Gradient, dither: boolean): Gradient { const { dither: _d, ...rest } = g; return dither ? { ...rest, dither: true } : rest; }
 
 export function fill(paint: Paint, opacity = 1, blend: BlendMode = 'normal'): FillItem { return { kind: 'fill', paint, opacity, blend, visible: true, effects: [] }; }
 export function stroke(paint: Paint, width = 1, patch: Partial<StrokeItem> = {}): StrokeItem {

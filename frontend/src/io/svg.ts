@@ -8,7 +8,7 @@ import { derivedArt } from '../engine/shaper';
 import { meshQuads } from '../engine/mesh';
 import { latticeCopies, patternLattice } from '../engine/pattern';
 import { instanceArt } from '../engine/symbolism';
-import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
+import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, perceptualStops, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
 import { clipGeometry, docArtBounds, gradientGeom, knockoutShape, knocksOut, renderNode } from '../engine/render';
 import { gradientStrokeArt, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import { glyphBox, glyphMat, glyphOutline, glyphShape, layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
@@ -57,7 +57,9 @@ class Writer {
     const g = gradientGeom(gr, b);
     const sorted = [...gr.stops].sort((a, c) => a.offset - c.offset);
     const stops: string[] = [];
-    sorted.forEach((s, i) => {
+    const pst = perceptualStops(gr);
+    if (pst) for (const s of pst) stops.push(`<stop offset="${num(s.t, 4)}" stop-color="${hex(s.color)}"${s.opacity < 1 ? ` stop-opacity="${num(s.opacity)}"` : ''}/>`);
+    else sorted.forEach((s, i) => {
       stops.push(`<stop offset="${num(s.offset, 4)}" stop-color="${hex(s.color)}"${s.opacity < 1 ? ` stop-opacity="${num(s.opacity)}"` : ''}/>`);
       const next = sorted[i + 1];
       if (next && Math.abs(s.mid - 0.5) > 0.01) { const t = s.offset + (next.offset - s.offset) * s.mid, c = gradientAt(gr, t); stops.push(`<stop offset="${num(t, 4)}" stop-color="${hex(c.color)}"${c.opacity < 1 ? ` stop-opacity="${num(c.opacity)}"` : ''}/>`); }

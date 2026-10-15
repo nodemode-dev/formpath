@@ -2,7 +2,7 @@ import { parse, type Font, type PathCommand } from 'opentype.js';
 import { anchor, mul, transformPath } from '../engine/geometry';
 import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, setShaping, weightOf } from '../engine/text';
 import type { Anchor, CharStyle, Mat, PathData, SubPath, TextNode } from '../engine';
-import { api, type FontInfo } from './api';
+import { api, type FontInfo, type SimilarFont } from './api';
 
 const BUNDLED = import.meta.glob('../../node_modules/@fontsource/{inter,jetbrains-mono}/files/*-latin-*-{normal,italic}.woff', { query: '?url', import: 'default' }) as Record<string, () => Promise<string>>;
 
@@ -53,6 +53,11 @@ export async function systemFonts(): Promise<FontInfo[]> {
 export function families(): string[] {
   const sys = [...new Set((systemList ?? []).map((f) => f.family))].sort((a, b) => a.localeCompare(b));
   return [...BUNDLED_FAMILIES, ...WEB_FAMILIES.filter((f) => !sys.includes(f)), ...sys.filter((f) => !BUNDLED_FAMILIES.includes(f))];
+}
+export async function findSimilarFonts(family: string, style = 'Regular', limit = 10): Promise<SimilarFont[]> {
+  const list = await systemFonts(), of = list.filter((f) => f.family === family);
+  const hit = of.find((f) => f.style === style) ?? of.find((f) => /^(regular|book|roman|normal)$/i.test(f.style)) ?? of[0];
+  return hit ? api.similarFonts(hit.id, limit) : [];
 }
 export function isVariableFamily(family: string): boolean { return (systemList ?? []).some((f) => f.family === family && !!f.variable); }
 

@@ -1,7 +1,7 @@
 import { clamp, type Mat, type Pt } from './types';
 
 export class Viewport {
-  static readonly MIN = 0.03125;
+  static readonly MIN = 0.0025;
   static readonly MAX = 640;
   static insetRight = 0;
   zoom = 1;

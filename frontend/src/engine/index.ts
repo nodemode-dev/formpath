@@ -13,6 +13,7 @@ import { align, arrange, duplicateNodes, fillRuleTargets, groupNodes, makeClip, 
 import { expandAppearance } from './ops/expand';
 import { allTargets, expandCornersOp, setCornersOp, type CornerTargets } from './ops/corner-ops';
 import type { CornerSpec } from './types';
+import { clampArtboardSide } from './types';
 import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { anchorCount, mixPathfinder, objectOnPath, trapShapes, ungroupAll, type OnPathArgs, type TrapArgs } from './ops/illustrator';
@@ -801,11 +802,11 @@ export class Engine extends Emitter<EngineEvents> {
 
   addArtboard(r: Rect, name?: string): void {
     const p = this.current; if (!p) return;
-    const a: Artboard = { id: newId('a'), name: name ?? `Artboard ${p.doc.artboards.length + 1}`, x: r.x, y: r.y, w: Math.max(1, r.w), h: Math.max(1, r.h), bg: null };
+    const a: Artboard = { id: newId('a'), name: name ?? `Artboard ${p.doc.artboards.length + 1}`, x: r.x, y: r.y, w: clampArtboardSide(r.w), h: clampArtboardSide(r.h), bg: null };
     this.edit('New Artboard', (d) => ({ ...d, artboards: [...d.artboards, a] }));
     p.activeArtboard = p.doc.artboards.length - 1;
   }
-  setArtboard(i: number, patch: Partial<Artboard>): void { this.edit('Artboard Options', (d) => ({ ...d, artboards: d.artboards.map((a, k) => (k === i ? { ...a, ...patch, w: Math.max(1, patch.w ?? a.w), h: Math.max(1, patch.h ?? a.h) } : a)) })); }
+  setArtboard(i: number, patch: Partial<Artboard>): void { this.edit('Artboard Options', (d) => ({ ...d, artboards: d.artboards.map((a, k) => (k === i ? { ...a, ...patch, w: clampArtboardSide(patch.w ?? a.w), h: clampArtboardSide(patch.h ?? a.h) } : a)) })); }
   deleteArtboard(i: number): void { const p = this.current; if (!p || p.doc.artboards.length < 2) return; this.edit('Delete Artboard', (d) => ({ ...d, artboards: d.artboards.filter((_, k) => k !== i) })); p.activeArtboard = Math.min(p.activeArtboard, p.doc.artboards.length - 1); }
   setActiveArtboard(i: number): void { const p = this.current; if (!p || i < 0 || i >= p.doc.artboards.length) return; p.activeArtboard = i; this.emit('options', null); this.emit('render', null); }
   fitArtboard(i: number, to: 'art' | 'selection'): void {

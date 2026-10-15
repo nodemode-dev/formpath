@@ -27,6 +27,8 @@ export interface Gradient {
   points?: FreeformPoint[];
   mode?: 'points' | 'lines';
   strokeMode?: 'within' | 'along' | 'across';
+  blend?: 'linear' | 'perceptual';
+  dither?: boolean;
 }
 
 export type Paint =
@@ -285,4 +287,6 @@ export interface EngineEvents {
 }
 
 export const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+export const MAX_ARTBOARD_PT = 163440;
+export const clampArtboardSide = (v: number): number => clamp(Number.isFinite(v) ? v : 1, 1, MAX_ARTBOARD_PT);
 export const UNIT_PT: Record<Units, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
