@@ -2,6 +2,19 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.29.0 · 2026-10-15
+
+What professionals ask Illustrator for.
+
+### Added
+
+- A large canvas: artboards up to 163,440 pt (2,270 in) a side, PDF pages beyond 14,400 pt written with UserUnit, raster export tiles past the 16,384 px browser limit.
+- Edit > Spelling: Check Spelling (Ctrl+I) and Edit Custom Dictionary, on a bundled word list with a personal dictionary.
+- Gradients: Method Classic or Perceptual (OKLab) and Dither. Rasterize: colour model Color, Grayscale, Bitmap or Palette with diffusion or pattern dithering and custom colours.
+- Preferences: Show generative features (off hides every generative entry point), anchor point and handle display size, Scale corners and Smart Guides construction angles.
+- View > Help Bar, Window > Contextual Task Bar, Edit > Paste on Selected Artboards; Find Similar Fonts in the engine (`/api/fonts/similar`).
+- The new strings in all 25 languages.
+
 ## 0.28.0 · 2026-10-15
 
 Path and transform depth.

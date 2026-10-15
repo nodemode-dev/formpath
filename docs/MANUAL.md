@@ -18,6 +18,13 @@ ask it questions.
   Download Project writes the .fpth to your downloads.
 - The documents open when formpth closes reopen at the next start (Preferences > File Handling). With that off, only
   unsaved work is kept, and formpth offers to recover it after a crash.
+- Canvas: an artboard can be up to 163,440 pt (2,270 inches) on each side. Raster export above 16,384 pixels a side
+  offers tiles; PDF pages that large are written with a scale (UserUnit) that PDF readers understand.
+- Helpers: View > Help Bar shows the active tool, its shortcut and a hint under the canvas; Window > Contextual Task
+  Bar floats a few next steps under the selection (Simplify, Offset Path and Corners for a path, Ungroup for a group,
+  Group, Align and Unite for several objects). Preferences > Selection & Snapping sets the anchor point and handle size
+  and the Smart Guides angles; Preferences > General has Show generative features, which hides every generative
+  command and panel when off.
 - Language: Preferences > Interface > Language switches the interface to one of 26 languages; formpth reloads in it.
   Your documents, layer names and typed text are never translated.
 - The engine: if a message says it is offline, start it with `./formpth boot` (or `formpth.bat boot` on Windows).
@@ -303,6 +310,10 @@ ask it questions.
   Across runs it from one edge of the stroke to the other. Along and Across follow dashes, caps, corners, alignment
   and width profiles, and look the same on screen, in SVG and PDF, and after Expand Appearance or Outline Stroke,
   which turn them into a clipped group of gradient-filled pieces.
+- Gradient Method: Classic blends stops as before; Perceptual blends them in a perceptual colour space, so the middle of
+  a red to blue gradient stays vivid instead of muddy. Dither adds a fine pattern that prevents visible banding.
+  Object > Rasterize can turn art into a two-colour bitmap, gray levels or a small palette, dithered by diffusion or
+  a pattern.
 - Freeform gradients: choose Freeform in the Gradient panel; colour points appear over the selected object. With the
   Gradient tool, click inside the object to add a point, drag a point to move it, drag the square on its dashed ring
   to spread it, and press Delete to remove it; the panel sets the selected point's colour and spread. Lines mode joins
@@ -402,6 +413,9 @@ ask it questions.
     Appearance.
 
 ## Type
+
+- Edit > Spelling > Check Spelling (Ctrl+I) walks every text object and offers suggestions for each unknown word:
+  Change, Change All, Ignore, Ignore All or Add to Dictionary; Edit Custom Dictionary removes added words.
 
 - Type (T): click for point type, drag for area type; click a path with Type on a Path to set type along it;
   click a closed path with Area Type to fill it. Typing works as in any text field: arrows, Shift to select,
