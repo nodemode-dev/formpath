@@ -9,6 +9,7 @@ export function installColorBackend(): void {
     profiles: () => api.colorProfiles(),
     profileBytes: (id) => api.colorProfileBytes(id),
     lut: (kind, body) => api.colorLut(kind, body),
+    displayProfile: () => api.colorDisplayProfile(),
   });
 }
 

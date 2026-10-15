@@ -78,7 +78,8 @@ export const api = {
   async colorProfiles(): Promise<ColorProfileInfo[]> { return (await json<{ profiles: ColorProfileInfo[] }>(await request('/color/profiles'))).profiles; },
   async colorUpload(file: File): Promise<ColorProfileInfo> { const f = new FormData(); f.append('file', file, file.name); return json(await request('/color/profiles', { method: 'POST', body: f })); },
   async colorProfileBytes(id: string): Promise<Uint8Array> { return new Uint8Array(await (await request(`/color/profiles/${encodeURIComponent(id)}/bytes`)).arrayBuffer()); },
-  async colorLut(kind: 'rgb-to-cmyk' | 'cmyk-to-rgb' | 'proof', body: Record<string, unknown>): Promise<Uint8Array> {
+  async colorDisplayProfile(): Promise<(ColorProfileInfo & { via: string }) | null> { return (await json<{ profile: (ColorProfileInfo & { via: string }) | null }>(await request('/color/display-profile'))).profile; },
+  async colorLut(kind: 'rgb-to-cmyk' | 'cmyk-to-rgb' | 'proof' | 'preserve', body: Record<string, unknown>): Promise<Uint8Array> {
     return new Uint8Array(await (await request(`/color/lut/${kind}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).arrayBuffer());
   },
   async spellCheck(words: string[], lang: string): Promise<SpellHit[]> { return (await json<{ unknown: SpellHit[] }>(await request('/spell/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ words, lang }) }))).unknown; },

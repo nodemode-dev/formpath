@@ -4,7 +4,8 @@ export interface ProfileInfo { id: string; name: string; space: string; class: s
 export interface ColorBackend {
   profiles(): Promise<ProfileInfo[]>;
   profileBytes(id: string): Promise<Uint8Array>;
-  lut(kind: 'rgb-to-cmyk' | 'cmyk-to-rgb' | 'proof', body: Record<string, unknown>): Promise<Uint8Array>;
+  lut(kind: 'rgb-to-cmyk' | 'cmyk-to-rgb' | 'proof' | 'preserve', body: Record<string, unknown>): Promise<Uint8Array>;
+  displayProfile?(): Promise<(ProfileInfo & { via: string }) | null>;
 }
 export interface Lut { n: number; data: Uint8Array }
 export interface CmykLuts { r2c: Lut; c2r: Lut }
@@ -13,7 +14,7 @@ export interface Resolved { rgb: ProfileInfo | null; cmyk: ProfileInfo | null; i
 export const INTENTS: ReadonlyArray<readonly [0 | 1 | 2 | 3, string]> = [[0, 'Perceptual'], [1, 'Relative Colorimetric'], [2, 'Saturation'], [3, 'Absolute Colorimetric']];
 export const GENERIC_CMYK_NAME = 'formpth Generic CMYK';
 export const SRGB_NAME = 'sRGB (built-in)';
-const GRID = { 'rgb-to-cmyk': 17, 'cmyk-to-rgb': 9, proof: 33 } as const;
+const GRID = { 'rgb-to-cmyk': 17, 'cmyk-to-rgb': 9, proof: 33, preserve: 9 } as const;
 
 let backend: ColorBackend | null = null;
 let profiles: ProfileInfo[] = [];
@@ -28,6 +29,17 @@ let proofOn = false;
 let proofKey = '';
 let proofLut: Lut | null = null;
 let proofWanted = '';
+let preserveLut: Lut | null = null;
+let previewRender = false;
+let display: (ProfileInfo & { via: string }) | null = null;
+
+export function displayProfileInfo(): (ProfileInfo & { via: string }) | null { return display; }
+export function refreshDisplayProfile(): Promise<(ProfileInfo & { via: string }) | null> {
+  const ask = backend?.displayProfile;
+  if (!ask || !backend) return Promise.resolve(display);
+  return ask.call(backend).then((p) => { display = p; return p; }, () => display);
+}
+export function setPreviewRender(on: boolean): void { previewRender = on; }
 
 export function setColorBackend(b: ColorBackend | null): void { backend = b; }
 export function onColorChange(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; }
@@ -115,6 +127,7 @@ export function lutRgbToCmyk(l: Lut, r: number, g: number, b: number): Color {
 
 let lastC = -1, lastM = -1, lastY = -1, lastK = -1, lastRgb: RGB = { r: 255, g: 255, b: 255 };
 export function cmToRgb(c: { c: number; m: number; y: number; k: number }): RGB | null {
+  if (previewRender && proofOn && preserveLut) return lutCmykToRgb(preserveLut, c.c, c.m, c.y, c.k);
   if (!active) return null;
   if (c.c === lastC && c.m === lastM && c.y === lastY && c.k === lastK) return lastRgb;
   lastRgb = lutCmykToRgb(active.c2r, c.c, c.m, c.y, c.k);
@@ -157,22 +170,28 @@ async function loadActive(cm: ColorSettings, key: string): Promise<void> {
 export function isProofing(): boolean { return proofOn; }
 export function activeProof(): Lut | null { return proofOn ? proofLut : null; }
 
-function proofBody(cm: ColorSettings | undefined): { key: string; body: Record<string, unknown> } | null {
+function proofBody(cm: ColorSettings | undefined): { key: string; body: Record<string, unknown>; keep: boolean } | null {
   const rgb = resolveProfile(cm?.rgb, 'RGB'), dev = proofDevice(cm);
   if (!rgb || !dev) return null;
-  const body = { rgb: rgb.id, device: dev.id, intent: cm?.intent ?? 1, bpc: cm?.bpc ?? true, paper: !!cm?.proof?.paper, black_ink: !!cm?.proof?.blackInk };
-  return { key: JSON.stringify(body), body };
+  const body: Record<string, unknown> = { rgb: rgb.id, device: dev.id, intent: cm?.intent ?? 1, bpc: cm?.bpc ?? true, paper: !!cm?.proof?.paper, black_ink: !!cm?.proof?.blackInk };
+  if (display) body.monitor = display.id;
+  const keep = !!cm?.proof?.preserve;
+  return { key: JSON.stringify(body) + (keep ? '|keep' : ''), body, keep };
 }
 
 async function loadProof(cm: ColorSettings | undefined): Promise<boolean> {
   if (!profiles.length) await refreshProfiles();
+  await refreshDisplayProfile();
   const want = proofBody(cm);
   if (!want) return false;
   proofWanted = want.key;
   if (proofKey === want.key && proofLut) return true;
-  const data = await fetchLut('proof', want.body);
+  const { intent: _intent, ...keepBody } = want.body;
+  const [data, kept] = await Promise.all([fetchLut('proof', want.body), want.keep ? fetchLut('preserve', keepBody) : Promise.resolve(null)]);
   if (proofWanted !== want.key) return false;
   proofLut = { n: GRID.proof, data }; proofKey = want.key;
+  preserveLut = kept ? { n: GRID.preserve, data: kept } : null;
+  lastC = -1;
   return true;
 }
 

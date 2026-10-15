@@ -42,6 +42,16 @@ class Proof(BaseModel):
     grid: int = Field(17, ge=17, le=33)
 
 
+class Preserve(BaseModel):
+    rgb: str = Field(min_length=40, max_length=40)
+    device: str = Field(min_length=40, max_length=40)
+    monitor: str | None = Field(None, min_length=40, max_length=40)
+    bpc: bool = True
+    paper: bool = False
+    black_ink: bool = False
+    grid: int = Field(9, ge=9, le=11)
+
+
 def _lut(data: bytes, grid: int, channels: int) -> Response:
     return Response(data, media_type="application/octet-stream", headers={"X-Formpth-Grid": str(grid), "X-Formpth-Channels": str(channels), "Cache-Control": "no-store"})
 
@@ -59,6 +69,12 @@ async def _run(fn, *args):
 async def profiles(request: Request) -> dict:
     require_local(request)
     return {"profiles": await _run(color.listing)}
+
+
+@router.get("/display-profile")
+async def display_profile(request: Request, refresh: bool = False) -> dict:
+    require_local(request)
+    return {"profile": await _run(color.display_profile, refresh)}
 
 
 @router.post("/profiles")
@@ -98,3 +114,10 @@ async def lut_proof(body: Proof, request: Request) -> Response:
     require_local(request)
     data = await _run(color.proof, body.rgb, body.device, body.intent, body.bpc, body.paper, body.black_ink, body.monitor, body.grid)
     return _lut(data, body.grid if body.grid in (17, 33) else 17, 3)
+
+
+@router.post("/lut/preserve")
+async def lut_preserve(body: Preserve, request: Request) -> Response:
+    require_local(request)
+    data = await _run(color.preserve, body.rgb, body.device, body.paper, body.black_ink, body.bpc, body.monitor, body.grid)
+    return _lut(data, body.grid if body.grid in (9, 11) else 9, 3)

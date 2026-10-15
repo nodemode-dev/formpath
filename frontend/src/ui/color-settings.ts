@@ -1,5 +1,5 @@
 import type { Engine } from '../engine';
-import { INTENTS, genericCmyk, isProofing, proofDevice, profileList, refOf, refreshProfiles, resolveSettings, setProofing, type ProfileInfo } from '../engine/color-management';
+import { INTENTS, genericCmyk, isProofing, proofDevice, profileList, refOf, refreshDisplayProfile, refreshProfiles, resolveSettings, setProofing, type ProfileInfo } from '../engine/color-management';
 import { applySettings, convertToProfile, settingsPatch, uploadProfile } from '../io/color-ops';
 import { askForm, type Field, type FieldValue } from './form-dialog';
 import { toast } from './toast';
@@ -98,9 +98,12 @@ export async function proofSetupDialog(engine: Engine): Promise<void> {
   const cmyks = profileList().filter((p) => p.space === 'CMYK');
   const cur = proofDevice(doc.cm);
   const pr = doc.cm?.proof ?? {};
+  const shown = await refreshDisplayProfile();
+  const via = { colord: 'colord', x11: 'the X11 _ICC_PROFILE atom', colorsync: 'ColorSync', windows: 'Windows colour management', env: 'FORMPTH_DISPLAY_PROFILE' }[shown?.via ?? ''] ?? '';
   const v = await askForm('Proof Setup', [
     { kind: 'select', key: 'device', label: 'Device to simulate', value: cur?.id ?? cmyks[0]?.id ?? '', choices: choices(cmyks) },
-    { kind: 'check', key: 'preserve', label: 'Preserve color numbers', value: !!pr.preserve },
+    { kind: 'note', text: shown ? `Display: ${shown.name} (from ${via}).` : 'Display: sRGB (built-in). No display profile was found on this computer.' },
+    { kind: 'check', key: 'preserve', label: 'Preserve CMYK numbers', value: !!pr.preserve },
     { kind: 'check', key: 'paper', label: 'Simulate paper color', value: !!pr.paper },
     { kind: 'check', key: 'ink', label: 'Simulate black ink', value: !!pr.blackInk },
     { kind: 'note', text: 'Choose View > Proof Colors to see the artwork as the selected device would print it. Simulating paper color uses absolute colorimetric rendering.' },

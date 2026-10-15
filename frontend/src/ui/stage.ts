@@ -7,7 +7,7 @@ import { layoutText, lineBaseline, pathBrackets } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
 import { envelopeFrame, envelopeGrid } from '../engine/live';
 import { cssColor } from '../engine/paint';
-import { activeProof, applyProof, type Lut } from '../engine/color-management';
+import { activeProof, applyProof, setPreviewRender, type Lut } from '../engine/color-management';
 import { gridGeometry, gridOf, vanishing } from '../engine/perspective';
 import { latticeCopies, tileOutline } from '../engine/pattern';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
@@ -265,10 +265,12 @@ export class Stage {
     if (vw.grid && Stage.prefs.gridInBack) this.drawGrid(g, p, pal, view);
     g.save();
     g.setTransform(...view);
+    const proofing = activeProof();
+    setPreviewRender(!!proofing);
     try { renderDocument(g, this.renderContext(p, v.zoom)); }
     catch (err) { console.error(err); }
+    setPreviewRender(false);
     g.restore();
-    const proofing = activeProof();
     if (proofing) this.proofPass(g, p, proofing, view);
     if (p.isolation) {
       const n = findNode(p.doc, p.isolation);

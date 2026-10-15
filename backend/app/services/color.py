@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 
 from app.core import config
+from app.services import display
 
 GENERIC_CMYK = "formpth Generic CMYK"
 SRGB_NAME = "sRGB (built-in)"
@@ -335,6 +336,16 @@ def _entries() -> list[dict]:
     return out
 
 
+def display_profile(refresh: bool = False) -> dict | None:
+    data, via = display.detect(refresh)
+    if not data:
+        return None
+    info = _describe(data)
+    if not info or info["space"] != "RGB":
+        return None
+    return {**info, "via": via}
+
+
 def listing() -> list[dict]:
     return [{k: v for k, v in e.items() if k != "path"} for e in _entries()]
 
@@ -342,6 +353,9 @@ def listing() -> list[dict]:
 def profile_bytes(pid: str) -> bytes | None:
     if not pid or len(pid) != 40 or any(c not in "0123456789abcdef" for c in pid):
         return None
+    shown = display_profile()
+    if shown and shown["id"] == pid:
+        return display.detect()[0]
     for e in _entries():
         if e["id"] == pid:
             if e["source"] == "builtin":
@@ -456,7 +470,7 @@ def proof(rgb_id: str, device_id: str, intent: int, bpc: bool, paper: bool, blac
     _check_intent(intent)
     _expect(rgb_id, "RGB", "RGB")
     _expect(device_id, "CMYK", "device")
-    monitor = monitor_id or _entries()[0]["id"]
+    monitor = monitor_id or _monitor()
     _expect(monitor, "RGB", "monitor")
     n = 17 if n not in (17, 33) else n
     cms = _cms()
@@ -472,3 +486,27 @@ def proof(rgb_id: str, device_id: str, intent: int, bpc: bool, paper: bool, blac
     key = ("proof", rgb_id, device_id, monitor, intent, proof_intent, flags)
     build = lambda: cms.buildProofTransform(_profile(rgb_id), _profile(monitor), _profile(device_id), "RGB", "RGB", renderingIntent=intent, proofRenderingIntent=proof_intent, flags=flags)
     return _apply(key, build, "RGB", "RGB", bytes(raw), n ** 3)
+
+
+def _monitor() -> str:
+    shown = display_profile()
+    return shown["id"] if shown else _entries()[0]["id"]
+
+
+def preserve(rgb_id: str, device_id: str, paper: bool, black_ink: bool, bpc: bool, monitor_id: str | None = None, n: int = 9) -> bytes:
+    _expect(rgb_id, "RGB", "RGB")
+    _expect(device_id, "CMYK", "device")
+    monitor = monitor_id or _monitor()
+    _expect(monitor, "RGB", "monitor")
+    n = 9 if n not in (9, 11) else n
+    cms = _cms()
+    flags = int(cms.Flags.BLACKPOINTCOMPENSATION) if bpc and not black_ink else 0
+    intent = 3 if paper else 1
+    raw = bytearray()
+    for c in range(n):
+        for m in range(n):
+            for y in range(n):
+                for k in range(n):
+                    raw += bytes((round(c * 255 / (n - 1)), round(m * 255 / (n - 1)), round(y * 255 / (n - 1)), round(k * 255 / (n - 1))))
+    seen = _apply(("keep-a", device_id, monitor, intent, flags), lambda: cms.buildTransform(_profile(device_id), _profile(monitor), "CMYK", "RGB", renderingIntent=intent, flags=flags), "CMYK", "RGB", bytes(raw), n ** 4)
+    return _apply(("keep-b", monitor, rgb_id, intent, flags), lambda: cms.buildTransform(_profile(monitor), _profile(rgb_id), "RGB", "RGB", renderingIntent=intent, flags=flags), "RGB", "RGB", seen, n ** 4)
