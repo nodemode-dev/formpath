@@ -64,13 +64,13 @@ export interface WidthPoint { t: number; l: number; r: number }
 
 export interface Effect { id: string; params: Record<string, number | string | boolean>; visible: boolean }
 
-export interface FillItem { kind: 'fill'; paint: Paint; opacity: number; blend: BlendMode; visible: boolean; effects: Effect[] }
+export interface FillItem { kind: 'fill'; paint: Paint; opacity: number; blend: BlendMode; visible: boolean; effects: Effect[]; overprint?: boolean }
 export interface StrokeItem {
   kind: 'stroke'; paint: Paint; width: number; cap: Cap; join: Join; miter: number; align: StrokeAlign;
   dash: number[]; dashOffset: number; dashCorners: boolean;
   startArrow: string; endArrow: string; arrowScale: [number, number]; arrowAlign: 'extend' | 'tip';
   profile: WidthPoint[] | null; brush: string | null;
-  opacity: number; blend: BlendMode; visible: boolean; effects: Effect[];
+  opacity: number; blend: BlendMode; visible: boolean; effects: Effect[]; overprint?: boolean;
 }
 export type AppearanceItem = FillItem | StrokeItem;
 export interface Appearance { items: AppearanceItem[]; effects: Effect[] }
@@ -271,6 +271,7 @@ export interface Doc {
   persp?: PerspGrid;
   perspView?: PerspView;
   linkPreviews?: boolean;
+  bleed?: { t: number; b: number; l: number; r: number };
 }
 
 export type VariableKind = 'text' | 'image' | 'visibility' | 'graph';

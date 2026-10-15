@@ -46,6 +46,7 @@ export const api = {
     return json(await request('/projects/folder', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder, move }) }));
   },
   async package(manifest: object, files: FilePart[], root = ''): Promise<Blob> { return (await request('/projects/package', { method: 'POST', body: form({ manifest: JSON.stringify(manifest), ...(root ? { root } : {}) }, files) })).blob(); },
+  async packageFull(fields: Record<string, string>, files: FilePart[]): Promise<Response> { return request('/projects/package-full', { method: 'POST', body: form(fields, files) }); },
   async openLibrary(name: string): Promise<OpenedProject> { return json(await request(`/projects/library/${encodeURIComponent(name)}`)); },
   async deleteLibrary(name: string): Promise<void> { await request(`/projects/library/${encodeURIComponent(name)}`, { method: 'DELETE' }); },
   async importProject(files: File[], paths: string[] = []): Promise<OpenedProject> {

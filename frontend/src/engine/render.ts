@@ -4,7 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterE
 import { emptyRect, inflate, isEmptyRect, pathBounds, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
 import { meshQuads } from './mesh';
-import { cssColor, freeformPixels, gradientAt, perceptualStops, resolvePaint, toRgb } from './paint';
+import { cssColor, freeformPixels, gray, gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from './paint';
 import { liveFaceNodes } from './livepaint';
 import { derivedArt } from './shaper';
 import { latticeCopies, patternLattice } from './pattern';
@@ -12,7 +12,7 @@ import { instanceArt } from './symbolism';
 import { runFilter, type FilterFrame } from './filters';
 import { gradientStrokeArt, type GradientStrokeArt, type StrokePiece } from './stroke-gradient';
 import { drawText, textEpoch } from './text';
-import { BLEND_MODES, type AppearanceItem, type BlendMode, type Doc, type Gradient, type ImageNode, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Pt, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
+import { BLEND_MODES, type AppearanceItem, type BlendMode, type Color, type Doc, type Gradient, type ImageNode, type Mat, type GroupNode, type Paint, type PathData, type PatternDef, type Pt, type Rect, type StrokeItem, type TraceView, type VNode } from './types';
 
 export interface RenderContext {
   doc: Doc;
@@ -24,7 +24,24 @@ export interface RenderContext {
   pixelRatio?: number;
   outlineColor?: string;
   knockout?: boolean;
+  overprint?: boolean;
+  separation?: string | null;
 }
+
+function plateGray(rc: RenderContext, raw: Paint, c: Color): Color {
+  const s = rc.separation;
+  if (!s) return c;
+  const sw = raw.type === 'color' && raw.swatch ? rc.doc.swatches.find((x) => x.id === raw.swatch) : undefined;
+  if (s === 'C' || s === 'M' || s === 'Y' || s === 'K') {
+    if (sw?.spot) return gray(0);
+    const k = toCmyk(c);
+    return k.kind === 'cmyk' ? gray(s === 'C' ? k.c : s === 'M' ? k.m : s === 'Y' ? k.y : k.k) : gray(0);
+  }
+  if (!sw?.spot || sw.name !== s) return gray(0);
+  return gray(raw.type === 'color' ? raw.tint ?? 100 : 100);
+}
+
+const plateBlend = (rc: RenderContext, it: { overprint?: boolean; blend: BlendMode }): BlendMode => (rc.overprint && it.overprint && it.blend === 'normal' ? 'multiply' : it.blend);
 
 export const knocksOut = (n: VNode, inherited: boolean): boolean => (n.kind === 'group' || n.kind === 'layer') && (n.knockout === 'inherit' ? inherited : n.knockout === true);
 
@@ -121,9 +138,9 @@ function ditheredPattern(ctx: CanvasRenderingContext2D, rc: RenderContext, gr: G
 export function paintStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, raw: Paint, b: Rect, alpha = 1): Style | null {
   const p = resolvePaint(rc.doc, raw);
   if (p.type === 'none') return null;
-  if (p.type === 'color') return cssColor(p.color, alpha);
+  if (p.type === 'color') return cssColor(plateGray(rc, raw, p.color), alpha);
   if (p.type === 'gradient') {
-    const gr = p.gradient;
+    const gr = rc.separation ? { ...p.gradient, stops: p.gradient.stops.map((s) => ({ ...s, color: plateGray(rc, p, s.color) })) } : p.gradient;
     if (gr.kind === 'freeform') { const v = gradientAt(gr, 0.5); return cssColor(v.color, alpha); }
     const g = gradientGeom(gr, b);
     if (gr.dither) { const dp = ditheredPattern(ctx, rc, gr, b, g, alpha); if (dp) return dp; }
@@ -342,7 +359,7 @@ function strokeWith(ctx: CanvasRenderingContext2D, rc: RenderContext, path: Path
   const art = gradientStrokeArt(rc.doc, d, s, rule);
   if (art) { gradientStroke(ctx, rc, art, path, d, s, b, rule, solo); return; }
   ctx.save();
-  if (!solo) { ctx.globalAlpha *= s.opacity; ctx.globalCompositeOperation = blendCss(s.blend); }
+  if (!solo) { ctx.globalAlpha *= s.opacity; ctx.globalCompositeOperation = blendCss(plateBlend(rc, s)); }
   if (s.brush) {
     const g = brushGeometry(rc.doc, d, s);
     if (g) {
@@ -440,7 +457,7 @@ function drawItem(ctx: CanvasRenderingContext2D, rc: RenderContext, it: Appearan
   const style = paintStyle(ctx, rc, it.paint, b);
   if (!style) return;
   ctx.save();
-  if (!solo) { ctx.globalAlpha *= it.opacity; ctx.globalCompositeOperation = blendCss(it.blend); }
+  if (!solo) { ctx.globalAlpha *= it.opacity; ctx.globalCompositeOperation = blendCss(plateBlend(rc, it)); }
   ctx.fillStyle = style;
   ctx.fill(ip, rule);
   ctx.restore();

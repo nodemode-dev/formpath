@@ -5,11 +5,12 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from app.core import config
+from app.services import package as pkg
 from app.services import project_format as pf
 from app.services import sessions
 
@@ -163,6 +164,56 @@ def package(manifest: str = Form(...), files: list[UploadFile] = File(default=[]
     if root and (not pf.safe_name(root) or root.startswith(".")):
         raise HTTPException(status_code=400, detail="Invalid package folder name.")
     return Response(pf.write_zip(data, assets, root), media_type="application/zip")
+
+
+def _json_list(raw: str, what: str) -> list:
+    try:
+        value = json.loads(raw or "[]")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"The {what} list is not valid JSON.") from exc
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail=f"The {what} list must be a list.")
+    return value
+
+
+@router.post("/package-full")
+def package_full(
+    request: Request,
+    name: str = Form(...),
+    manifest: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
+    links: str = Form("[]"),
+    fonts: str = Form("[]"),
+    report: str = Form(""),
+    folder: str = Form(""),
+    copy_links: bool = Form(True),
+    copy_fonts: bool = Form(True),
+    separate_links: bool = Form(True),
+    relink_copies: bool = Form(False),
+    as_zip: bool = Form(False),
+) -> Response:
+    host = request.client.host if request.client else ""
+    served = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]")
+    if host not in ("127.0.0.1", "::1", "localhost", "testclient") or served not in ("127.0.0.1", "localhost", "::1", "tauri.localhost"):
+        raise HTTPException(status_code=403, detail="Packaging reads files from this computer, so it only works from this computer.")
+    data, assets = _manifest(manifest), _assets(files)
+    _validated(data, assets)
+    stem = pkg.clean(name)
+    destination = None
+    if not as_zip:
+        base = Path(folder).expanduser() if folder.strip() else config.exports_dir()
+        if not base.is_absolute():
+            raise HTTPException(status_code=400, detail="Give the package folder's full path.")
+        destination = base / f"{stem} Folder"
+        if destination.exists():
+            raise HTTPException(status_code=409, detail=f"{destination} already exists. Choose another folder or remove it first.")
+    try:
+        blob, summary = pkg.build(stem, data, assets, [str(x) for x in _json_list(links, "links")], [x for x in _json_list(fonts, "fonts") if isinstance(x, dict)], report, copy_links, copy_fonts, separate_links, relink_copies, destination)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"formpth could not write the package: {exc.strerror or exc}. Choose a folder you can write to.") from exc
+    if blob is not None:
+        return Response(blob, media_type="application/zip", headers={"X-Package-Summary": json.dumps({k: v for k, v in summary.items() if k != "files"})[:4000]})
+    return Response(json.dumps(summary), media_type="application/json")
 
 
 @router.get("/library/{name}")

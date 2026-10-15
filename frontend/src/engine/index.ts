@@ -56,6 +56,7 @@ const withStyle = (n: VNode, st: GraphicStyle): VNode => (n.kind === 'text' ? { 
 
 export * from './types';
 export { Project } from './project';
+export { documentInfo, documentInfoText, type DocumentInfo } from './document-info';
 export type { SymbolismArgs, SymbolismMethod, SymbolismOp } from './symbolism';
 export const SYMBOLISM_NAMES: Record<SymbolismOp, string> = { shift: 'Symbol Shifter', scrunch: 'Symbol Scruncher', size: 'Symbol Sizer', spin: 'Symbol Spinner', stain: 'Symbol Stainer', screen: 'Symbol Screener', style: 'Symbol Styler' };
 export { Viewport } from './viewport';
@@ -64,6 +65,7 @@ export interface ViewFlags {
   outline: boolean; rulers: boolean; guides: boolean; guidesLocked: boolean; grid: boolean; smartGuides: boolean; snapGrid: boolean; snapPoint: boolean;
   boundingBox: boolean; edges: boolean; artboards: boolean; threads: boolean; transparencyGrid: boolean; previewBounds: boolean; scaleStrokes: boolean;
   transformPatterns: boolean; scaleCorners: boolean; cornerWidget: boolean; gradientAnnotator: boolean; pixelPreview: boolean; snapPixel: boolean;
+  overprintPreview: boolean; separation: null | 'C' | 'M' | 'Y' | 'K' | string;
 }
 export interface ToolOptions {
   polygonSides: number; starPoints: number; starRatio: number; cornerRadius: number; spiralDecay: number; spiralSegments: number; flareRays: number;
@@ -99,7 +101,7 @@ export class Engine extends Emitter<EngineEvents> {
   activeSlot: 'fill' | 'stroke' = 'fill';
   newArtBasic = true;
   maskDefaults = { clip: true, invert: false };
-  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, scaleCorners: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false };
+  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, scaleCorners: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false, overprintPreview: false, separation: null };
   options: ToolOptions = { polygonSides: 6, starPoints: 5, starRatio: 0.5, cornerRadius: 0, spiralDecay: 0.8, spiralSegments: 10, flareRays: 15, gridRows: 5, gridCols: 5, pencilFidelity: 0.5, pencilSmooth: 0.3, keepSelected: false, brushSize: 3, blobSize: 12, eraserSize: 12, widthPreset: 'uniform', magicTolerance: 32, symbolDensity: 5, symbolIntensity: 5, symbolMethod: 'user', meshRows: 4, meshCols: 4, blendSteps: 8, shapeMode: 'normal', textMode: 'point', vertical: false, arcConvex: true, liquifySize: 60, liquifyKind: 'warp' };
   currentBrush: string | null = null;
   currentSymbol: string | null = null;

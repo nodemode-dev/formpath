@@ -309,3 +309,12 @@ A shell in the dock is the person's own terminal inside the window they are usin
 - logged: v0.29.0 · 2026-10-15
 
 `GET /api/fonts/similar?id=` scores every other installed family against a font from tables read directly with struct: weight and width class, OS/2 family class and PANOSE serif style, italic flag and post italic angle, x-height and cap-height over the em, and average advance. The best style of each family is kept and the ten nearest return with a 0 to 100 score. Glyph outlines are not parsed, so the serif test rests on PANOSE and the family class.
+
+## app/services/package.py
+
+### app/services/package.py · Package
+- refers-to: app/services/package.py :: build; app/routers/projects.py :: package_full
+- kind: explainer
+- logged: v0.30.0 · 2026-10-15
+
+`POST /api/projects/package-full` writes `<name> Folder` holding the .fpth, a `Links` folder of every linked image copied from its path, a `Fonts` folder of the installed font files the fonts service finds for the families used, and `<name> report.txt` (Document Info as text, built by the frontend). With `relink_copies` the manifest's `linked.path` values are rewritten to the copies. With `as_zip` it returns a zip instead of touching the disk. The route reads arbitrary paths, so it requires a loopback client and Host. Only image-like extensions under 1 GiB are copied; anything missing is listed in the reply, never fatal. An existing destination folder is refused rather than merged.

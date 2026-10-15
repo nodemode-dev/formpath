@@ -6,8 +6,10 @@ import { BLACK, hex, toRgb, WHITE } from '../engine/paint';
 import type { Color, Project, Rect, VNode } from '../engine';
 import { exportRegion, exportSvg } from './svg';
 import { zipFiles } from './zip';
+import { encodeTiff, type TiffCompression } from './tiff';
 
-export type RasterFormat = 'png' | 'jpg' | 'webp';
+export type RasterFormat = 'png' | 'jpg' | 'webp' | 'tiff';
+export interface TiffChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface DitherOpts {
   model: 'bitmap' | 'grayscale' | 'palette';
   method: 'none' | 'diffusion' | 'bayer';
@@ -17,7 +19,7 @@ export interface DitherOpts {
   palette?: Color[];
   threshold?: number;
 }
-export interface RasterOpts { region: Rect; scale: number; format: RasterFormat; quality: number; transparent: boolean; bg?: Color | null; only?: VNode[]; dither?: DitherOpts }
+export interface RasterOpts { region: Rect; scale: number; format: RasterFormat; quality: number; transparent: boolean; bg?: Color | null; only?: VNode[]; dither?: DitherOpts; tiff?: Partial<TiffChoice> }
 
 export const RASTER_MAX_SIDE = 16384;
 const MAX_SIDE = RASTER_MAX_SIDE;
@@ -109,14 +111,20 @@ export async function renderRegion(p: Project, o: Omit<RasterOpts, 'format' | 'q
   return c;
 }
 
-export async function canvasBlob(c: HTMLCanvasElement, format: RasterFormat, quality: number): Promise<Blob> {
+export async function canvasBlob(c: HTMLCanvasElement, format: RasterFormat, quality: number, tiff?: Partial<TiffChoice>, transparent = false): Promise<Blob> {
+  if (format === 'tiff') {
+    const g = c.getContext('2d');
+    if (!g) throw new Error('This browser could not read the drawing surface for the TIFF export.');
+    const px = g.getImageData(0, 0, c.width, c.height);
+    return encodeTiff(px.data, c.width, c.height, { ppi: tiff?.ppi ?? 72, alpha: transparent, cmyk: tiff?.cmyk, compression: tiff?.compression ?? 'lzw' });
+  }
   const type = format === 'jpg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error(`This browser cannot write ${format.toUpperCase()} files.`))), type, quality));
 }
 
 export async function exportRaster(p: Project, o: RasterOpts): Promise<Blob> {
   const c = await renderRegion(p, { ...o, transparent: o.transparent && o.format !== 'jpg' });
-  return canvasBlob(c, o.format, o.quality);
+  return canvasBlob(c, o.format, o.quality, o.tiff ? { ...o.tiff, ppi: o.tiff.ppi ?? Math.round(72 * o.scale) } : { ppi: Math.round(72 * o.scale) }, o.transparent);
 }
 
 export interface ScreenItem { artboard: number; scale: number; format: RasterFormat | 'svg' | 'pdf'; suffix: string }

@@ -14,8 +14,9 @@ import type { BlendMode, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, P
 import { outlineText } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
+import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
 
-export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string }
+export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks }
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
 export const PDF_MAX_SIDE = 14400;
@@ -83,10 +84,10 @@ class Painter {
     return `${f(v.r / 255)} ${f(v.g / 255)} ${f(v.b / 255)} ${stroke ? 'RG' : 'rg'}`;
   }
 
-  extGState(alpha: number, stroke: boolean, blend: BlendMode = 'normal', ais = false): string {
-    const key = `${f(alpha)}|${stroke}|${blend}|${ais}`;
+  extGState(alpha: number, stroke: boolean, blend: BlendMode = 'normal', ais = false, op = false): string {
+    const key = `${f(alpha)}|${stroke}|${blend}|${ais}${op ? '|op' : ''}`;
     let id = this.gs.get(key);
-    if (!id) { id = this.pdf.add(`<< /Type /ExtGState ${stroke ? `/CA ${f(alpha)}` : `/ca ${f(alpha)}`}${BM[blend] ? ` /BM /${BM[blend]}` : ''}${ais ? ' /AIS true' : ''} >>`); this.gs.set(key, id); }
+    if (!id) { id = this.pdf.add(`<< /Type /ExtGState ${stroke ? `/CA ${f(alpha)}` : `/ca ${f(alpha)}`}${BM[blend] ? ` /BM /${BM[blend]}` : ''}${ais ? ' /AIS true' : ''}${op ? ' /OP true /op true /OPM 1' : ''} >>`); this.gs.set(key, id); }
     return `/GS${id} gs`;
   }
 
@@ -168,7 +169,7 @@ class Painter {
       if (it.kind === 'fill') {
         const c = this.paint(it.paint, false, b, page);
         if (!c) continue;
-        out.push(`q ${it.opacity < 1 || it.blend !== 'normal' ? this.extGState(it.opacity, false, it.blend) : ''} ${c}\n${this.path(id)}\n${rule === 'evenodd' ? 'f*' : 'f'} Q`);
+        out.push(`q ${it.opacity < 1 || it.blend !== 'normal' || it.overprint ? this.extGState(it.opacity, false, it.blend, false, !!it.overprint) : ''} ${c}\n${this.path(id)}\n${rule === 'evenodd' ? 'f*' : 'f'} Q`);
         continue;
       }
       if (it.width <= 0) continue;
@@ -176,7 +177,7 @@ class Painter {
       if (art) { out.push(this.gradientStroke(art, id, rule === 'evenodd' ? 'evenodd' : 'nonzero', it, b, page)); continue; }
       const c = this.paint(it.paint, true, b, page), cf = this.paint(it.paint, false, b, page);
       if (!c || !cf) continue;
-      const gsx = it.opacity < 1 || it.blend !== 'normal' ? `${this.extGState(it.opacity, true, it.blend)} ${this.extGState(it.opacity, false, it.blend)}` : '';
+      const gsx = it.opacity < 1 || it.blend !== 'normal' || it.overprint ? `${this.extGState(it.opacity, true, it.blend, false, !!it.overprint)} ${this.extGState(it.opacity, false, it.blend, false, !!it.overprint)}` : '';
       const brush = it.brush ? brushGeometry(this.doc, id, it) : null;
       if (brush) { for (const part of brush) { const po = part.opacity ?? 1, g2 = po < 1 ? this.extGState(it.opacity * po, false, it.blend) : gsx; out.push(`q ${g2} ${part.paint ? this.paint(part.paint, false, b, page) ?? cf : cf}\n${this.path(part.d)}\nf Q`); } continue; }
       const closed = id.every((sp) => sp.closed);
@@ -343,19 +344,38 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   RES = pdf.reserve();
   const pagesId = pdf.reserve();
   const pageIds: number[] = [];
+  const usesMarkFont = !!o.marks?.pageInfo;
+  const regSpace = (): number => {
+    let id = painter.spaces.get('[Registration]');
+    if (!id) { id = pdf.add('[/Separation /All /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 1 1 1] /N 1 >>]'); painter.spaces.set('[Registration]', id); }
+    return id;
+  };
   for (const i of o.artboards.length ? o.artboards : p.doc.artboards.map((_, k) => k)) {
     const a = p.doc.artboards[i];
     if (!a) continue;
     const uu = Math.max(1, Math.ceil((Math.max(a.w, a.h) / PDF_MAX_SIDE) * 1000) / 1000), s = 1 / uu;
-    const page: Mat = [s, 0, 0, -s, -a.x * s, (a.y + a.h) * s];
-    const parts: string[] = [`${f6(s)} 0 0 ${f6(-s)} ${f6(-a.x * s)} ${f6((a.y + a.h) * s)} cm`];
-    if (a.bg) parts.push(`q ${painter.color(a.bg, false)} ${f(a.x)} ${f(a.y)} ${f(a.w)} ${f(a.h)} re f Q`);
+    const bleed = bleedFor(p.doc, o.marks), geo = pageGeometry(a.w, a.h, bleed, o.marks), boxed = marksActive(o.marks) || bleed.t + bleed.b + bleed.l + bleed.r > 0;
+    const ox = geo.ml * s, oy = geo.mb * s;
+    const page: Mat = [s, 0, 0, -s, ox - a.x * s, oy + (a.y + a.h) * s];
+    const parts: string[] = [];
+    if (boxed) parts.push(`q ${f(ox - bleed.l * s)} ${f(oy - bleed.b * s)} ${f((a.w + bleed.l + bleed.r) * s)} ${f((a.h + bleed.t + bleed.b) * s)} re W n`);
+    parts.push(`${f6(s)} 0 0 ${f6(-s)} ${f6(ox - a.x * s)} ${f6(oy + (a.y + a.h) * s)} cm`);
+    if (a.bg) parts.push(`q ${painter.color(a.bg, false)} ${f(a.x - bleed.l)} ${f(a.y - bleed.t)} ${f(a.w + bleed.l + bleed.r)} ${f(a.h + bleed.t + bleed.b)} re f Q`);
     for (const l of p.doc.layers) parts.push(await painter.node(l, page));
+    if (boxed) parts.push('Q');
+    if (marksActive(o.marks) && o.marks) {
+      const reg = regSpace();
+      const info = pdfString(`${o.title ?? p.doc.title ?? p.name}   ${a.name}   ${p.doc.colorMode.toUpperCase()}   ${new Date().toISOString().slice(0, 10)}`);
+      parts.push(marksContent(geo, a.w, a.h, o.marks, s, `CS${reg}`, 'FMark', info));
+    }
     const content = pdf.add('<< /Filter /FlateDecode >>', await deflate(new TextEncoder().encode(parts.filter(Boolean).join('\n'))));
-    pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(a.w * s)} ${f(a.h * s)}] /TrimBox [0 0 ${f(a.w * s)} ${f(a.h * s)}]${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
+    const W = geo.width * s, H = geo.height * s, box = (x0: number, y0: number, x1: number, y1: number): string => `[${f(x0)} ${f(y0)} ${f(x1)} ${f(y1)}]`;
+    const bleedBox = bleed.t + bleed.b + bleed.l + bleed.r > 0 ? ` /BleedBox ${box(ox - bleed.l * s, oy - bleed.b * s, ox + (a.w + bleed.r) * s, oy + (a.h + bleed.t) * s)}` : '';
+    pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(W)} ${f(H)}]${bleedBox} /TrimBox ${box(ox, oy, ox + a.w * s, oy + a.h * s)}${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
   }
+  const fontId = usesMarkFont ? pdf.add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>') : 0;
   const res = (m: Map<string, number>, pre: string): string => [...m.values()].map((id) => `/${pre}${id} ${id} 0 R`).join(' ');
-  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${painter.spaces.size ? ` /ColorSpace << ${res(painter.spaces, 'CS')} >>` : ''} >>`);
+  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${fontId ? ` /Font << /FMark ${fontId} 0 R >>` : ''}${painter.spaces.size ? ` /ColorSpace << ${res(painter.spaces, 'CS')} >>` : ''} >>`);
   pdf.set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((x) => `${x} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
   let names = '';
   if (o.preserve) {
