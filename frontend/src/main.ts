@@ -1,3 +1,4 @@
 import { startApp } from './app';
+import { initLanguage } from './i18n';
 
-startApp();
+void initLanguage().finally(startApp);
