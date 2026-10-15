@@ -2,6 +2,24 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.33.0 · 2026-10-15
+
+Plan v0.6.0 phase 29: vector PDF, translations, verification and a steady window.
+
+### Added
+
+- PDF export writes opacity masks as soft masks, gradient meshes as Coons patch shadings, patterns as tiling patterns and freeform gradients as triangle shadings; only raster effects stay images. A test document fell from 1.64 MB to 240 KB.
+- Printer's marks set their page information in an embedded subset of Inter, so PDF/X-4 files carry no unembedded font.
+- The 68 strings added in 0.32.0 in all 25 languages.
+
+### Fixed
+
+- Opening a document, from any path, and selecting or deselecting objects no longer move the Properties column, the status bar or the Layers panel.
+
+### Verified
+
+- DWG from AutoCAD 2000, 2004, 2007, 2010, 2013 and 2018 converts through LibreDWG dwg2dxf; a 2018 drawing opens with its three layers and 80 paths, and the toast names the converter and what DXF leaves out.
+
 ## 0.32.0 · 2026-10-15
 
 Plan v0.6.0 phase 28: the five Partial rows, first pass.
