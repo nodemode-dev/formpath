@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.26.0 · 2026-10-15
+
+The agent inside the window, the command catalogue, a one-run desktop build and Live Corners on any path.
+
+### Added
+
+- Terminal dock (Window > Terminal): real shells over engine PTYs, a Claude Code button that runs the person's own `claude` connected to formpth's tools without the outside-agent question, a Chat tab that answers through Claude Code in plain words, Restart, Hide and an ask bar that adds the document and selection as context.
+- `./formpth claude` and `formpth.bat claude`: Claude Code in the current terminal with formpth's MCP server attached.
+- The command catalogue: 649 menu commands and tools with group, menu path, description, parameters, risky and enabled state, mirrored to the engine. MCP `describe_command` and `run_commands` (one undo step); `list_commands` filters by group and word; `run_command` takes parameters. `GET` and `POST /api/commands`, and `./formpth cli list|describe|run`.
+- `build_app` and `build_app.bat`: install, build the window, freeze the engine and bundle the desktop app in one run; DMG and Applications install on macOS, a `.deb` on Linux.
+- Live Corners on any path: per-point Round, Inverted Round or Chamfer corners with absolute or relative radius, Direct Selection widgets with drag, Alt-click and double-click, a red limit preview, Object > Path > Corners... and Expand Corners; drawn the same on the canvas, in SVG and in PDF.
+
+### Fixed
+
+- Calls from the in-app Claude Code and Chat tabs run while outside agents are switched off.
+
 ## 0.23.0 · 2026-10-10
 
 Files and generation. Every one of the 76 parity rows is built; an independent audit of the code puts parity at 72 of 76, 94.7 percent (68 Full, 8 Partial).

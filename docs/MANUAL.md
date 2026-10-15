@@ -220,6 +220,12 @@ ask it questions.
 - Object > Path: Join (Ctrl+J), Average, Outline Stroke, Offset Path, Reverse Path Direction, Simplify, Smooth, Add
   Anchor Points, Remove Anchor Points, Close, Divide Objects Below, Split into Grid and Clean Up (stray points,
   unpainted objects, empty text).
+- Live Corners: with the Direct Selection tool, every corner point of a selected path shows a small circle inside the
+  corner. Drag it to round the corner; with several points selected, the drag rounds all of them. Alt-click it to cycle
+  Round, Inverted Round and Chamfer; double-click it, or choose Object > Path > Corners..., for Type, Radius and
+  Rounding (Absolute keeps a fixed distance, Relative a share of the neighbouring segments). A corner that has reached
+  the largest radius its segments allow draws in red. Corners stay editable; Object > Path > Expand Corners turns them
+  into plain points.
 - Pathfinder: Unite, Minus Front, Intersect, Exclude, and Divide, Trim, Merge, Crop, Outline and Minus Back. Shape
   modes make a single new path; Divide and the rest make groups of pieces.
 - Shape Builder (Shift+M): drag across regions of the selected shapes to merge them; Alt-drag to delete regions.
@@ -629,6 +635,17 @@ ask it questions.
   address).
 
 ## Agents and the assistant
+
+- Window > Terminal (Alt+Shift+Ctrl+T, Opt+Shift+Cmd+T on a Mac) opens the dock at the bottom of the window: real
+  shells on this computer, one tab each. The agent button (Alt+Shift+Ctrl+C) starts Claude Code, your own sign-in,
+  in a tab already connected to formpth's tools, so it can draw in the open document without asking you first. The
+  speech bubble (Alt+Shift+Ctrl+H) opens Chat, which runs Claude Code behind a plain conversation; From Claude
+  Code... brings a tab's conversation into Chat and Open in Claude Code moves a Chat conversation to a tab. The line
+  under the dock sends a message to the active Chat or Claude Code tab with the document name and selection added.
+  Claude Code must be installed (https://claude.com/claude-code) and signed in once.
+- `./formpth cli list [word] [--group Object]`, `./formpth cli describe <id>` and `./formpth cli run <id> key=value`
+  read and run the command catalogue (every menu command and tool) on the open window; agents use the same catalogue
+  through `list_commands`, `describe_command`, `run_command` and `run_commands`.
 
 - formpth runs an MCP server so agents (Claude Code, Claude Desktop, Codex, Cursor and others) can draw in the open
   window. Turn it on in Preferences > Plugins (Allow agents); the first call asks your permission. Connect with
