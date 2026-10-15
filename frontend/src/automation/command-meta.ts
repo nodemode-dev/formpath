@@ -25,7 +25,7 @@ export const COMMAND_META: Readonly<Record<string, readonly [string, string]>> =
   'proof-setup': ['Opens Proof Setup to pick the device to simulate, whether to preserve numbers, and whether to simulate paper color and black ink.', 'Use before Proof Colors to describe the printing condition being checked.'],
   'proof-colors': ['Turns the on-screen soft proof on or off, showing the art as the proof device would print it.', 'Use when checking how saturated colours will look in print.'],
   'mode-cmyk': ['Switches the document to CMYK colour.', 'Use when the artwork is destined for print.'],
-  'print': ['Prints the document.', 'Use when a paper proof is needed.'],
+  'print': ['Opens the Print dialog for paper size, scale, marks, separations and colour handling, then sends the document to the system print dialog.', 'Use when a paper proof or press proof is needed.'],
   'undo': ['Reverses the last change.', 'Use when a step went wrong.'],
   'redo': ['Restores the change that was just undone.', 'Use when an undo went too far.'],
   'cut': ['Removes the selection and keeps it on the clipboard.', 'Use when moving art elsewhere.'],

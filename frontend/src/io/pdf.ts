@@ -19,9 +19,11 @@ import { serialize } from './project-io';
 import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
 import { pdfxParts } from './pdf-x';
 import { outputProfileBytes } from '../engine/color-management';
+import { inCopies, sheetPages } from './pdf-sheet';
+import type { PrintSettings } from './print-layout';
 import { embeddedMarkFont, LiveFonts, liveStream, type Ink, type LiveText } from './pdf-text';
 
-export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: 'none' | 'x4' }
+export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: 'none' | 'x4'; sheet?: PrintSettings }
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
 export const PDF_MAX_SIDE = 14400;
@@ -30,14 +32,14 @@ const f = (v: number): string => { const r = Math.round(v * 1000) / 1000; return
 const pdfName = (s: string): string => (s || 'Spot').replace(/[^\x21-\x7e]|[#()<>[\]{}/%]/g, (ch) => [...new TextEncoder().encode(ch)].map((b) => `#${b.toString(16).padStart(2, '0')}`).join(''));
 const pdfString = (s: string): string => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).replace(/[^\x20-\x7e]/g, '?')})`;
 
-async function deflate(data: Uint8Array): Promise<Uint8Array> {
+export async function deflate(data: Uint8Array): Promise<Uint8Array> {
   if (typeof CompressionStream === 'undefined') return data;
   const cs = new CompressionStream('deflate');
   const out = new Response(new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(cs));
   return new Uint8Array(await out.arrayBuffer());
 }
 
-class PdfFile {
+export class PdfFile {
   private objs: Array<Uint8Array | null> = [null];
   private readonly enc = new TextEncoder();
   reserve(): number { this.objs.push(null); return this.objs.length - 1; }
@@ -497,7 +499,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   RES = pdf.reserve();
   const pagesId = pdf.reserve();
   await painter.prepare();
-  const pageIds: number[] = [];
+  const pageIds: number[] = [], sheets: Array<() => number> = [];
   const usesMarkFont = !!o.marks?.pageInfo;
   const regSpace = (): number => {
     let id = painter.spaces.get('[Registration]');
@@ -522,11 +524,14 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
       const info = pdfString(`${o.title ?? p.doc.title ?? p.name}   ${a.name}   ${p.doc.colorMode.toUpperCase()}   ${new Date().toISOString().slice(0, 10)}`);
       parts.push(marksContent(geo, a.w, a.h, o.marks, s, `CS${reg}`, 'FMark', info));
     }
-    const content = pdf.add('<< /Filter /FlateDecode >>', await deflate(new TextEncoder().encode(parts.filter(Boolean).join('\n'))));
+    const packed = await deflate(new TextEncoder().encode(parts.filter(Boolean).join('\n')));
+    if (o.sheet) { sheets.push(...sheetPages(pdf, `${RES} 0 R`, pagesId, packed, geo.width * s, geo.height * s, uu, { w: geo.width, h: geo.height }, o.sheet)); continue; }
+    const content = pdf.add('<< /Filter /FlateDecode >>', packed);
     const W = geo.width * s, H = geo.height * s, box = (x0: number, y0: number, x1: number, y1: number): string => `[${f(x0)} ${f(y0)} ${f(x1)} ${f(y1)}]`;
     const bleedBox = bleed.t + bleed.b + bleed.l + bleed.r > 0 ? ` /BleedBox ${box(ox - bleed.l * s, oy - bleed.b * s, ox + (a.w + bleed.r) * s, oy + (a.h + bleed.t) * s)}` : '';
     pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(W)} ${f(H)}]${bleedBox} /TrimBox ${box(ox, oy, ox + a.w * s, oy + a.h * s)}${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
   }
+  if (o.sheet) pageIds.push(...inCopies(sheets, o.sheet));
   await painter.flush();
   const fontId = usesMarkFont ? (await embeddedMarkFont(pdf, deflate)) || pdf.add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>') : 0;
   const liveFonts = plans.size ? live.resources() : '';

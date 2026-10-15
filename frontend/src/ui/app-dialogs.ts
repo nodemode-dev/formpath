@@ -17,9 +17,9 @@ import { DEFAULT_MARKS, type PdfMarks } from '../io/pdf-marks';
 
 const UNIT_K: Record<Units, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
 
-function row(label: string, ...controls: HTMLElement[]): HTMLElement { const r = el('<label class="cv-dialog-row"><span></span></label>'); setText(q(r, 'span'), label); r.append(...controls); return r; }
-function numberInput(min: number, max: number, step = 1): HTMLInputElement { return el<HTMLInputElement>(`<input class="cv-input cv-input-num" type="number" min="${min}" max="${max}" step="${step}">`); }
-function selectOf(choices: ReadonlyArray<readonly [string, string]>): HTMLSelectElement { const s = el<HTMLSelectElement>('<select class="cv-input"></select>'); for (const [v, t] of choices) { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); } return s; }
+export function row(label: string, ...controls: HTMLElement[]): HTMLElement { const r = el('<label class="cv-dialog-row"><span></span></label>'); setText(q(r, 'span'), label); r.append(...controls); return r; }
+export function numberInput(min: number, max: number, step = 1): HTMLInputElement { return el<HTMLInputElement>(`<input class="cv-input cv-input-num" type="number" min="${min}" max="${max}" step="${step}">`); }
+export function selectOf(choices: ReadonlyArray<readonly [string, string]>): HTMLSelectElement { const s = el<HTMLSelectElement>('<select class="cv-input"></select>'); for (const [v, t] of choices) { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); } return s; }
 
 export class NewDocumentDialog extends Dialog {
   private readonly name = el<HTMLInputElement>('<input class="cv-input" type="text" value="Untitled-1">');
