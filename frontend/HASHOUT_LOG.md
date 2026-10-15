@@ -2645,3 +2645,26 @@ The dialog is built once and patched in place. It walks visible, unlocked text n
 - logged: v0.29.0 · 2026-10-15
 
 Ranking runs in the engine service, which already reads the font files; the frontend only resolves a family and style to an installed font id and asks for the top ten other families.
+
+## src/ui/home.ts
+
+### src/ui/home.ts · the home screen sat under the panels
+- refers-to: src/ui/home.ts :: HomeScreen (host); src/app.ts :: new HomeScreen(root, ...); src/styles/shell.css :: .cv-home; src/styles/tokens.css :: --z-home-screen; src/styles/formpth.css :: .cv-main > .cv-stage-col
+- kind: rationale
+- logged: v0.30.0 · 2026-10-15
+
+The Properties column, panel tabs and Layers list drew on top of the home screen. The home screen is `position: fixed` and asked for a high layer, but it was mounted inside `.cv-stage-col`, which is `position: relative; z-index: var(--z-base)` and therefore a stacking context at layer 0: nothing inside it can rise above the stage column's siblings, and the Properties column at a higher layer won. A bigger number could not fix it. The home screen now mounts on `.cv-app`, which creates no stacking context, at the named layer `--z-home-screen` (150): above the workspace chrome (`--z-chrome`, 100) so it covers every panel, below menus (`--z-menu`, the overlay root) and dialogs (`--z-modal`) so the File menu and New Document open over it, and below the task bar and floating windows, which the person opens. The stage column keeps its own context, which is what keeps the canvas overlays inside the stage.
+
+### src/styles/panels.css · the last raw z-index values
+- refers-to: src/styles/panels.css :: .cv-dock-split, .cv-props-col:not(.is-collapsed), .cv-props-resize
+- kind: rationale
+- logged: v0.30.0 · 2026-10-15
+
+These three values (2, 4 and 5) came with the formvis shell in the first commit. They now read `--z-raised`, `--z-selected` and `--z-raised`, keeping their order: the Properties column above the stage column (layer 0), the dock split and the resize grip above their own neighbours. No raw numeric `z-index` remains outside `tokens.css`.
+
+### src/styles/tokens.css · the layer scale
+- refers-to: src/styles/tokens.css :: --z-*
+- kind: explainer
+- logged: v0.30.0 · 2026-10-15
+
+From the bottom: `--z-base` 0 (document flow, the stage column), `--z-raised` 8 and `--z-selected` 9 (siblings that must overlap a neighbour), `--z-rail` 10, `--z-chrome` 100 (the narrow-window fixed panels), `--z-home-screen` 150, `--z-menu` 200 (the overlay root, menus and popovers), `--z-temp` 500, `--z-companion` 800 (floating windows, the assistant), `--z-taskbar` 900, `--z-modal` 1000 (dialog scrims), `--z-settings` 1500, `--z-context` 2000 (context menus, drag ghosts, dropdowns), `--z-toast` 3000, `--z-portal` 4000, then the inherited `--z-home*`, `--z-account-panel` and `--z-overlay*` levels, which formpth does not use. Add a layer here, never inline.

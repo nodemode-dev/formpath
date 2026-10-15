@@ -316,7 +316,7 @@
 .cv-props-fly { position: fixed; z-index: var(--z-context); width: 284px; max-height: calc(100vh - 24px); overflow-y: auto; border: 1px solid var(--line-3); border-radius: 12px; background: var(--surface-0); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6); }
 .cv-props-fly[hidden] { display: none; }
 
-.cv-dock-split { flex: none; position: relative; z-index: 2; height: 6px; margin: -3px 0; cursor: row-resize; touch-action: none; }
+.cv-dock-split { flex: none; position: relative; z-index: var(--z-raised); height: 6px; margin: -3px 0; cursor: row-resize; touch-action: none; }
 .cv-dock-split::after { content: ''; position: absolute; left: 42%; right: 42%; top: 2px; height: 2px; border-radius: 1px; background: transparent; }
 .cv-dock-split:hover::after { background: var(--line-3); }
 .cv-layers > section.is-sized { display: flex; flex-direction: column; overflow: hidden; }
@@ -347,7 +347,7 @@
 .cv-dock-fly > section { display: flex !important; flex-direction: column; max-height: calc(100vh - 40px); }
 
 .cv-props-col:not(.is-collapsed) {
-  justify-self: end; width: var(--cv-props-open-w); position: relative; z-index: 4;
+  justify-self: end; width: var(--cv-props-open-w); position: relative; z-index: var(--z-selected);
   box-shadow: -16px 0 36px rgba(0, 0, 0, 0.32); border-left: 1px solid var(--line-0);
 }
 
@@ -369,7 +369,7 @@
 .cv-hb-source.is-on { opacity: 1; color: var(--accent-ink); background: var(--accent-soft); }
 
 .cv-props-col { position: relative; }
-.cv-props-resize { position: absolute; top: 0; bottom: 0; left: -3px; width: 6px; cursor: col-resize; z-index: 5; touch-action: none; }
+.cv-props-resize { position: absolute; top: 0; bottom: 0; left: -3px; width: 6px; cursor: col-resize; z-index: var(--z-raised); touch-action: none; }
 .cv-props-col.is-collapsed .cv-props-resize { display: none; }
 .cv-props-resize:hover { background: color-mix(in srgb, var(--accent-color) 40%, transparent); }
 

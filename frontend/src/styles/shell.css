@@ -60,7 +60,7 @@ body { font-size: var(--fs-12); line-height: 1.35; }
 
 .cv-options [hidden] { display: none; }
 
-.cv-home { position: fixed; top: var(--cv-titlebar-h); left: 0; right: 0; bottom: 0; z-index: calc(var(--z-menu) - 1); display: grid; place-items: center; background: var(--group-head); overflow-y: auto; }
+.cv-home { position: fixed; top: var(--cv-titlebar-h); left: 0; right: 0; bottom: 0; z-index: var(--z-home-screen); display: grid; place-items: center; background: var(--group-head); overflow-y: auto; }
 .cv-home[hidden] { display: none; }
 .cv-home-center { display: flex; flex-direction: column; align-items: center; text-align: center; padding: var(--space-6); }
 .cv-home-brand { display: flex; align-items: baseline; gap: 10px; margin: 0; color: var(--text-primary); font-size: 38px; font-weight: 400; letter-spacing: -0.015em; }

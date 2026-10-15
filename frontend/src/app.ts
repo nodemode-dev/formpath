@@ -791,7 +791,7 @@ export function startApp(): void {
     if (!found) toast('The trace found no shapes: try another preset.', 'error');
   }
 
-  const home = new HomeScreen(stageEl, { engine, autoShow: () => loadPrefs().autoShowHome, recent: () => recent, openRecent: (name) => { void openLibrary(name); }, run: (c) => { commands.run(c); }, preset: (id) => newDoc.createPreset(id) });
+  const home = new HomeScreen(root, { engine, autoShow: () => loadPrefs().autoShowHome, recent: () => recent, openRecent: (name) => { void openLibrary(name); }, run: (c) => { commands.run(c); }, preset: (id) => newDoc.createPreset(id) });
   const brand = q(root, '.cv-brand');
   brand.setAttribute('role', 'button'); brand.setAttribute('tabindex', '0'); brand.setAttribute('aria-label', 'Home'); brand.title = 'Home';
   brand.addEventListener('click', () => home.show());
