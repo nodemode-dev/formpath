@@ -120,8 +120,15 @@ ask it questions.
   about its own centre, with random variation if you like).
 - The Transform panel and Properties type exact X, Y, W, H, rotation and shear, from the reference point you pick
   in the 3 by 3 grid; fields accept arithmetic (100/3, 2*72).
-- Width (Shift+W) drags out variable stroke widths at any point along a stroke; Warp (Shift+R), Twirl, Pucker and
-  Bloat reshape art under the brush.
+- Width (Shift+W) drags out variable stroke widths at any point along a stroke; Warp (Shift+R), Twirl, Pucker,
+  Bloat, Scallop (curved details), Crystallize (spiky details) and Wrinkle reshape art under the brush; [ and ] change
+  the brush size, and Intensity and Detail sit in the options bar.
+- Object > Transform > Scale Corners decides whether scaling also scales corner radii. Transform Each can scale to
+  absolute sizes (Scale mode: Absolute) as well as by percent.
+- Object > Object on Path > Attach to Path spreads the other selected objects along the topmost selected path, evenly
+  spaced, optionally rotated along it; Arrange on Path changes the spacing, offset, rotation and side.
+- Smart Guides also snap a line's end to a tangent of a nearby curve or perpendicular to a nearby segment, and to
+  construction angles; the Knife's start and end snap to Smart Guides.
 - Align: to the selection, a key object (the last one selected) or the artboard; Distribute Objects and Distribute
   Spacing with an exact gap.
 - Puppet Warp (J, with Free Transform on the rail) bends art like a jointed puppet. Select paths, groups or compound
@@ -219,6 +226,10 @@ ask it questions.
 
 ## Paths and Pathfinder
 
+- Object > Ungroup All ungroups every nested group in the selection at once. Simplify offers Straight Lines and an
+  Angle Threshold that keeps sharper corners, and shows the point count before and after. Object > Pathfinder adds
+  Hard Mix (overlaps take the stronger of each colour channel), Soft Mix (overlaps blend at the mixing rate) and Trap
+  (thin overlapping strips between touching colours, for print).
 - Object > Path: Join (Ctrl+J), Average, Outline Stroke, Offset Path, Reverse Path Direction, Simplify, Smooth, Add
   Anchor Points, Remove Anchor Points, Close, Divide Objects Below, Split into Grid and Clean Up (stray points,
   unpainted objects, empty text).

@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.28.0 · 2026-10-15
+
+Path and transform depth.
+
+### Added
+
+- Scallop, Crystallize and Wrinkle tools beside Warp, Twirl, Pucker and Bloat.
+- Smart Guides snap to tangents and perpendiculars and to a list of construction angles; the Knife snaps to Smart Guides.
+- Object > Ungroup All; Object > Pathfinder with the existing operations plus Hard Mix, Soft Mix and Trap; Object > Object on Path (Attach, Arrange); Object > Transform > Scale Corners.
+- Simplify: Straight Lines, Angle Threshold and a point count; Transform Each: absolute sizes.
+- The new strings in all 25 languages.
+
+### Changed
+
+- The Anchor Point tool ignores a drag under 3 px, so a click converts the point.
+
 ## 0.27.0 · 2026-10-15
 
 The interface in 26 languages.
