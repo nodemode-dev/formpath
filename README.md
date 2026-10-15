@@ -120,7 +120,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 72 of 76 rows against Illustrator 30 (68 Full, 8 Partial, 0 None), 94.7 percent, from an independent audit of the code. Partial: Smart Guides (fixed construction angles), 3D (one light, no ray tracing), `.ai` (read through PDF, no writer), PDF (outlined type), EPS and DXF (no DWG), colour management and print, and two generative rows that run through the Assistant. See `docs/PARITY.md`.
+- **Parity.** 73.5 of 76 rows against Illustrator 30 (71 Full, 5 Partial, 0 None), 96.7 percent. An independent audit of the code at v0.30.0 graded 71; the three rows it found short (star corners, Text to Vector Graphic, Generative Recolor) were built in v0.31.0 and re-traced. Partial: colour management (no ICC or PDF/X), PDF (outlined type, some rasterised effects), `.ai` (read through PDF, no writer), DWG, and 3D (one light, no ray tracing). The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors

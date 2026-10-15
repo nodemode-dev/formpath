@@ -12,9 +12,9 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list. The v0.23.0 grades come from a second independent audit of the code at commit 803e327, done without this page, with one row held stricter than the auditor graded it (PDF, see its row).
 
-## Score at v0.23.0
+## Score at v0.31.0
 
-**72 of 76 scored rows, 94.7 percent:** 68 Full, 8 Partial, 0 None, from the independent audit with the PDF row held at Partial. The tally is at the end.
+**73.5 of 76 scored rows, 96.7 percent:** 71 Full, 5 Partial, 0 None. A third independent audit graded every row from a snapshot of the code at commit 85dbe07 (v0.30.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed: 71 of 76 (68 Full, 6 Partial, 2 None), plus 11.5 of 12 for the plan v0.5.0 additions. It raised Smart Guides to Full, lowered Rectangle to Star to Partial (stars had no live corner radius), and graded Text to Vector Graphic and Generative Recolor None, since the Assistant is not those features. All three gaps were then built in v0.31.0 and re-traced here, not by the auditor; the rows say so. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -29,7 +29,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Clipping masks | Full | Make and Release, layer clipping masks, isolation of clip groups |
 | Transparency, blend modes, opacity masks | Full | 16 blend modes, opacity, opacity masks with Clip and Invert, Isolate Blending; Knockout Group drawn on the canvas and written to SVG and PDF (PDF also carries it through soft masks, since common readers ignore /K) |
 
-## Selection and transform · 7.5 of 8
+## Selection and transform · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Select Same and Select Object | Full | Twelve Same attributes; Select Object by kind, stray points, brush strokes, clipping masks |
 | Bounding box and Free Transform | Full | The bounding box turns with the object and has Reset Bounding Box; Free Transform with its widget and options-bar modes (Constrain, Free Transform, Perspective Distort, Free Distort) and the modifier keys; distortions are projective, curves subdivided to follow them, type, images and symbols carried in an envelope with type still editable; Ctrl on a side handle shears |
 | Rotate, Reflect, Scale, Shear, Transform Each and Again | Full | Origin click, Alt copy, exact dialogs, Transform Each with random, Transform Again |
-| Smart Guides and snapping | Partial | Alignment to edges and centres, equal-spacing guides with gap marks, labels, snap to point, grid and pixel. Missing: construction guides at angles the person sets (they are fixed at 0, 45 and 90 degrees) |
+| Smart Guides and snapping | Full | Alignment to edges and centres, equal-spacing guides with gap marks, labels, snap to point, grid and pixel; tangent and perpendicular snapping; construction angles chosen in Preferences (90 and 45, 30 to 90, or 30 degree sets) in `engine/snap.ts` snapLine; the Knife snaps too |
 | Rulers, guides and grids | Full | Rulers from the active artboard, guides dragged from rulers, lock, make, release, clear, grid with subdivisions and snapping |
 | Puppet Warp | Full | Puppet Warp tool (J): default and added pins, drag to bend while other pins hold, Shift to select several, Alt-drag to twist, Delete, Expand, Show Mesh; an as-rigid-as-possible solve over a triangle mesh of the art; type, images and symbols carried in an envelope. Pins belong to the tool, as in Illustrator |
 
@@ -48,7 +48,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | --- | --- | --- |
 | Pen, Curvature and anchor tools | Full | Pen with close, continue, add and delete on paths, convert; Add, Delete and Anchor Point tools; Curvature |
 | Pencil, Smooth, Path Eraser, Join | Full | Fitted Pencil that extends and closes paths; Smooth, Path Eraser and Join tools |
-| Rectangle to Star with live corners | Full | Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; Shape fields in Properties after drawing (size, every corner radius and corner type, pie angles, sides, points, radii, line length and angle); corner widgets on the canvas for rectangles and polygons |
+| Rectangle to Star with live corners | Full | Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; Shape fields in Properties after drawing (size, every corner radius and corner type, pie angles, sides, points, radii, line length and angle); corner widgets on the canvas for rectangles, polygons and stars, which stay live when rounded; Live Corners on any path in Direct Selection (round, inverted, chamfer, absolute or relative, the Corners dialog). The audit graded this Partial because stars had no live corner radius; that was built in v0.31.0 and re-traced here |
 | Line, Arc, Spiral and grids | Full | Line Segment, Arc, Spiral, Rectangular Grid, Polar Grid, Flare |
 | Paintbrush and Blob Brush | Full | Paintbrush with the current brush; Blob Brush merging same-fill shapes |
 | Eraser, Scissors and Knife | Full | All three cut real geometry |
@@ -111,14 +111,14 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | Variable fonts | Full | Variable faces marked and filterable in the font menu, named instances as styles, a slider per fvar axis; glyphs drawn at the axes (gvar, CFF2, HVAR) on the canvas, in Create Outlines and PDF; SVG keeps `font-variation-settings`. GPOS kerning is not varied by the axes |
 | Touch Type tool | Full | Touch Type (Shift+T) moves, scales and rotates single characters with a box and handles, arrow nudges and options-bar values; the text stays live and the transforms follow their characters through editing, outlines, SVG and PDF |
 
-## Generative AI · 4 of 5
+## Generative AI · 5 of 5
 
 formpth has no generative model of its own. Every row here runs on the language model the person configures for the Assistant, and the generative panels stay disabled until one is set. The art is SVG written by a general model, not by a trained vector model like Firefly, so its quality depends on the model chosen.
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
-| Text to Vector Graphic | Partial | The Assistant turns a prompt into tool calls on the configured model; no dedicated generator, at most 14 tool steps a turn, and the model does not see the result |
-| Generative Recolor | Partial | Through the Assistant a model can call the recolor tool with a palette from the prompt; one result, no variation set |
+| Text to Vector Graphic | Full | Object > Generative > Text to Vector Graphic: Type (Subject, Scene, Icon, Pattern), Detail, up to three variations, the chosen one placed as editable groups and paths fitted to the selection or artboard, one undo step; MCP `text_to_vector`. Runs on the model set for the Assistant, like the other generative rows. The audit graded this None (only the Assistant existed); built in v0.31.0 and re-traced here |
+| Generative Recolor | Full | A prompt with sample moods in Recolor Artwork returns up to four palettes that remap the artwork's colours with tints kept, one undo step; MCP `generative_recolor`. Runs on the configured model. The audit graded this None; built in v0.31.0 and re-traced here |
 | Generative Shape Fill | Full | The Generative Shape Fill panel sends a prompt, shape strength, detail and a variation count to the configured model and brings the chosen variation in as editable paths clipped to the shape; model SVG is cleaned of scripts, images and links |
 | Text to Pattern | Full | Generate Patterns turns a prompt, a colour preset or custom palette and a density into tile variations saved as editable pattern swatches |
 | Retype | Full | Retype reads outlined type (by letter-shape matching, no model needed) or an image region (with a model that reads images), ranks installed fonts by shape and replaces the source with live text. Matches only installed fonts |
@@ -145,7 +145,7 @@ formpth has no generative model of its own. Every row here runs on the language 
 | --- | --- |
 | Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
 | Web app | The same app in a browser against the local engine |
-| Agents over MCP | 84 tools, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
+| Agents over MCP | 88 tools, a command catalogue with `list_commands`, `describe_command`, `run_command` and `run_commands`, Claude Code and Chat inside the window's terminal dock, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpth-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |
 
 ## Tally
@@ -153,26 +153,45 @@ formpth has no generative model of its own. Every row here runs on the language 
 | Category | Score | Rows |
 | --- | --- | --- |
 | Objects and layers | 8 | 8 |
-| Selection and transform | 7.5 | 8 |
+| Selection and transform | 8 | 8 |
 | Drawing | 10 | 10 |
 | Paths and Pathfinder | 8 | 8 |
 | Paint and colour | 8 | 8 |
 | Effects and live objects | 9.5 | 10 |
 | Type | 8 | 8 |
-| Generative AI | 4 | 5 |
+| Generative AI | 5 | 5 |
 | Files, colour and output | 9 | 11 |
-| **Total** | **72** | **76** |
+| **Total** | **73.5** | **76** |
 
-68 rows Full, 8 Partial, 0 None: 94.7 percent.
+71 rows Full, 5 Partial, 0 None: 96.7 percent.
 
 ## Next to close
 
-Every row is built. The eight Partial rows, by what each lacks:
+Every row is built. The five Partial rows, by what each lacks, ranked by the audit's view of their impact:
 
-1. Smart Guides: construction guides at set angles.
-2. 3D and Materials: ray-traced rendering, several lights, texture materials.
-3. Text to Vector Graphic and Generative Recolor: dedicated prompt commands with variations (today both go through the Assistant).
-4. Illustrator `.ai`: a writer, and reading files saved without PDF compatibility.
-5. PDF: live text, vector masks and meshes, PDF/X presets and bleed.
-6. EPS, DXF and DWG: DWG, and images in foreign EPS and in DXF.
-7. Colour management and print: ICC profiles, proof colours, separations and overprint preview, a print dialog with marks and bleed.
+1. Colour management and print: ICC profiles, a document profile, soft proofing and PDF/X; CMYK is converted by formula. Overprint and Separations Preview, print marks and bleed exist since v0.30.0.
+2. PDF: live, selectable text with embedded fonts (type is outlined); opacity masks, meshes, patterns, freeform gradients and raster effects are rasterised; no PDF/X; import refuses encrypted files and skips soft masks.
+3. Illustrator `.ai`: a writer, and reading files saved without PDF compatibility.
+4. EPS, DXF and DWG: DWG.
+5. 3D and Materials: ray-traced rendering, several lights, texture materials.
+
+The generative rows run on the model the person sets up for the Assistant; formpth ships no image or vector model of its own.
+
+## Plan v0.5.0 additions (not in the 76)
+
+Graded by the same audit, 11.5 of 12, and 12 of 12 after v0.31.0:
+
+| Row | Grade | Evidence or gap |
+| --- | --- | --- |
+| Live Corners on any path | Full | Per-anchor round, inverted or chamfer corners, absolute or relative, drawn the same on the canvas, in SVG and PDF; Direct Selection widgets, Alt-click cycling, the Corners dialog, Expand Corners |
+| Liquify detail tools | Full | Scallop, Crystallize and Wrinkle with Size, Intensity and Detail |
+| Object on Path | Full | Attach and Arrange along a path with spacing, offset and rotation; no live link |
+| Pathfinder Hard Mix, Soft Mix and Trap | Full | Object > Pathfinder, with mixing rate and trap options |
+| Large canvas | Full | Artboards to 163,440 pt a side, PDF UserUnit, raster tiles |
+| Spell check | Full | Check Spelling, Auto Spell Check, a personal dictionary |
+| Gradient Method and Dither | Full | Perceptual (OKLab) blending matched on the canvas, in SVG and PDF; dither on the canvas |
+| TIFF export | Full | RGB, RGBA or CMYK with PackBits, LZW or Deflate |
+| PDF marks and bleed | Full | Trim, registration, colour bars, page information, BleedBox and TrimBox |
+| Package | Full | The document, linked images and fonts collected with a report |
+| Overprint and Separations Preview | Full | Previews, the plates panel and PDF /OP; the audit graded it Partial because nothing set the overprint flag, which the Attributes panel and `set_paint` now do (v0.31.0, re-traced here) |
+| Interface languages | Full | 26 languages with English the default |
