@@ -293,6 +293,14 @@ export function startApp(): void {
     setLocked: (on) => { dock.locked = on; },
   });
   dock.locked = dock.locked;
+  const narrow = window.matchMedia('(max-width: 1099px)');
+  let autoCollapsed = false;
+  const fitDock = (): void => {
+    if (narrow.matches && loadPrefs().narrowCollapse && !dock.collapsed) { autoCollapsed = true; dock.setCollapsed(true); }
+    else if (!narrow.matches && autoCollapsed) { autoCollapsed = false; if (dock.collapsed) dock.setCollapsed(false); }
+  };
+  narrow.addEventListener('change', fitDock);
+  fitDock();
   new Rail(q(root, '.cv-rail'), engine);
   new OptionsBar(q(root, '.cv-options'), engine);
   const status = new StatusBar(q(root, '.cv-status'), engine);
@@ -1128,13 +1136,13 @@ export function startApp(): void {
       { kind: 'number', key: 'bleedR', label: 'Bleed Right', value: p.doc.bleed?.r ?? 0, min: 0, max: 720, step: 0.25, unit: 'pt' },
     ]);
     if (!v) return;
-    engine.beginGesture();
-    const bleed = { t: Math.max(0, Number(v.bleedT) || 0), b: Math.max(0, Number(v.bleedB) || 0), l: Math.max(0, Number(v.bleedL) || 0), r: Math.max(0, Number(v.bleedR) || 0) };
+    engine.beginStep();
+    const bleed ={ t: Math.max(0, Number(v.bleedT) || 0), b: Math.max(0, Number(v.bleedB) || 0), l: Math.max(0, Number(v.bleedL) || 0), r: Math.max(0, Number(v.bleedR) || 0) };
     const old = p.doc.bleed ?? { t: 0, b: 0, l: 0, r: 0 };
     if (bleed.t !== old.t || bleed.b !== old.b || bleed.l !== old.l || bleed.r !== old.r) engine.edit('Bleed', (d) => ({ ...d, bleed }));
     engine.documentSetup({ title: String(v.title) || p.doc.title, units: v.units as Units, colorMode: v.mode as 'rgb' | 'cmyk', rasterPpi: Number(v.ppi) });
     if (Number(v.grid) !== p.doc.grid.spacing || Number(v.sub) !== p.doc.grid.subdivisions) engine.setGrid(Number(v.grid), Math.round(Number(v.sub)));
-    engine.endGesture();
+    engine.endStep();
   }
 
   async function recolorDialog(): Promise<void> {

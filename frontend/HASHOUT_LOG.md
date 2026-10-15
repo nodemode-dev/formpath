@@ -2727,3 +2727,46 @@ The Export dialog already reserved the height of its tallest format; the PDF mar
 - logged: v0.30.0 · 2026-10-15
 
 `patchList` calls `create` for a new row and `update` only for rows that already exist, so the similar-fonts rows came out blank and unclickable. The row fill is now one function that `create` calls before returning the node and `update` reuses.
+
+## src/ui/panels/attributes.ts
+
+### src/ui/panels/attributes.ts · Overprint Fill and Overprint Stroke checkboxes
+- refers-to: src/ui/panels/attributes.ts :: AttributesPanel.syncOver; src/engine/index.ts :: Engine.overprintOf, Engine.setOverprint
+- kind: rationale
+- logged: v0.31.0 · 2026-10-15
+
+The flag lives on the first fill and first stroke of each object, so the engine reads and writes exactly those: `overprintOf` walks the selection (into groups, skipping type) and answers true, false, mixed or null when nothing has such an item, and `setOverprint` is one history step named Overprint Fill or Overprint Stroke. The two rows are always present so the panel never changes height; a mixed selection sets the native indeterminate state through a guarded write. The agent tool set_paint takes overprint_fill and overprint_stroke beside its existing fields.
+
+## src/engine/ops/corner-ops.ts
+
+### src/engine/ops/corner-ops.ts · Live rectangles and polygons keep their live parameters
+- refers-to: src/engine/ops/corner-ops.ts :: liveCorners, setCornersOp, firstCorner
+- kind: rationale
+- logged: v0.31.0 · 2026-10-15
+
+Setting a corner on a live rectangle used to stamp a per-anchor corner on the path and drop `live`. A live rectangle now maps each targeted anchor back to its corner (a rounded corner owns two anchors, a square one owns one, computed from the current radii) and writes that corner's radius, and the corner type applies to the whole rectangle. A live polygon takes the shared radius from any targeted anchor. Relative mode, and a chamfer or inverted type on a polygon, still take the generic path because live shapes cannot express them, so those turn the shape into a plain path as before. The Corners dialog reads the live radius for its starting value.
+
+## src/io/package.ts
+
+### src/io/package.ts · bundled fonts are sent by the frontend
+- refers-to: src/io/package.ts :: packageProject; src/io/fonts.ts :: bundledFontFile; src/io/api.ts :: api.packageFull
+- kind: rationale
+- logged: v0.31.0 · 2026-10-15
+
+Inter and JetBrains Mono come from @fontsource, so a machine without them installed gave the engine nothing to copy and the Fonts folder was silently left out. The frontend now fetches the bundled face it loaded for each used family and uploads it as `font_files` with a `font_map` from file name to family and style; the engine uses an installed font first and the uploaded face only when none is installed.
+
+## src/app.ts
+
+### src/app.ts · Document Setup is one undo step
+- refers-to: src/app.ts :: documentSetup
+- kind: rationale
+- logged: v0.31.0 · 2026-10-15
+
+Bleed and the other setup fields were wrapped in a gesture, which only merges edits that share a name, so Undo needed two presses. The dialog now brackets its edits with beginStep and endStep, which squash them into one step named after the first change.
+
+### src/app.ts · the narrow-window preference does what it says
+- refers-to: src/app.ts :: fitDock, narrow; src/ui/prefs.ts :: narrowCollapse; src/ui/dock.ts :: setCollapsed
+- kind: rationale
+- logged: v0.31.0 · 2026-10-15
+
+Preferences > Workspace "Show the side column as icons in a narrow window" came with the formvis shell and was stored but read by nothing, which the independent audit flagged. Below 1,100 px wide, with the preference on, the side dock now collapses to its icon strip; when the window widens again it expands, but only if it was collapsed automatically, so a person's own choice to keep it collapsed survives. With the preference off nothing happens.

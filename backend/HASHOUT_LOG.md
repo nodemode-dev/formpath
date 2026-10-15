@@ -318,3 +318,12 @@ A shell in the dock is the person's own terminal inside the window they are usin
 - logged: v0.30.0 · 2026-10-15
 
 `POST /api/projects/package-full` writes `<name> Folder` holding the .fpth, a `Links` folder of every linked image copied from its path, a `Fonts` folder of the installed font files the fonts service finds for the families used, and `<name> report.txt` (Document Info as text, built by the frontend). With `relink_copies` the manifest's `linked.path` values are rewritten to the copies. With `as_zip` it returns a zip instead of touching the disk. The route reads arbitrary paths, so it requires a loopback client and Host. Only image-like extensions under 1 GiB are copied; anything missing is listed in the reply, never fatal. An existing destination folder is refused rather than merged.
+
+## app/services/package.py
+
+### app/services/package.py · bundled fonts uploaded by the frontend
+- refers-to: app/services/package.py :: resolve_fonts, build; app/routers/projects.py :: package_full
+- kind: rationale
+- logged: v0.31.0 · 2026-10-15
+
+A bundled family such as JetBrains Mono has no installed file, so `resolve_fonts` found nothing and the Fonts folder was never written. `package-full` now accepts `font_files` (at most 32 uploads, 64 MiB each) and a `font_map` JSON of file name to "Family|Style"; the fonts service still wins, and an uploaded face is copied into Fonts only for a family it cannot find. The name must pass `safe_name`.
