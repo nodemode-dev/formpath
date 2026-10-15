@@ -2,6 +2,23 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.30.0 · 2026-10-15
+
+Output, and the home screen fixed.
+
+### Added
+
+- Export TIFF (RGB, RGBA or CMYK; PackBits, LZW or Deflate; set resolution) and an artboard Range for every format.
+- PDF marks and bleed: trim, registration, colour bars and page information, document or custom bleed, BleedBox and TrimBox; Document Setup gains bleed.
+- File > Package... collects the document, linked images and fonts into a folder with a report. Window > Document Info.
+- View > Overprint Preview and Window > Separations Preview (process and spot plates).
+- Edit > Spelling > Auto Spell Check; Find Similar Fonts in the Character panel; Create Swatch Info; Smooth... with an amount; Simplify shows the original outline while previewing.
+- Hand-written descriptions and Use when sentences for agents on the most used commands; `./formpth counts --commands --check`; `./formpth i18n prune` and `untranslated`.
+
+### Fixed
+
+- The home screen covers the workspace: the Properties column, panel tabs and Layers list no longer show through it. No raw z-index values remain outside the token scale.
+
 ## 0.29.0 · 2026-10-15
 
 What professionals ask Illustrator for.

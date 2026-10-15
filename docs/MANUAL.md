@@ -415,7 +415,9 @@ ask it questions.
 ## Type
 
 - Edit > Spelling > Check Spelling (Ctrl+I) walks every text object and offers suggestions for each unknown word:
-  Change, Change All, Ignore, Ignore All or Add to Dictionary; Edit Custom Dictionary removes added words.
+  Change, Change All, Ignore, Ignore All or Add to Dictionary; Edit Custom Dictionary removes added words. Auto Spell
+  Check underlines unknown words in red as you work. In the Character panel, Find Similar Fonts lists the installed
+  fonts closest to the current one; click one to use it.
 
 - Type (T): click for point type, drag for area type; click a path with Type on a Path to set type along it;
   click a closed path with Area Type to fill it. Typing works as in any text field: arrows, Shift to select,
@@ -619,6 +621,17 @@ ask it questions.
   are kept (also in Preferences > File Handling).
 
 ## Saving and exporting
+
+- Export takes an artboard Range (All, Current, or numbers such as 1-3,5): PDF puts them in one file, SVG, raster and
+  EPS export one file per artboard, collected in a zip. TIFF exports in RGB, with transparency, or CMYK, with PackBits,
+  LZW or Deflate compression at the resolution you set.
+- PDF can add trim marks, registration marks, colour bars and page information outside the trim, with the document's
+  bleed (File > Document Setup) or a custom bleed; the PDF records its TrimBox and BleedBox for the printer.
+- File > Package... copies the document, its linked images and the font files it uses into one folder with a report,
+  and can relink the document to the copies. Window > Document Info lists artboards, objects, fonts, images and their
+  resolution, swatches and spot colours.
+- View > Overprint Preview shows how fills and strokes set to overprint will print; Window > Separations Preview shows
+  one process plate (Cyan, Magenta, Yellow, Black) or spot colour at a time in gray.
 
 - .fpth projects keep everything editable: artboards, layers, live shapes, effects, symbols, swatches, styles,
   brushes and the images inside (linked images keep their link and a cached preview).
