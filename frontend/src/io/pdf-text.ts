@@ -51,6 +51,22 @@ function toUnicode(face: Face): string {
   return `/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n${blocks.join('\n')}\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n`;
 }
 
+export async function embeddedMarkFont(pdf: PdfSink, deflate: (b: Uint8Array) => Promise<Uint8Array>): Promise<number> {
+  const font = await fontFor('Inter', 'Regular');
+  const src = font ? fontSource(font) : null;
+  if (!font || !src) return 0;
+  const codes = Array.from({ length: 95 }, (_, i) => 32 + i), gids = codes.map((c) => font.charToGlyph(String.fromCharCode(c)).index);
+  const sub = await api.subsetFont(src, [0, ...new Set(gids)], {});
+  if (!sub) return 0;
+  const k = 1000 / font.unitsPerEm, head = font.tables.head as { xMin: number; yMin: number; xMax: number; yMax: number }, os2 = font.tables.os2 as { sCapHeight?: number } | undefined;
+  const widths = gids.map((g) => Math.round((font.glyphs.get(g).advanceWidth ?? 0) * k));
+  const file = await deflate(sub.data);
+  const ff = sub.cff ? pdf.add(`<< /Subtype /OpenType /Filter /FlateDecode >>`, file) : pdf.add(`<< /Length1 ${sub.data.length} /Filter /FlateDecode >>`, file);
+  const name = `${tagOf('formpth-marks')}+${psName(font)}`;
+  const desc = pdf.add(`<< /Type /FontDescriptor /FontName /${name} /Flags 32 /FontBBox [${[head.xMin, head.yMin, head.xMax, head.yMax].map((v) => Math.round(v * k)).join(' ')}] /ItalicAngle 0 /Ascent ${Math.round(font.ascender * k)} /Descent ${Math.round(font.descender * k)} /CapHeight ${Math.round((os2?.sCapHeight || font.ascender * 0.7) * k)} /StemV 80 ${sub.cff ? '/FontFile3' : '/FontFile2'} ${ff} 0 R >>`);
+  return pdf.add(`<< /Type /Font /Subtype /TrueType /BaseFont /${name} /FirstChar 32 /LastChar 126 /Widths [${widths.join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${desc} 0 R >>`);
+}
+
 export class LiveFonts {
   private readonly faces = new Map<string, Face>();
 

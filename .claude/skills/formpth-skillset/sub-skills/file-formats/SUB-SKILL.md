@@ -16,7 +16,7 @@ A zip of `manifest.json` (`format: com.nodemode.formpth`, `version: 1`, `app`, `
 
 ## PDF (`io/pdf.ts`)
 
-`exportPdf(project, { artboards, preserve, ppi })`: one page per artboard with a flipped page matrix; transparency and blend modes as ExtGState; gradients as shading patterns (Type 2 and 3 with stitching functions); images as DCT or Flate with an SMask; anything a PDF cannot express (raster effects, masks, meshes, unoutlined text) is rasterised at `ppi`. The editable document is embedded as `formpth-document.json`; `readPdfNative` finds it.
+`exportPdf(project, { artboards, preserve, ppi })`: one page per artboard with a flipped page matrix; transparency and blend modes as ExtGState; gradients as shading patterns (Type 2 and 3 with stitching functions); images as DCT or Flate with an SMask; opacity masks are luminosity soft masks, meshes type 6 shadings (`io/pdf-shading.ts`), patterns tiling patterns, freeform gradients type 4 shadings; anything else a PDF cannot express (raster effects, unoutlined text, warped images) is rasterised at `ppi`. The editable document is embedded as `formpth-document.json`; `readPdfNative` finds it.
 
 ## PDF and .ai reading (`io/pdf-read.ts`)
 

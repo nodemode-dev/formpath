@@ -6,18 +6,20 @@ import { inflate, isEmptyRect, isLineSeg, pathBounds, segments, unionRect } from
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { derivedArt } from '../engine/shaper';
+import { latticeCopies, patternLattice } from '../engine/pattern';
+import { freeformShading, meshHasAlpha, meshShading } from './pdf-shading';
 import { instanceArt } from '../engine/symbolism';
 import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
 import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
-import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, Project, Rect, StrokeItem, VNode } from '../engine';
+import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, PatternDef, Project, Rect, StrokeItem, VNode } from '../engine';
 import { outlineText } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
 import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
 import { pdfxParts } from './pdf-x';
 import { outputProfileBytes } from '../engine/color-management';
-import { LiveFonts, liveStream, type Ink, type LiveText } from './pdf-text';
+import { embeddedMarkFont, LiveFonts, liveStream, type Ink, type LiveText } from './pdf-text';
 
 export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: 'none' | 'x4' }
 
@@ -63,6 +65,10 @@ class Painter {
   readonly patterns = new Map<string, number>();
   readonly xobjects = new Map<string, number>();
   readonly spaces = new Map<string, number>();
+  readonly shadings = new Map<string, number>();
+  private readonly tiles = new Map<string, { form: number; def: PatternDef; box: Rect }>();
+  private readonly ffShadings = new WeakMap<Gradient, { key: string; id: number }>();
+  private readonly jobs: Promise<void>[] = [];
   private n = 0;
   constructor(private readonly pdf: PdfFile, private readonly p: Project, private readonly o: PdfOptions, private readonly cmyk: boolean, private readonly outlines: Map<string, PathData>, private readonly live: LiveFonts, private readonly plans: Map<string, LiveText>) {}
   get doc(): Doc { return this.p.doc; }
@@ -121,6 +127,82 @@ class Painter {
     return id;
   }
 
+  defer(id: number, dict: string, data: Uint8Array): void {
+    this.jobs.push(deflate(data).then((z) => this.pdf.set(id, dict.replace(/>>\s*$/, '/Filter /FlateDecode >>'), z)));
+  }
+
+  async flush(): Promise<void> { await Promise.all(this.jobs); }
+
+  private mul(a: Mat, b: Mat): Mat {
+    return [a[0] * b[0] + a[1] * b[2], a[0] * b[1] + a[1] * b[3], a[2] * b[0] + a[3] * b[2], a[2] * b[1] + a[3] * b[3], a[4] * b[0] + a[5] * b[2] + b[4], a[4] * b[1] + a[5] * b[3] + b[5]];
+  }
+
+  freeformPattern(gr: Gradient, b: Rect, page: Mat): number | null {
+    if (!gr.points?.length || isEmptyRect(b) || b.w <= 0 || b.h <= 0) return null;
+    const box = inflate(b, 0.5), key = `${box.x},${box.y},${box.w},${box.h}`;
+    let hit = this.ffShadings.get(gr);
+    if (!hit || hit.key !== key) {
+      const s = freeformShading(gr, box, this.cmyk), sid = this.pdf.reserve();
+      this.defer(sid, s.dict, s.stream);
+      hit = { key, id: sid };
+      this.ffShadings.set(gr, hit);
+    }
+    const id = this.pdf.add(`<< /Type /Pattern /PatternType 2 /Shading ${hit.id} 0 R /Matrix [${page.map(f6).join(' ')}] >>`);
+    this.patterns.set(`P${id}`, id);
+    return id;
+  }
+
+  patternPaint(pid: string, xf: Mat, page: Mat): number | null {
+    const t = this.tiles.get(pid);
+    if (!t) return null;
+    const l = patternLattice(t.def), tl = t.def.tile;
+    const content = latticeCopies(t.def, 1).map((o) => `q 1 0 0 1 ${f6(o.x)} ${f6(o.y)} cm /Im${t.form} Do Q`).join('\n');
+    const id = this.pdf.add(`<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [${f6(tl.x)} ${f6(tl.y)} ${f6(tl.x + l.w)} ${f6(tl.y + l.h)}] /XStep ${f6(l.w)} /YStep ${f6(l.h)} /Matrix [${this.mul(xf, page).map(f6).join(' ')}] /Resources ${RES} 0 R >>`, new TextEncoder().encode(content));
+    this.patterns.set(`P${id}`, id);
+    return id;
+  }
+
+  private patternsIn(root: VNode): string[] {
+    const out = new Set<string>(), seen = new Set<VNode>();
+    const add = (raw: Paint): void => { const p = resolvePaint(this.doc, raw); if (p.type === 'pattern') out.add(p.pattern); };
+    const walk = (n: VNode): void => {
+      if (seen.has(n)) return;
+      seen.add(n);
+      n.ap.items.forEach((i) => add(i.paint));
+      if (n.kind === 'text') n.spans.forEach((s) => { add(s.style.fill); add(s.style.stroke); });
+      if (n.mask) walk(n.mask.art);
+      if (n.kind === 'symbol') { const a = instanceArt(this.doc, n); if (a) walk(a); }
+      if (n.kind === 'blend' || n.kind === 'envelope' || n.kind === 'repeat') liveChildren(this.doc, n).forEach(walk);
+      childrenOf(n)?.forEach(walk);
+    };
+    walk(root);
+    return [...out];
+  }
+
+  private async buildPattern(pid: string, active: Set<string>): Promise<void> {
+    if (this.tiles.has(pid) || active.has(pid)) return;
+    const def = this.doc.patterns.find((x) => x.id === pid);
+    if (!def || def.tile.w <= 0 || def.tile.h <= 0) return;
+    active.add(pid);
+    for (const dep of this.patternsIn(def.art)) await this.buildPattern(dep, active);
+    const b = inflate(visualBounds(this.doc, def.art), 2), inKo = this.ko;
+    this.ko = false;
+    const body = await this.node(def.art, [1, 0, 0, 1, 0, 0]);
+    this.ko = inKo;
+    const form = this.pdf.reserve();
+    this.defer(form, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Resources ${RES} 0 R >>`, new TextEncoder().encode(body));
+    this.xobjects.set(this.name('F'), form);
+    this.tiles.set(pid, { form, def, box: b });
+  }
+
+  async prepare(): Promise<void> {
+    const ids = new Set<string>();
+    for (const l of this.doc.layers) this.patternsIn(l).forEach((x) => ids.add(x));
+    for (const s of this.doc.symbols) this.patternsIn(s.art).forEach((x) => ids.add(x));
+    const active = new Set<string>();
+    for (const id of ids) await this.buildPattern(id, active);
+  }
+
   separation(raw: Paint, stroke: boolean): string | null {
     if (raw.type !== 'color' || !raw.swatch) return null;
     const sw = this.doc.swatches.find((s) => s.id === raw.swatch);
@@ -142,6 +224,8 @@ class Painter {
     if (p.type === 'none') return null;
     if (p.type === 'color') return this.color(p.color, stroke);
     if (p.type === 'gradient' && p.gradient.kind !== 'freeform' && p.gradient.stops.length) { const id = this.pattern(p.gradient, b, page); return `/Pattern ${stroke ? 'CS' : 'cs'} /P${id} ${stroke ? 'SCN' : 'scn'}`; }
+    if (p.type === 'gradient' && p.gradient.kind === 'freeform') { const id = this.freeformPattern(p.gradient, b, page); return id ? `/Pattern ${stroke ? 'CS' : 'cs'} /P${id} ${stroke ? 'SCN' : 'scn'}` : null; }
+    if (p.type === 'pattern') { const id = this.patternPaint(p.pattern, p.xf, page); return id ? `/Pattern ${stroke ? 'CS' : 'cs'} /P${id} ${stroke ? 'SCN' : 'scn'}` : null; }
     return null;
   }
 
@@ -151,9 +235,9 @@ class Painter {
   }
 
   needsRaster(n: VNode): boolean {
-    if (rasterEffects(n).length || (n.mask && !n.mask.disabled) || n.kind === 'mesh' || (n.kind === 'image' && !!n.warp)) return true;
+    if (rasterEffects(n).length || (n.kind === 'image' && !!n.warp)) return true;
     if (n.kind === 'text' && !this.outlines.has(n.id) && !this.livePlan(n)) return true;
-    return n.ap.items.some((i) => i.visible && (i.paint.type === 'pattern' || (i.paint.type === 'gradient' && i.paint.gradient.kind === 'freeform') || rasterEffectsOf(i.effects).length > 0 || (i.kind === 'stroke' && !!strokeGradient(this.doc, i)?.stops.some((s) => s.opacity < 1))));
+    return n.ap.items.some((i) => i.visible && ((() => { const p = resolvePaint(this.doc, i.paint); return p.type === 'pattern' && !this.tiles.has(p.pattern); })() || rasterEffectsOf(i.effects).length > 0 || (i.kind === 'stroke' && !!strokeGradient(this.doc, i)?.stops.some((s) => s.opacity < 1))));
   }
 
   gradientStroke(art: GradientStrokeArt, d: PathData, rule: FillRule, s: StrokeItem, b: Rect, page: Mat): string {
@@ -239,12 +323,45 @@ class Painter {
     return `q ${this.ko ? `${this.extGState(1, false, 'normal', true)} ` : ''}${f(b.w)} 0 0 ${f(-b.h)} ${f(b.x)} ${f(b.y + b.h)} cm /Im${id} Do Q`;
   }
 
-  async group(n: VNode, body: string, knockout = false, ais = false): Promise<string> {
+  async group(n: VNode, body: string, knockout = false, ais = false, smask = ''): Promise<string> {
     const b = inflate(visualBounds(this.doc, n), 2);
     const content = await deflate(new TextEncoder().encode(body));
     const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true${knockout ? ' /K true' : ''} >> /Resources ${RES} 0 R /Filter /FlateDecode >>`, content);
     this.xobjects.set(this.name('F'), id);
-    return `q ${this.extGState(n.opacity, false, n.blend, ais)} ${this.extGState(n.opacity, true, n.blend, ais)} /Im${id} Do Q`;
+    return `q ${smask || `${this.extGState(n.opacity, false, n.blend, ais)} ${this.extGState(n.opacity, true, n.blend, ais)}`} /Im${id} Do Q`;
+  }
+
+  private async maskState(n: VNode, ais: boolean): Promise<string> {
+    const m = n.mask;
+    if (!m) return '';
+    const inKo = this.ko;
+    this.ko = false;
+    const body = await this.node(m.art, [1, 0, 0, 1, 0, 0]);
+    this.ko = inKo;
+    const ab = visualBounds(this.doc, m.art), nb = visualBounds(this.doc, n), b = inflate(isEmptyRect(ab) ? nb : isEmptyRect(nb) ? ab : unionRect(nb, ab), 2);
+    const g = this.pdf.reserve();
+    this.defer(g, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /CS /DeviceRGB >> /Resources ${RES} 0 R >>`, new TextEncoder().encode(body));
+    if (m.invert && !this.invert) this.invert = this.pdf.add('<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>');
+    const id = this.pdf.add(`<< /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G ${g} 0 R${m.invert ? ` /TR ${this.invert} 0 R` : ''} >> /CA ${f(n.opacity)} /ca ${f(n.opacity)}${BM[n.blend] ? ` /BM /${BM[n.blend]}` : ''}${ais ? ' /AIS true' : ''} >>`);
+    this.gs.set(`mask${id}`, id);
+    return `/GS${id} gs`;
+  }
+
+  private meshBody(n: VNode): string {
+    if (n.kind !== 'mesh' || !n.points.length) return '';
+    const sh = (alpha: boolean): number => {
+      const s = meshShading(n, this.cmyk, alpha), id = this.pdf.reserve();
+      this.defer(id, s.dict, s.stream);
+      this.shadings.set(`S${id}`, id);
+      return id;
+    };
+    const color = sh(false);
+    if (!meshHasAlpha(n)) return `/Sh${color} sh`;
+    const a = sh(true), b = inflate(visualBounds(this.doc, n), 2), g = this.pdf.reserve();
+    this.defer(g, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /CS /DeviceGray >> /Resources ${RES} 0 R >>`, new TextEncoder().encode(`/Sh${a} sh`));
+    const gs = this.pdf.add(`<< /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G ${g} 0 R >> >>`);
+    this.gs.set(`mesh${gs}`, gs);
+    return `q /GS${gs} gs\n/Sh${color} sh\nQ`;
   }
 
   private ko = false;
@@ -255,12 +372,14 @@ class Painter {
     if (this.needsRaster(n)) return this.rasterize(n);
     const inKo = this.ko, ko = knocksOut(n, inKo), ais = inKo && !!n.knockoutShape;
     const kids = childrenOf(n), multi = !!kids || n.ap.items.filter((i) => i.visible).length > 1 || n.ap.items.some((i) => i.visible && i.kind === 'stroke' && (!!i.brush || !!strokeGradient(this.doc, i))) || (n.kind === 'text' && n.spans.some((s) => s.style.stroke.type !== 'none' && s.style.strokeWidth > 0));
-    const asForm = ((n.opacity < 1 || n.blend !== 'normal') && multi) || ko || (inKo && multi);
+    const masked = !!n.mask && !n.mask.disabled;
+    const asForm = masked || ((n.opacity < 1 || n.blend !== 'normal') && multi) || ko || (inKo && multi);
     this.ko = n.kind === 'group' || n.kind === 'layer' ? ko : false;
-    const body = await this.body(n, asForm ? [1, 0, 0, 1, 0, 0] : page);
+    let body = await this.body(n, asForm ? [1, 0, 0, 1, 0, 0] : page);
     this.ko = inKo;
     if (!body) return '';
-    if (asForm) return this.group(n, body, ko && !(kids ?? []).some((c) => c.knockoutShape), ais);
+    if (masked && n.mask?.clip) { const r = visualBounds(this.doc, n.mask.art); if (!isEmptyRect(r)) body = `q ${f(r.x)} ${f(r.y)} ${f(r.w)} ${f(r.h)} re W n\n${body}\nQ`; }
+    if (asForm) return this.group(n, body, ko && !(kids ?? []).some((c) => c.knockoutShape), ais, masked ? await this.maskState(n, ais) : '');
     if (n.opacity < 1 || n.blend !== 'normal' || ais) return `q ${this.extGState(n.opacity, false, n.blend, ais)} ${this.extGState(n.opacity, true, n.blend, ais)}\n${body}\nQ`;
     return body;
   }
@@ -315,6 +434,7 @@ class Painter {
         return geo.length ? [inner, this.shape(n, geo, 'nonzero', page)].filter(Boolean).join('\n') : inner;
       }
       case 'blend': case 'envelope': case 'repeat': return this.children(liveChildren(this.doc, n), page);
+      case 'mesh': return this.meshBody(n);
       case 'path': return n.guide ? '' : this.shape(n, effectPath(n.d, n.ap.effects), n.rule, page);
       case 'compound': return this.shape(n, effectPath(n.children.flatMap((c) => c.d), n.ap.effects), n.rule, page);
       case 'text': {
@@ -376,6 +496,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const painter = new Painter(pdf, p, o, p.doc.colorMode === 'cmyk', outlines, live, plans);
   RES = pdf.reserve();
   const pagesId = pdf.reserve();
+  await painter.prepare();
   const pageIds: number[] = [];
   const usesMarkFont = !!o.marks?.pageInfo;
   const regSpace = (): number => {
@@ -406,7 +527,8 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     const bleedBox = bleed.t + bleed.b + bleed.l + bleed.r > 0 ? ` /BleedBox ${box(ox - bleed.l * s, oy - bleed.b * s, ox + (a.w + bleed.r) * s, oy + (a.h + bleed.t) * s)}` : '';
     pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(W)} ${f(H)}]${bleedBox} /TrimBox ${box(ox, oy, ox + a.w * s, oy + a.h * s)}${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
   }
-  const fontId = usesMarkFont ? pdf.add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>') : 0;
+  await painter.flush();
+  const fontId = usesMarkFont ? (await embeddedMarkFont(pdf, deflate)) || pdf.add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>') : 0;
   const liveFonts = plans.size ? live.resources() : '';
   const res = (m: Map<string, number>, pre: string): string => [...m.values()].map((id) => `/${pre}${id} ${id} 0 R`).join(' ');
   const x4 = o.standard === 'x4';
@@ -415,7 +537,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const xp = cmykOut ? pdfxParts(cmykOut.bytes, 4, 'Custom', cmykOut.name) : null;
   const defaultRgb = rgbOut ? pdf.add(`[/ICCBased ${pdf.add('<< /N 3 /Alternate /DeviceRGB >>', rgbOut.bytes)} 0 R]`) : 0;
   const spaces = `${res(painter.spaces, 'CS')}${defaultRgb ? ` /DefaultRGB ${defaultRgb} 0 R` : ''}`.trim();
-  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${fontId || liveFonts ? ` /Font << ${fontId ? `/FMark ${fontId} 0 R ` : ''}${liveFonts} >>` : ''}${spaces ? ` /ColorSpace << ${spaces} >>` : ''} >>`);
+  pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /Shading << ${res(painter.shadings, 'Sh')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${fontId || liveFonts ? ` /Font << ${fontId ? `/FMark ${fontId} 0 R ` : ''}${liveFonts} >>` : ''}${spaces ? ` /ColorSpace << ${spaces} >>` : ''} >>`);
   pdf.set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((x) => `${x} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
   let names = '';
   if (o.preserve && o.standard !== 'x4') {

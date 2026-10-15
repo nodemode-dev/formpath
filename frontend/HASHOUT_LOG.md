@@ -2912,3 +2912,59 @@ Choosing a preset writes the whole `lights` string and the ambient value in one 
 - logged: v0.32.0 · 2026-10-15
 
 PDF/X-4 writes a 1.6 header, an OutputIntent whose DestOutputProfile is the document CMYK profile (formpth Generic CMYK when none is set), OutputConditionIdentifier Custom with the profile name as Info, GTS_PDFXVersion and Trapped in the Info dictionary and in XMP, ModDate, and a trailer ID. DeviceRGB content stays as written and a DefaultRGB ICCBased space carries the document RGB profile, bc that is how the PDF specification makes device RGB colorimetric without converting every colour and image. The formpth editing payload is left out under PDF/X bc it is an embedded file. The page information mark font is not embedded, so PDF/X with page information still fails a strict preflight. The .ai writer is the same PDF with the editing payload always on and no marks or standard, which is what Illustrator's own PDF-compatible .ai is from the outside: Illustrator opens it as PDF content and formpth reopens it fully editable. Illustrator's private data stream is not written, bc its format is unpublished.
+
+### src/ui/properties.ts · Properties panel reserves its final height
+- refers-to: src/ui/properties.ts :: PropertiesPanel.stack, PropertiesPanel.fillQuick, PropertiesPanel.widest; src/ui/shape-fields.ts :: ShapeFields.reserve; src/styles/formpth.css :: .cv-propsp-stack
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+Opening a document measured a 0.039 layout shift (0.063 at 1100, 0.094 at 900) and selecting an object 0.033, both the same mechanism: the Properties panel swapped a hidden Document box for a visible one (or the Selection box), so the group grew by 334 or 553 px and pushed the Type group, below it in the props column, down. The two boxes now sit in one grid cell (the stack) and the inactive one is inert and visibility hidden, so neither toggles display; this is reserved geometry, not a reveal. While nothing is selected the Selection box renders its widest state (the Shape section with the rectangle group, the multi-selection Quick Actions list) so the stack measures the worst case, and a ResizeObserver raises a floor (min-height through --cv-props-floor) in the same frame, before paint; the floor never shrinks, so a later selection of any kind fits. The cost is blank space under the Document box. With no document the Document box shows with its controls disabled instead of the panel being empty. The Shape section moved from under Transform to the end of the Selection box: it is the only block whose presence depends on the object kind, and above Appearance it moved Appearance and Quick Actions when the kind changed (0.008 measured), at the end it moves nothing. A wider reserve by hand-set pixel heights was not taken because the column width is user-resizable and the Quick Actions wrap with it.
+
+### src/ui/status.ts · status bar keeps its width
+- refers-to: src/ui/status.ts :: StatusBar.sync; src/styles/formpth.css :: .cv-status-boards, .cv-status .cv-dd-btn, .cv-status-sel
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+The artboard dropdown had no options until a document opened, so its button was about 61 px narrower and the artboard-next button, the tool label and the dropdown chevron all moved when the first artboard arrived. It now has a fixed 128 px width in both states. The selection label was toggled with the hidden attribute, which dropped its 110 px minimum width and moved the whole right group (0.0325 with the Properties shift); it is now always laid out and only its text changes.
+
+### src/styles/shell.css · reserved glyphs and rows against late content
+- refers-to: src/styles/shell.css :: .cv-tab-dot::after; src/styles/formpth.css :: .cv-appp-list
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+The document tab's modified asterisk used to add its width only once the document was dirty, moving the RGB mode label 6 px on the first edit; the asterisk is now always in the layout and only its visibility changes (a width reservation, nothing is hidden that has content). The Appearance panel list reserves three rows (fill, stroke, opacity, 86 px) so selecting a plain path no longer pushes the Layers panel below it down by 86 px; lists with more rows (effects, groups) grow as before.
+
+### src/io/pdf.ts · opacity masks as soft masks
+- refers-to: src/io/pdf.ts :: Painter.maskState, Painter.node, Painter.group
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+A node with an enabled opacity mask is always written as a transparency group form drawn under one ExtGState that carries the SMask, the node opacity (CA and ca) and the blend mode. The mask art is painted by the same Painter into a form with a transparency group, `/S /Luminosity`; formpth's mask has no alpha mode, and its canvas rule (art alpha times luminosity over nothing) is what a luminosity mask over the default black backdrop computes, so no /BC is written. Invert is a /TR type 2 function (1 to 0), which also inverts outside the form BBox, as the canvas does. Clip is a rectangle clip of the mask art visual bounds inside the group content. The mask group colour space is DeviceRGB even in CMYK documents: a DeviceCMYK group has a white default backdrop in viewers, which made non-inverted masks nearly transparent. Luminosity uses the PDF weights (0.30, 0.59, 0.11) and the canvas uses Rec. 709, a difference of a few levels on saturated mask art.
+
+### src/io/pdf-shading.ts · gradient mesh as type 6 patches
+- refers-to: src/io/pdf-shading.ts :: meshShading, meshHasAlpha; src/io/pdf.ts :: Painter.meshBody; src/engine/mesh.ts :: patchEval
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+`patchEval` is a Coons surface (two ruled surfaces minus the bilinear one) with bilinear colour, which is exactly what a type 6 patch is, so each mesh cell is one patch with its 12 boundary control points taken from the point handles and no tensor interior is needed. Coordinates are 32 bit over the control point box, colours 16 bit, flag 8 bit. Per point opacity cannot live in a shading, so a mesh with any opacity below 1 gets a second DeviceGray type 6 shading of the same patches used as a luminosity soft mask on the colour shading. Poppler draws hairline seams between patches inside that soft mask; the canvas has its own quad seams there.
+
+### src/io/pdf.ts · patterns as tiling patterns
+- refers-to: src/io/pdf.ts :: Painter.prepare, Painter.buildPattern, Painter.patternPaint; src/engine/render.ts :: patternStyle
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+Paint is synchronous but tile art needs the async node painter, so `prepare` walks the document before the pages, finds every pattern in use (appearance items, text spans, masks, symbols, live children, and patterns inside pattern art, built dependencies first), and paints each tile art once into a shared form. A tiling pattern object per use (the matrix is xf times the page matrix) draws the form at each lattice copy, with BBox and steps equal to the lattice cell, as the canvas tile does. A pattern that is part of a cycle has no tile and the node keeps the raster fallback. The canvas rounds the tile bitmap up to whole pixels but scales it by 1/scale, so its period drifts by up to a pixel per tile far from the tile origin; the PDF is exact, so the two differ by that drift on fills a long way from the pattern origin. Poppler shows hairline seams where art crosses the tile cell edge.
+
+### src/io/pdf-shading.ts · freeform gradients as type 4 grids
+- refers-to: src/io/pdf-shading.ts :: freeformShading; src/io/pdf.ts :: Painter.freeformPattern; src/engine/paint.ts :: freeformSampler
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+The on-canvas colour is an inverse distance cubed blend (points, or segments in lines mode), not an interpolation between the points, so a triangulation of just the points would not match it. The writer samples the same `freeformSampler` on a regular grid of about 96 cells on the long side and writes row strips of free-form triangles (flag 0 for the first three vertices, flag 1 after), 8 bit components, as a shading pattern filled through the shape path. Both modes use the same code. Nothing falls back to raster for freeform gradients. Streams are deflated through `Painter.defer` and awaited by `flush` because paint is synchronous.
+
+### src/io/pdf-text.ts · embedded font for printer's marks
+- refers-to: src/io/pdf-text.ts :: embeddedMarkFont; src/io/pdf.ts :: exportPdf fontId
+- kind: rationale
+- logged: v0.33.0 · 2026-10-15
+
+Page information was drawn in an unembedded Helvetica, which every PDF/X preflight rejects. It now uses a subset of the bundled Inter as a simple TrueType font with WinAnsiEncoding over codes 32 to 126, bc the information line is printable ASCII by construction (pdfString replaces anything else) and a simple font keeps marksContent's literal strings unchanged. Widths come from the font. Helvetica stays as the fallback only when the engine cannot subset, so an offline export still prints marks.
