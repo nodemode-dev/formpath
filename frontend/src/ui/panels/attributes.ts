@@ -1,6 +1,6 @@
 import type { Engine, FillRule } from '../../engine';
 import { el, setDisabled, setText, setValue } from '../dom';
-import { iconButton, row, section, seg } from './kit';
+import { check, iconButton, row, section, seg, type Ctl } from './kit';
 
 const RULE_LABEL: Record<string, string> = { nonzero: 'Non-Zero Winding', evenodd: 'Even-Odd', mixed: 'Mixed', '': '' };
 
@@ -10,6 +10,8 @@ export class AttributesPanel {
   private readonly ruleName = el('<span class="cv-attrp-rule-name"></span>');
   private readonly reverse: HTMLButtonElement;
   private readonly note = el<HTMLTextAreaElement>('<textarea class="cv-input cv-attrp-note" rows="3" spellcheck="false" aria-label="Note" placeholder="A note kept with the object"></textarea>');
+  private readonly overFill;
+  private readonly overStroke;
   private frame = 0;
 
   constructor(private readonly engine: Engine) {
@@ -17,12 +19,21 @@ export class AttributesPanel {
     this.reverse = iconButton('reversePath', 'Reverse Path Direction', () => engine.pathOp('reverse'));
     this.note.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { this.note.blur(); this.sync(); } });
     this.note.addEventListener('change', () => { const v = this.note.value.trim(); engine.setObjectProps({ note: v || undefined }); });
-    this.body.append(section('Fill Rule'), row(this.rule.el, this.ruleName, this.reverse), section('Note'), this.note);
+    this.overFill = check('Overprint Fill', (v) => engine.setOverprint('fill', v));
+    this.overStroke = check('Overprint Stroke', (v) => engine.setOverprint('stroke', v));
+    this.body.append(section('Fill Rule'), row(this.rule.el, this.ruleName, this.reverse), section('Overprint'), row(this.overFill.el), row(this.overStroke.el), section('Note'), this.note);
     for (const k of ['selection', 'doc', 'active'] as const) engine.on(k, () => this.queue());
     this.sync();
   }
 
   private queue(): void { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.sync(); }); }
+
+  private syncOver(c: Ctl<boolean>, v: boolean | 'mixed' | null): void {
+    c.set(v === true);
+    c.enable(v !== null);
+    const input = c.el.querySelector('input');
+    if (input && input.indeterminate !== (v === 'mixed')) input.indeterminate = v === 'mixed';
+  }
 
   private sync(): void {
     const e = this.engine, rule = e.fillRuleOf(), sel = e.selected();
@@ -30,6 +41,8 @@ export class AttributesPanel {
     this.rule.enable(!!rule);
     setText(this.ruleName, RULE_LABEL[rule ?? '']);
     setDisabled(this.reverse, !rule);
+    this.syncOver(this.overFill, e.overprintOf('fill'));
+    this.syncOver(this.overStroke, e.overprintOf('stroke'));
     setDisabled(this.note, !sel.length);
     if (document.activeElement === this.note) return;
     const notes = new Set(sel.map((n) => n.note ?? ''));

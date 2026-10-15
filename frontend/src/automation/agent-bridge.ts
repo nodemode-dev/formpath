@@ -718,6 +718,8 @@ export class AgentBridge {
           if (ff) this.freeform(ff, ids);
           else if (has('fill')) e.setFill(this.paint(a.fill, 'fill'), ids);
           if (has('stroke')) e.setStroke({ paint: this.paint(a.stroke, 'stroke') }, ids);
+          if (has('overprint_fill')) e.setOverprint('fill', a.overprint_fill === true, ids);
+          if (has('overprint_stroke')) e.setOverprint('stroke', a.overprint_stroke === true, ids);
           return text('Painted.');
         }
         case 'set_stroke': {

@@ -1,6 +1,8 @@
 import { childrenOf, findNode, updateNodes } from '../doc';
 import { cornerFrame, cornered, hasCorners } from '../corners';
-import type { CornerSpec, Doc, PathData, PathNode, VNode } from '../types';
+import { EPS } from '../geometry';
+import type { CornerSpec, Doc, LiveShape, PathData, PathNode, VNode } from '../types';
+import { editLive, normalizeLive } from './live-shapes';
 
 export type CornerTargets = Map<string, Set<number> | null>;
 
@@ -46,9 +48,39 @@ export function patchCorners(d: PathData, which: Set<number> | null, patch: Part
   return changed ? out : d;
 }
 
+function rectCornerOf(l: Extract<LiveShape, { kind: 'rect' }>): number[] {
+  const max = Math.min(Math.abs(l.w), Math.abs(l.h)) / 2, out: number[] = [];
+  l.radii.forEach((r, c) => { out.push(c); if (Math.max(0, Math.min(r, max)) >= EPS) out.push(c); });
+  return out;
+}
+
+function liveCorners(n: PathNode, which: Set<number> | null, patch: Partial<CornerSpec> | null): PathNode | null {
+  const live = n.live;
+  if (!live || (live.kind !== 'rect' && live.kind !== 'polygon') || patch?.mode === 'relative') return null;
+  const l = normalizeLive(live);
+  if (l.kind === 'rect') {
+    const owner = rectCornerOf(l), hit = new Set<number>();
+    owner.forEach((c, flat) => { if (!which || which.has(flat)) hit.add(c); });
+    if (!hit.size) return n;
+    const radii = l.radii.slice() as [number, number, number, number];
+    for (const c of hit) radii[c] = patch === null ? 0 : patch.r ?? radii[c];
+    const corner = patch?.type ?? l.corner;
+    if (corner === l.corner && radii.every((r, i) => r === l.radii[i])) return n;
+    return editLive(n, { radii, corner });
+  }
+  if (l.kind === 'polygon') {
+    if (patch && patch.type && patch.type !== 'round') return null;
+    const radius = patch === null ? 0 : patch.r ?? l.radius;
+    return radius === l.radius ? n : editLive(n, { radius });
+  }
+  return null;
+}
+
 export function setCornersOp(doc: Doc, targets: CornerTargets, patch: Partial<CornerSpec> | null): Doc {
   return updateNodes(doc, [...targets.keys()], (n) => {
     if (n.kind !== 'path') return n;
+    const kept = liveCorners(n, targets.get(n.id) ?? null, patch);
+    if (kept) return kept;
     const d = patchCorners(n.d, targets.get(n.id) ?? null, patch);
     return d === n.d ? n : { ...n, d, live: undefined };
   });
@@ -63,6 +95,8 @@ export function firstCorner(doc: Doc, targets: CornerTargets): CornerSpec | null
   for (const [id, set] of targets) {
     const n = findNode(doc, id);
     if (n?.kind !== 'path') continue;
+    if (n.live?.kind === 'rect') { const l = normalizeLive(n.live) as Extract<LiveShape, { kind: 'rect' }>, r = l.radii.find((v) => v >= EPS); if (r !== undefined) return { type: l.corner, r }; }
+    if (n.live?.kind === 'polygon' && n.live.radius >= EPS) return { type: 'round', r: n.live.radius };
     let k = 0;
     for (const sp of n.d) for (const a of sp.pts) { if (a.corner && (!set || set.has(k))) return a.corner; k++; }
   }

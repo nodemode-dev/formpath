@@ -703,6 +703,29 @@ export class Engine extends Emitter<EngineEvents> {
     if (!t.some((id) => { const n = findNode(p.doc, id); return !!n && (n.kind === 'path' || n.kind === 'compound') && n.rule !== rule; })) return false;
     return this.edit(rule === 'evenodd' ? 'Use Even-Odd Fill Rule' : 'Use Non-Zero Winding Fill Rule', (d) => setFillRule(d, t, rule).doc);
   }
+  overprintOf(kind: 'fill' | 'stroke', ids?: string[]): boolean | 'mixed' | null {
+    const p = this.current; if (!p) return null;
+    const seen = new Set<boolean>();
+    const walk = (n: VNode): void => {
+      if (n.kind === 'group' || n.kind === 'blend' || n.kind === 'repeat' || n.kind === 'envelope') { n.children.forEach(walk); return; }
+      if (n.kind === 'text') return;
+      const it = kind === 'fill' ? firstFill(n.ap) : firstStroke(n.ap);
+      if (it) seen.add(!!it.overprint);
+    };
+    for (const id of this.targetIds(ids)) { const n = findNode(p.doc, id); if (n) walk(n); }
+    return seen.size > 1 ? 'mixed' : (seen.size ? [...seen][0] : null);
+  }
+  setOverprint(kind: 'fill' | 'stroke', on: boolean, ids?: string[]): boolean {
+    if (this.overprintOf(kind, ids) === null) return false;
+    const label = kind === 'fill' ? 'Overprint Fill' : 'Overprint Stroke';
+    return this.applyToSelection(label, (n) => this.paintDeep(n, (ap) => {
+      const i = ap.items.findIndex((x) => x.kind === kind);
+      if (i < 0) return ap;
+      const items = ap.items.slice();
+      items[i] = { ...items[i], overprint: on } as typeof items[number];
+      return { ...ap, items };
+    }), ids);
+  }
   makeClip(ids?: string[]): boolean { return this.run('Make Clipping Mask', makeClip, ids); }
   releaseClip(ids?: string[]): boolean { return this.run('Release Clipping Mask', releaseClip, ids); }
   pathfinder(op: PathfinderOp, ids?: string[]): boolean { return this.run(`Pathfinder ${op.replace(/_/g, ' ')}`, (d, t) => pathfinder(d, t, op), ids); }
