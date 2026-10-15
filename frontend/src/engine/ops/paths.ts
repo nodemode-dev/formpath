@@ -1,7 +1,7 @@
 import { geomBounds } from '../bounds';
 import { childrenOf, findNode, newId, pathOf, removeNodes, topObjects, updateAt, updateNodes, type IndexPath } from '../doc';
 import { anchor, bezSplit, dist, flatIndex, hasIn, hasOut, isLineSeg, pathBounds, rectPath, rectsTouch, reversePath, segOf, segments, splitSegmentAt, unflatIndex } from '../geometry';
-import { boolean, cleanup, contains, area, offsetPath, polyKnife, simplifyPath, smoothPath, toPaper, fromPaper, type BoolOp } from '../kernel';
+import { boolean, cleanup, contains, area, offsetPath, polyKnife, simplifyPath, simplifyWith, smoothPath, toPaper, fromPaper, type BoolOp } from '../kernel';
 import { emptyAppearance, fill, NONE, solid, BLACK } from '../paint';
 import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
 import { brushGeometry } from '../effects';
@@ -25,7 +25,7 @@ export function geometryOf(n: VNode): { d: PathData; rule: FillRule } | null {
   return null;
 }
 
-function shapeNode(d: PathData, like: VNode, ap?: VNode['ap']): VNode {
+export function shapeNode(d: PathData, like: VNode, ap?: VNode['ap']): VNode {
   const base = { opacity: like.opacity, blend: like.blend, ap: ap ?? like.ap };
   if (d.length > 1) {
     const c: CompoundNode = { id: newId('c'), kind: 'compound', rule: 'nonzero', children: d.map((sp) => ({ id: newId(), kind: 'path', d: [sp], rule: 'nonzero', opacity: 1, blend: 'normal', ap: emptyAppearance() })), ...base };
@@ -38,7 +38,7 @@ function shapeNode(d: PathData, like: VNode, ap?: VNode['ap']): VNode {
 function fillPaint(n: VNode): Paint { const f = n.ap.items.find((i) => i.kind === 'fill' && i.visible) as FillItem | undefined; return f ? f.paint : NONE; }
 function paintKeyOf(p: Paint): string { return JSON.stringify(p); }
 
-function replaceSelection(doc: Doc, tops: string[], made: VNode[]): OpResult {
+export function replaceSelection(doc: Doc, tops: string[], made: VNode[]): OpResult {
   if (!made.length) return { doc: removeNodes(doc, tops), ids: [] };
   const lastId = tops[tops.length - 1];
   let out = removeNodes(doc, tops.filter((id) => id !== lastId));
@@ -160,7 +160,7 @@ export function shapeBuild(doc: Doc, ids: string[], points: Pt[], erase: boolean
 
 
 export type PathOp = 'offset' | 'outline_stroke' | 'simplify' | 'smooth' | 'join' | 'average' | 'reverse' | 'add_anchors' | 'remove_anchors' | 'divide_objects_below' | 'split_into_grid' | 'clean_up' | 'close' | 'open';
-export interface PathOpArgs { offset?: number; joins?: Join; miterLimit?: number; precision?: number; axis?: 'horizontal' | 'vertical' | 'both'; rows?: number; columns?: number; gutter?: number; anchors?: Map<string, Set<number>> }
+export interface PathOpArgs { straight?: boolean; angle?: number; offset?: number; joins?: Join; miterLimit?: number; precision?: number; axis?: 'horizontal' | 'vertical' | 'both'; rows?: number; columns?: number; gutter?: number; anchors?: Map<string, Set<number>> }
 
 function eachPathNode(doc: Doc, ids: string[], fn: (n: PathNode) => PathNode | VNode | VNode[] | null): Doc {
   const targets: string[] = [];
@@ -215,7 +215,8 @@ export function pathOperation(doc: Doc, ids: string[], op: PathOp, a: PathOpArgs
     }
     case 'simplify': {
       const tol = 0.05 + (1 - Math.max(0, Math.min(100, a.precision ?? 50)) / 100) * 6;
-      return { doc: eachPathNode(doc, tops, (n) => ({ ...n, d: simplifyPath(n.d, tol), live: undefined })), ids: tops };
+      const plain = !a.straight && !(a.angle && a.angle > 0);
+      return { doc: eachPathNode(doc, tops, (n) => ({ ...n, d: plain ? simplifyPath(n.d, tol) : simplifyWith(n.d, tol, !!a.straight, a.angle ?? 0), live: undefined })), ids: tops };
     }
     case 'smooth': return { doc: eachPathNode(doc, tops, (n) => ({ ...n, d: smoothPath(n.d, 0.4), live: undefined })), ids: tops };
     case 'reverse': return { doc: eachPathNode(doc, tops, (n) => ({ ...n, d: reversePath(n.d) })), ids: tops };

@@ -6,6 +6,7 @@ import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc'
 import { EFFECTS } from './engine/effects';
 import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
 import { transformNodes } from './engine/ops/objects';
+import { anchorCount, mixPathfinder, objectOnPath, trapShapes, type OnPathArgs, type TrapArgs } from './engine/ops/illustrator';
 import { pathOperation } from './engine/ops/paths';
 import { RECOLOR, recolorDoc } from './engine/ops/recolor';
 import { hex, solid, defaultGradient, NONE, toRgb } from './engine/paint';
@@ -878,28 +879,68 @@ export function startApp(): void {
     if (r) engine.lastTransform = { m: matrix(r), copy: copied };
   }
 
-  async function transformEachDialog(): Promise<void> {
+  async function transformEachDialog(params?: Record<string, unknown>): Promise<void> {
     if (!sel()) return;
-    const ids = engine.targetIds();
-    await previewEdit(engine, 'Transform Each', [
-      { kind: 'number', key: 'sh', label: 'Scale horizontal', value: 100, unit: '%' }, { kind: 'number', key: 'sv', label: 'Scale vertical', value: 100, unit: '%' },
-      { kind: 'number', key: 'dx', label: 'Move horizontal', value: 0, unit: 'pt' }, { kind: 'number', key: 'dy', label: 'Move vertical', value: 0, unit: 'pt' },
-      { kind: 'number', key: 'angle', label: 'Rotate', value: 0, unit: '°' }, { kind: 'check', key: 'rx', label: 'Reflect X', value: false }, { kind: 'check', key: 'ry', label: 'Reflect Y', value: false }, { kind: 'check', key: 'random', label: 'Random', value: false },
-    ], (origin, v) => {
+    const ids = engine.targetIds(), unit = UNIT_PT[engine.current?.doc.units ?? 'pt'];
+    const build = (origin: Doc, v: Record<string, unknown>): Doc => {
       let doc = origin;
+      const abs = v.mode === 'absolute', num = (key: string, d: number): number => (v[key] === undefined ? d : Number(v[key]));
       for (const id of ids) {
         const n = findNode(doc, id);
         if (!n) continue;
         const b = engine.boundsOf(n), cx = b.x + b.w / 2, cy = b.y + b.h / 2, rnd = v.random ? (k: number): number => k * Math.random() : (k: number): number => k;
-        let m = scaleAbout(1 + rnd(Number(v.sh) / 100 - 1), 1 + rnd(Number(v.sv) / 100 - 1), cx, cy);
-        m = mul(rotateAbout(-rnd(Number(v.angle)), cx, cy), m);
+        const sh = num('sh', abs ? 0 : 100), sv = num('sv', abs ? 0 : 100);
+        const fx = abs ? (sh > 0 && b.w > 1e-9 ? (sh * unit) / b.w : 1) : sh / 100, fy = abs ? (sv > 0 && b.h > 1e-9 ? (sv * unit) / b.h : 1) : sv / 100;
+        let m = scaleAbout(1 + rnd(fx - 1), 1 + rnd(fy - 1), cx, cy);
+        m = mul(rotateAbout(-rnd(num('angle', 0)), cx, cy), m);
         if (v.rx) m = mul(reflectAbout('horizontal', cx, cy), m);
         if (v.ry) m = mul(reflectAbout('vertical', cx, cy), m);
-        m = mul(translate(rnd(Number(v.dx)), rnd(Number(v.dy))), m);
+        m = mul(translate(rnd(num('dx', 0)), rnd(num('dy', 0))), m);
         doc = transformNodes(doc, [id], m, false, xfo()).doc;
       }
       return doc;
-    });
+    };
+    if (params && Object.keys(params).length) { engine.edit('Transform Each', (d) => build(d, params)); return; }
+    await previewEdit(engine, 'Transform Each', [
+      { kind: 'select', key: 'mode', label: 'Scale mode', value: 'relative', choices: [['relative', 'Relative'], ['absolute', 'Absolute']] },
+      { kind: 'number', key: 'sh', label: 'Scale horizontal', value: 100, unit: '% / size' }, { kind: 'number', key: 'sv', label: 'Scale vertical', value: 100, unit: '% / size' },
+      { kind: 'number', key: 'dx', label: 'Move horizontal', value: 0, unit: 'pt' }, { kind: 'number', key: 'dy', label: 'Move vertical', value: 0, unit: 'pt' },
+      { kind: 'number', key: 'angle', label: 'Rotate', value: 0, unit: '°' }, { kind: 'check', key: 'rx', label: 'Reflect X', value: false }, { kind: 'check', key: 'ry', label: 'Reflect Y', value: false }, { kind: 'check', key: 'random', label: 'Random', value: false },
+    ], build);
+  }
+
+  async function softMixDialog(params?: Record<string, unknown>): Promise<void> {
+    if (!sel()) return;
+    if (params && 'rate' in params) { engine.mixPathfinder('soft', Number(params.rate)); return; }
+    const ids = engine.targetIds();
+    await previewEdit(engine, 'Soft Mix', [{ kind: 'number', key: 'rate', label: 'Mixing rate', value: 50, min: 0, max: 100, unit: '%' }], (origin, v) => { const r = mixPathfinder(origin, ids, 'soft', Number(v.rate)); return { doc: r.doc, select: r.ids }; });
+  }
+
+  async function trapDialog(params?: Record<string, unknown>): Promise<void> {
+    const p = engine.current;
+    if (!p || !sel()) return;
+    const unit = UNIT_PT[p.doc.units], ids = engine.targetIds();
+    const args = (v: Record<string, unknown>): TrapArgs => ({ thickness: Number(v.thickness ?? 0.25) * unit, heightWidth: Number(v.height_width ?? 100), tintReduction: Number(v.tint_reduction ?? 40), process: v.process_color === true, reverse: v.reverse === true });
+    if (params && Object.keys(params).length) { engine.trap(args(params)); return; }
+    await previewEdit(engine, 'Trap', [
+      { kind: 'number', key: 'thickness', label: 'Thickness', value: 0.25, min: 0.01, unit: p.doc.units },
+      { kind: 'number', key: 'height_width', label: 'Height/Width', value: 100, min: 5, max: 400, unit: '%' },
+      { kind: 'number', key: 'tint_reduction', label: 'Tint reduction', value: 40, min: 0, max: 100, unit: '%' },
+      { kind: 'check', key: 'process_color', label: 'Traps with process color', value: false },
+      { kind: 'check', key: 'reverse', label: 'Reverse traps', value: false },
+    ], (origin, v) => { const r = trapShapes(origin, ids, args(v)); return { doc: r.doc, select: r.ids }; });
+  }
+
+  async function objectOnPathDialog(params?: Record<string, unknown>): Promise<void> {
+    if (!sel()) return;
+    const args = (v: Record<string, unknown>): OnPathArgs => ({ rotate: v.rotate !== false, offset: Number(v.offset ?? 0), flip: v.flip === true });
+    if (params && Object.keys(params).length) { engine.objectOnPath(args(params)); return; }
+    const ids = engine.targetIds();
+    await previewEdit(engine, 'Object on Path', [
+      { kind: 'check', key: 'rotate', label: 'Rotate along path', value: true },
+      { kind: 'number', key: 'offset', label: 'Offset', value: 0, min: 0, max: 100, unit: '%' },
+      { kind: 'check', key: 'flip', label: 'Flip side', value: false },
+    ], (origin, v) => { const r = objectOnPath(origin, ids, args(v)); return { doc: r.doc, select: r.ids }; });
   }
 
   async function offsetPathDialog(): Promise<void> {
@@ -908,10 +949,24 @@ export function startApp(): void {
     await previewEdit(engine, 'Offset Path', [{ kind: 'number', key: 'offset', label: 'Offset', value: 10, unit: 'pt' }, { kind: 'select', key: 'joins', label: 'Joins', value: 'miter', choices: [['miter', 'Miter'], ['round', 'Round'], ['bevel', 'Bevel']] }, { kind: 'number', key: 'miter', label: 'Miter limit', value: 4, min: 1, max: 500 }], (origin, v) => { const r = pathOperation(origin, ids, 'offset', { offset: Number(v.offset), joins: v.joins as 'miter', miterLimit: Number(v.miter) }); return { doc: r.doc, select: r.ids }; });
   }
 
-  async function simplifyDialog(): Promise<void> {
-    if (!sel()) return;
+  async function simplifyDialog(params?: Record<string, unknown>): Promise<void> {
+    const p = engine.current;
+    if (!p || !sel()) return;
     const ids = engine.targetIds();
-    await previewEdit(engine, 'Simplify', [{ kind: 'number', key: 'precision', label: 'Curve precision', value: 60, min: 0, max: 100, unit: '%' }], (origin, v) => { const r = pathOperation(origin, ids, 'simplify', { precision: Number(v.precision) }); return { doc: r.doc, select: r.ids }; });
+    const args = (v: Record<string, unknown>) => ({ precision: Number(v.precision ?? 60), straight: v.straight === true, angle: Number(v.angle ?? 0) });
+    if (params && ('precision' in params || 'straight' in params || 'angle' in params)) { engine.pathOp('simplify', args(params), ids); return; }
+    const before = engine.anchorCount(ids), readout = (m: number): string => `Original: ${before} points · Current: ${m} points`;
+    await previewEdit(engine, 'Simplify', [
+      { kind: 'number', key: 'precision', label: 'Curve precision', value: 60, min: 0, max: 100, unit: '%' },
+      { kind: 'number', key: 'angle', label: 'Angle threshold', value: 0, min: 0, max: 180, unit: '°' },
+      { kind: 'check', key: 'straight', label: 'Straight lines', value: false },
+      { kind: 'note', text: readout(anchorCount(pathOperation(p.doc, ids, 'simplify', args({})).doc, ids)) },
+    ], (origin, v) => {
+      const r = pathOperation(origin, ids, 'simplify', args(v));
+      const note = [...document.querySelectorAll<HTMLElement>('.cv-dialog .cv-note')].filter((e) => (e.textContent ?? '').includes('·')).pop();
+      if (note) setText(note, readout(anchorCount(r.doc, ids)));
+      return { doc: r.doc, select: r.ids };
+    });
   }
 
   async function cornersDialog(params?: Record<string, unknown>): Promise<void> {
@@ -1188,7 +1243,8 @@ export function startApp(): void {
     { id: 'reflect-dialog', label: 'Reflect...', enabled: sel, run: () => void transformDialog('reflect') },
     { id: 'scale-dialog', label: 'Scale...', enabled: sel, run: () => void transformDialog('scale') },
     { id: 'shear-dialog', label: 'Shear...', enabled: sel, run: () => void transformDialog('shear') },
-    { id: 'transform-each', label: 'Transform Each...', keys: ['Alt+Shift+Mod+D'], enabled: sel, run: () => void transformEachDialog() },
+    { id: 'transform-each', label: 'Transform Each...', keys: ['Alt+Shift+Mod+D'], group: 'Object', description: 'Transforms each selected object about its own centre; absolute mode takes target sizes in document units, relative mode percentages.', enabled: sel, mutates: true, params: { mode: { type: 'string', enum: ['relative', 'absolute'], description: 'Scale as percent of each object, or to a target size in document units (0 keeps the size)' }, sh: { type: 'number', min: 0, description: 'Scale horizontal: percent, or target width when absolute' }, sv: { type: 'number', min: 0, description: 'Scale vertical: percent, or target height when absolute' }, dx: { type: 'number', description: 'Move horizontal in points' }, dy: { type: 'number', description: 'Move vertical in points' }, angle: { type: 'number', min: -360, max: 360, description: 'Rotate in degrees' }, rx: { type: 'boolean', description: 'Reflect X' }, ry: { type: 'boolean', description: 'Reflect Y' }, random: { type: 'boolean', description: 'Randomise the amounts' } }, run: (params) => void transformEachDialog(params) },
+    { id: 'toggle-scale-corners', label: 'Scale Corners', group: 'Object', description: 'Toggles whether scaling a live rectangle or a path with corner radii scales the radii; off keeps them.', enabled: has, mutates: false, checked: () => engine.view.scaleCorners, run: () => engine.setView({ scaleCorners: !engine.view.scaleCorners }) },
     { id: 'bring-to-front', label: 'Bring to Front', keys: ['Shift+Mod+]'], enabled: sel, run: () => engine.arrange('bring_to_front') },
     { id: 'bring-forward', label: 'Bring Forward', keys: ['Mod+]'], enabled: sel, run: () => engine.arrange('bring_forward') },
     { id: 'send-backward', label: 'Send Backward', keys: ['Mod+['], enabled: sel, run: () => engine.arrange('send_backward') },
@@ -1197,6 +1253,10 @@ export function startApp(): void {
     ...ALIGN.map(([a, label]) => ({ id: `align-${a}`, label, enabled: sel, run: () => engine.align(a as 'left', many() ? 'selection' : 'artboard') })),
     { id: 'group', label: 'Group', keys: ['Mod+G'], enabled: sel, run: () => engine.group() },
     { id: 'ungroup', label: 'Ungroup', keys: ['Shift+Mod+G'], enabled: () => kindSel('group'), run: () => engine.ungroup() },
+    { id: 'ungroup-all', label: 'Ungroup All', group: 'Object', description: 'Ungroups every nested group in the selection in one step.', enabled: () => kindSel('group'), mutates: true, run: () => engine.ungroupAll() },
+    { id: 'object-on-path-attach', label: 'Attach to Path', group: 'Object', description: 'Places the selected objects at even spacing along the topmost selected path, optionally rotated to the path direction.', enabled: () => sel() && engine.targetIds().length > 1, mutates: true, params: { rotate: { type: 'boolean', description: 'Rotate objects along the path (default true)' }, offset: { type: 'number', min: 0, max: 100, description: 'Start offset along the path in percent' }, flip: { type: 'boolean', description: 'Flip to the other side of the path' } }, run: (params) => void objectOnPathDialog(params) },
+    { id: 'object-on-path-arrange', label: 'Arrange on Path...', group: 'Object', description: 'Changes spacing, offset, rotation and side for objects placed along a path.', enabled: () => sel() && engine.targetIds().length > 1, mutates: true, params: { rotate: { type: 'boolean', description: 'Rotate objects along the path (default true)' }, offset: { type: 'number', min: 0, max: 100, description: 'Start offset along the path in percent' }, flip: { type: 'boolean', description: 'Flip to the other side of the path' } }, run: (params) => void objectOnPathDialog(params) },
+    { id: 'object-on-path-release', label: 'Release from Path', group: 'Object', description: 'Leaves the objects where they are; there is no live link to release.', enabled: sel, mutates: false, run: () => toast('The objects stay where they are; there is no live link to release.') },
     { id: 'isolate', label: 'Isolate Selected Group', enabled: () => kindSel('group'), run: () => { const g = engine.selected().find((n) => n.kind === 'group'); if (g) engine.isolate(g.id); } },
     { id: 'exit-isolation', label: 'Exit Isolation Mode', enabled: () => !!engine.current?.isolation, run: () => engine.isolate(null) },
     { id: 'lock', label: 'Lock Selection', keys: ['Mod+2'], enabled: sel, run: () => engine.lockSelection() },
@@ -1213,7 +1273,7 @@ export function startApp(): void {
     { id: 'outline-stroke', label: 'Outline Stroke', enabled: sel, run: () => engine.pathOp('outline_stroke') },
     { id: 'offset-path', label: 'Offset Path...', enabled: sel, run: () => void offsetPathDialog() },
     { id: 'reverse-path', label: 'Reverse Path Direction', enabled: sel, run: () => engine.pathOp('reverse') },
-    { id: 'simplify', label: 'Simplify...', enabled: sel, run: () => void simplifyDialog() },
+    { id: 'simplify', label: 'Simplify...', group: 'Object', description: 'Reduces anchor points; straight lines replaces curves with straight segments and the angle threshold keeps sharp corners.', enabled: sel, mutates: true, params: { precision: { type: 'number', min: 0, max: 100, description: 'Curve precision in percent' }, straight: { type: 'boolean', description: 'Replace curves with straight segments' }, angle: { type: 'number', min: 0, max: 180, description: 'Corner points that turn more than this many degrees are kept' } }, run: (params) => void simplifyDialog(params) },
     { id: 'smooth-path', label: 'Smooth', enabled: sel, run: () => engine.pathOp('smooth') },
     { id: 'corners-dialog', label: 'Corners...', group: 'Object', enabled: sel, mutates: true, params: { type: { type: 'string', enum: ['round', 'inverted', 'chamfer'], description: 'Corner type' }, radius: { type: 'number', min: 0, description: 'Radius in document units, or percent when mode is relative' }, mode: { type: 'string', enum: ['absolute', 'relative'], description: 'Rounding mode' } }, run: (params) => void cornersDialog(params) },
     { id: 'expand-corners', label: 'Expand Corners', group: 'Object', enabled: sel, mutates: true, run: () => engine.expandCorners() },
@@ -1435,6 +1495,9 @@ export function startApp(): void {
     { id: 'draw-mode', label: 'Cycle Drawing Modes', keys: ['Shift+D'], run: () => engine.update({ shapeMode: engine.options.shapeMode === 'normal' ? 'behind' : engine.options.shapeMode === 'behind' ? 'inside' : 'normal' }) },
     { id: 'shape-dialog', label: 'Shape Size...', run: () => void shapeDialog() },
     { id: 'pf-unite', label: 'Unite', enabled: sel, run: () => engine.pathfinder('unite') },
+    { id: 'pf-hard-mix', label: 'Hard Mix', group: 'Object', description: 'Divides overlaps and colours each overlap with the per-channel maximum of the overlapping fills.', enabled: sel, mutates: true, run: () => engine.mixPathfinder('hard') },
+    { id: 'pf-soft-mix', label: 'Soft Mix...', group: 'Object', description: 'Divides overlaps and colours each overlap with a blend of the overlapping fills at the mixing rate.', enabled: sel, mutates: true, params: { rate: { type: 'number', min: 0, max: 100, description: 'Mixing rate in percent' } }, run: (params) => void softMixDialog(params) },
+    { id: 'pf-trap', label: 'Trap...', group: 'Object', description: 'Adds thin multiply-blended trap shapes where differently coloured objects abut or overlap.', enabled: sel, mutates: true, params: { thickness: { type: 'number', min: 0.01, description: 'Trap thickness in document units' }, height_width: { type: 'number', min: 5, max: 400, description: 'Height to width ratio in percent' }, tint_reduction: { type: 'number', min: 0, max: 100, description: 'Tint reduction in percent' }, process_color: { type: 'boolean', description: 'Trap with process colour' }, reverse: { type: 'boolean', description: 'Spread the darker colour into the lighter' } }, run: (params) => void trapDialog(params) },
     ...pfs.filter((x) => x !== 'unite').map((x) => ({ id: `pf-${x}`, label: PF_LABEL[x], enabled: sel, run: () => engine.pathfinder(x) })),
     { id: 'play-action', label: 'Play Action', run: () => actionsP.play() },
     { id: 'action-batch', label: 'Batch...', run: () => { showPanel('actions'); actionsP.openBatch(); } },
@@ -1468,10 +1531,12 @@ export function startApp(): void {
     { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
     { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'clear', '-', 'find-replace', '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: [
-      { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'reset-bounding-box'] },
+      { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },
       { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', '-', 'send-to-layer'] },
+      { label: 'Pathfinder', items: ['pf-unite', 'pf-minus_front', 'pf-intersect', 'pf-exclude', '-', 'pf-divide', 'pf-trim', 'pf-merge', 'pf-crop', 'pf-outline', 'pf-minus_back', '-', 'pf-hard-mix', 'pf-soft-mix', 'pf-trap'] },
+      { label: 'Object on Path', items: ['object-on-path-attach', 'object-on-path-arrange', 'object-on-path-release'] },
       { label: 'Align', items: ALIGN.map(([a]) => `align-${a}`) }, '-',
-      'group', 'ungroup', 'isolate', '-', 'lock', 'unlock-all', 'hide', 'show-all', '-', 'expand-object', 'expand-appearance', 'rasterize', 'create-mesh', '-',
+      'group', 'ungroup', 'ungroup-all', 'isolate', '-', 'lock', 'unlock-all', 'hide', 'show-all', '-', 'expand-object', 'expand-appearance', 'rasterize', 'create-mesh', '-',
       { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'corners-dialog', 'expand-corners', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
       { label: 'Shape', items: ['expand-shape', 'shaper-expand'] },
       { label: 'Pattern', items: ['make-pattern', 'edit-pattern', '-', 'generate-patterns'] },
@@ -1510,7 +1575,7 @@ export function startApp(): void {
     for (const ev of ['active', 'doc', 'selection', 'history', 'tool'] as const) engine.on(ev, () => native.refresh());
     engine.on('projects', () => { void native.build().catch(() => undefined); });
   }
-  contextMenu.setItems(['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-in-place', '-', 'group', 'ungroup', 'isolate', '-', { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', 'transform-each', '-', 'reset-bounding-box'] }, { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', 'send-to-layer'] }, { label: 'Select', items: ['select-above', 'select-below'] }, '-', 'make-clip', 'release-clip', 'compound-make', 'create-outlines', 'outline-stroke', 'expand-appearance', '-', 'collect-layer', 'new-symbol']);
+  contextMenu.setItems(['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-in-place', '-', 'group', 'ungroup', 'ungroup-all', 'isolate', '-', { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', 'transform-each', '-', 'reset-bounding-box'] }, { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', 'send-to-layer'] }, { label: 'Select', items: ['select-above', 'select-below'] }, '-', 'make-clip', 'release-clip', 'compound-make', 'create-outlines', 'outline-stroke', 'expand-appearance', '-', 'collect-layer', 'new-symbol']);
   stageEl.addEventListener('contextmenu', (e) => {
     const p = engine.current;
     if (!p || anyDialogOpen()) return;

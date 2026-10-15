@@ -193,11 +193,12 @@ export function pathBounds(d: PathData): Rect {
 export function transformPath(d: PathData, m: Mat): PathData {
   return d.map((sp) => ({ closed: sp.closed, pts: sp.pts.map((a) => transformAnchor(a, m)) }));
 }
+export const cornerScale = { on: true };
 export function transformAnchor(a: Anchor, m: Mat): Anchor {
   const p = apply(m, a.x, a.y), i = apply(m, a.ix, a.iy), o = apply(m, a.ox, a.oy);
   const out: Anchor = { x: p.x, y: p.y, ix: i.x, iy: i.y, ox: o.x, oy: o.y };
   if (a.smooth) out.smooth = true;
-  if (a.corner) out.corner = a.corner.mode === 'relative' ? a.corner : { ...a.corner, r: a.corner.r * matScale(m) };
+  if (a.corner) out.corner = a.corner.mode === 'relative' || !cornerScale.on ? a.corner : { ...a.corner, r: a.corner.r * matScale(m) };
   return out;
 }
 export function translatePath(d: PathData, dx: number, dy: number): PathData { return transformPath(d, translate(dx, dy)); }

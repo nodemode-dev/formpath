@@ -1,5 +1,6 @@
 import { mapMeshSpec, meshFromMapper } from './envelope';
-import { apply, applyPt, isIdentity, matScale, mul, transformPath } from './geometry';
+import { apply, applyPt, cornerScale, isIdentity, matScale, mul, transformPath } from './geometry';
+import { liveShapePath, normalizeLive } from './ops/live-shapes';
 import { envelopeMapper } from './live';
 import { dimHandles, dimOffsetFor } from './dimension';
 import { transformIntertwine } from './intertwine';
@@ -50,7 +51,14 @@ export function transformNode<T extends VNode>(n: T, m: Mat, o: XfOpts = { strok
   const ang = boxAngle(n.bbox, m);
   const base = { ...n, ap, ...(n.mask !== undefined ? { mask } : {}), ...(ang !== undefined ? { bbox: ang } : n.bbox !== undefined ? { bbox: undefined } : {}) };
   switch (n.kind) {
-    case 'path': return { ...base, d: transformPath(n.d, m), ...(n.live ? { live: xfLive(n.live, m) } : {}) } as T;
+    case 'path': {
+      if (n.live?.kind === 'rect' && !cornerScale.on) {
+        const kept = normalizeLive(n.live), moved = normalizeLive(xfLive(n.live, m));
+        const live = kept.kind === 'rect' && moved.kind === 'rect' ? { ...moved, radii: kept.radii } : moved;
+        return { ...base, d: liveShapePath(live), live } as T;
+      }
+      return { ...base, d: transformPath(n.d, m), ...(n.live ? { live: xfLive(n.live, m) } : {}) } as T;
+    }
     case 'compound': return { ...base, children: n.children.map((c) => transformNode(c, m, o)) } as T;
     case 'text':
       if (n.mode === 'path') return { ...base, path: n.path ? transformPath(n.path, m) : n.path, spans: o.strokes ? n.spans : n.spans } as T;

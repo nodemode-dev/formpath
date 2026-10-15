@@ -15,6 +15,7 @@ import { allTargets, expandCornersOp, setCornersOp, type CornerTargets } from '.
 import type { CornerSpec } from './types';
 import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
+import { anchorCount, mixPathfinder, objectOnPath, trapShapes, ungroupAll, type OnPathArgs, type TrapArgs } from './ops/illustrator';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, toRgb, WHITE, withFirstFill, withFirstStroke } from './paint';
 import { intersections, splitAtOffsets } from './kernel';
@@ -44,7 +45,7 @@ import { cleanData, graphNode, graphSpec, GRAPH_TYPES, restyleText, seriesOfPart
 import { applyDataSetDoc, captureValues, kindFits, uniqueName, type ResolvedImage } from './variables';
 import { History } from './history';
 import type { DataSet, GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from './types';
-import { rectCorners } from './geometry';
+import { cornerScale, rectCorners } from './geometry';
 import type { DimensionSpec, EnvelopeNode, EnvelopeOptions, EnvelopeSpec } from './types';
 import type { PerspGrid, PerspPlane, PerspView } from './types';
 import { attachKeep, attachPlace, DEFAULT_PERSP_VIEW, gridOf, leafPlaneBounds, mapLeaves, moveLeaf, perspLeaves, placeMatrix, planeAt, planeDeltaWorld, planeLocalRect, presetGrid, releaseNode, reprojectDoc, sanitizeGrid, scaleLeaf, type PlaneDelta } from './perspective';
@@ -61,7 +62,7 @@ export { Viewport } from './viewport';
 export interface ViewFlags {
   outline: boolean; rulers: boolean; guides: boolean; guidesLocked: boolean; grid: boolean; smartGuides: boolean; snapGrid: boolean; snapPoint: boolean;
   boundingBox: boolean; edges: boolean; artboards: boolean; threads: boolean; transparencyGrid: boolean; previewBounds: boolean; scaleStrokes: boolean;
-  transformPatterns: boolean; cornerWidget: boolean; gradientAnnotator: boolean; pixelPreview: boolean; snapPixel: boolean;
+  transformPatterns: boolean; scaleCorners: boolean; cornerWidget: boolean; gradientAnnotator: boolean; pixelPreview: boolean; snapPixel: boolean;
 }
 export interface ToolOptions {
   polygonSides: number; starPoints: number; starRatio: number; cornerRadius: number; spiralDecay: number; spiralSegments: number; flareRays: number;
@@ -97,7 +98,7 @@ export class Engine extends Emitter<EngineEvents> {
   activeSlot: 'fill' | 'stroke' = 'fill';
   newArtBasic = true;
   maskDefaults = { clip: true, invert: false };
-  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false };
+  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, scaleCorners: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false };
   options: ToolOptions = { polygonSides: 6, starPoints: 5, starRatio: 0.5, cornerRadius: 0, spiralDecay: 0.8, spiralSegments: 10, flareRays: 15, gridRows: 5, gridCols: 5, pencilFidelity: 0.5, pencilSmooth: 0.3, keepSelected: false, brushSize: 3, blobSize: 12, eraserSize: 12, widthPreset: 'uniform', magicTolerance: 32, symbolDensity: 5, symbolIntensity: 5, symbolMethod: 'user', meshRows: 4, meshCols: 4, blendSteps: 8, shapeMode: 'normal', textMode: 'point', vertical: false, arcConvex: true, liquifySize: 60, liquifyKind: 'warp' };
   currentBrush: string | null = null;
   currentSymbol: string | null = null;
@@ -277,7 +278,7 @@ export class Engine extends Emitter<EngineEvents> {
   fitSelection(): void { const p = this.current; if (!p) return; const b = this.selectionBounds(); if (!b) return; p.viewport.fitRect(b.x, b.y, Math.max(b.w, 1), Math.max(b.h, 1), 80); this.emit('viewport', null); }
   pan(dx: number, dy: number): void { const p = this.current; if (!p) return; p.viewport.panBy(dx, dy); this.emit('viewport', null); }
   setViewRotation(deg: number): void { const p = this.current; if (!p) return; p.viewport.rotation = ((deg % 360) + 360) % 360; this.emit('viewport', null); }
-  setView(patch: Partial<ViewFlags>): void { this.view = { ...this.view, ...patch }; this.emit('options', null); this.emit('render', null); this.emit('overlay', null); }
+  setView(patch: Partial<ViewFlags>): void { this.view = { ...this.view, ...patch }; cornerScale.on = this.view.scaleCorners; this.emit('options', null); this.emit('render', null); this.emit('overlay', null); }
   update(patch: Partial<ToolOptions>): void { this.options = { ...this.options, ...patch }; this.emit('options', null); }
   setTool(id: ToolId): void { if (this.tool === id) return; this.tool = id; this.emit('tool', null); this.emit('overlay', null); }
   setOverlay(o: Partial<Engine['overlay']>): void { this.overlay = { ...this.overlay, ...o }; this.emit('overlay', null); }
@@ -679,6 +680,11 @@ export class Engine extends Emitter<EngineEvents> {
   }
   group(ids?: string[]): boolean { return this.run('Group', groupNodes, ids); }
   ungroup(ids?: string[]): boolean { return this.run('Ungroup', ungroupNodes, ids); }
+  ungroupAll(ids?: string[]): boolean { return this.run('Ungroup All', ungroupAll, ids); }
+  mixPathfinder(mode: 'hard' | 'soft', rate = 50, ids?: string[]): boolean { return this.run(mode === 'hard' ? 'Pathfinder Hard Mix' : 'Pathfinder Soft Mix', (d, t) => mixPathfinder(d, t, mode, rate), ids); }
+  trap(args: TrapArgs, ids?: string[]): boolean { return this.run('Pathfinder Trap', (d, t) => trapShapes(d, t, args), ids); }
+  objectOnPath(args: OnPathArgs, ids?: string[]): boolean { return this.run('Object on Path', (d, t) => objectOnPath(d, t, args), ids); }
+  anchorCount(ids?: string[]): number { const p = this.current; return p ? anchorCount(p.doc, this.targetIds(ids)) : 0; }
   arrange(order: ArrangeOrder, ids?: string[]): boolean { const t = this.targetIds(ids); return this.edit({ bring_to_front: 'Bring to Front', bring_forward: 'Bring Forward', send_backward: 'Send Backward', send_to_back: 'Send to Back' }[order], (d) => arrange(d, t, order)); }
   duplicate(dx = 0, dy = 0, ids?: string[]): boolean { return this.run('Duplicate', (d, t) => duplicateNodes(d, t, dx, dy), ids); }
   makeCompound(ids?: string[], rule?: 'nonzero' | 'evenodd'): boolean { return this.run('Make Compound Path', (d, t) => makeCompound(d, t, rule), ids); }

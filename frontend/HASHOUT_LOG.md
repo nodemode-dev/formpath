@@ -2523,3 +2523,63 @@ The Direct Selection tool draws a circle-and-dot widget inside every corner of t
 - logged: v0.27.0 · 2026-10-15
 
 formlit's design: the English strings stay in the code and are the keys, so no string in the interface carries an id. When a language other than English is stored (`formpth.lang`), `initLanguage` loads only that language's table (`import.meta.glob`, one lazy chunk per language), translates `document.title` and every text node and `title`, `placeholder`, `aria-label` and `alt` attribute under `body`, and a MutationObserver translates whatever is added later. Observer callbacks run as microtasks before the browser paints, so English never shows first, and `main.ts` starts the app only after the table is in, so the first frame is already in the chosen language. Keys with `{0}` become patterns (longest first) whose captures are translated in turn; a trailing colon or full stop, a shortcut in parentheses and ` · ` joined parts are tried against their bare forms. `SKIP` keeps user content in its own words: the canvas, editable text, the terminal, chat replies, layer, document, swatch group, variable, link, asset and recent file names. Unlike formlit there is one `keys.json` and one table per language keyed by the English string (formlit uses numbered batches keyed by index), so a key never shifts when another is added. Translating a string the interface never shows is harmless, which is why the extractor errs toward more keys. Command ids, MCP descriptions and engine errors stay English. The picker is Preferences > Interface > Language, which reloads the window.
+
+## src/engine/snap.ts
+
+### src/engine/snap.ts · Tangent, perpendicular and construction-angle snapping
+
+- refers-to: snapLine, DEFAULT_SNAP_ANGLES, SnapTargets.curves
+- kind: explainer
+- logged: v0.28.0 · 2026-10-15
+
+`collectTargets` now keeps the bezier segments of every visible path (capped at 6000) beside the anchor spots. `snapLine(p, from, targets, tol, angles)` is what the stage calls when a tool passes `from` to `ctx.snap`: it offers the construction angles (default 0, 45, 90 and 135, replaceable through `Stage.prefs.snapAngles`), the foot of the perpendicular from the fixed end onto a nearby segment, and the tangency point of a line from the fixed end to a nearby curve. Perpendicular points are roots of (B(t) - from) . B'(t) and tangent points are roots of the cross product of the same two vectors, found by sampling each segment 14 times and bisecting every sign change; only segments whose control box lies within six tolerances of the pointer are tried. The nearest candidate inside the snap tolerance wins, with a small bias that lets tangent and perpendicular beat an angle at the same distance, and its guide line and label ("tangent", "perpendicular" or the angle) go through the usual smart-guide overlay.
+
+## src/tools/liquify-detail.ts
+
+### src/tools/liquify-detail.ts · Scallop, Crystallize and Wrinkle
+
+- refers-to: detailTool, refine, shape
+- kind: explainer
+- logged: v0.28.0 · 2026-10-15
+
+The three tools share the Warp group and its brush size and bracket keys, and add Intensity and Detail options held in module state. Each pointer step (after the brush has moved a fifth of its radius) first subdivides every segment near the brush until anchors are about a thirteenth of the brush apart at the default detail, then displaces the anchors inside the brush with a squared falloff: Scallop pulls random anchors toward the centre and gives them smooth catmull handles, Crystallize pushes random anchors outward and makes them corners, Wrinkle jitters every anchor in a random direction and carries its handles. The random stream is seeded from the pointer-down position plus the current step position, so the same drag over the same path gives the same result, and the whole stroke is one drag preview committed once on release.
+
+## src/engine/ops/illustrator.ts
+
+### src/engine/ops/illustrator.ts · Ungroup All, Hard and Soft Mix, Trap, Object on Path
+
+- refers-to: src/engine/ops/illustrator.ts :: ungroupAll, anchorCount, mixPathfinder, trapShapes, objectOnPath; src/engine/index.ts (ungroupAll, mixPathfinder, trap, objectOnPath, anchorCount); src/app.ts (ungroup-all, pf-hard-mix, pf-soft-mix, pf-trap, object-on-path-*)
+- kind: explainer
+- logged: v0.28.0 · 2026-10-15
+
+Ungroup All repeats `ungroupNodes` on the plain groups left in the result until none remain, in one `edit`; clipping groups and live groups (Live Paint, trace, dimension, graph, intertwine, shaper) are left whole, as Illustrator keeps clipping sets. Hard Mix and Soft Mix run `arrangement` (the Divide faces) and decide which shapes cover a face by whether the face lies more than half inside each shape (a single interior point is unreliable on L-shaped faces, where the bounds centre can sit on the overlap's edge). Hard Mix paints a covered-twice face with the per-channel maximum (CMYK when every contributor is CMYK, else RGB); Soft Mix folds the contributors bottom to top with `mixColor` at the mixing rate, so 100% shows the top colour and 0% the bottom one. Faces covered once keep their fill; strokes are dropped as in Trim. Trap pairs every two solid-filled shapes of different colour, spreads the lighter one (the darker one with Reverse Traps) by `offsetPath` and keeps the part that lies inside the other shape and outside the spreading one, filled with the spreading colour tinted by the reduction and set to Multiply; Height/Width scales y before and after so horizontal and vertical edges get different thickness. The strips are added as a group named Traps above the topmost selected object and the originals stay. Object on Path takes the topmost selected path or compound as the guide and the others, in stacking order, as the objects: each centre lands on the guide at equal arc-length steps (closed guides wrap, open guides run from the offset to the end), optionally turned to the tangent, and Flip adds a half turn. There is no live link, so Release only says so and changes nothing; Arrange is the same dialog as Attach.
+
+## src/engine/kernel.ts
+
+### src/engine/kernel.ts · simplifyWith and pathSampler
+
+- refers-to: src/engine/kernel.ts :: simplifyWith, pathSampler, dpKeep, cornerTurn; src/engine/ops/paths.ts (simplify case, PathOpArgs.straight and angle); src/app.ts (simplifyDialog)
+- kind: explainer
+- logged: v0.28.0 · 2026-10-15
+
+Simplify keeps `simplifyPath` for the plain case so existing results do not change. With Straight Lines or an Angle Threshold it cuts each subpath at its corner anchors (open ends, and any anchor whose tangent turn, taken from the handles or the neighbouring anchors, exceeds the threshold) and treats each run alone: curves are fitted by paper's `simplify`, straight lines by flattening the run and keeping the Douglas-Peucker points within the tolerance. A closed path with no corner is simplified as a ring, or cut at its first anchor when Straight Lines is on. Show Original is not done: `previewEdit` has no overlay and drawing the original into the document would be committed with the result. The dialog's point count is a note whose text is patched in place from the preview build (found by the interpunct in its text, so a translation does not break it), which adds no node and shifts no layout. `pathSampler` returns arc-length position and tangent angle of the longest subpath for Object on Path.
+
+## src/engine/geometry.ts
+
+### src/engine/geometry.ts · Scale Corners
+
+- refers-to: src/engine/geometry.ts :: cornerScale, transformAnchor; src/engine/transform.ts :: transformNode (live rect); src/engine/index.ts (ViewFlags.scaleCorners, setView); src/app.ts (toggle-scale-corners)
+- kind: explainer
+- logged: v0.28.0 · 2026-10-15
+
+`cornerScale.on` is a module flag set by `Engine.setView` from `view.scaleCorners` (default on), so every caller of `transformNode`, including the tools, follows it without being edited. Off, `transformAnchor` leaves an absolute `corner.r` as it was, and a live rectangle is rebuilt from its normalised live shape with the radii it had in document points instead of stretching the rounded outline. The flag is not stored in preferences yet and the Properties panel has no checkbox for it; the command `toggle-scale-corners` in Object > Transform is the switch.
+
+## src/app.ts
+
+### src/app.ts · Transform Each absolute mode and command parameters
+
+- refers-to: src/app.ts :: transformEachDialog, simplifyDialog, softMixDialog, trapDialog, objectOnPathDialog
+- kind: explainer
+- logged: v0.28.0 · 2026-10-15
+
+Transform Each gains a Scale mode select. Absolute reads Scale horizontal and vertical as target width and height in document units for every object (0 keeps that dimension), always about each object's centre; Relative is the old percentage. The dialog opens in Relative because one default cannot be right for every object in Absolute. Every command added or extended here takes `params` and, when any are given, skips the dialog and applies at once, so an agent gets the same result as the dialog's OK in one undo step. An Object > Pathfinder submenu now lists the existing pf-* commands, which had no menu, followed by the three new ones.

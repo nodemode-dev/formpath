@@ -118,6 +118,79 @@ export function splitAtOffsets(sp: SubPath, offsets: number[]): SubPath[] {
 export function simplifyPath(d: PathData, tolerance: number): PathData {
   return d.map((sp) => { const p = toPaperPath(sp); p.simplify(Math.max(0.01, tolerance)); return fromPaperPath(p); });
 }
+function dpKeep(P: Pt[], tol: number): number[] {
+  const keep = new Set<number>([0, P.length - 1]);
+  const stack: Array<[number, number]> = [[0, P.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop() as [number, number];
+    const dx = P[b].x - P[a].x, dy = P[b].y - P[a].y, l = Math.hypot(dx, dy);
+    let far = -1, fd = tol;
+    for (let i = a + 1; i < b; i++) {
+      const dd = l < 1e-9 ? Math.hypot(P[i].x - P[a].x, P[i].y - P[a].y) : Math.abs(dy * (P[i].x - P[a].x) - dx * (P[i].y - P[a].y)) / l;
+      if (dd > fd) { fd = dd; far = i; }
+    }
+    if (far >= 0) { keep.add(far); stack.push([a, far], [far, b]); }
+  }
+  return [...keep].sort((x, y) => x - y);
+}
+
+function cornerTurn(sp: SubPath, i: number): number {
+  const n = sp.pts.length, a = sp.pts[i], p = sp.pts[(i - 1 + n) % n], q = sp.pts[(i + 1) % n];
+  const hin = Math.abs(a.ix - a.x) + Math.abs(a.iy - a.y) > 1e-9, hout = Math.abs(a.ox - a.x) + Math.abs(a.oy - a.y) > 1e-9;
+  const ux = hin ? a.x - a.ix : a.x - p.x, uy = hin ? a.y - a.iy : a.y - p.y, vx = hout ? a.ox - a.x : q.x - a.x, vy = hout ? a.oy - a.y : q.y - a.y;
+  const lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+  return lu < 1e-9 || lv < 1e-9 ? 0 : Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (lu * lv))));
+}
+
+export function simplifyWith(d: PathData, tol: number, straight: boolean, angle: number): PathData {
+  return d.map((sp) => {
+    const n = sp.pts.length;
+    if (n < 3) return sp;
+    const corners: number[] = [];
+    for (let i = 0; i < n; i++) if ((!sp.closed && (i === 0 || i === n - 1)) || (angle > 0 && (cornerTurn(sp, i) * 180) / Math.PI > angle)) corners.push(i);
+    if (sp.closed && !corners.length) {
+      if (!straight) { const q = toPaperPath(sp); q.simplify(tol); return fromPaperPath(q); }
+      corners.push(0);
+    }
+    const out: Anchor[] = [], runs = sp.closed ? corners.length : corners.length - 1;
+    for (let k = 0; k < runs; k++) {
+      const i0 = corners[k], i1 = corners[(k + 1) % corners.length], idx: number[] = [];
+      for (let i = i0; ; i = (i + 1) % n) { idx.push(i); if (i === i1 && idx.length > 1) break; }
+      const sub: SubPath = { closed: false, pts: idx.map((i) => sp.pts[i]) };
+      let part: Anchor[];
+      if (sub.pts.length < 3) part = sub.pts.map((a) => (straight ? anchor(a.x, a.y) : { ...a }));
+      else {
+        const q = toPaperPath(sub);
+        if (straight) {
+          q.flatten(Math.max(0.05, tol / 2));
+          const P = q.segments.map((g) => ({ x: g.point.x, y: g.point.y }));
+          part = dpKeep(P, tol).map((i) => anchor(P[i].x, P[i].y));
+        } else { q.simplify(tol); part = fromPaperPath(q).pts; }
+      }
+      const last = out[out.length - 1];
+      if (last) { last.ox = part[0].ox; last.oy = part[0].oy; last.smooth = false; out.push(...part.slice(1)); } else out.push(...part);
+    }
+    if (sp.closed && out.length > 1) { const f = out[0], l = out[out.length - 1]; if (Math.abs(f.x - l.x) < 1e-6 && Math.abs(f.y - l.y) < 1e-6) { f.ix = l.ix; f.iy = l.iy; f.smooth = false; out.pop(); } }
+    return { closed: sp.closed, pts: out };
+  });
+}
+
+export function pathSampler(d: PathData): { length: number; closed: boolean; at: (t: number) => { x: number; y: number; angle: number } } | null {
+  let best: paper.Path | null = null;
+  for (const sp of d) { if (sp.pts.length < 2) continue; const p = toPaperPath(sp); if (!best || p.length > best.length) best = p; }
+  if (!best || best.length < 1e-9) return null;
+  const path = best, len = path.length;
+  return {
+    length: len, closed: path.closed,
+    at: (t) => {
+      const off = path.closed ? (((t % 1) + 1) % 1) * len : Math.min(len - 1e-6, Math.max(0, t * len));
+      const loc = path.getLocationAt(off) ?? path.getLocationAt(0);
+      const g = loc ? loc.tangent : new (ps().Point)(1, 0);
+      return { x: loc ? loc.point.x : 0, y: loc ? loc.point.y : 0, angle: (Math.atan2(g.y, g.x) * 180) / Math.PI };
+    },
+  };
+}
+
 export function smoothPath(d: PathData, factor = 0.4): PathData {
   return d.map((sp) => { const p = toPaperPath(sp); p.smooth({ type: 'geometric', factor }); return fromPaperPath(p); });
 }
