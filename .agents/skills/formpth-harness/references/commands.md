@@ -4,13 +4,16 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 
 ## Edit
 
+- `assign-profile` (Edit > Assign Profile): Assigns an RGB and a CMYK profile to the document without changing any colour number. Use when the colour numbers are right but the document was tagged with the wrong profile.
 - `auto-spell-check` (Edit > Spelling > Auto Spell Check): Draws red wavy underlines under misspelled words in the text objects in view; the setting is saved and off by default. Use when proofreading while editing.
 - `check-spelling` (Edit > Spelling > Check Spelling): Walks every text object in the document and offers corrections for words the dictionary does not know, with Change, Change All, Ignore and Add to Dictionary; each change is one undo step. Use when proofreading text in the artwork.
 - `clear` (Edit > Clear): Deletes the selection. Use when removing objects.
+- `color-settings` (Edit > Color Settings): Opens Color Settings to choose the RGB and CMYK working spaces, the rendering intent and black point compensation for this document, or to load an ICC profile. Use when CMYK colours should follow a real printing profile instead of the simple formula.
 - `colors-cmyk` (Edit > Edit Colors > Convert to CMYK): Convert to CMYK, as in Edit > Edit Colors > Convert to CMYK.
 - `colors-grayscale` (Edit > Edit Colors > Convert to Grayscale): Converts the colours of the selection to grays. Use when preparing a one-colour version.
 - `colors-invert` (Edit > Edit Colors > Invert Colors): Inverts the colours of the selection. Use when a negative of the artwork is wanted.
 - `colors-rgb` (Edit > Edit Colors > Convert to RGB): Convert to RGB, as in Edit > Edit Colors > Convert to RGB.
+- `convert-to-profile` (Edit > Convert to Profile): Converts every fill, stroke, gradient stop, swatch and artboard colour in the document to another profile, as one undo step. Use when the look must stay the same while moving the document to a press profile.
 - `copy` (Edit > Copy): Copies the selection to the clipboard. Use when duplicating art or moving it between documents.
 - `cut` (Edit > Cut): Removes the selection and keeps it on the clipboard. Use when moving art elsewhere.
 - `find-replace` (Edit > Find and Replace): Finds text, fonts or colours and replaces them. Use when changing the same thing in many places.
@@ -515,6 +518,8 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `persp-save-preset` (View > Perspective Grid > Save Grid as Preset): Save Grid as Preset, as in View > Perspective Grid > Save Grid as Preset.
 - `persp-show` (View > Perspective Grid > Show Grid): Show Grid, as in View > Perspective Grid > Show Grid.
 - `persp-snap` (View > Perspective Grid > Snap to Grid): Snap to Grid, as in View > Perspective Grid > Snap to Grid.
+- `proof-colors` (View > Proof Colors): Turns the on-screen soft proof on or off, showing the art as the proof device would print it. Use when checking how saturated colours will look in print.
+- `proof-setup` (View > Proof Setup > Customize): Opens Proof Setup to pick the device to simulate, whether to preserve numbers, and whether to simulate paper color and black ink. Use before Proof Colors to describe the printing condition being checked.
 - `release-guides` (View > Guides > Release Guides): Release Guides, as in View > Guides > Release Guides.
 - `reset-rotation` (View > Reset Rotate View): Reset Rotate View, as in View > Reset Rotate View.
 - `screen-full` (View > Screen Mode > Full Screen Mode): Full Screen Mode, as in View > Screen Mode > Full Screen Mode.
