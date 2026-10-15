@@ -154,3 +154,77 @@ def find(family: str, style: str = "Regular") -> dict | None:
     same = [f for f in candidates if (re.search(r"italic|oblique", f["style"].lower()) is not None) == slanted]
     pool = sorted(same or candidates, key=lambda f: (not f.get("variable"), f["style"].lower() not in ("regular", "book", "roman", "normal", "italic", "oblique")))
     return pool[0]
+
+
+_metrics: dict[str, dict | None] = {}
+
+
+def _table(data: bytes, base: int, want: bytes) -> tuple[int, int] | None:
+    num = struct.unpack_from(">H", data, base + 4)[0]
+    for i in range(num):
+        tag, _, offset, length = struct.unpack_from(">4sIII", data, base + 12 + i * 16)
+        if tag == want:
+            return offset, length
+    return None
+
+
+def _measure(entry: dict) -> dict | None:
+    try:
+        data = Path(entry["path"]).read_bytes()
+        base = struct.unpack_from(">I", data, 12 + entry["member"] * 4)[0] if data[:4] == b"ttcf" else 0
+        head, os2, post = _table(data, base, b"head"), _table(data, base, b"OS/2"), _table(data, base, b"post")
+        if not head:
+            return None
+        upm = struct.unpack_from(">H", data, head[0] + 18)[0] or 1000
+        m = {"upm": upm, "weight": 400, "width": 5, "klass": 0, "serif": 0, "xh": 0.0, "cap": 0.0, "avg": 0.0, "angle": 0.0, "italic": 0}
+        if os2:
+            o = os2[0]
+            version, avg, weight, width = struct.unpack_from(">HhHH", data, o)
+            klass = struct.unpack_from(">h", data, o + 30)[0] >> 8
+            panose = struct.unpack_from(">10B", data, o + 32)
+            sel = struct.unpack_from(">H", data, o + 62)[0]
+            m.update(weight=weight or 400, width=width or 5, klass=klass, avg=avg / upm, italic=1 if sel & 1 else 0)
+            if panose[0] == 2 and panose[1] > 1:
+                m["serif"] = 0 if panose[1] >= 11 else 1
+            elif klass in (1, 2, 3, 4, 5, 7):
+                m["serif"] = 1
+            if version >= 2 and os2[1] >= 90:
+                xh, cap = struct.unpack_from(">hh", data, o + 86)
+                m.update(xh=xh / upm, cap=cap / upm)
+        if post:
+            m["angle"] = struct.unpack_from(">i", data, post[0] + 4)[0] / 65536
+        return m
+    except (struct.error, OSError):
+        return None
+
+
+def _metrics_of(entry: dict) -> dict | None:
+    if entry["id"] not in _metrics:
+        _metrics[entry["id"]] = _measure(entry)
+    return _metrics[entry["id"]]
+
+
+def similar(font_id: str, limit: int = 10) -> list[dict] | None:
+    fonts = index()
+    target = fonts.get(font_id)
+    if not target:
+        return None
+    ref = _metrics_of(target)
+    if not ref:
+        return []
+    best: dict[str, tuple[float, dict]] = {}
+    for entry in fonts.values():
+        if entry["family"] == target["family"]:
+            continue
+        m = _metrics_of(entry)
+        if not m:
+            continue
+        d = abs(m["weight"] - ref["weight"]) / 100 * 0.9 + abs(m["width"] - ref["width"]) * 0.8
+        d += 3.0 * (m["serif"] != ref["serif"]) + 1.5 * (m["klass"] != ref["klass"]) + 2.0 * (m["italic"] != ref["italic"])
+        if ref["xh"] and m["xh"]:
+            d += abs(m["xh"] - ref["xh"]) * 14 + abs(m["cap"] - ref["cap"]) * 8
+        d += abs(m["avg"] - ref["avg"]) * 6 + min(abs(m["angle"] - ref["angle"]), 30) / 6
+        if entry["family"] not in best or d < best[entry["family"]][0]:
+            best[entry["family"]] = (d, entry)
+    ranked = sorted(best.values(), key=lambda t: (t[0], t[1]["family"].lower()))[: max(1, min(limit, 50))]
+    return [{"id": e["id"], "family": e["family"], "style": e["style"], "score": round(max(0.0, 100 - d * 6), 1)} for d, e in ranked]

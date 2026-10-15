@@ -291,3 +291,21 @@ The window mirrors its command catalogue here (`POST /api/commands/catalogue`) a
 - logged: v0.25.0 · 2026-10-15
 
 A shell in the dock is the person's own terminal inside the window they are using, so `./formpth cli run ...` typed there should not ask them whether an outside agent may act. The token is per engine start and lives only in the environment of programs the engine starts.
+
+## app/services/spell.py
+
+### app/services/spell.py · spell check and personal dictionary
+
+- refers-to: app/services/spell.py :: check, dictionary, edit_dictionary; app/routers/spell.py
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+`POST /api/spell/check` takes words and a language and returns only the unknown ones, each with up to 6 suggestions ranked by word frequency, on pyspellchecker (MIT) word lists; languages without a list fall back to English. The personal dictionary is `spell-dictionary.json` in the data folder, edited with `POST /api/spell/dictionary` (add and remove lists) and read with the matching GET. Every route requires a loopback origin and host like the terminal routes.
+
+### app/services/fonts.py · similar
+
+- refers-to: app/services/fonts.py :: similar, _measure; app/routers/fonts.py :: similar
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+`GET /api/fonts/similar?id=` scores every other installed family against a font from tables read directly with struct: weight and width class, OS/2 family class and PANOSE serif style, italic flag and post italic angle, x-height and cap-height over the em, and average advance. The best style of each family is kept and the ten nearest return with a 0 to 100 score. Glyph outlines are not parsed, so the serif test rests on PANOSE and the family class.

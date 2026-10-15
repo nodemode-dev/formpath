@@ -13,7 +13,7 @@ rm -rf build/pyinstaller dist-engine
 pyinstaller --noconfirm --clean --onefile --name formpth-engine \
   --distpath dist-engine --workpath build/pyinstaller --specpath build/pyinstaller \
   --add-data "$FORMPTH_ROOT/frontend/dist${sep}frontend_dist" \
-  --collect-submodules app --collect-submodules uvicorn --collect-submodules keyring \
+  --collect-submodules app --collect-submodules uvicorn --collect-submodules keyring --collect-data spellchecker \
   "$FORMPTH_ROOT/backend/formpth_engine.py"
 mkdir -p "$FORMPTH_ROOT/src-tauri/binaries"
 out="$FORMPTH_ROOT/src-tauri/binaries/formpth-engine-${triple}${ext}"

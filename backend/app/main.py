@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core import config
 import asyncio
 
-from app.routers import batch, claude_code, commands, fonts, io, llm, mcp, nodemode, plugins, projects, system, terminal
+from app.routers import batch, claude_code, commands, fonts, io, llm, mcp, nodemode, plugins, projects, spell, system, terminal
 from app.services import sessions
 from app.services import terminal as terminals
 
@@ -34,6 +34,7 @@ app.include_router(batch.router)
 app.include_router(terminal.router)
 app.include_router(claude_code.router)
 app.include_router(commands.router)
+app.include_router(spell.router)
 
 _dist = config.dist_dir()
 if _dist is not None:

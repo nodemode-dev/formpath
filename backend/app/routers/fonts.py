@@ -19,6 +19,14 @@ async def find(family: str, style: str = "Regular") -> dict:
     return {k: hit[k] for k in ("id", "family", "style", "full", "postscript")}
 
 
+@router.get("/similar")
+async def similar(id: str, limit: int = 10) -> dict:
+    found = await run_in_threadpool(fonts.similar, id, limit)
+    if found is None:
+        raise HTTPException(status_code=404, detail="That font is not installed on this computer.")
+    return {"fonts": found}
+
+
 @router.get("/file/{font_id}")
 async def font_file(font_id: str) -> Response:
     found = await run_in_threadpool(fonts.font_file, font_id)

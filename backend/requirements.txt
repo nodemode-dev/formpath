@@ -5,3 +5,4 @@ keyring==25.7.0
 httpx==0.28.1
 ptyprocess==0.7.0; sys_platform != "win32"
 pywinpty==3.0.5; sys_platform == "win32"
+pyspellchecker==0.9.1
