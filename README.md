@@ -13,7 +13,7 @@
 
 formpth is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, variable fonts and Touch Type, symbols and the symbolism tools, blends, repeats, Live Paint, gradient meshes, pattern editing, live image trace, the Perspective Grid, Puppet Warp, Shaper, graphs and data merge. It saves its own `.fpth` projects, reads and writes SVG, PDF, EPS and DXF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 86 tools, and Claude Code runs inside its own terminal dock.
 
-**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 40,100 lines of TypeScript, 1,900 of CSS, 4,000 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
+**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 40,300 lines of TypeScript, 1,900 of CSS, 4,100 of Python and 100 of Rust (product code; `./formpth counts` prints this, and `./formpth counts --check` fails when it drifts).
 
 ## Highlights
 

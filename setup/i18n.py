@@ -17,10 +17,13 @@ USAGE = """./formpth i18n <command>
   extract              harvest the interface's English strings from frontend/src into frontend/src/i18n/keys.json
   check [LANG]         every language has every key, with the same {0} placeholders; exit 1 otherwise
   missing LANG         print the keys LANG has not translated, as a JSON list
+  untranslated LANG    print sentences LANG holds in English unchanged, as a JSON list
+  prune                drop table rows whose English key is no longer in keys.json
   export LANG FILE.csv write English and LANG side by side for a reviewer
   import LANG FILE.csv read a reviewed CSV back into frontend/src/i18n/locales/LANG.json"""
 
-SKIP_DIRS = {"i18n"}
+SKIP_DIRS = {"i18n", "automation"}
+AGENT_TEXT = re.compile(r"\b(description|when)\s*:\s*(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|`(?:[^`\\]|\\.)*`)")
 SINGLE = re.compile(r"'((?:[^'\\\n]|\\.)*)'")
 TEMPLATE = re.compile(r"`((?:[^`\\]|\\.)*)`", re.S)
 DOUBLE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
@@ -105,7 +108,7 @@ def harvest_html(body: str, keys: set[str]) -> None:
 
 def harvest_file(text: str, keys: set[str]) -> None:
     lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith(("import ", "export * from", "//"))]
-    text = "\n".join(lines)
+    text = AGENT_TEXT.sub("", "\n".join(lines))
     for m in TEMPLATE.finditer(text):
         body, _ = numbered(unescape(m.group(1)))
         if "<" in body and ">" in body:
@@ -199,6 +202,24 @@ def import_(lang: str, file: str) -> int:
     return 0
 
 
+def untranslated(lang: str) -> int:
+    keys = json.loads(KEYS.read_text(encoding="utf-8"))
+    loc = load(lang)
+    print(json.dumps([k for k in keys if loc.get(k) == k and re.search(r"[a-z]{3,} [a-z]{3,}", k)], ensure_ascii=False, indent=0))
+    return 0
+
+
+def prune() -> int:
+    keys = set(json.loads(KEYS.read_text(encoding="utf-8")))
+    for lang in LANGS:
+        loc = load(lang)
+        kept = {k: v for k, v in loc.items() if k in keys}
+        if len(kept) != len(loc):
+            (LOCALES / f"{lang}.json").write_text(json.dumps(dict(sorted(kept.items())), ensure_ascii=False, indent=0) + "\n", encoding="utf-8")
+        print(f"{lang:8} {len(loc) - len(kept)} stale rows removed")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
@@ -210,6 +231,10 @@ def main(argv: list[str]) -> int:
         return check(rest[0] if rest else None)
     if cmd == "missing" and rest:
         return missing(rest[0])
+    if cmd == "untranslated" and rest:
+        return untranslated(rest[0])
+    if cmd == "prune":
+        return prune()
     if cmd == "export" and len(rest) == 2:
         return export(*rest)
     if cmd == "import" and len(rest) == 2:
