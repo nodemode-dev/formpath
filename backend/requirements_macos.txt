@@ -3,3 +3,4 @@ uvicorn[standard]==0.53.0
 python-multipart==0.0.32
 keyring==25.7.0
 httpx==0.28.1
+ptyprocess==0.7.0

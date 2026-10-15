@@ -241,3 +241,37 @@ On Linux the `dir` entries of fontconfig's configuration are added to the standa
 - logged: v0.18.0 · 2026-10-08
 
 Each listed face now carries `variable`, true when its table directory has an `fvar` table, so the Character panel can mark and filter variable families without downloading them; the field is new and optional, so older clients ignore it. A variable family is listed by its files (Lora Regular and Lora Italic) while the window asks for named instances (Lora SemiBold, Lora Bold Italic), which match no file's style. `find` used to fall back to the family's Regular for any unknown style, which sent italic instances to the upright file; it now keeps to faces of the same slant (italic or oblique against upright), prefers variable files and then the plain Regular or Italic. Static families resolve as before, except that an unknown italic style now finds the family's Italic instead of its Regular.
+
+## app/services/terminal.py
+
+### app/services/terminal.py · engine PTYs
+- refers-to: app/services/terminal.py :: Session, open_session, restart, write, resize, close, base_env, bind, call_in_loop
+- kind: explainer
+- logged: v0.24.0 · 2026-10-15
+
+The terminal dock's shells are engine-owned PTYs, as formlit and formvis keep them: `ptyprocess` on macOS and Linux, `pywinpty` on Windows. A session holds its argv, environment and kind (`shell` or `claude`), a 256 KB scrollback ring and a set of subscriber queues; a reader thread per process pushes output to the queues through the event loop bound at startup (`main.lifespan` calls `bind`), so a WebSocket that attaches later gets the scrollback and then the live text. `restart` bumps a generation number so the old reader thread stops delivering, clears the scrollback and sends `ESC c` so xterm resets. The shell starts in the repository when the engine runs from a checkout (so `./formpth cli` and `formpth claude` work inside it) and in the home folder in the frozen desktop build. `base_env` sets `FORMPTH_TERMINAL`, `FORMPTH_ENGINE_URL`, `FORMPTH_MCP_URL` and `FORMPTH_URL`, and puts the repository on `PATH` outside the frozen build.
+
+## app/routers/terminal.py
+
+### app/routers/terminal.py · local only
+- refers-to: app/routers/terminal.py :: origin_ok, require_local, attach
+- kind: warning-context
+- logged: v0.24.0 · 2026-10-15
+
+A terminal is a shell on this computer, so every route and the WebSocket refuse a request whose Host is not a loopback name (a page that rebinds its domain to 127.0.0.1 still sends its own Host) and whose Origin is neither a configured CORS origin nor a loopback or `tauri://` origin. WebSockets are not covered by CORS, which is why the check is explicit. Output frames are text; the only control message (`exit`) is a binary frame, so shell output can never be read as one. `terminal_text` strips ANSI codes for `read`, which the CLI and agents use.
+
+## app/services/claude_code.py
+
+### app/services/claude_code.py · Claude Code in the window
+- refers-to: app/services/claude_code.py :: cli, info, argv, open_tab, mcp_config, INAPP_TOKEN, chat_send, _run, chat_sessions, chat_adopt
+- kind: explainer
+- logged: v0.24.0 · 2026-10-15
+
+Follows formlit's design. The Claude Code button runs the person's own `claude` (Preferences path, `FORMPTH_CLAUDE_BIN`, `PATH`, the usual install folders, then a login shell's `command -v`) in a PTY tab of kind `claude`, started through the login shell so the person's `PATH` and Node are found, with `--mcp-config` naming formpth's `/mcp` over HTTP plus the `x-formpth-inapp` header, `--allowedTools mcp__formpth` and a note appended to the system prompt. The token is minted per engine start and never written to disk, so only programs the engine starts carry it. The Chat tab runs `claude -p ... --output-format stream-json --include-partial-messages` per message, resuming the same session id, and publishes start, delta, tool, toolDone, usage, done, reset and adopted events to the chat WebSocket; tool result pictures are saved under the data folder's `Chat` and served by name only. Sign-in stays Claude Code's own: nothing here reads or stores a credential. `chat_sessions` reads Claude Code's own transcripts for the agent folder so a conversation started in a tab can be continued in Chat, and Open in Claude Code resumes a Chat conversation in a tab.
+
+### app/routers/mcp.py · in-app token
+- refers-to: app/routers/mcp.py :: _inapp, _call, _ask, bridge_next (eligible)
+- kind: rationale
+- logged: v0.24.0 · 2026-10-15
+
+A `tools/call` carrying the engine's in-app token sets the `_inapp` context variable, which skips the outside-agent consent question in `_call` and marks the queued item `inapp` so the window's long poll delivers it even while outside agents are not allowed. Every other client still meets the question and the window session secret. The window must still be open: the token removes the question, not the window.

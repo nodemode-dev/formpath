@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import collections
+import contextvars
 import itertools
 import json
 import os
@@ -13,6 +14,9 @@ from fastapi import APIRouter, Request, Response
 
 from app import __version__
 from app.core import config
+from app.services import claude_code
+
+_inapp: contextvars.ContextVar[bool] = contextvars.ContextVar("formpth_inapp", default=False)
 
 router = APIRouter()
 VERSIONS = ["2026-07-28", "2025-11-25"]
@@ -423,7 +427,7 @@ async def _ask(name: str, args: dict, timeout: float) -> dict | None:
     rid = str(next(_ids))
     fut = asyncio.get_running_loop().create_future()
     _waiting[rid] = fut
-    _put({"id": rid, "name": name, "arguments": args})
+    _put({"id": rid, "name": name, "arguments": args, **({"inapp": True} if _inapp.get() else {})})
     try:
         return await asyncio.wait_for(fut, timeout=timeout)
     except asyncio.TimeoutError:
@@ -503,7 +507,7 @@ async def _call(name: str, args: dict) -> dict:
                     break
         if not _live():
             return _fail("formpth is not open. Start it with ./formpth boot (or open the formpth app), then retry.")
-    if not _allowed:
+    if not _allowed and not _inapp.get():
         if time.monotonic() < _declined_until:
             return _fail("The person chose not to allow outside agents in formpth just now. Ask them to turn on Allow outside agents (Preferences > Plugins), then retry.")
         answer = await _ask("__consent__", {}, 180)
@@ -549,6 +553,7 @@ async def mcp(request: Request) -> Response:
         out = _ok(req_id, {"tools": TOOLS}, modern)
     elif method == "tools/call":
         name, args = params.get("name"), params.get("arguments") or {}
+        _inapp.set(claude_code.is_inapp(request.headers.get(claude_code.INAPP_HEADER)))
         out = _ok(req_id, await _run(name, args), modern) if name in NAMES and isinstance(args, dict) else _err(req_id, -32602, f"No tool named {name}")
     else:
         out = _err(req_id, -32601, f"Method not found: {method}")
@@ -593,7 +598,7 @@ async def bridge_next(request: Request) -> Response:
         _declined_until = 0.0
     _allowed = allowed
     deadline = time.monotonic() + 20
-    eligible = lambda it: allowed or it.get("name") == "__consent__"
+    eligible = lambda it: allowed or it.get("name") == "__consent__" or it.get("inapp") is True
     while time.monotonic() < deadline:
         if _secret != held:
             return Response(status_code=205)
