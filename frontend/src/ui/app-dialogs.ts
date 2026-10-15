@@ -7,7 +7,7 @@ import { el, escapeHtml, patchList, q, setClass, setDisabled, setHidden, setText
 import { LANGUAGES, language, setLanguage } from '../i18n';
 import { icon } from './icons';
 import { brandMark } from './brand';
-import { CHECKER_COLORS, CHECKER_SIZES, loadPrefs, RECOVERY_CHOICES, savePrefs, UNIT_CHOICES, type CheckerColors, type CheckerSize, type Prefs } from './prefs';
+import { ANCHOR_SIZES, CHECKER_COLORS, CHECKER_SIZES, SNAP_ANGLE_SETS, loadPrefs, RECOVERY_CHOICES, savePrefs, UNIT_CHOICES, type CheckerColors, type CheckerSize, type Prefs } from './prefs';
 import { readChoice, setAccent, setIntensity, setTheme, themeSwatchesHtml, THEMES } from './themes';
 import { toast } from './toast';
 import { ARTBOARD_PRESETS } from '../tools/view';
@@ -22,8 +22,8 @@ function selectOf(choices: ReadonlyArray<readonly [string, string]>): HTMLSelect
 export class NewDocumentDialog extends Dialog {
   private readonly name = el<HTMLInputElement>('<input class="cv-input" type="text" value="Untitled-1">');
   private readonly presets = el('<div class="cv-newdoc-presets" role="listbox" aria-label="Presets"></div>');
-  private readonly w = numberInput(1, 100000, 0.01);
-  private readonly h = numberInput(1, 100000, 0.01);
+  private readonly w = numberInput(1, 163440, 0.01);
+  private readonly h = numberInput(1, 163440, 0.01);
   private readonly units = selectOf(UNIT_CHOICES);
   private readonly boards = numberInput(1, 100);
   private readonly mode = selectOf([['rgb', 'RGB Color'], ['cmyk', 'CMYK Color']]);
@@ -190,7 +190,7 @@ export class SettingsDialog extends Dialog {
     const color = (key: 'guideColor' | 'gridColor', label: string): HTMLElement => { const c = el<HTMLInputElement>('<input class="cv-input" type="color">'); c.setAttribute('aria-label', label); c.addEventListener('input', () => this.change({ [key]: c.value } as Partial<Prefs>)); const b = el<HTMLButtonElement>('<button class="cv-btn" type="button">Theme colour</button>'); b.addEventListener('click', () => this.change({ [key]: '' } as Partial<Prefs>)); this.ctl[key] = c; return row(label, c, b); };
     const reset = el<HTMLButtonElement>('<button class="cv-btn" type="button">Reset All Preferences...</button>');
     reset.addEventListener('click', () => { void confirmAction('Reset all preferences?', 'Every preference, the panel arrangement and the tools shown go back to how formpth comes; your documents and library are kept. formpth reloads.', 'Reset').then((ok) => { if (!ok) return; for (const k of Object.keys(localStorage)) if (k.startsWith('formpth.') || k === 'nodemode_ui_settings') localStorage.removeItem(k); location.reload(); }); });
-    add('General', check('autoShowHome', 'Show the Home screen when no document is open'), num('keyIncrement', 'Keyboard increment (pt)', 0.01, 1000, 0.1), check('scaleStrokes', 'Scale strokes and effects'), check('previewBounds', 'Use preview bounds'), reset);
+    add('General', check('autoShowHome', 'Show the Home screen when no document is open'), num('keyIncrement', 'Keyboard increment (pt)', 0.01, 1000, 0.1), check('scaleStrokes', 'Scale strokes and effects'), check('scaleCorners', 'Scale corners'), check('previewBounds', 'Use preview bounds'), check('showGenerative', 'Show generative features'), reset);
     this.intensity.addEventListener('input', () => setIntensity(Number(this.intensity.value) / 100));
     const lang = el<HTMLSelectElement>(`<select class="cv-select" translate="no" aria-label="Language">${LANGUAGES.map(([c, n]) => `<option value="${c}">${escapeHtml(n)}</option>`).join('')}</select>`);
     lang.value = language();
@@ -200,7 +200,7 @@ export class SettingsDialog extends Dialog {
     lock.addEventListener('change', () => this.workspaceLock?.set(lock.checked));
     this.ctl.lock = lock;
     add('Workspace', row('Lock workspace', lock), check('narrowCollapse', 'Show the side column as icons in a narrow window'));
-    add('Selection & Snapping', num('snapTolerance', 'Snapping tolerance (screen px)', 1, 20), check('zoomWheel', 'Zoom with the scroll wheel'), el('<p class="cv-note">On, the wheel zooms about the pointer and Ctrl, Cmd or Alt with the wheel scrolls; off, the other way round.</p>'));
+    add('Selection & Snapping', num('snapTolerance', 'Snapping tolerance (screen px)', 1, 20), sel('snapAngleSet', 'Smart Guides construction angles', SNAP_ANGLE_SETS), sel('anchorSize', 'Anchor point and handle display size', ANCHOR_SIZES), check('zoomWheel', 'Zoom with the scroll wheel'), el('<p class="cv-note">On, the wheel zooms about the pointer and Ctrl, Cmd or Alt with the wheel scrolls; off, the other way round.</p>'));
     add('Units', sel('units', 'Default units for new documents', UNIT_CHOICES), el('<p class="cv-note">A document keeps its own units, set in File > Document Setup; rulers and fields show them.</p>'));
     add('Guides & Grid', color('guideColor', 'Guides'), color('gridColor', 'Grid'), num('gridSpacing', 'Gridline every (pt)', 1, 5000), num('gridSubdivisions', 'Subdivisions', 1, 64), check('gridInBack', 'Grids in back'), sel('checkerSize', 'Transparency grid size', CHECKER_SIZES), sel('checkerColors', 'Transparency grid colours', CHECKER_COLORS));
     const libApply = el<HTMLButtonElement>('<button class="cv-btn" type="button">Use this folder</button>');

@@ -28,7 +28,21 @@ export interface Prefs {
   narrowCollapse: boolean;
   newMaskClip: boolean;
   newMaskInvert: boolean;
+  showGenerative: boolean;
+  anchorSize: AnchorSize;
+  snapAngleSet: SnapAngleSet;
+  scaleCorners: boolean;
+  helpBar: boolean;
+  taskBar: boolean;
+  pasteOnArtboards: boolean;
 }
+
+export type AnchorSize = 'small' | 'medium' | 'large' | 'xlarge';
+export type SnapAngleSet = 'a45' | 'a30-45' | 'a30';
+export const ANCHOR_SIZES: ReadonlyArray<readonly [AnchorSize, string]> = [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['xlarge', 'Extra large']];
+export const ANCHOR_SCALE: Record<AnchorSize, number> = { small: 1, medium: 1.25, large: 1.6, xlarge: 2 };
+export const SNAP_ANGLE_SETS: ReadonlyArray<readonly [SnapAngleSet, string]> = [['a45', '90° and 45° angles'], ['a30-45', '30°, 45°, 60° and 90° angles'], ['a30', '30° angles']];
+export const SNAP_ANGLES: Record<SnapAngleSet, number[]> = { a45: [0, 45, 90, 135], 'a30-45': [0, 30, 45, 60, 90, 120, 135, 150], a30: [0, 30, 60, 90, 120, 150] };
 
 export const UNIT_CHOICES: ReadonlyArray<readonly [Units, string]> = [['pt', 'Points'], ['px', 'Pixels'], ['in', 'Inches'], ['mm', 'Millimeters'], ['cm', 'Centimeters'], ['pc', 'Picas']];
 export const CHECKER_SIZES: ReadonlyArray<readonly [CheckerSize, string]> = [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']];
@@ -41,6 +55,7 @@ export const DEFAULT_PREFS: Prefs = {
   shortcuts: {}, restoreSession: true, agentsAllowed: false, nodemodeUrl: 'http://localhost:8000', historyStates: 200, recoverySeconds: 20, autoShowHome: true,
   zoomWheel: false, keyIncrement: 1, snapTolerance: 4, units: 'pt', scaleStrokes: true, previewBounds: false, gridInBack: true, gridSpacing: 72, gridSubdivisions: 8,
   guideColor: '', gridColor: '', checkerSize: 'medium', checkerColors: 'light', narrowCollapse: true, newMaskClip: true, newMaskInvert: false,
+  showGenerative: true, anchorSize: 'small', snapAngleSet: 'a45', scaleCorners: true, helpBar: false, taskBar: true, pasteOnArtboards: false,
 };
 
 const KEY = 'formpth.prefs';
@@ -75,6 +90,13 @@ export function loadPrefs(): Prefs {
       narrowCollapse: bool(r.narrowCollapse, true),
       newMaskClip: bool(r.newMaskClip, true),
       newMaskInvert: bool(r.newMaskInvert, false),
+      showGenerative: bool(r.showGenerative, true),
+      anchorSize: ANCHOR_SIZES.some(([k]) => k === r.anchorSize) ? r.anchorSize as AnchorSize : 'small',
+      snapAngleSet: SNAP_ANGLE_SETS.some(([k]) => k === r.snapAngleSet) ? r.snapAngleSet as SnapAngleSet : 'a45',
+      scaleCorners: bool(r.scaleCorners, true),
+      helpBar: bool(r.helpBar, false),
+      taskBar: bool(r.taskBar, true),
+      pasteOnArtboards: bool(r.pasteOnArtboards, false),
     };
   } catch { return { ...DEFAULT_PREFS }; }
 }
@@ -83,7 +105,7 @@ export function savePrefs(p: Prefs): void { try { localStorage.setItem(KEY, JSON
 
 export function applyPrefs(engine: Engine, p: Prefs): void {
   if (History.limit !== p.historyStates) engine.setHistoryLimit(p.historyStates);
-  engine.view = { ...engine.view, scaleStrokes: p.scaleStrokes, previewBounds: p.previewBounds };
+  engine.setView({ scaleStrokes: p.scaleStrokes, previewBounds: p.previewBounds, scaleCorners: p.scaleCorners });
   engine.maskDefaults = { clip: p.newMaskClip, invert: p.newMaskInvert };
   engine.emit('options', null);
   engine.emit('overlay', null);

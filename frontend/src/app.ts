@@ -9,7 +9,7 @@ import { transformNodes } from './engine/ops/objects';
 import { anchorCount, mixPathfinder, objectOnPath, trapShapes, type OnPathArgs, type TrapArgs } from './engine/ops/illustrator';
 import { pathOperation } from './engine/ops/paths';
 import { RECOLOR, recolorDoc } from './engine/ops/recolor';
-import { hex, solid, defaultGradient, NONE, toRgb } from './engine/paint';
+import { hex, solid, defaultGradient, NONE, toRgb, parseColor } from './engine/paint';
 import { fontsChanged, plainText } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
@@ -87,13 +87,17 @@ import { VariablesPanel } from './ui/panels/variables';
 import { GraphDesignDialog, graphColumnDialog, graphMarkerDialog, graphSizeDialog, graphTypeDialog } from './ui/panels/graph-dialogs';
 import { pendingGraph } from './tools/graph';
 import { defineGrid, presetById, presetChoices, saveGridPreset } from './ui/panels/perspective-grid';
-import { CHECKER_CELL, CHECKER_PAIR, applyPrefs, loadPrefs, savePrefs, type Prefs } from './ui/prefs';
+import { ANCHOR_SCALE, CHECKER_CELL, CHECKER_PAIR, SNAP_ANGLES, applyPrefs, loadPrefs, savePrefs, type Prefs } from './ui/prefs';
+import { HelpBar } from './ui/helpbar';
+import { TaskBar } from './ui/taskbar';
+import { anchorUi } from './tools/util';
 import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './ui/properties';
 import { Rail } from './ui/rail';
 import { Stage } from './ui/stage';
 import { StatusBar } from './ui/status';
 import { TerminalDock } from './ui/terminal-dock';
 import { Catalogue } from './automation/catalogue';
+import { SpellingDialog, resetSpellCache } from './ui/panels/spelling';
 import { Tabs } from './ui/tabs';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
@@ -147,6 +151,7 @@ const SHELL = `<div class="cv-app">
 <div class="cv-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the panels"></div>
 <section class="cv-layers" aria-label="Panels"></section>
 </div>
+<div class="fp-helpbar" aria-label="Help bar"><span class="fp-help-name"></span><kbd class="fp-help-key" hidden></kbd><span class="fp-help-text"></span></div>
 <footer class="cv-status"></footer>
 </div>`;
 
@@ -181,8 +186,16 @@ export function startApp(): void {
   typing.style = () => ({ font: typeDefaults.font, style: typeDefaults.style, size: typeDefaults.size });
   stage.onType((r) => { if (!/^(type|areaType|typePath|typeVertical|areaTypeVertical|typePathVertical)$/.test(engine.tool)) engine.setTool('type'); typing.begin(r); });
 
+  const late: { task: TaskBar | null } = { task: null };
+  const GENERATIVE = ['generative-shape-fill', 'generate-patterns', 'retype', 'panel-shape-fill', 'panel-generate-patterns', 'panel-retype'];
+  commands.gate = (cmd) => prefs.showGenerative || !GENERATIVE.includes(cmd.id);
   const applyUiPrefs = (pr: Prefs): void => {
-    Stage.prefs = { ...Stage.prefs, zoomWheel: pr.zoomWheel, gridColor: pr.gridColor, guideColor: pr.guideColor, snapTol: pr.snapTolerance, gridInBack: pr.gridInBack, cell: CHECKER_CELL[pr.checkerSize] };
+    Stage.prefs = { ...Stage.prefs, zoomWheel: pr.zoomWheel, gridColor: pr.gridColor, guideColor: pr.guideColor, snapTol: pr.snapTolerance, gridInBack: pr.gridInBack, cell: CHECKER_CELL[pr.checkerSize], snapAngles: SNAP_ANGLES[pr.snapAngleSet] };
+    anchorUi.scale = ANCHOR_SCALE[pr.anchorSize];
+    for (const t of ['shape-fill', 'generate-patterns', 'retype']) PanelGroup.setTabHidden(t, !pr.showGenerative);
+    const rootEl = document.documentElement, helpOn = pr.helpBar ? 'on' : 'off';
+    if (rootEl.getAttribute('data-fp-help') !== helpOn) rootEl.setAttribute('data-fp-help', helpOn);
+    if (late.task) { late.task.enabled = pr.taskBar; late.task.schedule(); }
     const [a, b] = CHECKER_PAIR[pr.checkerColors];
     document.documentElement.style.setProperty('--cv-checker-a', a);
     document.documentElement.style.setProperty('--cv-checker-b', b);
@@ -276,6 +289,9 @@ export function startApp(): void {
   new Rail(q(root, '.cv-rail'), engine);
   new OptionsBar(q(root, '.cv-options'), engine);
   const status = new StatusBar(q(root, '.cv-status'), engine);
+  new HelpBar(q(root, '.fp-helpbar'), engine);
+  late.task = new TaskBar(q(document.body, '#overlay-root'), stageEl, engine, commands);
+  applyUiPrefs(prefs);
   const termDock = new TerminalDock();
   root.insertBefore(termDock.root, q(root, '.cv-status'));
   termDock.onFail = (err) => toast(message(err), 'error');
@@ -844,6 +860,17 @@ export function startApp(): void {
     else engine.setActivePaint(cur.type === 'color' ? cur : solid(cur.type === 'gradient' ? cur.gradient.stops[0].color : { kind: 'rgb', r: 0, g: 0, b: 0 }));
   }
 
+  const setPref = (patch: Partial<Prefs>): void => { prefs = { ...prefs, ...patch }; savePrefs(prefs); applyPrefs(engine, prefs); applyUiPrefs(prefs); };
+  const pasteCommand = (): void => {
+    const p = engine.current, c = engine.clipboard;
+    if (!p || !c || !prefs.pasteOnArtboards || p.doc.artboards.length < 2) { engine.paste('center'); return; }
+    const abs = p.doc.artboards, cx = c.bounds.x + c.bounds.w / 2, cy = c.bounds.y + c.bounds.h / 2;
+    let ref = abs.findIndex((a) => cx >= a.x && cx <= a.x + a.w && cy >= a.y && cy <= a.y + a.h);
+    if (ref < 0) ref = Math.min(p.activeArtboard, abs.length - 1);
+    engine.paste('in_place');
+    let prev = abs[ref];
+    for (const a of abs) { if (a === abs[ref]) continue; engine.duplicate(a.x - prev.x, a.y - prev.y); prev = a; }
+  };
   const has = (): boolean => !!engine.current;
   const sel = (): boolean => engine.hasSelection;
   const wrapDefaults = { offset: 6, invert: false };
@@ -1140,14 +1167,38 @@ export function startApp(): void {
     return [...BRUSH_LIBRARIES.map((l) => `br-lib-${l.id}`), '-', { label: 'User Defined', items: users.length ? users.slice(0, 12).map((_, i) => `br-user-${i}`) : ['br-user-none'] }, '-', 'br-lib-other', 'br-lib-save'];
   }
 
+  let spelling: SpellingDialog | null = null;
+  async function editDictionary(): Promise<void> {
+    const words = await api.spellDictionary().catch(() => [] as string[]);
+    const v = await askForm('Edit Custom Dictionary', [
+      { kind: 'note', text: words.length ? `Words added: ${words.join(', ')}` : 'No words have been added yet. Add to Dictionary in Check Spelling adds them.' },
+      { kind: 'text', key: 'remove', label: 'Remove words', value: '', placeholder: 'word, another' },
+    ], { ok: 'Remove' });
+    const remove = String(v?.remove ?? '').split(/[,\s]+/).filter(Boolean);
+    if (!remove.length) return;
+    try { await api.spellDictionaryEdit([], remove); resetSpellCache(); toast(`Removed ${remove.length} ${remove.length === 1 ? 'word' : 'words'}.`); } catch (err) { toast(message(err), 'error'); }
+  }
+
   async function rasterizeSel(): Promise<void> {
     const p = engine.current;
     if (!p || !sel()) return;
     const ids = engine.targetIds(), nodes = ids.map((id) => findNode(p.doc, id) as VNode);
     const b = engine.selectionBounds(true);
     if (!b) return;
+    const v = await askForm('Rasterize', [
+      { kind: 'select', key: 'model', label: 'Color model', value: 'color', choices: [['color', 'Color'], ['grayscale', 'Grayscale'], ['bitmap', 'Bitmap'], ['palette', 'Palette']] },
+      { kind: 'select', key: 'method', label: 'Dither', value: 'diffusion', choices: [['none', 'None'], ['diffusion', 'Diffusion'], ['bayer', 'Pattern']] },
+      { kind: 'color', key: 'fg', label: 'Foreground', value: '#000000' },
+      { kind: 'color', key: 'bg', label: 'Background', value: '#ffffff' },
+      { kind: 'number', key: 'levels', label: 'Gray levels', value: 4, min: 2, max: 256 },
+      { kind: 'note', text: 'Bitmap maps every pixel to the foreground or background colour, Palette to the foreground, the background, black and white; Grayscale keeps the given number of levels.' },
+    ], { ok: 'Rasterize' });
+    if (!v) return;
+    const model = String(v.model), col = (s: string, d: string): Color => parseColor(s) ?? parseColor(d) as Color;
+    const fg = col(String(v.fg), '#000000'), bg = col(String(v.bg), '#ffffff');
+    const dither = model === 'color' ? undefined : { model: model as 'bitmap' | 'grayscale' | 'palette', method: String(v.method) as 'none' | 'diffusion' | 'bayer', fg, bg, levels: Number(v.levels), palette: [fg, bg, col('#000000', '#000000'), col('#ffffff', '#ffffff')] };
     await engine.task(async () => {
-      const c = await renderRegion(p, { region: b, scale: (p.doc.rasterPpi || 300) / 72, transparent: true, only: nodes });
+      const c = await renderRegion(p, { region: b, scale: (p.doc.rasterPpi || 300) / 72, transparent: true, only: nodes, dither });
       const blob = await canvasBlob(c, 'png', 1), key = imageKey(blob);
       p.assets.set(key, blob);
       const img: VNode = { id: newId('im'), kind: 'image', src: key, w: c.width, h: c.height, xf: [b.w / c.width, 0, 0, b.h / c.height, b.x, b.y], opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, name: 'Rasterized' };
@@ -1225,12 +1276,14 @@ export function startApp(): void {
     { id: 'redo', label: () => `Redo${engine.current?.history.redoName ? ` ${engine.current.history.redoName}` : ''}`, keys: ['Shift+Mod+Z'], enabled: () => !!engine.current?.history.canRedo, run: () => { typing.end(); engine.redo(); } },
     { id: 'cut', label: 'Cut', keys: ['Mod+X'], enabled: sel, run: () => { void copyToSystem(); engine.cut(); } },
     { id: 'copy', label: 'Copy', keys: ['Mod+C'], enabled: sel, run: () => { engine.copy(); void copyToSystem(); } },
-    { id: 'paste', label: 'Paste', keys: ['Mod+V'], enabled: () => has() && !!engine.clipboard, run: () => engine.paste('center') },
+    { id: 'paste', label: 'Paste', keys: ['Mod+V'], enabled: () => has() && !!engine.clipboard, run: () => pasteCommand() },
     { id: 'paste-front', label: 'Paste in Front', keys: ['Mod+F'], enabled: () => has() && !!engine.clipboard, run: () => engine.paste('front') },
     { id: 'paste-back', label: 'Paste in Back', keys: ['Mod+B'], enabled: () => has() && !!engine.clipboard, run: () => engine.paste('back') },
     { id: 'paste-in-place', label: 'Paste in Place', keys: ['Shift+Mod+V'], enabled: () => has() && !!engine.clipboard, run: () => engine.paste('in_place') },
     { id: 'clear', label: 'Clear', keys: ['Delete', 'Backspace'], enabled: sel, run: () => engine.deleteSelection() },
     { id: 'find-replace', label: 'Find and Replace...', enabled: has, run: () => void findReplaceDialog(engine) },
+    { id: 'check-spelling', label: 'Check Spelling...', keys: ['Mod+I'], enabled: has, group: 'Edit', description: 'Walks every text object in the document and offers corrections for words the dictionary does not know, with Change, Change All, Ignore and Add to Dictionary; each change is one undo step.', run: () => { spelling ??= new SpellingDialog(engine); void spelling.start(); } },
+    { id: 'spelling-dictionary', label: 'Edit Custom Dictionary...', group: 'Edit', description: 'Shows the words added to the personal spelling dictionary and removes the ones typed here.', run: () => void editDictionary() },
     { id: 'find-font', label: 'Find Font...', enabled: () => engine.fontsUsed().length > 0, run: () => { findFont ??= new FindFontDialog(engine); findFont.show(); } },
     { id: 'recolor', label: 'Recolor Artwork...', enabled: sel, run: () => void recolorDialog() },
     ...(['invert', 'grayscale', 'cmyk', 'rgb'] as const).map((k) => ({ id: `colors-${k}`, label: { invert: 'Invert Colors', grayscale: 'Convert to Grayscale', cmyk: 'Convert to CMYK', rgb: 'Convert to RGB' }[k], enabled: sel, run: () => { const ids = engine.targetIds(); engine.edit({ invert: 'Invert Colors', grayscale: 'Convert to Grayscale', cmyk: 'Convert to CMYK', rgb: 'Convert to RGB' }[k], (d) => recolorDoc(d, ids, RECOLOR[k](0))); } })),
@@ -1244,7 +1297,11 @@ export function startApp(): void {
     { id: 'scale-dialog', label: 'Scale...', enabled: sel, run: () => void transformDialog('scale') },
     { id: 'shear-dialog', label: 'Shear...', enabled: sel, run: () => void transformDialog('shear') },
     { id: 'transform-each', label: 'Transform Each...', keys: ['Alt+Shift+Mod+D'], group: 'Object', description: 'Transforms each selected object about its own centre; absolute mode takes target sizes in document units, relative mode percentages.', enabled: sel, mutates: true, params: { mode: { type: 'string', enum: ['relative', 'absolute'], description: 'Scale as percent of each object, or to a target size in document units (0 keeps the size)' }, sh: { type: 'number', min: 0, description: 'Scale horizontal: percent, or target width when absolute' }, sv: { type: 'number', min: 0, description: 'Scale vertical: percent, or target height when absolute' }, dx: { type: 'number', description: 'Move horizontal in points' }, dy: { type: 'number', description: 'Move vertical in points' }, angle: { type: 'number', min: -360, max: 360, description: 'Rotate in degrees' }, rx: { type: 'boolean', description: 'Reflect X' }, ry: { type: 'boolean', description: 'Reflect Y' }, random: { type: 'boolean', description: 'Randomise the amounts' } }, run: (params) => void transformEachDialog(params) },
-    { id: 'toggle-scale-corners', label: 'Scale Corners', group: 'Object', description: 'Toggles whether scaling a live rectangle or a path with corner radii scales the radii; off keeps them.', enabled: has, mutates: false, checked: () => engine.view.scaleCorners, run: () => engine.setView({ scaleCorners: !engine.view.scaleCorners }) },
+    { id: 'toggle-scale-corners', label: 'Scale Corners', group: 'Object', description: 'Toggles whether scaling a live rectangle or a path with corner radii scales the radii; off keeps them.', enabled: has, mutates: false, checked: () => engine.view.scaleCorners, run: () => setPref({ scaleCorners: !engine.view.scaleCorners }) },
+    { id: 'toggle-generative', label: 'Generative Features', group: 'View', description: 'Shows or hides every generative feature: the Generative menu, Generate Patterns, Retype and their panels.', checked: () => prefs.showGenerative, run: () => setPref({ showGenerative: !prefs.showGenerative }) },
+    { id: 'toggle-help-bar', label: 'Help Bar', group: 'View', description: 'Shows or hides the slim bar under the stage that names the active tool, its shortcut and its hint.', checked: () => prefs.helpBar, run: () => setPref({ helpBar: !prefs.helpBar }) },
+    { id: 'toggle-task-bar', label: 'Contextual Task Bar', group: 'Window', description: 'Shows or hides the floating bar of next-step buttons below the selection.', checked: () => prefs.taskBar, run: () => setPref({ taskBar: !prefs.taskBar }) },
+    { id: 'paste-on-selected-artboards', label: 'Paste on Selected Artboards', group: 'Edit', description: 'When on, Paste places a copy on every artboard at the same relative position; artboards have no multi-selection, so all artboards are used.', checked: () => prefs.pasteOnArtboards, run: () => setPref({ pasteOnArtboards: !prefs.pasteOnArtboards }) },
     { id: 'bring-to-front', label: 'Bring to Front', keys: ['Shift+Mod+]'], enabled: sel, run: () => engine.arrange('bring_to_front') },
     { id: 'bring-forward', label: 'Bring Forward', keys: ['Mod+]'], enabled: sel, run: () => engine.arrange('bring_forward') },
     { id: 'send-backward', label: 'Send Backward', keys: ['Mod+['], enabled: sel, run: () => engine.arrange('send_backward') },
@@ -1529,8 +1586,8 @@ export function startApp(): void {
 
   const menus: MenuDef[] = [
     { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
-    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'clear', '-', 'find-replace', '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
-    { label: 'Object', items: [
+    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['check-spelling', 'spelling-dictionary'] }, '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
+    { label: 'Object', items: () => [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },
       { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', '-', 'send-to-layer'] },
       { label: 'Pathfinder', items: ['pf-unite', 'pf-minus_front', 'pf-intersect', 'pf-exclude', '-', 'pf-divide', 'pf-trim', 'pf-merge', 'pf-crop', 'pf-outline', 'pf-minus_back', '-', 'pf-hard-mix', 'pf-soft-mix', 'pf-trap'] },
@@ -1539,8 +1596,8 @@ export function startApp(): void {
       'group', 'ungroup', 'ungroup-all', 'isolate', '-', 'lock', 'unlock-all', 'hide', 'show-all', '-', 'expand-object', 'expand-appearance', 'rasterize', 'create-mesh', '-',
       { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'corners-dialog', 'expand-corners', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
       { label: 'Shape', items: ['expand-shape', 'shaper-expand'] },
-      { label: 'Pattern', items: ['make-pattern', 'edit-pattern', '-', 'generate-patterns'] },
-      { label: 'Generative', items: ['generative-shape-fill'] },
+      { label: 'Pattern', items: prefs.showGenerative ? ['make-pattern', 'edit-pattern', '-', 'generate-patterns'] : ['make-pattern', 'edit-pattern'] },
+      ...(prefs.showGenerative ? [{ label: 'Generative', items: ['generative-shape-fill'] }] : []),
       { label: 'Repeat', items: ['repeat-radial', 'repeat-grid', 'repeat-mirror', '-', 'release-live', 'repeat-options'] },
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'envelope-options', 'expand-object', '-', 'envelope-edit-contents', 'envelope-edit-envelope', '-', 'envelope-reset-warp', 'envelope-reset-mesh'] },
@@ -1556,12 +1613,12 @@ export function startApp(): void {
       { label: 'Opacity Mask', items: ['opacity-mask', 'release-opacity-mask', 'disable-opacity-mask', 'unlink-opacity-mask', '-', 'new-mask-clip', 'new-mask-invert'] },
       { label: 'Symbol', items: ['new-symbol', 'symbol-edit', 'symbol-exit', '-', 'symbol-redefine', 'symbol-duplicate', 'symbol-replace', 'symbol-reset', '-', 'break-symbol', 'symbol-options'] },
       { label: 'Artboards', items: ['artboards-from-selection', 'artboards-rearrange', 'artboard-fit-art', 'artboard-fit-selection', '-', 'artboard-options'] }] },
-    { label: 'Type', items: ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', 'retype', '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
+    { label: 'Type', items: () => ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', ...(prefs.showGenerative ? ['retype'] : []), '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
-    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
+    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', ...Object.keys(TAB_HOMES).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);

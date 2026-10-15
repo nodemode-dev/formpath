@@ -18,7 +18,7 @@ import { CORNER_TYPES, cornerAlong, cornerFrame, cornerRadiusFor, tangentFromAlo
 import { setCornersOp, type CornerTargets } from '../engine/ops/corner-ops';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { isMac } from '../ui/dom';
-import { fmt, hud, layerColor, marquee, outlineNode, stroke2, tolDoc, unitLabel } from './util';
+import { anchorUi, fmt, hud, layerColor, marquee, outlineNode, stroke2, tolDoc, unitLabel } from './util';
 
 const xf = (e: Engine) => ({ strokes: e.view.scaleStrokes, patterns: e.view.transformPatterns, gradients: true });
 
@@ -339,7 +339,7 @@ registerTool({
     if (!pr) return;
     if (!S.mode && !L.id) {
       const v = ctx.view(), color = pr.selection.size ? layerColor(e, [...pr.selection][0]) : ctx.paint().accent;
-      for (const w of cornerWidgets(ctx)) { const s = v.toScreen(w.at); g.save(); g.beginPath(); g.arc(s.x, s.y, 4, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1; g.strokeStyle = color; g.stroke(); g.beginPath(); g.arc(s.x, s.y, 1.5, 0, Math.PI * 2); g.fillStyle = color; g.fill(); g.restore(); }
+      for (const w of cornerWidgets(ctx)) { const s = v.toScreen(w.at); g.save(); g.beginPath(); g.arc(s.x, s.y, 4 * anchorUi.scale, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1; g.strokeStyle = color; g.stroke(); g.beginPath(); g.arc(s.x, s.y, 1.5, 0, Math.PI * 2); g.fillStyle = color; g.fill(); g.restore(); }
     }
     if (L.drag) marquee(ctx, g, L.start, L.cur);
     else if (S.mode === 'marquee') marquee(ctx, g, S.start, S.cur);
@@ -561,7 +561,7 @@ function cornerOverlay(ctx: ToolContext, g: CanvasRenderingContext2D): void {
   }
   for (const w of pathWidgets(ctx)) {
     const s = v.toScreen(w.at), color = layerColor(e, w.id), hot = CD.on && CD.w?.id === w.id && CD.w.flat === w.flat;
-    g.save(); g.beginPath(); g.arc(s.x, s.y, 4, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1; g.strokeStyle = hot && CD.clamped ? ctx.paint().danger ?? color : color; g.stroke(); g.beginPath(); g.arc(s.x, s.y, 1.5, 0, Math.PI * 2); g.fillStyle = g.strokeStyle; g.fill(); g.restore();
+    g.save(); g.beginPath(); g.arc(s.x, s.y, 4 * anchorUi.scale, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1; g.strokeStyle = hot && CD.clamped ? ctx.paint().danger ?? color : color; g.stroke(); g.beginPath(); g.arc(s.x, s.y, 1.5, 0, Math.PI * 2); g.fillStyle = g.strokeStyle; g.fill(); g.restore();
   }
 }
 
@@ -761,7 +761,7 @@ function directOverlay(ctx: ToolContext, g: CanvasRenderingContext2D): void {
     if (n) {
       const color = layerColor(e, hoverLeaf), v = ctx.view();
       outlineNode(ctx, g, pr.doc, n, color, 1.5);
-      for (const { d } of leafPaths(n)) for (const sp of d) for (const a of sp.pts) { const s = v.toScreen(a); g.fillStyle = '#fff'; g.strokeStyle = color; g.fillRect(Math.round(s.x - 2.5), Math.round(s.y - 2.5), 5, 5); g.strokeRect(Math.round(s.x - 2.5) + 0.5, Math.round(s.y - 2.5) + 0.5, 4, 4); }
+      for (const { d } of leafPaths(n)) for (const sp of d) for (const a of sp.pts) { const s = v.toScreen(a); g.fillStyle = '#fff'; g.strokeStyle = color; const r = 2.5 * anchorUi.scale; g.fillRect(Math.round(s.x - r), Math.round(s.y - r), r * 2, r * 2); g.strokeRect(Math.round(s.x - r) + 0.5, Math.round(s.y - r) + 0.5, r * 2 - 1, r * 2 - 1); }
     }
   }
 }

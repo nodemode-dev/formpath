@@ -1,4 +1,4 @@
-import { cmyk, cssColor, defaultGradient, gradientAt, gray, hex, hsbToRgb, parseColor, resolvePaint, rgb, rgbToHsb, solid, stop, toCmyk, toGray, toRgb, BLACK, WHITE, NONE } from '../../engine/paint';
+import { cmyk, cssColor, defaultGradient, gradientAt, gray, hex, hsbToRgb, parseColor, resolvePaint, rgb, rgbToHsb, setGradientBlend, setGradientDither, solid, stop, toCmyk, toGray, toRgb, BLACK, WHITE, NONE } from '../../engine/paint';
 import type { Color, Engine, Gradient, GradientStop, Paint, Swatch } from '../../engine';
 import { el, patchList, q, setClass, setHidden, setStyleVar, setText, setTitle } from '../dom';
 import { icon } from '../icons';
@@ -353,6 +353,9 @@ export class GradientPanel {
   private readonly loc: Ctl<number | null>;
   private readonly opacity: Ctl<number | null>;
   private readonly strokeMode: Ctl<string>;
+  private readonly method: Ctl<string>;
+  private readonly dither = el<HTMLInputElement>('<input type="checkbox" aria-label="Dither">');
+  private readonly ditherRow = el('<label class="cv-kit-row cv-gradp-dither"><span>Dither</span></label>');
   private readonly chip: HTMLButtonElement;
   private readonly ffMode: Ctl<string>;
   private readonly ffChip: HTMLButtonElement;
@@ -403,7 +406,10 @@ export class GradientPanel {
     stopRow.append(this.chip, this.loc.el, this.opacity.el, del);
     const geo = el('<div class="cv-kit-row"></div>');
     geo.append(this.angle.el, this.aspect.el);
-    this.linearBox.append(geo, this.bar, stopRow, this.strokeMode.el);
+    this.method = seg([{ id: 'linear', label: 'Classic' }, { id: 'perceptual', label: 'Perceptual' }], (id) => { const g = this.gradient(); if (g) this.set(setGradientBlend(g, id === 'perceptual' ? 'perceptual' : 'linear')); });
+    this.dither.addEventListener('change', () => { const g = this.gradient(); if (g) this.set(setGradientDither(g, this.dither.checked)); });
+    this.ditherRow.prepend(this.dither);
+    this.linearBox.append(geo, this.bar, stopRow, this.strokeMode.el, this.method.el, this.ditherRow);
     this.body.append(top, this.linearBox, this.ffBox);
     this.bindBar();
     for (const k of ['colors', 'selection', 'active', 'doc', 'options'] as const) engine.on(k, () => this.queue());
@@ -516,6 +522,8 @@ export class GradientPanel {
     this.aspect.set(Math.round(shown.aspect * 100));
     setHidden(this.aspect.el, shown.kind !== 'radial');
     this.strokeMode.set(shown.strokeMode ?? 'within');
+    this.method.set(shown.blend === 'perceptual' ? 'perceptual' : 'linear');
+    if (this.dither.checked !== (shown.dither === true)) this.dither.checked = shown.dither === true;
     setHidden(this.strokeMode.el, e.activeSlot !== 'stroke');
     setClass(this.body, 'is-inactive', !g);
     setText(q(this.body, '.cv-gradp-preview'), '');

@@ -182,6 +182,18 @@ export class PanelGroup {
     this.onTab?.(id);
   }
 
+  static setTabHidden(tid: string, hide: boolean): void {
+    for (const g of PanelGroup.all.values()) {
+      const t = g.tabs.get(tid);
+      if (!t) continue;
+      setHidden(t.btn, hide);
+      if (hide && g.active === tid) {
+        const next = [...g.tabs].find(([k, x]) => k !== tid && !x.btn.hidden);
+        if (next) g.show(next[0], false);
+      }
+    }
+  }
+
   setMinimised(min: boolean, remember = true): void {
     this.root.classList.toggle('is-min', min);
     setHidden(this.root.querySelector('.cv-group-body') as HTMLElement, min);

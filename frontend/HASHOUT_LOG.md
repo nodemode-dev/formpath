@@ -2583,3 +2583,65 @@ Simplify keeps `simplifyPath` for the plain case so existing results do not chan
 - logged: v0.28.0 · 2026-10-15
 
 Transform Each gains a Scale mode select. Absolute reads Scale horizontal and vertical as target width and height in document units for every object (0 keeps that dimension), always about each object's centre; Relative is the old percentage. The dialog opens in Relative because one default cannot be right for every object in Absolute. Every command added or extended here takes `params` and, when any are given, skips the dialog and applies at once, so an agent gets the same result as the dialog's OK in one undo step. An Object > Pathfinder submenu now lists the existing pf-* commands, which had no menu, followed by the three new ones.
+
+## src/ui/prefs.ts
+
+### src/ui/prefs.ts · Generative switch, anchor size, snap angles and the bars
+
+- refers-to: src/ui/prefs.ts (Prefs.showGenerative, anchorSize, snapAngleSet, scaleCorners, helpBar, taskBar, pasteOnArtboards); src/app.ts (applyUiPrefs, setPref, commands.gate, toggle-generative, toggle-help-bar, toggle-task-bar, paste-on-selected-artboards); src/tools/util.ts (anchorUi, ANCHOR_TOL, tolDoc); src/ui/panel-group.ts (setTabHidden)
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+Every new switch lives in Prefs and is applied by one function, applyUiPrefs, so the command, the Preferences dialog and the startup path cannot disagree; the dialog reloads prefs on show, so a command toggle is never overwritten by a stale copy. Generative off is enforced three ways: commands.gate refuses the six generative ids (so menus grey nothing, agents and the catalogue get a refusal), the Object, Type and Window menu definitions drop the entries because their items are functions evaluated when a menu opens, and PanelGroup.setTabHidden hides the three panel tabs and moves an active one to its neighbour. The anchor size is a scale in tools/util.ts read by every anchor, handle and corner widget draw; the hit radius follows because tolDoc scales the 5 px request that is used only for anchor hit tests. The bounding-box handles keep their size. Paste on Selected Artboards: artboards have no multi-selection, so with the switch on Paste puts the copy in place and duplicates it onto every other artboard, one undo step per artboard. Artboard names in Outline already draw, because the overlay canvas draws them in both views; nothing was changed there.
+
+## src/ui/taskbar.ts
+
+### src/ui/taskbar.ts · Contextual task bar and help bar
+
+- refers-to: src/ui/taskbar.ts; src/ui/helpbar.ts; src/styles/helpbar.css; index.html (data-fp-help boot script); src/app.ts (SHELL .fp-helpbar)
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+The help bar is a grid row of the app, present in the shell markup from first paint; its height is the variable --fp-help-h, set to 0 or the control height by the data-fp-help attribute that a boot script in index.html reads from the saved prefs, as the terminal dock does. The task bar is a fixed element in the overlay root with all nine buttons created once; a selection kind only toggles which are hidden, and the position is a transform written only when it changes. It is made invisible, not removed, while a pointer gesture runs on the stage and when nothing suitable is selected.
+
+## src/engine/types.ts
+
+### src/engine/types.ts · Large Canvas class
+
+- refers-to: src/engine/types.ts :: MAX_ARTBOARD_PT, clampArtboardSide; src/engine/doc.ts :: newDoc; src/engine/index.ts :: addArtboard, setArtboard; src/engine/viewport.ts :: Viewport.MIN; src/io/pdf.ts :: PDF_MAX_SIDE; src/io/raster.ts :: rasterCap, exportRasterTiles
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+Before this change the engine had no upper bound on an artboard side (only a floor of 1 pt), the engine service refused any artboard over 16,383 x 72 = 1,179,576 pt in a saved project, the zoom floor was 3.125 percent (so a 100,000 pt board could not be fitted) and the PDF page box had no UserUnit. The effective canvas is now capped at 163,440 pt (2,270 in, Illustrator's Large Canvas class) on each side by one helper that new documents, new artboards and Artboard Options all go through, and the zoom floor is 0.25 percent so the largest board still fits a normal window. Canvas 2D carries the transform in 32-bit floats, which resolves about 0.016 pt at 163,440 pt, finer than any print or screen output needs, so no 1/10 working scale was added. PDF pages over 14,400 pt (Acrobat's limit) get /UserUnit, chosen as the smallest value to the thousandth that fits the longer side in 14,400 units; the content matrix and every gradient pattern matrix carry the inverse scale so the page matches the canvas. Raster export cannot draw past 16,384 px per side, so `rasterCap` reports the capped size and a message the dialog can show, and `exportRasterTiles` writes the full-resolution image as a zip of 8,192 px tiles (at most 256).
+
+### src/engine/paint.ts · gradient blend and dither
+
+- refers-to: src/engine/types.ts :: Gradient.blend, Gradient.dither; src/engine/paint.ts :: gradientAt, mixOklab, perceptualStops, setGradientBlend, setGradientDither; src/engine/render.ts :: addStops, ditheredPattern; src/io/svg.ts :: gradient; src/io/pdf.ts :: fnFor
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+Both fields are optional and are dropped when they hold their default, so old files load and save unchanged. A perceptual gradient mixes each stop pair in OKLab; the canvas, SVG and PDF writers all take the same list of 16 extra stops per segment from `perceptualStops`, so the three outputs agree to one level per channel. Dither is a render-time pass: `ditheredPattern` fills the shape bounds into a cached canvas at device resolution (capped at 16 million pixels) from a 1,024-entry float lookup of the gradient, adding an 8 x 8 Bayer threshold before rounding to 8 bits, and returns it as a pattern in document space. Linear and radial gradients without a focal point use it; others fall back to the plain canvas gradient. Chromium already dithers its own canvas gradients, so the visible gain is in engines and rasterizers that do not; SVG and PDF output omit dithering because the formats have no equivalent.
+
+### src/io/raster.ts · dithered rasterize
+
+- refers-to: src/io/raster.ts :: DitherOpts, ditherCanvas, renderRegion
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+`ditherCanvas` maps a rendered canvas onto a chosen colour set in place. Bitmap uses two colours (foreground for dark, background for light), Grayscale uses N levels on the ramp between them, Palette picks the nearest of a list in RGB. Methods are None (threshold), Diffusion (Floyd-Steinberg, left to right) and Pattern (Bayer 4 x 4). Pixels under half alpha stay fully transparent and the rest become fully opaque, so the output holds only the chosen colours plus transparency.
+
+### src/ui/panels/spelling.ts · Check Spelling dialog and auto-check ranges
+
+- refers-to: src/ui/panels/spelling.ts :: SpellingDialog, misspelledRanges, wordsOf, resetSpellCache; src/io/api.ts :: spellCheck, spellDictionary, spellDictionaryEdit
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+The dialog is built once and patched in place. It walks visible, unlocked text nodes in document order, asks the engine service about the distinct words (cached per session, so Auto Spell Check and the dialog share lookups) and shows the first unknown word in context. Change and Change All write through `setTextSpans`, one history step per changed text node, keeping the spans' styles; Ignore All is per dialog run; Add to Dictionary persists in the data folder and clears the cache.
+
+### src/io/fonts.ts · findSimilarFonts
+
+- refers-to: src/io/fonts.ts :: findSimilarFonts; src/io/api.ts :: similarFonts; app/services/fonts.py :: similar
+- kind: explainer
+- logged: v0.29.0 · 2026-10-15
+
+Ranking runs in the engine service, which already reads the font files; the frontend only resolves a family and style to an installed font id and asks for the top ten other families.

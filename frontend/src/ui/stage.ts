@@ -12,6 +12,7 @@ import { latticeCopies, tileOutline } from '../engine/pattern';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
 import type { Project } from '../engine/project';
 import { getTool, type SnapAt, type Tool, type ToolContext, type ToolPointer, type ViewInfo } from '../extensions/registry';
+import { anchorUi } from '../tools/util';
 import { el, isMac, q, setClass, setHidden, setStyleVar } from './dom';
 import { icon } from './icons';
 import { paint, type StagePaint } from './palette';
@@ -682,10 +683,10 @@ export class Stage {
             for (const [hx, hy, has] of [[a.ix, a.iy, hasIn(a)], [a.ox, a.oy, hasOut(a)]] as const) {
               if (!has) continue;
               const h = v.toScreen(hx, hy);
-              g.beginPath(); g.arc(h.x, h.y, 2.5, 0, Math.PI * 2); g.fill();
+              g.beginPath(); g.arc(h.x, h.y, 2.5 * anchorUi.scale, 0, Math.PI * 2); g.fill();
             }
           }
-          const r = direct ? 3 : 2.5;
+          const r = (direct ? 3 : 2.5) * anchorUi.scale;
           g.fillStyle = on ? color : pal.handle;
           g.strokeStyle = color;
           g.fillRect(Math.round(sa.x - r), Math.round(sa.y - r), r * 2, r * 2);

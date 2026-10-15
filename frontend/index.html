@@ -79,6 +79,13 @@
   r.style.setProperty('--ft-dock-size', h + 'px');
 })();
   </script>
+  <script>
+(function () {
+  var on = 0;
+  try { on = JSON.parse(localStorage.getItem('formpth.prefs') || '{}').helpBar === true ? 1 : 0; } catch (e) { on = 0; }
+  document.documentElement.setAttribute('data-fp-help', on ? 'on' : 'off');
+})();
+  </script>
   <link rel="stylesheet" href="/src/styles/fonts.css">
   <link rel="stylesheet" href="/src/styles/tokens.css">
   <link rel="stylesheet" href="/src/styles/shell.css">
@@ -88,6 +95,7 @@
   <link rel="stylesheet" href="/src/styles/light-mode.css">
   <link rel="stylesheet" href="/src/styles/scrollbars.css">
   <link rel="stylesheet" href="/src/styles/terminal.css">
+  <link rel="stylesheet" href="/src/styles/helpbar.css">
 </head>
 <body>
   <div id="app"></div>

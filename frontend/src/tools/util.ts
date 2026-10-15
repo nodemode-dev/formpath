@@ -6,7 +6,9 @@ import { layoutText, lineBaseline } from '../engine/text';
 import type { Doc, Engine, PathData, Pt, Rect, VNode } from '../engine';
 import { dashed, type ToolContext } from '../extensions/registry';
 
-export const tolDoc = (ctx: ToolContext, px = 4): number => px / ctx.view().zoom;
+export const anchorUi = { scale: 1 };
+export const ANCHOR_TOL = 5;
+export const tolDoc = (ctx: ToolContext, px = 4): number => (px === ANCHOR_TOL ? px * anchorUi.scale : px) / ctx.view().zoom;
 
 export function dragRect(a: Pt, b: Pt, square: boolean, center: boolean): Rect {
   let dx = b.x - a.x, dy = b.y - a.y;
@@ -88,7 +90,8 @@ export function unitLabel(engine: Engine, pt: number): string {
   return `${fmt(pt / k)} ${u}`;
 }
 
-export function anchorDot(g: CanvasRenderingContext2D, p: Pt, color: string, filled: boolean, r = 3): void {
+export function anchorDot(g: CanvasRenderingContext2D, p: Pt, color: string, filled: boolean, r0 = 3): void {
+  const r = r0 * anchorUi.scale;
   g.fillStyle = filled ? color : '#ffffff';
   g.strokeStyle = color;
   g.lineWidth = 1;
@@ -101,7 +104,7 @@ export function handleDot(g: CanvasRenderingContext2D, a: Pt, h: Pt, color: stri
   g.lineWidth = 1;
   g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(h.x, h.y); g.stroke();
   g.fillStyle = color;
-  g.beginPath(); g.arc(h.x, h.y, 2.5, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(h.x, h.y, 2.5 * anchorUi.scale, 0, Math.PI * 2); g.fill();
 }
 
 export function stroke2(g: CanvasRenderingContext2D, pts: Pt[], color: string, closed = false): void {
