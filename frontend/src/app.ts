@@ -90,6 +90,7 @@ import { Rail } from './ui/rail';
 import { Stage } from './ui/stage';
 import { StatusBar } from './ui/status';
 import { TerminalDock } from './ui/terminal-dock';
+import { Catalogue } from './automation/catalogue';
 import { Tabs } from './ui/tabs';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
@@ -1473,6 +1474,9 @@ export function startApp(): void {
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);
+  const catalogue = new Catalogue({ engine, commands, menus: () => menus });
+  catalogue.attach();
+  agents.catalogue = catalogue;
   if (wantsNativeMenus()) {
     const native = new NativeMenus(commands, () => menus);
     void native.build().catch(() => undefined);
@@ -1647,7 +1651,7 @@ export function startApp(): void {
   });
 
   for (const [id, keys] of Object.entries(loadPrefs().shortcuts)) commands.setKeys(id, keys);
-  if (import.meta.env.DEV) (window as unknown as { formpth: unknown }).formpth = { engine, commands, agents, stage };
+  if (import.meta.env.DEV) (window as unknown as { formpth: Record<string, unknown> }).formpth = { ...(window as unknown as { formpth?: Record<string, unknown> }).formpth, engine, commands, agents, stage };
 
   const SESSION = 'formpth.session';
   const keptAt = new Map<string, string>();

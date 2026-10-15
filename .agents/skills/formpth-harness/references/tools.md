@@ -19,6 +19,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Graphs and data: `graph`, `variables`
 - Commands: `actions`, `list_commands`, `run_command`
 - History: `undo`, `redo`
+- Other: `describe_command`, `run_commands`
 
 ## get_document
 
@@ -1151,17 +1152,35 @@ Actions: list the action sets and their recorded steps (menu commands with their
 
 ## list_commands
 
-Every menu command formpth has: its id, label, menu, shortcut and whether it can run now. Filter by a word.
+The command catalogue: every menu command and tool formpth has, with its id, menu path, shortcut, parameters, whether Undo can reverse it and whether it can run now. Filter by group (a menu name such as Object or Effect, or Tools) and by a word.
 
-- `filter`: string
+- `filter`: string; a word in the id, label or menu path
+- `group`: string
+- `limit`: integer; default 400
+
+Note: read-only.
+
+## describe_command
+
+One catalogue entry in full: menu path, description, parameters and whether it can run now; suggests close ids when the id is unknown.
+
+- `id`: string; required
 
 Note: read-only.
 
 ## run_command
 
-Runs any menu command by its id (see list_commands), on the selection, as the menu would.
+Runs any menu command or tool by its id (see list_commands), on the selection, as the menu would. Ids starting tool. make that tool active.
 
-- `command`: string; required
+- `command`: string
+- `id`: string; same as command
+- `params`: object; the command's parameters, when describe_command lists any
+
+## run_commands
+
+Runs several catalogue commands in order as one undo step, stopping at the first that cannot run.
+
+- `steps`: array; required
 
 ## undo
 

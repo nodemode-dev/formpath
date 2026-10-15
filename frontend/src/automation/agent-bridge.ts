@@ -23,6 +23,7 @@ import { circleFrom, circumcentre, dimLabel } from '../engine/dimension';
 import type { DimensionSpec } from '../engine/types';
 import { SYMBOLISM_NAMES, UNIT_PT, type Anchor, type BlendMode, type Color, type Engine, type Mat, type MeshNode, type Paint, type PathData, type PathNode, type Pt, type Rect, type StrokeItem, type SymbolismMethod, type SymbolismOp, type TextNode, type TraceView, type ParaStyle, type Justification, type TabStop, type ListStyle, type Units, type VNode } from '../engine';
 import type { Commands } from '../ui/commands';
+import type { Catalogue, CatalogueEntry } from './catalogue';
 import type { ActionsPanel } from '../ui/panels/actions';
 import { cleanData, dataToText, GRAPH_TYPES, graphSummary, parseNumber, parseTable, swapXY, transposeData } from '../engine/graph';
 import { boundLabel, parseDataFile, VARIABLE_KINDS } from '../engine/variables';
@@ -70,6 +71,7 @@ export class AgentBridge {
   private on = false;
   private looping = false;
   commands: Commands | null = null;
+  catalogue: Catalogue | null = null;
   actions: ActionsPanel | null = null;
   constructor(private readonly engine: Engine, private readonly deps: AgentDeps) {}
 
@@ -108,7 +110,7 @@ export class AgentBridge {
             await api.mcpResult(secret, item.id, { allowed: yes });
             continue;
           }
-          const result = this.on ? await this.run(item.name, item.arguments ?? {}) : fail('formpth stopped taking requests.');
+          const result = this.on || item.inapp === true ? await this.run(item.name, item.arguments ?? {}) : fail('formpth stopped taking requests.');
           await api.mcpResult(secret, item.id, result);
         } else if (status !== 204) await sleep(2000);
       } catch { await sleep(2000); }
@@ -561,17 +563,30 @@ export class AgentBridge {
         const q = e.current;
         return q ? text(`Opened ${file.name} as ${q.name}: ${q.doc.artboards.length} artboard(s), ${q.doc.layers.length} layer(s).`, { name: q.name }) : fail(`Could not open ${file.name}.`);
       }
-      if (name === 'list_commands') {
-        const c = this.commands, needle = str('filter').toLowerCase();
-        const list = (c?.all() ?? []).filter((x) => !x.id.startsWith('plugin:')).map((x) => ({ id: x.id, label: c?.label(x) ?? x.id, enabled: c?.enabled(x) ?? false })).filter((x) => !needle || x.id.includes(needle) || x.label.toLowerCase().includes(needle));
-        return text(list.map((x) => `${x.id}: ${x.label}${x.enabled ? '' : ' (not available now)'}`).join('\n') || 'No commands match.', { commands: list });
+      if (name === 'list_commands' && this.catalogue) {
+        const shown = this.catalogue.list(str('group') || undefined, str('filter') || str('text') || undefined).filter((x) => !x.windowOnly);
+        const cap = Math.max(1, Math.min(1000, Number(a.limit) || 400));
+        const line = (x: CatalogueEntry): string => `${x.id}: ${x.path}${x.keys ? ` [${x.keys[0]}]` : ''}${x.params ? ` (params: ${Object.keys(x.params).join(', ')})` : ''}${x.risky ? ' (undo cannot reverse)' : ''}${x.enabled ? '' : ' (not available now)'}`;
+        const groups = [...new Set(this.catalogue.build().filter((x) => !x.windowOnly).map((x) => x.group))].sort();
+        return text(`${shown.length} of the catalogue${shown.length > cap ? `, first ${cap} shown` : ''}. Groups: ${groups.join(', ')}.\n${shown.slice(0, cap).map(line).join('\n') || 'No commands match.'}`, { size: shown.length, groups, commands: shown.slice(0, cap) });
       }
-      if (name === 'run_command') {
-        const c = this.commands, id = str('command'), cmd = c?.get(id);
-        if (!cmd) return fail(`There is no command ${id}: call list_commands.`);
-        if (!c?.enabled(cmd)) return fail(`${c?.label(cmd)} is not available now (it may need a selection or an open document).`);
-        c.run(id);
-        return text(`Ran ${c.label(cmd).replace(/\.\.\.$/, '')}.`);
+      if (name === 'describe_command' && this.catalogue) {
+        const d = this.catalogue.describe(str('id') || str('command'));
+        if ('error' in d) return fail(`${d.error}${d.suggestions.length ? ` Did you mean ${d.suggestions.join(', ')}?` : ' list_commands lists every id.'}`);
+        return text(`${d.id}: ${d.path}. ${d.description}${d.when ? ` ${d.when}` : ''}${d.enabled ? '' : ' Not available now.'}`, { ...d });
+      }
+      if (name === 'run_command' && this.catalogue) {
+        const params = typeof a.params === 'object' && a.params !== null && !Array.isArray(a.params) ? a.params as Record<string, unknown> : undefined;
+        const r = this.catalogue.run(str('id') || str('command'), params, true);
+        return r.ok ? text(r.message, { ...r }) : fail(r.message);
+      }
+      if (name === 'run_commands' && this.catalogue) {
+        const steps = Array.isArray(a.steps) ? (a.steps as Array<{ id: string; params?: Record<string, unknown> }>).filter((s) => s && typeof s === 'object') : [];
+        if (!steps.length) return fail('steps needs at least one {id, params} item.');
+        const rs = this.catalogue.runMany(steps, true);
+        const bad = rs.find((r) => !r.ok);
+        const summary = rs.map((r, i) => `${i + 1}. ${r.id}: ${r.message}`).join('\n');
+        return bad ? fail(`Stopped at step ${rs.length} of ${steps.length}; the steps that ran are one undo step.\n${summary}`) : text(`Ran ${rs.length} commands as one undo step.\n${summary}`, { results: rs });
       }
       if (name === 'actions') return await this.actionsTool(a, str, has);
       const p = e.current;

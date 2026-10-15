@@ -84,6 +84,8 @@ def base_env() -> dict:
     env["FORMPTH_ENGINE_URL"] = engine_url()
     env["FORMPTH_MCP_URL"] = engine_url() + "/mcp"
     env["FORMPTH_URL"] = engine_url()
+    from app.services import claude_code
+    env["FORMPTH_INAPP_TOKEN"] = claude_code.INAPP_TOKEN
     if not getattr(sys, "frozen", False):
         env["PATH"] = str(config.REPO_DIR) + os.pathsep + env.get("PATH", "")
     return env

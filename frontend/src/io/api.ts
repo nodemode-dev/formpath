@@ -5,7 +5,7 @@ export interface LibraryFolder { folder: string; default: string; custom: boolea
 export interface FilePart { name: string; blob: Blob }
 export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string; variable?: boolean }
 export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file'; vision?: boolean }
-export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown> }
+export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown>; inapp?: boolean }
 const BRIDGE_HEADER = 'X-Formpth-Bridge';
 
 export class ApiError extends Error {

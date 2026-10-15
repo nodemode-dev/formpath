@@ -275,3 +275,19 @@ Follows formlit's design. The Claude Code button runs the person's own `claude` 
 - logged: v0.24.0 · 2026-10-15
 
 A `tools/call` carrying the engine's in-app token sets the `_inapp` context variable, which skips the outside-agent consent question in `_call` and marks the queued item `inapp` so the window's long poll delivers it even while outside agents are not allowed. Every other client still meets the question and the window session secret. The window must still be open: the token removes the question, not the window.
+
+## app/routers/commands.py
+
+### app/routers/commands.py · the catalogue over HTTP
+- refers-to: app/routers/commands.py :: mirror, listing, describe, run, _catalogue
+- kind: explainer
+- logged: v0.25.0 · 2026-10-15
+
+The window mirrors its command catalogue here (`POST /api/commands/catalogue`) and the engine keeps it in memory and in the data folder's `commands-catalogue.json`, so `GET /api/commands?group=&text=` and `GET /api/commands/{id}` (with close-match suggestions on a miss) answer even when the window was opened in an earlier run. `POST /api/commands/{id}` takes the parameters as the JSON body and runs the command through the MCP router's `_call("run_command")`, which means the window must be open and the outside-agent question applies, exactly as for MCP clients; a request carrying the in-app token (the terminal dock's shells have it in `FORMPTH_INAPP_TOKEN`, which `setup/cli.py` sends) skips the question. All routes are local only.
+
+### app/services/terminal.py · the dock's shells carry the in-app token
+- refers-to: app/services/terminal.py :: base_env
+- kind: rationale
+- logged: v0.25.0 · 2026-10-15
+
+A shell in the dock is the person's own terminal inside the window they are using, so `./formpth cli run ...` typed there should not ask them whether an outside agent may act. The token is per engine start and lives only in the environment of programs the engine starts.

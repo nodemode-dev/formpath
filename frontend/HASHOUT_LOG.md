@@ -2482,3 +2482,19 @@ Copied from formlit v0.45.3 (same owner, Apache-2.0) with its class names moved 
 - logged: v0.24.0 · 2026-10-15
 
 Drawn for formlit (same owner) and carried over unchanged; not from an outside set, so NOTICE needs no row.
+
+## src/automation/catalogue.ts
+
+### src/automation/catalogue.ts · the command catalogue
+- refers-to: src/automation/catalogue.ts :: Catalogue, build, list, describe, run, runMany, mirror, WINDOW_ONLY; src/ui/commands.ts :: Command, CommandParam, onChange, run
+- kind: explainer
+- logged: v0.25.0 · 2026-10-15
+
+formvis's window-owned catalogue, the model formpth follows because its shell and bridge came from formvis. `build` turns every registered command and every tool into a `CatalogueEntry`: the group is the command's own `group` or the top menu that holds it (found by walking the live menu definitions, so a command moved between menus follows), the path is its menu trail, and the description is the command's own or one written from that path; `mutates` defaults to false for the View, Window and Help menus and `risky` marks the few commands Undo cannot reverse. Tools appear as `tool.<id>` entries that make the tool active. `Commands.onChange` debounces a mirror of the entries to `POST /api/commands/catalogue`, so the engine, `./formpth cli` and `agents` see the same list without a window round trip. `run` validates parameters against the command's `params` (unknown keys, types, enums, ranges) before it runs anything, and refuses the WINDOW_ONLY commands (terminal, Claude Code, Chat, Preferences, Quit) to agents, as formlit keeps its terminal, Claude Code and chat commands out of `run_command`. `runMany` wraps the steps in `engine.beginStep()` and `endStep()`, so a batch is one undo step even when it stops early. `window.formpth.catalogue` exposes the same four calls to the console and to tests.
+
+### src/automation/agent-bridge.ts · in-app calls while agents are off
+- refers-to: src/automation/agent-bridge.ts :: loop
+- kind: rationale
+- logged: v0.25.0 · 2026-10-15
+
+The poll loop ran a delivered item only when outside agents were allowed, so the Claude Code tab and the Chat tab, whose calls the engine marks `inapp`, were refused with "formpth stopped taking requests" whenever the person had not switched outside agents on. An `inapp` item now runs either way; every other item still needs the switch.
