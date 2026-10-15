@@ -1,5 +1,7 @@
 import { AgentBridge, regionOf } from './automation/agent-bridge';
-import { Engine, type Color, type Doc, type ExportAsset, type ImageNode, type Pt, type Rect, type TraceView, type Units, type VNode } from './engine';
+import { CORNER_TYPES } from './engine/corners';
+import { firstCorner, setCornersOp } from './engine/ops/corner-ops';
+import { Engine, UNIT_PT, type Color, type CornerSpec, type Doc, type ExportAsset, type ImageNode, type Pt, type Rect, type TraceView, type Units, type VNode } from './engine';
 import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc';
 import { EFFECTS } from './engine/effects';
 import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
@@ -912,6 +914,28 @@ export function startApp(): void {
     await previewEdit(engine, 'Simplify', [{ kind: 'number', key: 'precision', label: 'Curve precision', value: 60, min: 0, max: 100, unit: '%' }], (origin, v) => { const r = pathOperation(origin, ids, 'simplify', { precision: Number(v.precision) }); return { doc: r.doc, select: r.ids }; });
   }
 
+  async function cornersDialog(params?: Record<string, unknown>): Promise<void> {
+    const p = engine.current;
+    if (!p || !sel()) return;
+    const targets = engine.cornerTargets(), k = UNIT_PT[p.doc.units], cur = firstCorner(p.doc, targets);
+    const make = (v: Record<string, unknown>): Partial<CornerSpec> => {
+      const mode = v.mode === 'relative' ? 'relative' : v.mode === 'absolute' ? 'absolute' : undefined, r = Number(v.radius);
+      const type = CORNER_TYPES.find((t) => t === v.type);
+      const patch: Partial<CornerSpec> = {};
+      if (type) patch.type = type;
+      if (mode) patch.mode = mode;
+      if (v.radius !== undefined && Number.isFinite(r)) patch.r = Math.max(0, (mode ?? cur?.mode) === 'relative' ? r / 100 : r * k);
+      return patch;
+    };
+    if (params && ('type' in params || 'radius' in params || 'mode' in params)) { engine.setCorners(make(params), targets); return; }
+    const rel = cur?.mode === 'relative';
+    await previewEdit(engine, 'Corners', [
+      { kind: 'select', key: 'type', label: 'Type', value: cur?.type ?? 'round', choices: [['round', 'Round'], ['inverted', 'Inverted Round'], ['chamfer', 'Chamfer']] },
+      { kind: 'number', key: 'radius', label: 'Radius', value: cur ? Math.round((rel ? cur.r * 100 : cur.r / k) * 1000) / 1000 : 0, min: 0, unit: rel ? '%' : p.doc.units },
+      { kind: 'select', key: 'mode', label: 'Rounding', value: cur?.mode ?? 'absolute', choices: [['absolute', 'Absolute'], ['relative', 'Relative']] },
+    ], (origin, v) => ({ doc: setCornersOp(origin, targets, make(v)) }));
+  }
+
   async function splitGridDialog(): Promise<void> {
     if (!sel()) return;
     const ids = engine.targetIds();
@@ -1191,6 +1215,8 @@ export function startApp(): void {
     { id: 'reverse-path', label: 'Reverse Path Direction', enabled: sel, run: () => engine.pathOp('reverse') },
     { id: 'simplify', label: 'Simplify...', enabled: sel, run: () => void simplifyDialog() },
     { id: 'smooth-path', label: 'Smooth', enabled: sel, run: () => engine.pathOp('smooth') },
+    { id: 'corners-dialog', label: 'Corners...', group: 'Object', enabled: sel, mutates: true, params: { type: { type: 'string', enum: ['round', 'inverted', 'chamfer'], description: 'Corner type' }, radius: { type: 'number', min: 0, description: 'Radius in document units, or percent when mode is relative' }, mode: { type: 'string', enum: ['absolute', 'relative'], description: 'Rounding mode' } }, run: (params) => void cornersDialog(params) },
+    { id: 'expand-corners', label: 'Expand Corners', group: 'Object', enabled: sel, mutates: true, run: () => engine.expandCorners() },
     { id: 'add-anchors', label: 'Add Anchor Points', enabled: sel, run: () => engine.pathOp('add_anchors') },
     { id: 'remove-anchors', label: 'Remove Anchor Points', enabled: () => !!engine.current?.anchors.size, run: () => engine.deleteAnchors() },
     { id: 'divide-below', label: 'Divide Objects Below', enabled: sel, run: () => engine.pathOp('divide_objects_below') },
@@ -1446,7 +1472,7 @@ export function startApp(): void {
       { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', '-', 'send-to-layer'] },
       { label: 'Align', items: ALIGN.map(([a]) => `align-${a}`) }, '-',
       'group', 'ungroup', 'isolate', '-', 'lock', 'unlock-all', 'hide', 'show-all', '-', 'expand-object', 'expand-appearance', 'rasterize', 'create-mesh', '-',
-      { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
+      { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'corners-dialog', 'expand-corners', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
       { label: 'Shape', items: ['expand-shape', 'shaper-expand'] },
       { label: 'Pattern', items: ['make-pattern', 'edit-pattern', '-', 'generate-patterns'] },
       { label: 'Generative', items: ['generative-shape-fill'] },

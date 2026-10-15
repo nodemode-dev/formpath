@@ -7,13 +7,15 @@ import { framePort } from '../engine/flow';
 import { pathBrackets, pathParamAt } from '../engine/text';
 import { editLive, normalizeLive } from '../engine/ops/live-shapes';
 import { updateNodes } from '../engine/doc';
-import type { Anchor, Doc, Engine, EnvelopeNode, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
+import type { Anchor, CornerSpec, Doc, Engine, EnvelopeNode, LiveShape, Mat, PathData, Pt, Rect, VNode } from '../engine';
 import { meshHandleAt, meshHandles, meshPointAt, withMeshHandle, withMeshPoint, type MeshSpec } from '../engine/envelope';
 import { envelopeFrame } from '../engine/live';
 import { instanceArt } from '../engine/symbolism';
 import { findPart } from '../engine/symbols';
 import { transformNode } from '../engine/transform';
-import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
+import { registerTool, toolHost, type ToolContext, type ToolPointer } from '../extensions/registry';
+import { CORNER_TYPES, cornerAlong, cornerFrame, cornerRadiusFor, tangentFromAlong, type CornerFrame } from '../engine/corners';
+import { setCornersOp, type CornerTargets } from '../engine/ops/corner-ops';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { isMac } from '../ui/dom';
 import { fmt, hud, layerColor, marquee, outlineNode, stroke2, tolDoc, unitLabel } from './util';
@@ -477,9 +479,96 @@ export function envelopeOverlay(ctx: ToolContext, g: CanvasRenderingContext2D): 
   }
 }
 
+interface PathWidget { id: string; flat: number; at: Pt; frame: CornerFrame; spec: CornerSpec }
+interface FrameAt { flat: number; frame: CornerFrame; corner: CornerSpec | undefined }
+const frameCache = new WeakMap<PathData, FrameAt[]>();
+const CD = { on: false, w: null as PathWidget | null, moved: false, alt: false, clamped: false, targets: null as CornerTargets | null, sx: 0, sy: 0 };
+
+function framesOf(d: PathData): FrameAt[] {
+  let list = frameCache.get(d);
+  if (!list) {
+    list = [];
+    d.forEach((sp, s) => sp.pts.forEach((a, i) => { const frame = cornerFrame(sp, i); if (frame) list?.push({ flat: flatIndex(d, s, i), frame, corner: a.corner }); }));
+    frameCache.set(d, list);
+  }
+  return list;
+}
+
+function pathWidgets(ctx: ToolContext): PathWidget[] {
+  const e = ctx.engine, pr = e.current;
+  if (!pr || !e.view.cornerWidget) return [];
+  const min = 14 / ctx.view().zoom, out: PathWidget[] = [], seen = new Set<string>();
+  for (const n of selectedLeaves(e)) {
+    const leaves = n.kind === 'compound' ? n.children : n.kind === 'path' ? [n] : [];
+    for (const leaf of leaves) {
+      if (seen.has(leaf.id)) continue;
+      seen.add(leaf.id);
+      for (const f of framesOf(leaf.d)) {
+        const spec: CornerSpec = f.corner ?? { type: 'round', r: 0 }, dist = Math.max(cornerAlong(f.frame, spec), min);
+        out.push({ id: leaf.id, flat: f.flat, at: { x: f.frame.at.x + f.frame.bis.x * dist, y: f.frame.at.y + f.frame.bis.y * dist }, frame: f.frame, spec });
+      }
+    }
+  }
+  return out;
+}
+
+function pathWidgetAt(ctx: ToolContext, p: ToolPointer): PathWidget | null {
+  const v = ctx.view();
+  let best: PathWidget | null = null, bd = 7;
+  for (const w of pathWidgets(ctx)) { const s = v.toScreen(w.at), d = Math.hypot(s.x - p.screen.x, s.y - p.screen.y); if (d <= bd) { bd = d; best = w; } }
+  return best;
+}
+
+function cornerDown(ctx: ToolContext, p: ToolPointer, w: PathWidget): void {
+  const e = ctx.engine, pr = e.current;
+  if (!pr) return;
+  const sel = pr.anchors.get(w.id), inSel = !!sel && (sel.has(-1) || sel.has(w.flat));
+  if (!inSel) e.setAnchors(w.id, new Set([w.flat]));
+  CD.on = true; CD.w = w; CD.moved = false; CD.alt = p.alt; CD.clamped = false; CD.sx = p.screen.x; CD.sy = p.screen.y;
+  CD.targets = inSel ? e.cornerTargets() : new Map([[w.id, new Set([w.flat])]]);
+  e.beginDrag('Corner Radius');
+}
+
+function cornerMove(ctx: ToolContext, p: ToolPointer): void {
+  const e = ctx.engine, base = e.dragOrigin, w = CD.w;
+  if (!base || !w || !CD.targets) return;
+  if (!CD.moved && Math.hypot(p.screen.x - CD.sx, p.screen.y - CD.sy) < 3) return;
+  CD.moved = true;
+  const f = w.frame, along = (p.doc.x - f.at.x) * f.bis.x + (p.doc.y - f.at.y) * f.bis.y, raw = tangentFromAlong(f, along);
+  const mode = w.spec.mode ?? 'absolute', r = cornerRadiusFor(f, { type: w.spec.type, mode }, raw);
+  CD.clamped = raw >= f.tmax - 1e-6;
+  e.dragTo(setCornersOp(base, CD.targets, { r, mode }));
+  e.setOverlay({ label: mode === 'relative' ? `Radius: ${Math.round(r * 100)}%` : `Radius: ${unitLabel(e, r)}`, at: p.doc, lines: [] });
+}
+
+function cornerUp(ctx: ToolContext): void {
+  const e = ctx.engine, w = CD.w, targets = CD.targets;
+  CD.on = false; CD.w = null; CD.clamped = false;
+  e.clearOverlay();
+  if (CD.moved) { e.commitDrag(); return; }
+  e.cancelDrag();
+  if (CD.alt && w && targets) e.setCorners({ type: CORNER_TYPES[(CORNER_TYPES.indexOf(w.spec.type) + 1) % CORNER_TYPES.length] }, targets);
+  ctx.redraw();
+}
+
+function cornerOverlay(ctx: ToolContext, g: CanvasRenderingContext2D): void {
+  const e = ctx.engine, pr = e.current;
+  if (!pr) return;
+  const v = ctx.view();
+  if (CD.on && CD.clamped && CD.w) {
+    const n = findNode(pr.doc, CD.w.id);
+    if (n) outlineNode(ctx, g, pr.doc, n, ctx.paint().danger ?? ctx.paint().accent, 2);
+  }
+  for (const w of pathWidgets(ctx)) {
+    const s = v.toScreen(w.at), color = layerColor(e, w.id), hot = CD.on && CD.w?.id === w.id && CD.w.flat === w.flat;
+    g.save(); g.beginPath(); g.arc(s.x, s.y, 4, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1; g.strokeStyle = hot && CD.clamped ? ctx.paint().danger ?? color : color; g.stroke(); g.beginPath(); g.arc(s.x, s.y, 1.5, 0, Math.PI * 2); g.fillStyle = g.strokeStyle; g.fill(); g.restore();
+  }
+}
+
 function directDown(ctx: ToolContext, p: ToolPointer, groupMode: boolean): void {
   const e = ctx.engine, pr = e.current;
   if (!pr) return;
+  if (!groupMode) { const cw = pathWidgetAt(ctx, p); if (cw) { cornerDown(ctx, p, cw); return; } }
   if (!groupMode && envelopeDown(ctx, p)) return;
   const doc = pr.doc, t = tolDoc(ctx, 5);
   D.start = D.cur = p.doc; D.moved = false;
@@ -695,11 +784,12 @@ registerTool({
   hint: () => 'Click an anchor or segment to edit it, drag handles to reshape curves, Alt-drag a handle to break it. Drag a marquee to select anchors.',
   cursor: (_ctx, p) => (p && hoverAnchor ? CURSORS.directPoint : CURSORS.direct),
   down: (ctx, p) => { if (!bracketDown(ctx, p)) directDown(ctx, p, false); },
-  move: (ctx, p) => { if (BR.on) bracketMove(ctx, p); else directMove(ctx, p); },
-  up: (ctx, p) => { if (BR.on) bracketUp(ctx); else directUp(ctx, p); },
+  move: (ctx, p) => { if (CD.on) cornerMove(ctx, p); else if (BR.on) bracketMove(ctx, p); else directMove(ctx, p); },
+  up: (ctx, p) => { if (CD.on) cornerUp(ctx); else if (BR.on) bracketUp(ctx); else directUp(ctx, p); },
   hover: directHover,
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); D.mode = null; BR.on = false; EP.on = false; ctx.redraw(); },
-  overlay: directOverlay,
+  dblclick: (ctx, p) => { if (pathWidgetAt(ctx, p)) toolHost.run('corners-dialog'); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); D.mode = null; BR.on = false; EP.on = false; CD.on = false; CD.w = null; CD.clamped = false; ctx.engine.clearOverlay(); ctx.redraw(); },
+  overlay: (ctx, g) => { directOverlay(ctx, g); if (!D.mode) cornerOverlay(ctx, g); },
 });
 
 const G = newDrag();
