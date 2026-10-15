@@ -2668,3 +2668,62 @@ These three values (2, 4 and 5) came with the formvis shell in the first commit.
 - logged: v0.30.0 · 2026-10-15
 
 From the bottom: `--z-base` 0 (document flow, the stage column), `--z-raised` 8 and `--z-selected` 9 (siblings that must overlap a neighbour), `--z-rail` 10, `--z-chrome` 100 (the narrow-window fixed panels), `--z-home-screen` 150, `--z-menu` 200 (the overlay root, menus and popovers), `--z-temp` 500, `--z-companion` 800 (floating windows, the assistant), `--z-taskbar` 900, `--z-modal` 1000 (dialog scrims), `--z-settings` 1500, `--z-context` 2000 (context menus, drag ghosts, dropdowns), `--z-toast` 3000, `--z-portal` 4000, then the inherited `--z-home*`, `--z-account-panel` and `--z-overlay*` levels, which formpth does not use. Add a layer here, never inline.
+
+## frontend/src/ui/spell-marks.ts
+
+### frontend/src/ui/spell-marks.ts · Auto Spell Check underlines
+- refers-to: src/ui/stage.ts :: Stage.painters
+- kind: explainer
+- logged: v0.30.0 · 2026-10-15
+
+Auto Spell Check draws on the stage overlay through `Stage.painters`, a set of functions run after the selection is drawn, so turning it on or off only emits `overlay` and never touches the scene canvas. Misspelled ranges are cached per text string and requested after a 350 ms debounce; glyph positions come from `selectionQuads`, whose bottom edge carries a sine wave that is phased by distance so adjacent glyphs join. The Edit Custom Dictionary command clears the cache. The Simplify dialog uses the same hook to dash the original outline while it previews; the outline is overlay drawing, not document content.
+
+## src/io/tiff.ts
+
+### src/io/tiff.ts · TIFF encoder
+- refers-to: src/io/tiff.ts :: encodeTiff; src/io/raster.ts :: canvasBlob
+- kind: explainer
+- logged: v0.30.0 · 2026-10-15
+
+Baseline little-endian TIFF, 8 bits per sample, RGB or RGBA (unassociated alpha) or CMYK, one IFD, strips of about 64 KiB, resolution tags from the export ppi. Compression is none, PackBits, LZW (MSB first with early change, clear code at 4094) or Deflate through CompressionStream, which writes the zlib stream that Adobe Deflate expects. CMYK uses `rgbToCmyk`, the same naive conversion the PDF writer uses, so no ICC profile is embedded.
+
+## src/io/pdf-marks.ts
+
+### src/io/pdf-marks.ts · marks and bleed geometry
+- refers-to: src/io/pdf-marks.ts :: pageGeometry, marksContent; src/io/pdf.ts :: exportPdf
+- kind: explainer
+- logged: v0.30.0 · 2026-10-15
+
+Each side of the page is the bleed, or when marks are on, `max(offset, bleed) + 18 pt` of mark area. The art is clipped to the bleed box and the artboard background is filled out to it; TrimBox is the artboard, BleedBox is written only when the bleed is not zero. Marks use a Separation `All` colour space (all four inks at 100 percent), the same one the `[Registration]` swatch uses, so a plate setter prints them on every plate. Colour bars are CMYK solids and tints on the left half of the bottom margin; page information is Helvetica text at the top left and can run under the top registration target on a narrow artboard.
+
+## src/engine/render.ts
+
+### src/engine/render.ts · overprint preview and separations
+- refers-to: src/engine/render.ts :: plateGray, plateBlend, paintStyle; src/engine/types.ts :: FillItem.overprint, StrokeItem.overprint
+- kind: rationale
+- logged: v0.30.0 · 2026-10-15
+
+Overprint preview multiplies an item that has `overprint` onto what is beneath, which is what an overprinting ink does on a plate; items without the flag still knock out. A separation maps every colour to a gray equal to its ink amount on that plate (C, M, Y, K from `toCmyk`, or a spot swatch's tint when its name matches), so a plate reads as dark where ink lands. Spot swatches are white on process plates. Gradient stops are mapped too; freeform gradients and raster effects are not. Both flags ride on `RenderContext`, so the stage must pass them from `engine.view`, and exports leave them off.
+
+## src/ui/panels/separations.ts
+
+### src/ui/panels/separations.ts · Separations Preview and Document Info windows
+- refers-to: src/ui/panels/separations.ts :: SeparationsDialog; src/ui/panels/document-info.ts :: DocumentInfoDialog; src/ui/stage.ts :: Stage.renderContext
+- kind: explainer
+- logged: v0.30.0 · 2026-10-15
+
+Both are dialogs built once and patched in place. Separations Preview uses the pass-through scrim of Recolor Artwork so the stage stays visible and clickable behind it; its plate list (All, the four process inks and one row per spot swatch) is a keyed list with a reserved minimum height, a row sets `engine.view.separation`, and closing the window sets it back to null. Document Info shows `documentInfoText` in a fixed-height scrolling block and rewrites it on the next frame after a document change, so counts follow edits while it is open. The stage now passes `overprintPreview` and `separation` from `engine.view` into the render context.
+
+### src/ui/app-dialogs.ts · Export gains TIFF and PDF marks and bleeds
+- refers-to: src/ui/app-dialogs.ts :: ExportDialog (reserve, sync, value), ExportChoice.tiff, ExportChoice.marks; src/app.ts :: exportBlob, packageDialog, documentSetup
+- kind: rationale
+- logged: v0.30.0 · 2026-10-15
+
+The Export dialog already reserved the height of its tallest format; the PDF marks and bleed rows made PDF the tallest, so `reserve` now also forces the Bleed menu to Custom while it measures, which keeps the dialog the same height for every format and every bleed choice. TIFF reuses the Resolution menu (ppi is 72 times the scale) and adds Compression and Color. Bleed in Document Setup is saved as one history step named Bleed. Package is a form that calls `packageProject`, and a 409 from an existing folder is shown as an error toast.
+
+### src/ui/panels/similar-fonts.ts · rows were created empty
+- refers-to: src/ui/panels/similar-fonts.ts :: openSimilarFonts
+- kind: rationale
+- logged: v0.30.0 · 2026-10-15
+
+`patchList` calls `create` for a new row and `update` only for rows that already exist, so the similar-fonts rows came out blank and unclickable. The row fill is now one function that `create` calls before returning the node and `update` reuses.

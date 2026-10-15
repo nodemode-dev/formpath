@@ -162,7 +162,9 @@ export class SwatchesPanel {
   private pickedGroup: string | null = null;
   private frame = 0;
 
-  constructor(private readonly engine: Engine, private readonly pickColor: (c: Color) => Promise<Color | null>, private readonly libMenu: (anchor: HTMLElement) => void = () => undefined) {
+  pickedIds(): string[] { return [...this.picked]; }
+
+  constructor(private readonly engine: Engine, private readonly pickColor: (c: Color) => Promise<Color | null>, private readonly libMenu: (anchor: HTMLElement) => void = () => undefined, private readonly info: () => void = () => undefined) {
     const head = el('<div class="cv-kit-row cv-swatchp-head"></div>');
     const kinds = seg([{ id: 'all', label: 'All' }, { id: 'color', label: 'Colors' }, { id: 'gradient', label: 'Gradients' }, { id: 'pattern', label: 'Patterns' }], (id) => { this.kind = id as typeof this.kind; kinds.set(id); this.sync(); }, 'cv-seg-small');
     kinds.set('all');
@@ -171,6 +173,7 @@ export class SwatchesPanel {
     const mk = (name: string, label: string, run: (b: HTMLButtonElement) => void): HTMLButtonElement => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', () => run(b)); foot.appendChild(b); return b; };
     mk('library', 'Swatch Libraries menu', (b) => this.libMenu(b));
     mk('sparkle', 'Add Used Colors', () => engine.addUsedColors());
+    mk('info', 'Create Swatch Info', () => this.info());
     mk('folder', 'New Color Group from the selected swatches', () => void this.newGroup());
     mk('add', 'New Swatch from the active Fill or Stroke', () => void this.newSwatch());
     mk('delete', 'Delete Swatch or Color Group', () => {

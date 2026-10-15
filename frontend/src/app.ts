@@ -4,13 +4,13 @@ import { firstCorner, setCornersOp } from './engine/ops/corner-ops';
 import { Engine, UNIT_PT, type Color, type CornerSpec, type Doc, type ExportAsset, type ImageNode, type Pt, type Rect, type TraceView, type Units, type VNode } from './engine';
 import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc';
 import { EFFECTS } from './engine/effects';
-import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul } from './engine/geometry';
+import { reflectAbout, rotateAbout, scaleAbout, shearAbout, translate, mul, rectPath } from './engine/geometry';
 import { transformNodes } from './engine/ops/objects';
 import { anchorCount, mixPathfinder, objectOnPath, trapShapes, type OnPathArgs, type TrapArgs } from './engine/ops/illustrator';
 import { pathOperation } from './engine/ops/paths';
 import { RECOLOR, recolorDoc } from './engine/ops/recolor';
-import { hex, solid, defaultGradient, NONE, toRgb, parseColor } from './engine/paint';
-import { fontsChanged, plainText } from './engine/text';
+import { hex, solid, defaultGradient, NONE, toRgb, toCmyk, fill as fillItem, stroke as strokeItem, parseColor } from './engine/paint';
+import { fontsChanged, plainText, textNode } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
 import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
@@ -44,7 +44,8 @@ import { LayersPanel } from './ui/layers';
 import { MenuBar, PopupMenu, type MenuDef, type MenuItem } from './ui/menu';
 import { NativeMenus, wantsNativeMenus } from './ui/native-menu';
 import { OptionsBar } from './ui/options';
-import { invalidatePaint } from './ui/palette';
+import { invalidatePaint, paint as paintOf } from './ui/palette';
+import { smoothPath } from './engine/kernel';
 import { PanelGroup } from './ui/panel-group';
 import { AppearancePanel, GraphicStylesPanel } from './ui/panels/appearance';
 import { AttributesPanel } from './ui/panels/attributes';
@@ -98,6 +99,10 @@ import { StatusBar } from './ui/status';
 import { TerminalDock } from './ui/terminal-dock';
 import { Catalogue } from './automation/catalogue';
 import { SpellingDialog, resetSpellCache } from './ui/panels/spelling';
+import { SeparationsDialog } from './ui/panels/separations';
+import { DocumentInfoDialog } from './ui/panels/document-info';
+import { packageProject } from './io/package';
+import { SpellMarks } from './ui/spell-marks';
 import { Tabs } from './ui/tabs';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
@@ -180,6 +185,8 @@ export function startApp(): void {
   applyPrefs(engine, prefs);
   const stageEl = q(root, '.cv-stage');
   const stage = new Stage(stageEl, engine);
+  const spellMarks = new SpellMarks(engine, stage.painters);
+  spellMarks.set(prefs.autoSpell);
   const typing = new TextEditor(stageEl, engine);
   typingRef.editor = typing;
   typing.redraw = () => stage.ctx.redraw();
@@ -210,7 +217,7 @@ export function startApp(): void {
   const dockHost = q(root, '.cv-layers'), sideHost = q(root, '.cv-props-col');
   const libMenu = new PopupMenu(commands, null, true);
   const openLibMenu = (anchor: HTMLElement, items: MenuItem[]): void => { libMenu.setItems(items); const r = anchor.getBoundingClientRect(); libMenu.openAt(r.left, r.top - 8); };
-  const colorP = new ColorPanel(engine), swatchesP = new SwatchesPanel(engine, pickColor, (a) => openLibMenu(a, swatchLibItems())), gradientP = new GradientPanel(engine, pickColor);
+  const colorP = new ColorPanel(engine), swatchesP = new SwatchesPanel(engine, pickColor, (a) => openLibMenu(a, swatchLibItems()), () => void swatchInfo()), gradientP = new GradientPanel(engine, pickColor);
   const strokeP = new StrokePanel(engine), transP = new TransparencyPanel(engine), brushesP = new BrushesPanel(engine, (a) => openLibMenu(a, brushLibItems()));
   const swatchLibP = new SwatchLibraryPanel(engine, (a) => openLibMenu(a, swatchLibItems())), brushLibP = new BrushLibraryPanel(engine, (a) => openLibMenu(a, brushLibItems()));
   const recolorD = new RecolorDialog(engine, { pickColor: (c, live) => picker.pick(c, live), stagePoint: (x, y) => stage.docPoint(x, y), userLibraries: userSwatchLibraries });
@@ -660,7 +667,7 @@ export function startApp(): void {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
       return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
     }
-    if (c.format === 'pdf') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : [ab], preserve: c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION });
+    if (c.format === 'pdf') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.marks });
     if (c.format === 'eps') {
       const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
       if (scope === 'all' && p.doc.artboards.length > 1) {
@@ -681,17 +688,27 @@ export function startApp(): void {
     if (!region) return null;
     const only = scope === 'selection' ? engine.targetIds().map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n) : undefined;
     const bg = scope === 'artboard' ? p.doc.artboards[ab]?.bg ?? null : null;
-    return exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only });
+    return exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only, tiff: c.format === 'tiff' ? c.tiff : undefined });
   }
 
   const exportDialog = new ExportDialog(), screensDialog = new ScreensDialog();
   async function exportAs(format: ExportChoice['format']): Promise<void> {
     const p = engine.current;
     if (!p) return;
-    const c = await exportDialog.ask(format, p.activeArtboard, engine.hasSelection, p.doc.colorMode === 'cmyk');
+    const c = await exportDialog.ask(format, p.activeArtboard, engine.hasSelection, p.doc.colorMode === 'cmyk', p.doc.artboards.length);
     if (!c) return;
     await engine.task(async () => {
       try {
+        if (c.artboards && c.artboards.length > 1 && c.format !== 'pdf') {
+          const files: Array<{ name: string; blob: Blob }> = [];
+          for (const i of c.artboards) {
+            const one = await exportBlob({ ...c, artboard: i, artboards: undefined });
+            if (one) files.push({ name: `${p.name}-${i + 1}.${c.format}`.replace(/[\\/:*?"<>|]+/g, '-'), blob: one });
+          }
+          if (!files.length) { toast('There is nothing to export there.', 'error'); return; }
+          await deliver(await zipFiles(files), `${p.name}.zip`.replace(/[\\/:*?"<>|]+/g, '-'));
+          return;
+        }
         const blob = await exportBlob(c);
         if (!blob) { toast('There is nothing to export there.', 'error'); return; }
         const suffix = c.scope === 'artboard' && p.doc.artboards.length > 1 ? `-${p.doc.artboards[c.artboard]?.name ?? ''}` : '';
@@ -983,17 +1000,79 @@ export function startApp(): void {
     const args = (v: Record<string, unknown>) => ({ precision: Number(v.precision ?? 60), straight: v.straight === true, angle: Number(v.angle ?? 0) });
     if (params && ('precision' in params || 'straight' in params || 'angle' in params)) { engine.pathOp('simplify', args(params), ids); return; }
     const before = engine.anchorCount(ids), readout = (m: number): string => `Original: ${before} points · Current: ${m} points`;
+    let showOrig = true;
+    const originals = ids.map((id) => findNode(p.doc, id)).flatMap((n) => (n?.kind === 'path' ? [n.d] : n?.kind === 'compound' ? n.children.map((c) => c.d) : []));
+    const outline = (g: CanvasRenderingContext2D, pr: Project): void => {
+      if (!showOrig) return;
+      g.save();
+      g.strokeStyle = paintOf().accent;
+      g.globalAlpha = 0.7;
+      g.setLineDash([4, 3]);
+      g.lineWidth = 1;
+      g.beginPath();
+      for (const d of originals) for (const sp of d) {
+        const n = sp.pts.length, to = (x: number, y: number): Pt => pr.viewport.toScreen(x, y);
+        if (!n) continue;
+        const f = to(sp.pts[0].x, sp.pts[0].y);
+        g.moveTo(f.x, f.y);
+        for (let i = 1; i < (sp.closed ? n + 1 : n); i++) {
+          const a = sp.pts[i - 1], b = sp.pts[i % n], c1 = to(a.ox, a.oy), c2 = to(b.ix, b.iy), e = to(b.x, b.y);
+          g.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, e.x, e.y);
+        }
+      }
+      g.stroke();
+      g.restore();
+    };
+    stage.painters.add(outline);
+    engine.emit('overlay', null);
+    try {
     await previewEdit(engine, 'Simplify', [
       { kind: 'number', key: 'precision', label: 'Curve precision', value: 60, min: 0, max: 100, unit: '%' },
       { kind: 'number', key: 'angle', label: 'Angle threshold', value: 0, min: 0, max: 180, unit: '°' },
       { kind: 'check', key: 'straight', label: 'Straight lines', value: false },
+      { kind: 'check', key: 'original', label: 'Show original', value: true },
       { kind: 'note', text: readout(anchorCount(pathOperation(p.doc, ids, 'simplify', args({})).doc, ids)) },
     ], (origin, v) => {
       const r = pathOperation(origin, ids, 'simplify', args(v));
+      if (showOrig !== (v.original !== false)) { showOrig = v.original !== false; engine.emit('overlay', null); }
       const note = [...document.querySelectorAll<HTMLElement>('.cv-dialog .cv-note')].filter((e) => (e.textContent ?? '').includes('·')).pop();
       if (note) setText(note, readout(anchorCount(r.doc, ids)));
       return { doc: r.doc, select: r.ids };
     });
+    } finally { stage.painters.delete(outline); engine.emit('overlay', null); }
+  }
+
+  async function smoothDialog(params?: Record<string, unknown>): Promise<void> {
+    const p = engine.current, ids = engine.targetIds();
+    if (!p || !ids.length) return;
+    const run = (origin: Doc, amount: number): { doc: Doc; select: string[] } => ({ doc: updateNodes(origin, ids, (n) => (n.kind === 'path' ? { ...n, d: smoothPath(n.d, Math.max(0, Math.min(100, amount)) / 100), live: undefined } : n)), select: ids });
+    if (params && 'smoothness' in params) { engine.edit('Smooth', (d) => run(d, Number(params.smoothness))); return; }
+    await previewEdit(engine, 'Smooth', [{ kind: 'number', key: 'smoothness', label: 'Smoothness', value: 40, min: 0, max: 100, unit: '%' }], (origin, v) => run(origin, Number(v.smoothness)));
+  }
+
+  async function swatchInfo(): Promise<void> {
+    const p = engine.current, a = p?.doc.artboards[p.activeArtboard];
+    if (!p || !a) return;
+    const all = p.doc.swatches.filter((s) => !s.name.startsWith('['));
+    const picked = new Set(swatchesP.pickedIds());
+    const list = picked.size ? all.filter((s) => picked.has(s.id)) : all;
+    if (!list.length) { toast('There are no swatches to describe.', 'error'); return; }
+    const cols = 4, cw = 150, ch = 70, pitch = 170, rowH = 170, x0 = a.x + a.w + 60, y0 = a.y;
+    const cards: VNode[] = list.map((s, i) => {
+      const x = x0 + (i % cols) * pitch, y = y0 + Math.floor(i / cols) * rowH;
+      const lines = [s.name];
+      if (s.paint.type === 'color') {
+        const c = s.paint.color, v = toRgb(c), k = toCmyk(c);
+        lines.push(`HEX ${hex(c).toUpperCase()}`, `RGB ${Math.round(v.r)} ${Math.round(v.g)} ${Math.round(v.b)}`);
+        if (k.kind === 'cmyk') lines.push(`CMYK ${Math.round(k.c)} ${Math.round(k.m)} ${Math.round(k.y)} ${Math.round(k.k)}`);
+        if (s.spot) lines.push(`Spot ${s.name}`);
+      } else lines.push(s.paint.type === 'gradient' ? 'Gradient' : 'Pattern');
+      const rect = { id: newId('p'), kind: 'path', name: `${s.name} Swatch`, d: rectPath(x, y, cw, ch), rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items: [fillItem(s.paint), strokeItem(solid({ kind: 'rgb', r: 0, g: 0, b: 0 }), 0.5)], effects: [] } } as VNode;
+      const text = { ...textNode(lines.join('\n'), x, y + ch + 14, { size: 9, leading: 11 }), id: newId('t'), name: `${s.name} Info` } as VNode;
+      return { id: newId('g'), kind: 'group', name: s.name, clip: false, children: [rect, text], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } } as VNode;
+    });
+    const group: VNode = { id: newId('g'), kind: 'group', name: 'Swatch Info', clip: false, children: cards, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+    engine.addNodes('Swatch Info', [group], { select: true });
   }
 
   async function cornersDialog(params?: Record<string, unknown>): Promise<void> {
@@ -1043,9 +1122,16 @@ export function startApp(): void {
       { kind: 'number', key: 'ppi', label: 'Raster effects resolution', value: p.doc.rasterPpi, min: 72, max: 1200, unit: 'ppi' },
       { kind: 'number', key: 'grid', label: 'Gridline every', value: p.doc.grid.spacing, min: 1, unit: 'pt' },
       { kind: 'number', key: 'sub', label: 'Grid subdivisions', value: p.doc.grid.subdivisions, min: 1, max: 64 },
+      { kind: 'number', key: 'bleedT', label: 'Bleed Top', value: p.doc.bleed?.t ?? 0, min: 0, max: 720, step: 0.25, unit: 'pt' },
+      { kind: 'number', key: 'bleedB', label: 'Bleed Bottom', value: p.doc.bleed?.b ?? 0, min: 0, max: 720, step: 0.25, unit: 'pt' },
+      { kind: 'number', key: 'bleedL', label: 'Bleed Left', value: p.doc.bleed?.l ?? 0, min: 0, max: 720, step: 0.25, unit: 'pt' },
+      { kind: 'number', key: 'bleedR', label: 'Bleed Right', value: p.doc.bleed?.r ?? 0, min: 0, max: 720, step: 0.25, unit: 'pt' },
     ]);
     if (!v) return;
     engine.beginGesture();
+    const bleed = { t: Math.max(0, Number(v.bleedT) || 0), b: Math.max(0, Number(v.bleedB) || 0), l: Math.max(0, Number(v.bleedL) || 0), r: Math.max(0, Number(v.bleedR) || 0) };
+    const old = p.doc.bleed ?? { t: 0, b: 0, l: 0, r: 0 };
+    if (bleed.t !== old.t || bleed.b !== old.b || bleed.l !== old.l || bleed.r !== old.r) engine.edit('Bleed', (d) => ({ ...d, bleed }));
     engine.documentSetup({ title: String(v.title) || p.doc.title, units: v.units as Units, colorMode: v.mode as 'rgb' | 'cmyk', rasterPpi: Number(v.ppi) });
     if (Number(v.grid) !== p.doc.grid.spacing || Number(v.sub) !== p.doc.grid.subdivisions) engine.setGrid(Number(v.grid), Math.round(Number(v.sub)));
     engine.endGesture();
@@ -1168,6 +1254,28 @@ export function startApp(): void {
   }
 
   let spelling: SpellingDialog | null = null;
+  let separations: SeparationsDialog | null = null;
+  let docInfo: DocumentInfoDialog | null = null;
+  async function packageDialog(): Promise<void> {
+    const p = engine.current;
+    if (!p) return;
+    const v = await askForm('Package', [
+      { kind: 'text', key: 'folder', label: 'Folder', value: '', placeholder: 'Full path, or empty for the Exports folder' },
+      { kind: 'check', key: 'links', label: 'Copy Linked Images', value: true },
+      { kind: 'check', key: 'fonts', label: 'Copy Fonts', value: true },
+      { kind: 'check', key: 'separate', label: 'Collect Links in Separate Folder', value: true },
+      { kind: 'check', key: 'relink', label: 'Relink to Copied Images', value: true },
+      { kind: 'check', key: 'report', label: 'Create Report', value: true },
+    ], { ok: 'Package' });
+    if (!v) return;
+    await engine.task(async () => {
+      try {
+        const r = await packageProject(p, { folder: String(v.folder).trim(), copyLinks: !!v.links, copyFonts: !!v.fonts, separateLinks: !!v.separate, relink: !!v.relink, report: !!v.report });
+        const miss = r.missingLinks.length + r.missingFonts.length;
+        toast(`Packaged ${r.links} ${r.links === 1 ? 'link' : 'links'} and ${r.fonts} ${r.fonts === 1 ? 'font' : 'fonts'} to ${r.folder ?? 'the Exports folder'}${miss ? `. Missing: ${[...r.missingLinks, ...r.missingFonts].join(', ')}` : '.'}`, miss ? 'error' : 'info');
+      } catch (err) { toast(message(err), 'error'); }
+    });
+  }
   async function editDictionary(): Promise<void> {
     const words = await api.spellDictionary().catch(() => [] as string[]);
     const v = await askForm('Edit Custom Dictionary', [
@@ -1176,7 +1284,7 @@ export function startApp(): void {
     ], { ok: 'Remove' });
     const remove = String(v?.remove ?? '').split(/[,\s]+/).filter(Boolean);
     if (!remove.length) return;
-    try { await api.spellDictionaryEdit([], remove); resetSpellCache(); toast(`Removed ${remove.length} ${remove.length === 1 ? 'word' : 'words'}.`); } catch (err) { toast(message(err), 'error'); }
+    try { await api.spellDictionaryEdit([], remove); resetSpellCache(); spellMarks.reset(); toast(`Removed ${remove.length} ${remove.length === 1 ? 'word' : 'words'}.`); } catch (err) { toast(message(err), 'error'); }
   }
 
   async function rasterizeSel(): Promise<void> {
@@ -1283,6 +1391,7 @@ export function startApp(): void {
     { id: 'clear', label: 'Clear', keys: ['Delete', 'Backspace'], enabled: sel, run: () => engine.deleteSelection() },
     { id: 'find-replace', label: 'Find and Replace...', enabled: has, run: () => void findReplaceDialog(engine) },
     { id: 'check-spelling', label: 'Check Spelling...', keys: ['Mod+I'], enabled: has, group: 'Edit', description: 'Walks every text object in the document and offers corrections for words the dictionary does not know, with Change, Change All, Ignore and Add to Dictionary; each change is one undo step.', run: () => { spelling ??= new SpellingDialog(engine); void spelling.start(); } },
+    { id: 'auto-spell-check', label: 'Auto Spell Check', group: 'Edit', description: 'Draws red wavy underlines under misspelled words in the text objects in view; the setting is saved and off by default.', checked: () => prefs.autoSpell, run: () => { setPref({ autoSpell: !prefs.autoSpell }); spellMarks.set(prefs.autoSpell); } },
     { id: 'spelling-dictionary', label: 'Edit Custom Dictionary...', group: 'Edit', description: 'Shows the words added to the personal spelling dictionary and removes the ones typed here.', run: () => void editDictionary() },
     { id: 'find-font', label: 'Find Font...', enabled: () => engine.fontsUsed().length > 0, run: () => { findFont ??= new FindFontDialog(engine); findFont.show(); } },
     { id: 'recolor', label: 'Recolor Artwork...', enabled: sel, run: () => void recolorDialog() },
@@ -1331,7 +1440,12 @@ export function startApp(): void {
     { id: 'offset-path', label: 'Offset Path...', enabled: sel, run: () => void offsetPathDialog() },
     { id: 'reverse-path', label: 'Reverse Path Direction', enabled: sel, run: () => engine.pathOp('reverse') },
     { id: 'simplify', label: 'Simplify...', group: 'Object', description: 'Reduces anchor points; straight lines replaces curves with straight segments and the angle threshold keeps sharp corners.', enabled: sel, mutates: true, params: { precision: { type: 'number', min: 0, max: 100, description: 'Curve precision in percent' }, straight: { type: 'boolean', description: 'Replace curves with straight segments' }, angle: { type: 'number', min: 0, max: 180, description: 'Corner points that turn more than this many degrees are kept' } }, run: (params) => void simplifyDialog(params) },
-    { id: 'smooth-path', label: 'Smooth', enabled: sel, run: () => engine.pathOp('smooth') },
+    { id: 'smooth-path', label: 'Smooth...', group: 'Object', description: 'Smooths the selected paths with a Smoothness amount from 0 to 100 percent, previewed live.', enabled: sel, mutates: true, params: { smoothness: { type: 'number', min: 0, max: 100, description: 'Smoothness in percent' } }, run: (params) => void smoothDialog(params) },
+    { id: 'swatch-info', label: 'Create Swatch Info', group: 'Window', description: 'Places a card beside the artboard for each selected swatch, or every swatch when none is selected, with its colour and its name, HEX, RGB, CMYK and spot name, as one group named Swatch Info.', enabled: has, mutates: true, run: () => void swatchInfo() },
+    { id: 'overprint-preview', label: 'Overprint Preview', keys: ['Alt+Shift+Mod+Y'], group: 'View', description: 'Shows how objects marked to overprint multiply onto the art beneath them, as a printing plate would; off by default and never applied to exports.', enabled: has, checked: () => engine.view.overprintPreview, run: () => engine.setView({ overprintPreview: !engine.view.overprintPreview }) },
+    { id: 'separations-preview', label: 'Separations Preview', group: 'Window', description: 'Opens a window to show a single ink plate in gray: All, Cyan, Magenta, Yellow, Black or one spot color; closing it returns to the full color view.', enabled: has, params: { plate: { type: 'string', description: 'Plate to show: All, C, M, Y, K or the name of a spot swatch' } }, run: (params) => { separations ??= new SeparationsDialog(engine); separations.show(); if (typeof params?.plate === 'string') engine.setView({ separation: /^all$/i.test(params.plate) ? null : params.plate }); } },
+    { id: 'document-info', label: 'Document Info', group: 'Window', description: 'Opens a read-only window with the counts for the document: artboards, objects, paths and anchors, fonts, linked images, swatches, spot colors, gradients, patterns, symbols and brushes.', enabled: has, run: () => { docInfo ??= new DocumentInfoDialog(engine); docInfo.show(); } },
+    { id: 'package', label: 'Package...', group: 'File', description: 'Collects the document, its linked images and the fonts it uses into one folder with a report, optionally relinking the document to the copied images; an existing folder is refused.', enabled: has, params: { folder: { type: 'string', description: 'Full path of the new package folder; empty writes inside the Exports folder' }, links: { type: 'boolean', description: 'Copy linked images' }, fonts: { type: 'boolean', description: 'Copy fonts' }, separate: { type: 'boolean', description: 'Collect links in a separate folder' }, relink: { type: 'boolean', description: 'Relink the document to the copied images' }, report: { type: 'boolean', description: 'Create a report' } }, run: () => void packageDialog() },
     { id: 'corners-dialog', label: 'Corners...', group: 'Object', enabled: sel, mutates: true, params: { type: { type: 'string', enum: ['round', 'inverted', 'chamfer'], description: 'Corner type' }, radius: { type: 'number', min: 0, description: 'Radius in document units, or percent when mode is relative' }, mode: { type: 'string', enum: ['absolute', 'relative'], description: 'Rounding mode' } }, run: (params) => void cornersDialog(params) },
     { id: 'expand-corners', label: 'Expand Corners', group: 'Object', enabled: sel, mutates: true, run: () => engine.expandCorners() },
     { id: 'add-anchors', label: 'Add Anchor Points', enabled: sel, run: () => engine.pathOp('add_anchors') },
@@ -1585,8 +1699,8 @@ export function startApp(): void {
   }
 
   const menus: MenuDef[] = [
-    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
-    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['check-spelling', 'spelling-dictionary'] }, '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
+    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'package', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
+    { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['auto-spell-check', 'check-spelling', 'spelling-dictionary'] }, '-', { label: 'Edit Colors', items: ['recolor', '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: () => [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },
       { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', '-', 'send-to-layer'] },
@@ -1616,9 +1730,9 @@ export function startApp(): void {
     { label: 'Type', items: () => ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', ...(prefs.showGenerative ? ['retype'] : []), '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
-    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
+    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);

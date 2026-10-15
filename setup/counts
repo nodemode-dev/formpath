@@ -2,4 +2,7 @@
 source "$(dirname "$0")/lib.sh"
 py="$FORMPTH_ROOT/backend/venv/bin/python"
 [ -x "$py" ] || py="$(fp_python)" || { fp_say "Python 3.12+ is required"; exit 1; }
+for a in "$@"; do
+  [ "$a" = "--commands" ] && exec "$py" "$FORMPTH_ROOT/setup/command_counts.py" "$@"
+done
 exec "$py" "$FORMPTH_ROOT/setup/line_counts.py" "$@"

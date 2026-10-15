@@ -401,6 +401,10 @@
 .cv-parap .cv-seg button { min-width: 0; }
 .cv-parap-btn, .cv-tabsp .cv-parap-btn { flex: 1 1 0; min-width: 0; height: 28px; justify-content: center; font-size: 12px; }
 .cv-parap-btn:disabled { opacity: .45; cursor: default; }
+.cv-similar-btn { flex: 0 0 auto; width: 100%; }
+.cv-similar { max-height: 320px; }
+.cv-similar .cv-menu-item { grid-template-columns: minmax(0, 1fr) auto; }
+.cv-similar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-charp-axes { display: flex; flex-direction: column; gap: 6px; }
 .cv-charp-axes[hidden] { display: none; }
 .cv-charp-axes-list { display: flex; flex-direction: column; gap: 6px; }
@@ -482,6 +486,11 @@
 .cv-dialog-row > .cv-input, .cv-dialog-row > select { width: 100%; }
 .cv-export .cv-dialog-body { align-content: start; }
 .cv-input-num { font-family: var(--font-mono); }
+.cv-export .cv-dialog-row:has(> input[type="checkbox"]) { grid-template-columns: minmax(0, 1fr) auto; }
+.cv-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.cv-docinfo { box-sizing: border-box; height: 360px; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-1); border-radius: 6px; background: var(--surface-2); color: var(--text-secondary); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; white-space: pre; user-select: text; }
+.cv-sep-list { min-height: 150px; }
+.cv-pkg-note { min-height: 36px; }
 .cv-dialog .cv-num { height: var(--ctl-md); }
 .cv-dialog .cv-num input { width: 100%; }
 .cv-dialog .cv-field .cv-select, .cv-dialog .cv-field .cv-dd-btn { width: 100%; height: var(--ctl-md); }

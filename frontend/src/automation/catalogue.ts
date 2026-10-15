@@ -1,4 +1,5 @@
 import type { Engine } from '../engine';
+import { COMMAND_META } from './command-meta';
 import { toolList } from '../extensions/registry';
 import type { Command, CommandParam, Commands } from '../ui/commands';
 import type { MenuDef, MenuItem } from '../ui/menu';
@@ -74,8 +75,8 @@ export class Catalogue {
       const path = [...trail, label].join(' > ');
       out.push({
         id: c.id, label, kind: 'command', group, path,
-        description: c.description ?? (trail.length ? `${label}, as in ${path}.` : `${label}, from a panel menu or shortcut.`),
-        when: c.when ?? '',
+        description: c.description ?? COMMAND_META[c.id]?.[0] ?? (trail.length ? `${label}, as in ${path}.` : `${label}, from a panel menu or shortcut.`),
+        when: c.when ?? COMMAND_META[c.id]?.[1] ?? '',
         params: c.params,
         mutates: c.mutates ?? !READ_ONLY_GROUPS.has(group),
         risky: c.risky ?? RISKY.has(c.id),

@@ -1,0 +1,627 @@
+# formpth commands
+
+Generated from the engine's stored catalogue by `./formpth agents sync`; do not edit by hand.
+
+## Edit
+
+- `auto-spell-check` (Edit > Spelling > Auto Spell Check): Draws red wavy underlines under misspelled words in the text objects in view; the setting is saved and off by default. Use when proofreading while editing.
+- `check-spelling` (Edit > Spelling > Check Spelling): Walks every text object in the document and offers corrections for words the dictionary does not know, with Change, Change All, Ignore and Add to Dictionary; each change is one undo step. Use when proofreading text in the artwork.
+- `clear` (Edit > Clear): Deletes the selection. Use when removing objects.
+- `colors-cmyk` (Edit > Edit Colors > Convert to CMYK): Convert to CMYK, as in Edit > Edit Colors > Convert to CMYK.
+- `colors-grayscale` (Edit > Edit Colors > Convert to Grayscale): Converts the colours of the selection to grays. Use when preparing a one-colour version.
+- `colors-invert` (Edit > Edit Colors > Invert Colors): Inverts the colours of the selection. Use when a negative of the artwork is wanted.
+- `colors-rgb` (Edit > Edit Colors > Convert to RGB): Convert to RGB, as in Edit > Edit Colors > Convert to RGB.
+- `copy` (Edit > Copy): Copies the selection to the clipboard. Use when duplicating art or moving it between documents.
+- `cut` (Edit > Cut): Removes the selection and keeps it on the clipboard. Use when moving art elsewhere.
+- `find-replace` (Edit > Find and Replace): Finds text, fonts or colours and replaces them. Use when changing the same thing in many places.
+- `paste` (Edit > Paste): Pastes the clipboard into the centre of the view. Use when bringing copied art back in.
+- `paste-back` (Edit > Paste in Back): Pastes the clipboard at the same place, behind the selection. Use when the copy should sit under the original.
+- `paste-front` (Edit > Paste in Front): Pastes the clipboard at the same place, in front of the selection. Use when the copy should sit on top of the original.
+- `paste-in-place` (Edit > Paste in Place): Pastes the clipboard at its original position. Use when art must keep its coordinates.
+- `paste-on-selected-artboards` (Edit > Paste on Selected Artboards): When on, Paste places a copy on every artboard at the same relative position; artboards have no multi-selection, so all artboards are used.
+- `recolor` (Edit > Edit Colors > Recolor Artwork): Opens Recolor Artwork to remap the colours of the selection. Use when changing a palette across several objects.
+- `redo` (Edit > Redo): Restores the change that was just undone. Use when an undo went too far.
+- `settings` (Edit > Preferences): Opens the preferences. Use when changing how the editor behaves.
+- `shortcuts` (Edit > Keyboard Shortcuts): Keyboard Shortcuts, as in Edit > Keyboard Shortcuts.
+- `spelling-dictionary` (Edit > Spelling > Edit Custom Dictionary): Shows the words added to the personal spelling dictionary and removes the ones typed here.
+- `undo` (Edit > Undo): Reverses the last change. Use when a step went wrong.
+
+## Effect
+
+- `apply-last-effect` (Effect > Apply Last Effect): Reopens the last effect with its settings to adjust. Use when tweaking an effect just applied.
+- `effect-gallery` (Effect > Effect Gallery): Opens the Effect Gallery with previews. Use when browsing raster effects.
+- `fx-3d.extrude` (Effect > 3D and Materials > Extrude & Bevel): Extrude & Bevel, as in Effect > 3D and Materials > Extrude & Bevel.
+- `fx-3d.inflate` (Effect > 3D and Materials > Inflate): Inflate, as in Effect > 3D and Materials > Inflate.
+- `fx-3d.revolve` (Effect > 3D and Materials > Revolve): Revolve, as in Effect > 3D and Materials > Revolve.
+- `fx-3d.rotate` (Effect > 3D and Materials > Rotate): Rotate, as in Effect > 3D and Materials > Rotate.
+- `fx-blur.gaussian` (Effect > Blur > Gaussian Blur): Blurs the selection with a Gaussian blur. Use when art should look out of focus.
+- `fx-blur.radial` (Effect > Blur > Radial Blur): Radial Blur, as in Effect > Blur > Radial Blur.
+- `fx-blur.smart` (Effect > Blur > Smart Blur): Smart Blur, as in Effect > Blur > Smart Blur.
+- `fx-convert.ellipse` (Effect > Convert to Shape > Ellipse): Ellipse, as in Effect > Convert to Shape > Ellipse.
+- `fx-convert.rectangle` (Effect > Convert to Shape > Rectangle): Rectangle, as in Effect > Convert to Shape > Rectangle.
+- `fx-convert.rounded_rectangle` (Effect > Convert to Shape > Rounded Rectangle): Rounded Rectangle, as in Effect > Convert to Shape > Rounded Rectangle.
+- `fx-distort.free_distort` (Effect > Distort & Transform > Free Distort): Free Distort, as in Effect > Distort & Transform > Free Distort.
+- `fx-distort.pucker_bloat` (Effect > Distort & Transform > Pucker & Bloat): Pucker & Bloat, as in Effect > Distort & Transform > Pucker & Bloat.
+- `fx-distort.roughen` (Effect > Distort & Transform > Roughen): Roughens the edges of paths. Use when art should look hand-made.
+- `fx-distort.transform` (Effect > Distort & Transform > Transform): Transform, as in Effect > Distort & Transform > Transform.
+- `fx-distort.tweak` (Effect > Distort & Transform > Tweak): Tweak, as in Effect > Distort & Transform > Tweak.
+- `fx-distort.twist` (Effect > Distort & Transform > Twist): Twist, as in Effect > Distort & Transform > Twist.
+- `fx-distort.zig_zag` (Effect > Distort & Transform > Zig Zag): Zig Zag, as in Effect > Distort & Transform > Zig Zag.
+- `fx-gallery.accented_edges` (Effect > Brush Strokes > Accented Edges): Accented Edges, as in Effect > Brush Strokes > Accented Edges.
+- `fx-gallery.angled_strokes` (Effect > Brush Strokes > Angled Strokes): Angled Strokes, as in Effect > Brush Strokes > Angled Strokes.
+- `fx-gallery.bas_relief` (Effect > Sketch > Bas Relief): Bas Relief, as in Effect > Sketch > Bas Relief.
+- `fx-gallery.chalk_charcoal` (Effect > Sketch > Chalk & Charcoal): Chalk & Charcoal, as in Effect > Sketch > Chalk & Charcoal.
+- `fx-gallery.charcoal` (Effect > Sketch > Charcoal): Charcoal, as in Effect > Sketch > Charcoal.
+- `fx-gallery.chrome` (Effect > Sketch > Chrome): Chrome, as in Effect > Sketch > Chrome.
+- `fx-gallery.color_halftone` (Effect > Pixelate > Color Halftone): Color Halftone, as in Effect > Pixelate > Color Halftone.
+- `fx-gallery.colored_pencil` (Effect > Artistic > Colored Pencil): Colored Pencil, as in Effect > Artistic > Colored Pencil.
+- `fx-gallery.conte_crayon` (Effect > Sketch > Conté Crayon): Conté Crayon, as in Effect > Sketch > Conté Crayon.
+- `fx-gallery.craquelure` (Effect > Texture > Craquelure): Craquelure, as in Effect > Texture > Craquelure.
+- `fx-gallery.crosshatch` (Effect > Brush Strokes > Crosshatch): Crosshatch, as in Effect > Brush Strokes > Crosshatch.
+- `fx-gallery.crystallize` (Effect > Pixelate > Crystallize): Crystallize, as in Effect > Pixelate > Crystallize.
+- `fx-gallery.cutout` (Effect > Artistic > Cutout): Cutout, as in Effect > Artistic > Cutout.
+- `fx-gallery.dark_strokes` (Effect > Brush Strokes > Dark Strokes): Dark Strokes, as in Effect > Brush Strokes > Dark Strokes.
+- `fx-gallery.de_interlace` (Effect > Video > De-Interlace): De-Interlace, as in Effect > Video > De-Interlace.
+- `fx-gallery.diffuse_glow` (Effect > Distort > Diffuse Glow): Diffuse Glow, as in Effect > Distort > Diffuse Glow.
+- `fx-gallery.dry_brush` (Effect > Artistic > Dry Brush): Dry Brush, as in Effect > Artistic > Dry Brush.
+- `fx-gallery.film_grain` (Effect > Artistic > Film Grain): Film Grain, as in Effect > Artistic > Film Grain.
+- `fx-gallery.fresco` (Effect > Artistic > Fresco): Fresco, as in Effect > Artistic > Fresco.
+- `fx-gallery.glass` (Effect > Distort > Glass): Glass, as in Effect > Distort > Glass.
+- `fx-gallery.glowing_edges` (Effect > Stylize > Glowing Edges): Glowing Edges, as in Effect > Stylize > Glowing Edges.
+- `fx-gallery.grain` (Effect > Texture > Grain): Grain, as in Effect > Texture > Grain.
+- `fx-gallery.graphic_pen` (Effect > Sketch > Graphic Pen): Graphic Pen, as in Effect > Sketch > Graphic Pen.
+- `fx-gallery.halftone_pattern` (Effect > Sketch > Halftone Pattern): Halftone Pattern, as in Effect > Sketch > Halftone Pattern.
+- `fx-gallery.ink_outlines` (Effect > Brush Strokes > Ink Outlines): Ink Outlines, as in Effect > Brush Strokes > Ink Outlines.
+- `fx-gallery.mezzotint` (Effect > Pixelate > Mezzotint): Mezzotint, as in Effect > Pixelate > Mezzotint.
+- `fx-gallery.mosaic_tiles` (Effect > Texture > Mosaic Tiles): Mosaic Tiles, as in Effect > Texture > Mosaic Tiles.
+- `fx-gallery.neon_glow` (Effect > Artistic > Neon Glow): Neon Glow, as in Effect > Artistic > Neon Glow.
+- `fx-gallery.note_paper` (Effect > Sketch > Note Paper): Note Paper, as in Effect > Sketch > Note Paper.
+- `fx-gallery.ntsc_colors` (Effect > Video > NTSC Colors): NTSC Colors, as in Effect > Video > NTSC Colors.
+- `fx-gallery.ocean_ripple` (Effect > Distort > Ocean Ripple): Ocean Ripple, as in Effect > Distort > Ocean Ripple.
+- `fx-gallery.paint_daubs` (Effect > Artistic > Paint Daubs): Paint Daubs, as in Effect > Artistic > Paint Daubs.
+- `fx-gallery.palette_knife` (Effect > Artistic > Palette Knife): Palette Knife, as in Effect > Artistic > Palette Knife.
+- `fx-gallery.patchwork` (Effect > Texture > Patchwork): Patchwork, as in Effect > Texture > Patchwork.
+- `fx-gallery.photocopy` (Effect > Sketch > Photocopy): Photocopy, as in Effect > Sketch > Photocopy.
+- `fx-gallery.plaster` (Effect > Sketch > Plaster): Plaster, as in Effect > Sketch > Plaster.
+- `fx-gallery.plastic_wrap` (Effect > Artistic > Plastic Wrap): Plastic Wrap, as in Effect > Artistic > Plastic Wrap.
+- `fx-gallery.pointillize` (Effect > Pixelate > Pointillize): Pointillize, as in Effect > Pixelate > Pointillize.
+- `fx-gallery.poster_edges` (Effect > Artistic > Poster Edges): Poster Edges, as in Effect > Artistic > Poster Edges.
+- `fx-gallery.reticulation` (Effect > Sketch > Reticulation): Reticulation, as in Effect > Sketch > Reticulation.
+- `fx-gallery.rough_pastels` (Effect > Artistic > Rough Pastels): Rough Pastels, as in Effect > Artistic > Rough Pastels.
+- `fx-gallery.smudge_stick` (Effect > Artistic > Smudge Stick): Smudge Stick, as in Effect > Artistic > Smudge Stick.
+- `fx-gallery.spatter` (Effect > Brush Strokes > Spatter): Spatter, as in Effect > Brush Strokes > Spatter.
+- `fx-gallery.sponge` (Effect > Artistic > Sponge): Sponge, as in Effect > Artistic > Sponge.
+- `fx-gallery.sprayed_strokes` (Effect > Brush Strokes > Sprayed Strokes): Sprayed Strokes, as in Effect > Brush Strokes > Sprayed Strokes.
+- `fx-gallery.stained_glass` (Effect > Texture > Stained Glass): Stained Glass, as in Effect > Texture > Stained Glass.
+- `fx-gallery.stamp` (Effect > Sketch > Stamp): Stamp, as in Effect > Sketch > Stamp.
+- `fx-gallery.sumi_e` (Effect > Brush Strokes > Sumi-e): Sumi-e, as in Effect > Brush Strokes > Sumi-e.
+- `fx-gallery.texturizer` (Effect > Texture > Texturizer): Texturizer, as in Effect > Texture > Texturizer.
+- `fx-gallery.torn_edges` (Effect > Sketch > Torn Edges): Torn Edges, as in Effect > Sketch > Torn Edges.
+- `fx-gallery.underpainting` (Effect > Artistic > Underpainting): Underpainting, as in Effect > Artistic > Underpainting.
+- `fx-gallery.water_paper` (Effect > Sketch > Water Paper): Water Paper, as in Effect > Sketch > Water Paper.
+- `fx-gallery.watercolor` (Effect > Artistic > Watercolor): Watercolor, as in Effect > Artistic > Watercolor.
+- `fx-path.offset` (Effect > Path > Offset Path): Offsets the path outline as a live effect. Use when keeping an adjustable offset.
+- `fx-path.outline_stroke` (Effect > Path > Outline Stroke): Outline Stroke, as in Effect > Path > Outline Stroke.
+- `fx-rasterize.raster` (Effect > Rasterize > Rasterize): Rasterize, as in Effect > Rasterize > Rasterize.
+- `fx-stylize.drop_shadow` (Effect > Stylize > Drop Shadow): Adds a soft drop shadow behind the selection. Use when giving art depth.
+- `fx-stylize.feather` (Effect > Stylize > Feather): Fades the edges of the selection. Use when art should blend softly into the background.
+- `fx-stylize.inner_glow` (Effect > Stylize > Inner Glow): Inner Glow, as in Effect > Stylize > Inner Glow.
+- `fx-stylize.outer_glow` (Effect > Stylize > Outer Glow): Adds a glow around the outside of the selection. Use when art should shine.
+- `fx-stylize.round_corners` (Effect > Stylize > Round Corners): Rounds the corners of the selection by a radius. Use when softening sharp corners.
+- `fx-stylize.scribble` (Effect > Stylize > Scribble): Scribble, as in Effect > Stylize > Scribble.
+- `fx-warp.arc` (Effect > Warp > Arc): Bends the selection into an arc. Use when curving text or shapes.
+- `fx-warp.arc_lower` (Effect > Warp > Arc Lower): Arc Lower, as in Effect > Warp > Arc Lower.
+- `fx-warp.arc_upper` (Effect > Warp > Arc Upper): Arc Upper, as in Effect > Warp > Arc Upper.
+- `fx-warp.arch` (Effect > Warp > Arch): Arch, as in Effect > Warp > Arch.
+- `fx-warp.bulge` (Effect > Warp > Bulge): Bulge, as in Effect > Warp > Bulge.
+- `fx-warp.fish` (Effect > Warp > Fish): Fish, as in Effect > Warp > Fish.
+- `fx-warp.fisheye` (Effect > Warp > Fisheye): Fisheye, as in Effect > Warp > Fisheye.
+- `fx-warp.flag` (Effect > Warp > Flag): Flag, as in Effect > Warp > Flag.
+- `fx-warp.inflate` (Effect > Warp > Inflate): Inflate, as in Effect > Warp > Inflate.
+- `fx-warp.rise` (Effect > Warp > Rise): Rise, as in Effect > Warp > Rise.
+- `fx-warp.shell_lower` (Effect > Warp > Shell Lower): Shell Lower, as in Effect > Warp > Shell Lower.
+- `fx-warp.shell_upper` (Effect > Warp > Shell Upper): Shell Upper, as in Effect > Warp > Shell Upper.
+- `fx-warp.squeeze` (Effect > Warp > Squeeze): Squeeze, as in Effect > Warp > Squeeze.
+- `fx-warp.twist` (Effect > Warp > Twist): Twist, as in Effect > Warp > Twist.
+- `fx-warp.wave` (Effect > Warp > Wave): Distorts the selection into a wave. Use when art should ripple.
+- `last-effect` (Effect > Last Effect): Applies the last used effect again with the same settings. Use when repeating an effect on more art.
+- `raster-settings` (Effect > Document Raster Effects Settings): Document Raster Effects Settings, as in Effect > Document Raster Effects Settings.
+
+## File
+
+- `action-batch` (File > Automate > Batch): Batch, as in File > Automate > Batch.
+- `close-tab` (File > Close): Closes the current document tab. Use when finished with a document.
+- `collect-multiple` (File > Export > Collect for Export as Multiple Assets): Collect for Export as Multiple Assets, as in File > Export > Collect for Export as Multiple Assets.
+- `collect-single` (File > Export > Collect for Export as Single Asset): Collect for Export as Single Asset, as in File > Export > Collect for Export as Single Asset.
+- `document-setup` (File > Document Setup): Opens the document settings for units, bleed and colour mode. Use when changing the basic properties of the document.
+- `download-project` (File > Download Project (.fpth)): Downloads the document as an editable .fpth file. Use when moving the project to another computer.
+- `export-as` (File > Export > Export As): Opens the Export dialog with artboard range, scope and format. Use when saving the artwork as SVG, PDF, EPS, DXF or a raster image.
+- `export-dxf` (File > Export > AutoCAD Interchange (DXF)): Exports the artwork as an AutoCAD DXF drawing. Use when handing outlines to CAD or cutting software.
+- `export-eps` (File > Export > EPS): Exports the artwork as an EPS file. Use when a print workflow asks for EPS.
+- `export-jpg` (File > Export > JPEG): Exports the artwork as a JPEG image. Use when a small photographic raster file is needed.
+- `export-pdf` (File > Export > PDF): Exports the artwork as a PDF with the chosen artboards. Use when sending print-ready or shareable pages.
+- `export-png` (File > Export > PNG): Exports the artwork as a PNG image. Use when a transparent raster image is needed.
+- `export-screens` (File > Export > Export for Screens): Exports chosen artboards at several scales and formats into a zip. Use when producing assets for screens in more than one size.
+- `export-svg` (File > Export > SVG): Exports the artwork as an SVG file. Use when the result goes on the web or into another vector tool.
+- `export-webp` (File > Export > WebP): Exports the artwork as a WebP image. Use when a compact web image is needed.
+- `history-new-document` (File > Automate > New Document from History State): New Document from History State, as in File > Automate > New Document from History State.
+- `history-options` (File > Automate > History Options): History Options, as in File > Automate > History Options.
+- `mode-cmyk` (File > Document Color Mode > CMYK Color): Switches the document to CMYK colour. Use when the artwork is destined for print.
+- `mode-rgb` (File > Document Color Mode > RGB Color): Switches the document to RGB colour. Use when the artwork is destined for screens.
+- `new` (File > New): Creates a blank document in a new tab. Use when starting a fresh piece of artwork.
+- `open` (File > Open): Opens a saved project from the library. Use when continuing work stored in the library.
+- `open-file` (File > Open from Disk): Opens a file from disk, such as an .fpth or an SVG. Use when the artwork lives outside the library.
+- `package` (File > Package): Collects the document, its linked images and the fonts it uses into one folder with a report, optionally relinking the document to the copied images; an existing folder is refused.
+- `place` (File > Place): Places an image or vector file into the document, embedded. Use when adding a picture or logo to the artwork.
+- `place-linked` (File > Place Linked): Places a file as a link that updates when the source changes. Use when the source file is still being edited elsewhere.
+- `play-action` (File > Automate > Play Action): Play Action, as in File > Automate > Play Action.
+- `print` (File > Print): Prints the document. Use when a paper proof is needed.
+- `save` (File > Save): Saves the document to the library under its current name. Use when keeping the latest changes.
+- `save-as` (File > Save As): Saves the document under a new name. Use when branching a copy of the work.
+- `send-nodemode` (File > Send to NodeMode): Send to NodeMode, as in File > Send to NodeMode.
+
+## Help
+
+- `about` (Help > About formpth): About formpth, as in Help > About formpth.
+- `copy-error-log` (Help > Copy Error Log): Copy Error Log, as in Help > Copy Error Log.
+- `help` (Help > formpth Help): formpth Help, as in Help > formpth Help.
+
+## Object
+
+- `add-anchors` (Object > Path > Add Anchor Points): Adds an anchor at the midpoint of every segment. Use when a path needs more points to shape.
+- `align-bottom` (Object > Align > Vertical Align Bottom): Aligns the selection to its bottom edge. Use when objects need a common bottom edge.
+- `align-distribute_horizontal_space` (Object > Align > Distribute Horizontal Space): Distribute Horizontal Space, as in Object > Align > Distribute Horizontal Space.
+- `align-distribute_vertical_space` (Object > Align > Distribute Vertical Space): Distribute Vertical Space, as in Object > Align > Distribute Vertical Space.
+- `align-horizontal_center` (Object > Align > Horizontal Align Center): Centres the selection on a shared vertical axis. Use when stacking objects on their centres.
+- `align-left` (Object > Align > Horizontal Align Left): Aligns the selection to its left edge. Use when objects need a common left edge.
+- `align-right` (Object > Align > Horizontal Align Right): Aligns the selection to its right edge. Use when objects need a common right edge.
+- `align-top` (Object > Align > Vertical Align Top): Aligns the selection to its top edge. Use when objects need a common top edge.
+- `align-vertical_center` (Object > Align > Vertical Align Center): Centres the selection on a shared horizontal axis. Use when lining objects up on their centres.
+- `artboard-fit-art` (Object > Artboards > Fit to Artwork Bounds): Fit to Artwork Bounds, as in Object > Artboards > Fit to Artwork Bounds.
+- `artboard-fit-selection` (Object > Artboards > Fit to Selected Art): Fit to Selected Art, as in Object > Artboards > Fit to Selected Art.
+- `artboard-options` (Object > Artboards > Artboard Options): Opens the options for the active artboard, including name, size and background colour. Use when resizing, renaming or colouring an artboard.
+- `artboards-from-selection` (Object > Artboards > Convert to Artboards): Creates an artboard around each selected object. Use when exporting several objects as separate pages.
+- `artboards-rearrange` (Object > Artboards > Rearrange All Artboards): Rearrange All Artboards, as in Object > Artboards > Rearrange All Artboards.
+- `average` (Object > Path > Average): Moves the selected anchors to their average position. Use when anchors should line up exactly.
+- `blend-expand` (Object > Blend > Expand Blend): Turns a blend into its individual objects. Use when the blend steps need separate editing.
+- `blend-make` (Object > Blend > Make Blend): Creates a blend of intermediate steps between two objects. Use when morphing one shape or colour into another.
+- `blend-options` (Object > Blend > Blend Options): Opens the blend spacing and orientation options. Use when changing the number of blend steps.
+- `blend-release` (Object > Blend > Release Blend): Release Blend, as in Object > Blend > Release Blend.
+- `blend-spine` (Object > Blend > Replace Spine): Replace Spine, as in Object > Blend > Replace Spine.
+- `break-symbol` (Object > Symbol > Break Link to Symbol): Break Link to Symbol, as in Object > Symbol > Break Link to Symbol.
+- `bring-forward` (Object > Arrange > Bring Forward): Moves the selection one step up in stacking order. Use when a small stacking change is needed.
+- `bring-to-front` (Object > Arrange > Bring to Front): Moves the selection above everything in its layer. Use when art is covered by other objects.
+- `clean-up` (Object > Path > Clean Up): Removes stray points, unpainted objects and empty text. Use when tidying up an imported file.
+- `close-path` (Object > Path > Close Path): Closes the selected open paths. Use when a shape needs a fill.
+- `compound-make` (Object > Compound Path > Make Compound Path): Combines paths into one compound path with holes. Use when cutting a shape out of another.
+- `compound-release` (Object > Compound Path > Release Compound Path): Splits a compound path back into separate paths. Use when the holes should become shapes again.
+- `corners-dialog` (Object > Path > Corners): Corners, as in Object > Path > Corners.
+- `create-mesh` (Object > Create Gradient Mesh): Create Gradient Mesh, as in Object > Create Gradient Mesh.
+- `disable-opacity-mask` (Object > Opacity Mask > Disable Opacity Mask): Disable Opacity Mask, as in Object > Opacity Mask > Disable Opacity Mask.
+- `divide-below` (Object > Path > Divide Objects Below): Cuts the objects below along the selected path. Use when slicing shapes with a line.
+- `edit-pattern` (Object > Pattern > Edit Pattern): Edit Pattern, as in Object > Pattern > Edit Pattern.
+- `embed-image` (Object > Image Trace > Embed Image): Embed Image, as in Object > Image Trace > Embed Image.
+- `envelope-edit-contents` (Object > Envelope Distort > Edit Contents): Edit Contents, as in Object > Envelope Distort > Edit Contents.
+- `envelope-edit-envelope` (Object > Envelope Distort > Edit Envelope): Edit Envelope, as in Object > Envelope Distort > Edit Envelope.
+- `envelope-mesh` (Object > Envelope Distort > Make with Mesh): Makes an envelope from a mesh grid. Use when distorting art by pulling mesh points.
+- `envelope-options` (Object > Envelope Distort > Envelope Options): Envelope Options, as in Object > Envelope Distort > Envelope Options.
+- `envelope-reset-mesh` (Object > Envelope Distort > Reset with Mesh): Reset with Mesh, as in Object > Envelope Distort > Reset with Mesh.
+- `envelope-reset-warp` (Object > Envelope Distort > Reset with Warp): Reset with Warp, as in Object > Envelope Distort > Reset with Warp.
+- `envelope-top` (Object > Envelope Distort > Make with Top Object): Make with Top Object, as in Object > Envelope Distort > Make with Top Object.
+- `envelope-warp` (Object > Envelope Distort > Make with Warp): Makes an envelope from a preset warp shape. Use when bending art into an arc, flag or wave.
+- `expand-appearance` (Object > Expand Appearance): Flattens the appearance of the selection into separate objects. Use when stacked fills and strokes must be edited apart.
+- `expand-corners` (Object > Path > Expand Corners): Expand Corners, as in Object > Path > Expand Corners.
+- `expand-object` (Object > Expand): Turns strokes, fills and live effects into plain paths. Use when the appearance must become editable geometry.
+- `expand-shape` (Object > Shape > Expand Shape): Expand Shape, as in Object > Shape > Expand Shape.
+- `generate-patterns` (Object > Pattern > Generate Patterns): Generate Patterns, as in Object > Pattern > Generate Patterns.
+- `generative-shape-fill` (Object > Generative > Shape Fill): Shape Fill, as in Object > Generative > Shape Fill.
+- `graph-column` (Object > Graph > Column): Column, as in Object > Graph > Column.
+- `graph-data` (Object > Graph > Data): Data, as in Object > Graph > Data.
+- `graph-design` (Object > Graph > Design): Design, as in Object > Graph > Design.
+- `graph-marker` (Object > Graph > Marker): Marker, as in Object > Graph > Marker.
+- `graph-type` (Object > Graph > Type): Type, as in Object > Graph > Type.
+- `group` (Object > Group): Groups the selected objects so they move as one. Use when keeping related shapes together.
+- `hide` (Object > Hide Selection): Hides the selected objects. Use when clearing the view without deleting.
+- `image-trace` (Object > Image Trace > Make Image Trace): Traces a placed image into vector paths. Use when turning a bitmap into editable vectors.
+- `image-trace-expand` (Object > Image Trace > Make Image Trace and Expand): Make Image Trace and Expand, as in Object > Image Trace > Make Image Trace and Expand.
+- `intertwine-edit` (Object > Intertwine > Edit Intertwine): Edit Intertwine, as in Object > Intertwine > Edit Intertwine.
+- `intertwine-make` (Object > Intertwine > Make Intertwine): Make Intertwine, as in Object > Intertwine > Make Intertwine.
+- `intertwine-release` (Object > Intertwine > Release Intertwine): Release Intertwine, as in Object > Intertwine > Release Intertwine.
+- `isolate` (Object > Isolate Selected Group): Isolate Selected Group, as in Object > Isolate Selected Group.
+- `join` (Object > Path > Join): Joins two open end points with a segment. Use when closing a gap between paths.
+- `link-embed` (Object > Links > Embed Image): Embed Image, as in Object > Links > Embed Image.
+- `link-info` (Object > Links > Link Info): Link Info, as in Object > Links > Link Info.
+- `link-relink` (Object > Links > Relink): Relink, as in Object > Links > Relink.
+- `link-relink-all` (Object > Links > Relink All Instances): Relink All Instances, as in Object > Links > Relink All Instances.
+- `link-relink-folder` (Object > Links > Relink Missing Links from Folder): Relink Missing Links from Folder, as in Object > Links > Relink Missing Links from Folder.
+- `link-unembed` (Object > Links > Unembed): Unembed, as in Object > Links > Unembed.
+- `link-update` (Object > Links > Update Link): Update Link, as in Object > Links > Update Link.
+- `link-update-all` (Object > Links > Update All Modified Links): Update All Modified Links, as in Object > Links > Update All Modified Links.
+- `live-paint-expand` (Object > Live Paint > Expand Live Paint): Expand Live Paint, as in Object > Live Paint > Expand Live Paint.
+- `live-paint-gap` (Object > Live Paint > Live Paint Gap Options): Live Paint Gap Options, as in Object > Live Paint > Live Paint Gap Options.
+- `live-paint-make` (Object > Live Paint > Make Live Paint): Turns the selection into a Live Paint group. Use when colouring the gaps between overlapping paths.
+- `live-paint-merge` (Object > Live Paint > Merge Live Paint): Merge Live Paint, as in Object > Live Paint > Merge Live Paint.
+- `live-paint-release` (Object > Live Paint > Release Live Paint): Release Live Paint, as in Object > Live Paint > Release Live Paint.
+- `lock` (Object > Lock Selection): Locks the selected objects against editing. Use when protecting finished art.
+- `make-clip` (Object > Clipping Mask > Make Clipping Mask): Clips the selection with the topmost object as a mask. Use when showing only part of the art.
+- `make-pattern` (Object > Pattern > Make Pattern): Make Pattern, as in Object > Pattern > Make Pattern.
+- `move-dialog` (Object > Transform > Move): Moves the selection by exact distances. Use when nudging by a measured amount.
+- `new-mask-clip` (Object > Opacity Mask > New Opacity Masks Are Clipping): New Opacity Masks Are Clipping, as in Object > Opacity Mask > New Opacity Masks Are Clipping.
+- `new-mask-invert` (Object > Opacity Mask > New Opacity Masks Are Inverted): New Opacity Masks Are Inverted, as in Object > Opacity Mask > New Opacity Masks Are Inverted.
+- `new-symbol` (Object > Symbol > New Symbol): New Symbol, as in Object > Symbol > New Symbol.
+- `object-on-path-arrange` (Object > Object on Path > Arrange on Path): Changes spacing, offset, rotation and side for objects placed along a path.
+- `object-on-path-attach` (Object > Object on Path > Attach to Path): Places the selected objects at even spacing along the topmost selected path, optionally rotated to the path direction. Use when placing items along a curve.
+- `object-on-path-release` (Object > Object on Path > Release from Path): Leaves the objects where they are; there is no live link to release.
+- `offset-path` (Object > Path > Offset Path): Creates a path offset from the selection by a distance. Use when growing or shrinking a shape evenly.
+- `opacity-mask` (Object > Opacity Mask > Make Opacity Mask): Make Opacity Mask, as in Object > Opacity Mask > Make Opacity Mask.
+- `outline-stroke` (Object > Path > Outline Stroke): Converts a stroke into a filled shape. Use when a line must scale like a shape.
+- `persp-attach` (Object > Perspective > Attach to Active Plane): Attach to Active Plane, as in Object > Perspective > Attach to Active Plane.
+- `persp-edit-text` (Object > Perspective > Edit Text): Edit Text, as in Object > Perspective > Edit Text.
+- `persp-match-plane` (Object > Perspective > Move Plane to Match Object): Move Plane to Match Object, as in Object > Perspective > Move Plane to Match Object.
+- `persp-release` (Object > Perspective > Release with Perspective): Release with Perspective, as in Object > Perspective > Release with Perspective.
+- `pf-crop` (Object > Pathfinder > Crop): Crops everything to the topmost shape. Use when trimming art to a boundary shape.
+- `pf-divide` (Object > Pathfinder > Divide): Splits overlapping shapes into separate pieces. Use when each overlap region needs its own fill.
+- `pf-exclude` (Object > Pathfinder > Exclude): Keeps the areas where shapes do not overlap. Use when removing the overlap.
+- `pf-hard-mix` (Object > Pathfinder > Hard Mix): Divides overlaps and colours each overlap with the per-channel maximum of the overlapping fills.
+- `pf-intersect` (Object > Pathfinder > Intersect): Keeps only the area where shapes overlap. Use when you need the shared region.
+- `pf-merge` (Object > Pathfinder > Merge): Merge, as in Object > Pathfinder > Merge.
+- `pf-minus_back` (Object > Pathfinder > Minus Back): Minus Back, as in Object > Pathfinder > Minus Back.
+- `pf-minus_front` (Object > Pathfinder > Minus Front): Cuts the front shapes out of the back one. Use when punching a hole with a shape.
+- `pf-outline` (Object > Pathfinder > Outline): Outline, as in Object > Pathfinder > Outline.
+- `pf-soft-mix` (Object > Pathfinder > Soft Mix): Divides overlaps and colours each overlap with a blend of the overlapping fills at the mixing rate.
+- `pf-trap` (Object > Pathfinder > Trap): Adds thin multiply-blended trap shapes where differently coloured objects abut or overlap.
+- `pf-trim` (Object > Pathfinder > Trim): Removes hidden parts of the shapes behind. Use when overlaps should disappear without merging.
+- `pf-unite` (Object > Pathfinder > Unite): Merges the selected shapes into one outline. Use when combining shapes into a single silhouette.
+- `rasterize` (Object > Rasterize): Converts the selection to a bitmap image. Use when art should become a flat picture.
+- `reflect-dialog` (Object > Transform > Reflect): Mirrors the selection across an axis. Use when making a symmetrical copy.
+- `release-clip` (Object > Clipping Mask > Release Clipping Mask): Releases a clipping mask. Use when the hidden art should show again.
+- `release-live` (Object > Repeat > Release): Release, as in Object > Repeat > Release.
+- `release-opacity-mask` (Object > Opacity Mask > Release Opacity Mask): Release Opacity Mask, as in Object > Opacity Mask > Release Opacity Mask.
+- `remove-anchors` (Object > Path > Remove Anchor Points): Removes the selected anchors and keeps the path shape. Use when points are redundant.
+- `repeat-grid` (Object > Repeat > Grid): Grid, as in Object > Repeat > Grid.
+- `repeat-mirror` (Object > Repeat > Mirror): Mirror, as in Object > Repeat > Mirror.
+- `repeat-options` (Object > Repeat > Repeat Options): Repeat Options, as in Object > Repeat > Repeat Options.
+- `repeat-radial` (Object > Repeat > Radial): Radial, as in Object > Repeat > Radial.
+- `reset-bounding-box` (Object > Transform > Reset Bounding Box): Resets the bounding box to match the artwork. Use when the box stays tilted after a rotation.
+- `reverse-path` (Object > Path > Reverse Path Direction): Reverses the direction of a path. Use when arrowheads or dashes run the wrong way.
+- `rotate-dialog` (Object > Transform > Rotate): Rotates the selection by an angle you type. Use when an exact rotation is needed.
+- `scale-dialog` (Object > Transform > Scale): Scales the selection by a percentage. Use when resizing by a precise factor.
+- `send-backward` (Object > Arrange > Send Backward): Moves the selection one step down in stacking order. Use when a small stacking change is needed.
+- `send-to-back` (Object > Arrange > Send to Back): Moves the selection below everything in its layer. Use when art should become a backdrop.
+- `send-to-layer` (Object > Arrange > Send to Current Layer): Moves the selection to another layer. Use when organising art across layers.
+- `shaper-expand` (Object > Shape > Expand Shaper Group): Expand Shaper Group, as in Object > Shape > Expand Shaper Group.
+- `shear-dialog` (Object > Transform > Shear): Slants the selection by an angle. Use when skewing a shape.
+- `show-all` (Object > Show All): Shows every hidden object. Use when something was hidden and is needed again.
+- `simplify` (Object > Path > Simplify): Reduces anchor points; straight lines replaces curves with straight segments and the angle threshold keeps sharp corners. Use when a path has more points than it needs.
+- `smooth-path` (Object > Path > Smooth): Smooths the selected paths with a Smoothness amount from 0 to 100 percent, previewed live. Use when a hand-drawn path is lumpy.
+- `split-grid` (Object > Path > Split Into Grid): Splits a shape into a grid of rows and columns. Use when dividing a shape into equal cells.
+- `symbol-duplicate` (Object > Symbol > Duplicate Symbol): Duplicate Symbol, as in Object > Symbol > Duplicate Symbol.
+- `symbol-edit` (Object > Symbol > Edit Symbol): Edit Symbol, as in Object > Symbol > Edit Symbol.
+- `symbol-exit` (Object > Symbol > Exit Symbol Editing Mode): Exit Symbol Editing Mode, as in Object > Symbol > Exit Symbol Editing Mode.
+- `symbol-options` (Object > Symbol > Symbol Options): Symbol Options, as in Object > Symbol > Symbol Options.
+- `symbol-redefine` (Object > Symbol > Redefine Symbol): Redefine Symbol, as in Object > Symbol > Redefine Symbol.
+- `symbol-replace` (Object > Symbol > Replace Symbol): Replace Symbol, as in Object > Symbol > Replace Symbol.
+- `symbol-reset` (Object > Symbol > Reset Symbol Overrides): Reset Symbol Overrides, as in Object > Symbol > Reset Symbol Overrides.
+- `toggle-scale-corners` (Object > Transform > Scale Corners): Toggles whether scaling a live rectangle or a path with corner radii scales the radii; off keeps them.
+- `trace-expand` (Object > Image Trace > Expand Image Trace): Expand Image Trace, as in Object > Image Trace > Expand Image Trace.
+- `trace-release` (Object > Image Trace > Release Image Trace): Release Image Trace, as in Object > Image Trace > Release Image Trace.
+- `transform-again` (Object > Transform > Transform Again): Repeats the last transform. Use when building a pattern of repeated steps.
+- `transform-each` (Object > Transform > Transform Each): Transforms each selected object about its own centre; absolute mode takes target sizes in document units, relative mode percentages. Use when each object needs the same scale or rotation.
+- `ungroup` (Object > Ungroup): Dissolves the selected groups into their parts. Use when editing the objects inside a group.
+- `ungroup-all` (Object > Ungroup All): Ungroups every nested group in the selection in one step.
+- `unlink-opacity-mask` (Object > Opacity Mask > Unlink Opacity Mask): Unlink Opacity Mask, as in Object > Opacity Mask > Unlink Opacity Mask.
+- `unlock-all` (Object > Unlock All): Unlock All, as in Object > Unlock All.
+- `wrap-make` (Object > Text Wrap > Make): Make, as in Object > Text Wrap > Make.
+- `wrap-options` (Object > Text Wrap > Text Wrap Options): Text Wrap Options, as in Object > Text Wrap > Text Wrap Options.
+- `wrap-release` (Object > Text Wrap > Release): Release, as in Object > Text Wrap > Release.
+
+## Panels
+
+- `clear-recent` (Clear Recent): Clear Recent, from a panel menu or shortcut.
+- `collect-layer` (Collect in New Layer): Collect in New Layer, from a panel menu or shortcut.
+- `default-fill-stroke` (Default Fill and Stroke): Default Fill and Stroke, from a panel menu or shortcut.
+- `draw-mode` (Cycle Drawing Modes): Cycle Drawing Modes, from a panel menu or shortcut.
+- `exit-isolation` (Exit Isolation Mode): Exit Isolation Mode, from a panel menu or shortcut.
+- `graph-size` (Graph Size): Graph Size, from a panel menu or shortcut.
+- `link-goto` (Go To Link): Go To Link, from a panel menu or shortcut.
+- `link-previews` (Save Previews of Linked Images): Save Previews of Linked Images, from a panel menu or shortcut.
+- `new-layer` (New Layer): New Layer, from a panel menu or shortcut.
+- `paint-color` (Color): Color, from a panel menu or shortcut.
+- `paint-gradient` (Gradient): Gradient, from a panel menu or shortcut.
+- `paint-none` (None): None, from a panel menu or shortcut.
+- `pattern-cancel` (Cancel Pattern Editing): Cancel Pattern Editing, from a panel menu or shortcut.
+- `pattern-copy` (Save Pattern as a Copy): Save Pattern as a Copy, from a panel menu or shortcut.
+- `pattern-done` (Exit Pattern Editing Mode): Exit Pattern Editing Mode, from a panel menu or shortcut.
+- `screen-next` (Change Screen Mode): Change Screen Mode, from a panel menu or shortcut.
+- `shape-dialog` (Shape Size): Shape Size, from a panel menu or shortcut.
+- `swap-fill-stroke` (Swap Fill and Stroke): Swap Fill and Stroke, from a panel menu or shortcut.
+- `symbol-cancel` (Cancel Symbol Editing): Cancel Symbol Editing, from a panel menu or shortcut.
+- `symbol-delete` (Delete Symbol): Delete Symbol, from a panel menu or shortcut.
+- `toggle-fill-stroke` (Fill or Stroke in Front): Fill or Stroke in Front, from a panel menu or shortcut.
+- `tool-anchorPoint` (Anchor Point Tool): Anchor Point Tool, from a panel menu or shortcut.
+- `tool-arc` (Arc Tool): Arc Tool, from a panel menu or shortcut.
+- `tool-areaGraph` (Area Graph Tool): Area Graph Tool, from a panel menu or shortcut.
+- `tool-areaType` (Area Type Tool): Area Type Tool, from a panel menu or shortcut.
+- `tool-areaTypeVertical` (Vertical Area Type Tool): Vertical Area Type Tool, from a panel menu or shortcut.
+- `tool-artboard` (Artboard Tool): Artboard Tool, from a panel menu or shortcut.
+- `tool-barGraph` (Bar Graph Tool): Bar Graph Tool, from a panel menu or shortcut.
+- `tool-blend` (Blend Tool): Blend Tool, from a panel menu or shortcut.
+- `tool-bloat` (Bloat Tool): Bloat Tool, from a panel menu or shortcut.
+- `tool-blob` (Blob Brush Tool): Blob Brush Tool, from a panel menu or shortcut.
+- `tool-columnGraph` (Column Graph Tool): Column Graph Tool, from a panel menu or shortcut.
+- `tool-crystallize` (Crystallize Tool): Crystallize Tool, from a panel menu or shortcut.
+- `tool-curvature` (Curvature Tool): Curvature Tool, from a panel menu or shortcut.
+- `tool-dimension` (Dimension Tool): Dimension Tool, from a panel menu or shortcut.
+- `tool-direct` (Direct Selection Tool): Direct Selection Tool, from a panel menu or shortcut.
+- `tool-ellipse` (Ellipse Tool): Ellipse Tool, from a panel menu or shortcut.
+- `tool-eraser` (Eraser Tool): Eraser Tool, from a panel menu or shortcut.
+- `tool-eyedropper` (Eyedropper Tool): Eyedropper Tool, from a panel menu or shortcut.
+- `tool-flare` (Flare Tool): Flare Tool, from a panel menu or shortcut.
+- `tool-freeTransform` (Free Transform Tool): Free Transform Tool, from a panel menu or shortcut.
+- `tool-gradient` (Gradient Tool): Gradient Tool, from a panel menu or shortcut.
+- `tool-groupSelect` (Group Selection Tool): Group Selection Tool, from a panel menu or shortcut.
+- `tool-hand` (Hand Tool): Hand Tool, from a panel menu or shortcut.
+- `tool-intertwine` (Intertwine Tool): Intertwine Tool, from a panel menu or shortcut.
+- `tool-join` (Join Tool): Join Tool, from a panel menu or shortcut.
+- `tool-knife` (Knife): Knife, from a panel menu or shortcut.
+- `tool-lasso` (Lasso Tool): Lasso Tool, from a panel menu or shortcut.
+- `tool-line` (Line Segment Tool): Line Segment Tool, from a panel menu or shortcut.
+- `tool-lineGraph` (Line Graph Tool): Line Graph Tool, from a panel menu or shortcut.
+- `tool-livePaint` (Live Paint Bucket): Live Paint Bucket, from a panel menu or shortcut.
+- `tool-livePaintSelect` (Live Paint Selection Tool): Live Paint Selection Tool, from a panel menu or shortcut.
+- `tool-magicWand` (Magic Wand Tool): Magic Wand Tool, from a panel menu or shortcut.
+- `tool-measure` (Measure Tool): Measure Tool, from a panel menu or shortcut.
+- `tool-mesh` (Mesh Tool): Mesh Tool, from a panel menu or shortcut.
+- `tool-paintbrush` (Paintbrush Tool): Paintbrush Tool, from a panel menu or shortcut.
+- `tool-pathEraser` (Path Eraser Tool): Path Eraser Tool, from a panel menu or shortcut.
+- `tool-pen` (Pen Tool): Pen Tool, from a panel menu or shortcut.
+- `tool-penAdd` (Add Anchor Point Tool): Add Anchor Point Tool, from a panel menu or shortcut.
+- `tool-penDelete` (Delete Anchor Point Tool): Delete Anchor Point Tool, from a panel menu or shortcut.
+- `tool-pencil` (Pencil Tool): Pencil Tool, from a panel menu or shortcut.
+- `tool-perspectiveGrid` (Perspective Grid Tool): Perspective Grid Tool, from a panel menu or shortcut.
+- `tool-perspectiveSelect` (Perspective Selection Tool): Perspective Selection Tool, from a panel menu or shortcut.
+- `tool-pieGraph` (Pie Graph Tool): Pie Graph Tool, from a panel menu or shortcut.
+- `tool-polarGrid` (Polar Grid Tool): Polar Grid Tool, from a panel menu or shortcut.
+- `tool-polygon` (Polygon Tool): Polygon Tool, from a panel menu or shortcut.
+- `tool-pucker` (Pucker Tool): Pucker Tool, from a panel menu or shortcut.
+- `tool-puppetWarp` (Puppet Warp Tool): Puppet Warp Tool, from a panel menu or shortcut.
+- `tool-radarGraph` (Radar Graph Tool): Radar Graph Tool, from a panel menu or shortcut.
+- `tool-rectGrid` (Rectangular Grid Tool): Rectangular Grid Tool, from a panel menu or shortcut.
+- `tool-rectangle` (Rectangle Tool): Rectangle Tool, from a panel menu or shortcut.
+- `tool-reflect` (Reflect Tool): Reflect Tool, from a panel menu or shortcut.
+- `tool-reshape` (Reshape Tool): Reshape Tool, from a panel menu or shortcut.
+- `tool-rotate` (Rotate Tool): Rotate Tool, from a panel menu or shortcut.
+- `tool-rotateView` (Rotate View Tool): Rotate View Tool, from a panel menu or shortcut.
+- `tool-roundedRectangle` (Rounded Rectangle Tool): Rounded Rectangle Tool, from a panel menu or shortcut.
+- `tool-scale` (Scale Tool): Scale Tool, from a panel menu or shortcut.
+- `tool-scallop` (Scallop Tool): Scallop Tool, from a panel menu or shortcut.
+- `tool-scatterGraph` (Scatter Graph Tool): Scatter Graph Tool, from a panel menu or shortcut.
+- `tool-scissors` (Scissors Tool): Scissors Tool, from a panel menu or shortcut.
+- `tool-selection` (Selection Tool): Selection Tool, from a panel menu or shortcut.
+- `tool-shapeBuilder` (Shape Builder Tool): Shape Builder Tool, from a panel menu or shortcut.
+- `tool-shaper` (Shaper Tool): Shaper Tool, from a panel menu or shortcut.
+- `tool-shear` (Shear Tool): Shear Tool, from a panel menu or shortcut.
+- `tool-smooth` (Smooth Tool): Smooth Tool, from a panel menu or shortcut.
+- `tool-spiral` (Spiral Tool): Spiral Tool, from a panel menu or shortcut.
+- `tool-stackedBarGraph` (Stacked Bar Graph Tool): Stacked Bar Graph Tool, from a panel menu or shortcut.
+- `tool-stackedColumnGraph` (Stacked Column Graph Tool): Stacked Column Graph Tool, from a panel menu or shortcut.
+- `tool-star` (Star Tool): Star Tool, from a panel menu or shortcut.
+- `tool-symbolScreener` (Symbol Screener Tool): Symbol Screener Tool, from a panel menu or shortcut.
+- `tool-symbolScruncher` (Symbol Scruncher Tool): Symbol Scruncher Tool, from a panel menu or shortcut.
+- `tool-symbolShifter` (Symbol Shifter Tool): Symbol Shifter Tool, from a panel menu or shortcut.
+- `tool-symbolSizer` (Symbol Sizer Tool): Symbol Sizer Tool, from a panel menu or shortcut.
+- `tool-symbolSpinner` (Symbol Spinner Tool): Symbol Spinner Tool, from a panel menu or shortcut.
+- `tool-symbolSprayer` (Symbol Sprayer Tool): Symbol Sprayer Tool, from a panel menu or shortcut.
+- `tool-symbolStainer` (Symbol Stainer Tool): Symbol Stainer Tool, from a panel menu or shortcut.
+- `tool-symbolStyler` (Symbol Styler Tool): Symbol Styler Tool, from a panel menu or shortcut.
+- `tool-touchType` (Touch Type Tool): Touch Type Tool, from a panel menu or shortcut.
+- `tool-twirl` (Twirl Tool): Twirl Tool, from a panel menu or shortcut.
+- `tool-type` (Type Tool): Type Tool, from a panel menu or shortcut.
+- `tool-typePath` (Type on a Path Tool): Type on a Path Tool, from a panel menu or shortcut.
+- `tool-typePathVertical` (Vertical Type on a Path Tool): Vertical Type on a Path Tool, from a panel menu or shortcut.
+- `tool-typeVertical` (Vertical Type Tool): Vertical Type Tool, from a panel menu or shortcut.
+- `tool-warp` (Warp Tool): Warp Tool, from a panel menu or shortcut.
+- `tool-width` (Width Tool): Width Tool, from a panel menu or shortcut.
+- `tool-wrinkle` (Wrinkle Tool): Wrinkle Tool, from a panel menu or shortcut.
+- `tool-zoom` (Zoom Tool): Zoom Tool, from a panel menu or shortcut.
+
+## Plugins
+
+- `manage-plugins` (Plugins > Manage Plugins): Manage Plugins, as in Plugins > Manage Plugins.
+
+## Select
+
+- `deselect` (Select > Deselect): Clears the selection. Use when starting over with a new selection.
+- `inverse` (Select > Inverse): Selects everything that is not currently selected. Use when it is easier to pick what to exclude.
+- `same-appearance` (Select > Same > Appearance): Appearance, as in Select > Same > Appearance.
+- `same-blending_mode` (Select > Same > Blending Mode): Blending Mode, as in Select > Same > Blending Mode.
+- `same-fill_and_stroke` (Select > Same > Fill & Stroke): Fill & Stroke, as in Select > Same > Fill & Stroke.
+- `same-fill_color` (Select > Same > Fill Color): Fill Color, as in Select > Same > Fill Color.
+- `same-font_family` (Select > Same > Font Family): Font Family, as in Select > Same > Font Family.
+- `same-font_size` (Select > Same > Font Size): Font Size, as in Select > Same > Font Size.
+- `same-graphic_style` (Select > Same > Graphic Style): Graphic Style, as in Select > Same > Graphic Style.
+- `same-opacity` (Select > Same > Opacity): Opacity, as in Select > Same > Opacity.
+- `same-shape` (Select > Same > Shape): Shape, as in Select > Same > Shape.
+- `same-stroke_color` (Select > Same > Stroke Color): Stroke Color, as in Select > Same > Stroke Color.
+- `same-stroke_weight` (Select > Same > Stroke Weight): Stroke Weight, as in Select > Same > Stroke Weight.
+- `same-symbol_instance` (Select > Same > Symbol Instance): Symbol Instance, as in Select > Same > Symbol Instance.
+- `select-above` (Select > Next Object Above): Selects the object directly above the selection. Use when walking up the stack.
+- `select-all` (Select > All): Selects every object in the document. Use when applying a change to everything.
+- `select-area_text` (Select > Object > Area Type Objects): Area Type Objects, as in Select > Object > Area Type Objects.
+- `select-artboard` (Select > All on Active Artboard): Selects all objects on the active artboard. Use when working on one artboard at a time.
+- `select-below` (Select > Next Object Below): Selects the object directly below the selection. Use when walking down the stack.
+- `select-brush_strokes` (Select > Object > Brush Strokes): Brush Strokes, as in Select > Object > Brush Strokes.
+- `select-clipping_masks` (Select > Object > Clipping Masks): Selects all clipping masks. Use when auditing masked art.
+- `select-open_paths` (Select > Object > All Open Paths): Selects all open paths. Use when finding lines that need closing.
+- `select-point_text` (Select > Object > Point Type Objects): Point Type Objects, as in Select > Object > Point Type Objects.
+- `select-same_layers` (Select > Object > All on Same Layers): All on Same Layers, as in Select > Object > All on Same Layers.
+- `select-stray_points` (Select > Object > Stray Points): Selects isolated single anchor points. Use when cleaning up stray points.
+- `select-text` (Select > Object > All Text Objects): Selects all text objects. Use when styling every piece of text.
+
+## Type
+
+- `area-type-options` (Type > Area Type Options): Area Type Options, as in Type > Area Type Options.
+- `case-lower` (Type > Change Case > lowercase): Changes the selected text to lower case. Use when text should be all small letters.
+- `case-sentence` (Type > Change Case > Sentence case): Capitalises only the first letter of each sentence. Use when normalising body text.
+- `case-title` (Type > Change Case > Title Case): Capitalises the first letter of every word. Use when setting titles.
+- `case-upper` (Type > Change Case > UPPERCASE): Changes the selected text to upper case. Use when headlines need capitals.
+- `create-outlines` (Type > Create Outlines): Converts text into editable vector shapes. Use when fonts must not travel with the file.
+- `edit-text` (Type > Edit Text): Starts editing the text of the selected object. Use when changing the wording.
+- `find-font` (Type > Find Font): Finds the fonts used in the document and replaces them. Use when a font is missing or must change everywhere.
+- `hyphenation-options` (Type > Hyphenation): Hyphenation, as in Type > Hyphenation.
+- `justification-options` (Type > Justification): Justification, as in Type > Justification.
+- `panel-character` (Type > Character): Shows the Character panel. Use when changing font, size and spacing.
+- `panel-character-styles` (Type > Character Styles): Character Styles, as in Type > Character Styles.
+- `panel-glyphs` (Type > Glyphs): Shows the Glyphs panel. Use when inserting special characters or alternates.
+- `panel-paragraph` (Type > Paragraph): Shows the Paragraph panel. Use when changing alignment and indents.
+- `panel-paragraph-styles` (Type > Paragraph Styles): Paragraph Styles, as in Type > Paragraph Styles.
+- `panel-tabs` (Type > Tabs): Tabs, as in Type > Tabs.
+- `retype` (Type > Retype): Retype, as in Type > Retype.
+- `thread-create` (Type > Threaded Text > Create): Create, as in Type > Threaded Text > Create.
+- `thread-release` (Type > Threaded Text > Release Selection): Release Selection, as in Type > Threaded Text > Release Selection.
+- `thread-remove` (Type > Threaded Text > Remove Threading): Remove Threading, as in Type > Threaded Text > Remove Threading.
+- `toggle-area-type` (Type > Convert Point and Area Type): Convert Point and Area Type, as in Type > Convert Point and Area Type.
+- `type-on-path-options` (Type > Type on a Path > Type on a Path Options): Type on a Path Options, as in Type > Type on a Path > Type on a Path Options.
+- `type-orientation-horizontal` (Type > Type Orientation > Horizontal): Sets the selected text to run horizontally. Use when vertical type should return to normal.
+- `type-orientation-vertical` (Type > Type Orientation > Vertical): Sets the selected text to run vertically. Use when setting East Asian or stacked type.
+- `type-path-gravity` (Type > Type on a Path > Gravity): Gravity, as in Type > Type on a Path > Gravity.
+- `type-path-rainbow` (Type > Type on a Path > Rainbow): Sets the Rainbow effect for type on a path. Use when letters should stand upright along a curve.
+- `type-path-ribbon` (Type > Type on a Path > 3D Ribbon): 3D Ribbon, as in Type > Type on a Path > 3D Ribbon.
+- `type-path-skew` (Type > Type on a Path > Skew): Skew, as in Type > Type on a Path > Skew.
+- `type-path-stair` (Type > Type on a Path > Stair Step): Stair Step, as in Type > Type on a Path > Stair Step.
+
+## View
+
+- `actual` (View > Actual Size): Zooms to 100 percent. Use when checking pixel-exact detail.
+- `clear-guides` (View > Guides > Clear Guides): Clear Guides, as in View > Guides > Clear Guides.
+- `fit` (View > Fit Artboard in Window): Fits the active artboard in the window. Use when starting work on an artboard.
+- `fit-all` (View > Fit All in Window): Fits all artboards in the window. Use when viewing the whole document.
+- `lock-guides` (View > Guides > Lock Guides): Lock Guides, as in View > Guides > Lock Guides.
+- `make-guides` (View > Guides > Make Guides): Make Guides, as in View > Guides > Make Guides.
+- `outline` (View > Outline): Switches between outline and preview mode. Use when inspecting paths without fills.
+- `overprint-preview` (View > Overprint Preview): Shows how objects marked to overprint multiply onto the art beneath them, as a printing plate would; off by default and never applied to exports.
+- `persp-1p` (View > Perspective Grid > One Point Perspective > [1P-Normal View]): [1P-Normal View], as in View > Perspective Grid > One Point Perspective > [1P-Normal View].
+- `persp-2p` (View > Perspective Grid > Two Point Perspective > [2P-Normal View]): [2P-Normal View], as in View > Perspective Grid > Two Point Perspective > [2P-Normal View].
+- `persp-3p` (View > Perspective Grid > Three Point Perspective > [3P-Normal View]): [3P-Normal View], as in View > Perspective Grid > Three Point Perspective > [3P-Normal View].
+- `persp-define` (View > Perspective Grid > Define Grid): Define Grid, as in View > Perspective Grid > Define Grid.
+- `persp-lock` (View > Perspective Grid > Lock Grid): Lock Grid, as in View > Perspective Grid > Lock Grid.
+- `persp-plane-floor` (View > Perspective Grid > Horizontal Grid Plane): Horizontal Grid Plane, as in View > Perspective Grid > Horizontal Grid Plane.
+- `persp-plane-left` (View > Perspective Grid > Left Grid Plane): Left Grid Plane, as in View > Perspective Grid > Left Grid Plane.
+- `persp-plane-none` (View > Perspective Grid > No Active Plane): No Active Plane, as in View > Perspective Grid > No Active Plane.
+- `persp-plane-right` (View > Perspective Grid > Right Grid Plane): Right Grid Plane, as in View > Perspective Grid > Right Grid Plane.
+- `persp-presets` (View > Perspective Grid > Grid Presets): Grid Presets, as in View > Perspective Grid > Grid Presets.
+- `persp-save-preset` (View > Perspective Grid > Save Grid as Preset): Save Grid as Preset, as in View > Perspective Grid > Save Grid as Preset.
+- `persp-show` (View > Perspective Grid > Show Grid): Show Grid, as in View > Perspective Grid > Show Grid.
+- `persp-snap` (View > Perspective Grid > Snap to Grid): Snap to Grid, as in View > Perspective Grid > Snap to Grid.
+- `release-guides` (View > Guides > Release Guides): Release Guides, as in View > Guides > Release Guides.
+- `reset-rotation` (View > Reset Rotate View): Reset Rotate View, as in View > Reset Rotate View.
+- `screen-full` (View > Screen Mode > Full Screen Mode): Full Screen Mode, as in View > Screen Mode > Full Screen Mode.
+- `screen-menu` (View > Screen Mode > Full Screen Mode with Menu Bar): Full Screen Mode with Menu Bar, as in View > Screen Mode > Full Screen Mode with Menu Bar.
+- `screen-standard` (View > Screen Mode > Normal Screen Mode): Normal Screen Mode, as in View > Screen Mode > Normal Screen Mode.
+- `snap-grid` (View > Snap to Grid): Snaps objects to the grid. Use when placing art on grid lines.
+- `snap-pixel` (View > Snap to Pixel): Snap to Pixel, as in View > Snap to Pixel.
+- `snap-point` (View > Snap to Point): Snaps objects to anchor points. Use when joining shapes precisely.
+- `toggle-artboards` (View > Show Artboards): Show Artboards, as in View > Show Artboards.
+- `toggle-bbox` (View > Show Bounding Box): Shows or hides the bounding box of the selection. Use when handles get in the way.
+- `toggle-corner-widget` (View > Show Corner Widget): Show Corner Widget, as in View > Show Corner Widget.
+- `toggle-edges` (View > Show Edges): Show Edges, as in View > Show Edges.
+- `toggle-generative` (Window > Generative Features): Shows or hides every generative feature: the Generative menu, Generate Patterns, Retype and their panels.
+- `toggle-gradient-annotator` (View > Show Gradient Annotator): Show Gradient Annotator, as in View > Show Gradient Annotator.
+- `toggle-grid` (View > Show Grid): Shows or hides the grid. Use when aligning art to a grid.
+- `toggle-guides` (View > Guides > Show Guides): Shows or hides the guides. Use when guides get in the way of the view.
+- `toggle-help-bar` (View > Help Bar): Shows or hides the slim bar under the stage that names the active tool, its shortcut and its hint.
+- `toggle-panels` (View > Show or Hide Panels): Show or Hide Panels, as in View > Show or Hide Panels.
+- `toggle-rulers` (View > Rulers): Shows or hides the rulers. Use when measuring or placing guides.
+- `toggle-smart` (View > Smart Guides): Turns smart guides on or off. Use when snapping to nearby objects helps or hinders.
+- `toggle-threads` (View > Show Text Threads): Show Text Threads, as in View > Show Text Threads.
+- `toggle-transparency` (View > Show Transparency Grid): Shows or hides the transparency checkerboard. Use when checking see-through areas.
+- `zoom-in` (View > Zoom In): Zoom In, as in View > Zoom In.
+- `zoom-out` (View > Zoom Out): Zoom Out, as in View > Zoom Out.
+- `zoom-selection` (View > Zoom to Selection): Zoom to Selection, as in View > Zoom to Selection.
+
+## Window
+
+- `assistant` (Window > Assistant): Assistant, as in Window > Assistant.
+- `br-lib-arrows` (Window > Brush Libraries > Arrows): Arrows, as in Window > Brush Libraries > Arrows.
+- `br-lib-artistic_ink` (Window > Brush Libraries > Artistic Ink): Artistic Ink, as in Window > Brush Libraries > Artistic Ink.
+- `br-lib-borders` (Window > Brush Libraries > Borders): Borders, as in Window > Brush Libraries > Borders.
+- `br-lib-bristle` (Window > Brush Libraries > Bristle Brushes): Bristle Brushes, as in Window > Brush Libraries > Bristle Brushes.
+- `br-lib-decorative_scatter` (Window > Brush Libraries > Decorative Scatter): Decorative Scatter, as in Window > Brush Libraries > Decorative Scatter.
+- `br-lib-other` (Window > Brush Libraries > Open Brush Library): Open Brush Library, as in Window > Brush Libraries > Open Brush Library.
+- `br-lib-save` (Window > Brush Libraries > Save Brushes): Save Brushes, as in Window > Brush Libraries > Save Brushes.
+- `br-user-none` (Window > Brush Libraries > User Defined > No saved libraries yet): No saved libraries yet, as in Window > Brush Libraries > User Defined > No saved libraries yet.
+- `claude-chat` (Window > Chat with Claude): Chat with Claude, as in Window > Chat with Claude.
+- `claude-code` (Window > Claude Code): Claude Code, as in Window > Claude Code.
+- `document-info` (Window > Document Info): Opens a read-only window with the counts for the document: artboards, objects, paths and anchors, fonts, linked images, swatches, spot colors, gradients, patterns, symbols and brushes.
+- `gs-lib-buttons` (Window > Graphic Style Libraries > Buttons): Buttons, as in Window > Graphic Style Libraries > Buttons.
+- `gs-lib-outlines` (Window > Graphic Style Libraries > Outlines): Outlines, as in Window > Graphic Style Libraries > Outlines.
+- `gs-lib-scribbles` (Window > Graphic Style Libraries > Scribbles): Scribbles, as in Window > Graphic Style Libraries > Scribbles.
+- `gs-lib-shadows` (Window > Graphic Style Libraries > Shadows and Glows): Shadows and Glows, as in Window > Graphic Style Libraries > Shadows and Glows.
+- `gs-lib-textures` (Window > Graphic Style Libraries > Textures): Textures, as in Window > Graphic Style Libraries > Textures.
+- `panel-actions` (Window > Actions): Actions, as in Window > Actions.
+- `panel-align` (Window > Align): Align, as in Window > Align.
+- `panel-appearance` (Window > Appearance): Appearance, as in Window > Appearance.
+- `panel-artboards` (Window > Artboards): Artboards, as in Window > Artboards.
+- `panel-asset-export` (Window > Asset Export): Asset Export, as in Window > Asset Export.
+- `panel-attributes` (Window > Attributes): Attributes, as in Window > Attributes.
+- `panel-brush-library` (Window > Brush Library): Brush Library, as in Window > Brush Library.
+- `panel-brushes` (Window > Brushes): Brushes, as in Window > Brushes.
+- `panel-color` (Window > Color): Color, as in Window > Color.
+- `panel-color-guide` (Window > Color Guide): Color Guide, as in Window > Color Guide.
+- `panel-generate-patterns` (Window > Generate Patterns): Generate Patterns, as in Window > Generate Patterns.
+- `panel-gradient` (Window > Gradient): Gradient, as in Window > Gradient.
+- `panel-graphic-styles` (Window > Graphic Styles): Graphic Styles, as in Window > Graphic Styles.
+- `panel-history` (Window > History): History, as in Window > History.
+- `panel-image-trace` (Window > Image Trace): Image Trace, as in Window > Image Trace.
+- `panel-info` (Window > Info): Info, as in Window > Info.
+- `panel-layers` (Window > Layers): Layers, as in Window > Layers.
+- `panel-links` (Window > Links): Links, as in Window > Links.
+- `panel-navigator` (Window > Navigator): Navigator, as in Window > Navigator.
+- `panel-pathfinder` (Window > Pathfinder): Pathfinder, as in Window > Pathfinder.
+- `panel-pattern-options` (Window > Pattern Options): Pattern Options, as in Window > Pattern Options.
+- `panel-properties` (Window > Properties): Properties, as in Window > Properties.
+- `panel-properties-col` (Window > Properties Column): Properties Column, as in Window > Properties Column.
+- `panel-retype` (Window > Retype): Retype, as in Window > Retype.
+- `panel-shape-fill` (Window > Shape Fill): Shape Fill, as in Window > Shape Fill.
+- `panel-stroke` (Window > Stroke): Stroke, as in Window > Stroke.
+- `panel-swatch-library` (Window > Swatch Library): Swatch Library, as in Window > Swatch Library.
+- `panel-swatches` (Window > Swatches): Swatches, as in Window > Swatches.
+- `panel-symbol-library` (Window > Symbol Library): Symbol Library, as in Window > Symbol Library.
+- `panel-symbols` (Window > Symbols): Symbols, as in Window > Symbols.
+- `panel-three-d` (Window > 3D and Materials): 3D and Materials, as in Window > 3D and Materials.
+- `panel-transform` (Window > Transform): Transform, as in Window > Transform.
+- `panel-transparency` (Window > Transparency): Transparency, as in Window > Transparency.
+- `panel-variables` (Window > Variables): Variables, as in Window > Variables.
+- `reset-panels` (Window > Reset Essentials): Reset Essentials, as in Window > Reset Essentials.
+- `separations-preview` (Window > Separations Preview): Opens a window to show a single ink plate in gray: All, Cyan, Magenta, Yellow, Black or one spot color; closing it returns to the full color view.
+- `sw-lib-brights` (Window > Swatch Libraries > Color Themes > Brights): Brights, as in Window > Swatch Libraries > Color Themes > Brights.
+- `sw-lib-dots` (Window > Swatch Libraries > Patterns > Dots and Grids): Dots and Grids, as in Window > Swatch Libraries > Patterns > Dots and Grids.
+- `sw-lib-earth_tones` (Window > Swatch Libraries > Earth Tones): Earth Tones, as in Window > Swatch Libraries > Earth Tones.
+- `sw-lib-fades` (Window > Swatch Libraries > Gradients > Fades): Fades, as in Window > Swatch Libraries > Gradients > Fades.
+- `sw-lib-grayscale` (Window > Swatch Libraries > Grayscale): Grayscale, as in Window > Swatch Libraries > Grayscale.
+- `sw-lib-lines` (Window > Swatch Libraries > Patterns > Basic Lines): Basic Lines, as in Window > Swatch Libraries > Patterns > Basic Lines.
+- `sw-lib-metals` (Window > Swatch Libraries > Metals): Metals, as in Window > Swatch Libraries > Metals.
+- `sw-lib-other` (Window > Swatch Libraries > Other Library): Other Library, as in Window > Swatch Libraries > Other Library.
+- `sw-lib-pastels` (Window > Swatch Libraries > Color Themes > Pastels): Pastels, as in Window > Swatch Libraries > Color Themes > Pastels.
+- `sw-lib-retro` (Window > Swatch Libraries > Color Themes > Retro): Retro, as in Window > Swatch Libraries > Color Themes > Retro.
+- `sw-lib-save-ase` (Window > Swatch Libraries > Save Swatch Library as ASE): Save Swatch Library as ASE, as in Window > Swatch Libraries > Save Swatch Library as ASE.
+- `sw-lib-save-fpth` (Window > Swatch Libraries > Save Swatch Library as formpth): Save Swatch Library as formpth, as in Window > Swatch Libraries > Save Swatch Library as formpth.
+- `sw-lib-seasons` (Window > Swatch Libraries > Nature > Seasons): Seasons, as in Window > Swatch Libraries > Nature > Seasons.
+- `sw-lib-skin_tones` (Window > Swatch Libraries > Skin Tones): Skin Tones, as in Window > Swatch Libraries > Skin Tones.
+- `sw-lib-sky_water` (Window > Swatch Libraries > Gradients > Sky and Water): Sky and Water, as in Window > Swatch Libraries > Gradients > Sky and Water.
+- `sw-lib-spectrums` (Window > Swatch Libraries > Gradients > Spectrums): Spectrums, as in Window > Swatch Libraries > Gradients > Spectrums.
+- `sw-lib-spot_inks` (Window > Swatch Libraries > Color Books > Spot Inks): Spot Inks, as in Window > Swatch Libraries > Color Books > Spot Inks.
+- `sw-lib-web` (Window > Swatch Libraries > Web): Web, as in Window > Swatch Libraries > Web.
+- `sw-user-none` (Window > Swatch Libraries > User Defined > No saved libraries yet): No saved libraries yet, as in Window > Swatch Libraries > User Defined > No saved libraries yet.
+- `swatch-info` (Window > Create Swatch Info): Places a card beside the artboard for each selected swatch, or every swatch when none is selected, with its colour and its name, HEX, RGB, CMYK and spot name, as one group named Swatch Info. Use when documenting a palette with its HEX, RGB and CMYK values.
+- `sym-lib-arrows` (Window > Symbol Libraries > Arrows): Arrows, as in Window > Symbol Libraries > Arrows.
+- `sym-lib-flowchart` (Window > Symbol Libraries > Flowchart): Flowchart, as in Window > Symbol Libraries > Flowchart.
+- `sym-lib-nature` (Window > Symbol Libraries > Nature): Nature, as in Window > Symbol Libraries > Nature.
+- `sym-lib-other` (Window > Symbol Libraries > Open Symbol Library): Open Symbol Library, as in Window > Symbol Libraries > Open Symbol Library.
+- `sym-lib-save` (Window > Symbol Libraries > Save Symbols): Save Symbols, as in Window > Symbol Libraries > Save Symbols.
+- `sym-lib-shapes` (Window > Symbol Libraries > Shapes): Shapes, as in Window > Symbol Libraries > Shapes.
+- `sym-lib-web_icons` (Window > Symbol Libraries > Web Icons): Web Icons, as in Window > Symbol Libraries > Web Icons.
+- `sym-user-none` (Window > Symbol Libraries > User Defined > No saved libraries yet): No saved libraries yet, as in Window > Symbol Libraries > User Defined > No saved libraries yet.
+- `terminal-new` (Window > New Terminal): New Terminal, as in Window > New Terminal.
+- `terminal-toggle` (Window > Terminal): Terminal, as in Window > Terminal.
+- `toggle-task-bar` (Window > Contextual Task Bar): Shows or hides the floating bar of next-step buttons below the selection.

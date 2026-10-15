@@ -6,6 +6,7 @@ import { el, patchList, q, setClass, setDisabled, setHidden, setHtml, setStyleVa
 import { icon } from '../icons';
 import { askForm, type Field } from '../form-dialog';
 import { previewEdit } from './preview-edit';
+import { openSimilarFonts } from './similar-fonts';
 import { typing } from '../text-editor';
 import { families, glyphAlternates, glyphList, isVariableFamily, stylesOf, ensureFace, variationOf, type VariationAxis, type VariationInfo } from '../../io/fonts';
 import { typeDefaults } from '../../tools/type';
@@ -123,7 +124,11 @@ export class CharacterPanel {
     this.underline = check('Underline', (v) => set({ underline: v }));
     this.strike = check('Strikethrough', (v) => set({ strike: v }));
     this.upright = check('Upright Latin in vertical type', (v) => set({ upright: v || undefined }));
-    this.body.append(this.font.el, this.varOnly.el, this.style.el, row(this.size.el, this.leading.el), row(this.kerning.el, this.tracking.el), row(this.hscale.el, this.vscale.el), row(this.baseline.el, this.rotate.el), section('Case'), this.caps.el, section('Position'), this.position.el, row(this.underline.el, this.strike.el), this.upright.el, section('OpenType'), this.figures.el, this.otPos.el, this.sset.el);
+    const similar = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-parap-btn cv-similar-btn"></button>');
+    setText(similar, 'Find Similar Fonts');
+    setTitle(similar, 'Lists the installed fonts closest to the current one; click one to apply it to the selection');
+    similar.addEventListener('click', () => { const st = currentStyle(engine); void openSimilarFonts(similar, st?.font ?? typeDefaults.font, st?.style ?? typeDefaults.style, (font, style) => set({ font, style })); });
+    this.body.append(this.font.el, similar, this.varOnly.el, this.style.el, row(this.size.el, this.leading.el), row(this.kerning.el, this.tracking.el), row(this.hscale.el, this.vscale.el), row(this.baseline.el, this.rotate.el), section('Case'), this.caps.el, section('Position'), this.position.el, row(this.underline.el, this.strike.el), this.upright.el, section('OpenType'), this.figures.el, this.otPos.el, this.sset.el);
     for (let i = 0; i < this.ot.length; i += 2) this.body.append(row(...this.ot.slice(i, i + 2).map((o) => o.ctl.el)));
     this.axesBox.append(section('Variable Font'), this.axesList);
     this.body.append(this.axesBox);

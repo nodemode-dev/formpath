@@ -35,6 +35,7 @@ export interface Prefs {
   helpBar: boolean;
   taskBar: boolean;
   pasteOnArtboards: boolean;
+  autoSpell: boolean;
 }
 
 export type AnchorSize = 'small' | 'medium' | 'large' | 'xlarge';
@@ -55,7 +56,7 @@ export const DEFAULT_PREFS: Prefs = {
   shortcuts: {}, restoreSession: true, agentsAllowed: false, nodemodeUrl: 'http://localhost:8000', historyStates: 200, recoverySeconds: 20, autoShowHome: true,
   zoomWheel: false, keyIncrement: 1, snapTolerance: 4, units: 'pt', scaleStrokes: true, previewBounds: false, gridInBack: true, gridSpacing: 72, gridSubdivisions: 8,
   guideColor: '', gridColor: '', checkerSize: 'medium', checkerColors: 'light', narrowCollapse: true, newMaskClip: true, newMaskInvert: false,
-  showGenerative: true, anchorSize: 'small', snapAngleSet: 'a45', scaleCorners: true, helpBar: false, taskBar: true, pasteOnArtboards: false,
+  showGenerative: true, anchorSize: 'small', snapAngleSet: 'a45', scaleCorners: true, helpBar: false, taskBar: true, pasteOnArtboards: false, autoSpell: false,
 };
 
 const KEY = 'formpth.prefs';
@@ -97,6 +98,7 @@ export function loadPrefs(): Prefs {
       helpBar: bool(r.helpBar, false),
       taskBar: bool(r.taskBar, true),
       pasteOnArtboards: bool(r.pasteOnArtboards, false),
+      autoSpell: bool(r.autoSpell, false),
     };
   } catch { return { ...DEFAULT_PREFS }; }
 }

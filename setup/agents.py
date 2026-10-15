@@ -76,6 +76,28 @@ def tools_reference() -> str:
     return "\n".join(out)
 
 
+def commands_reference() -> str | None:
+    path = Path(os.environ.get("FORMPTH_DATA", str(Path.home() / "Formpth"))) / "commands-catalogue.json"
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    entries = data if isinstance(data, list) else data.get("commands", [])
+    out = ["# formpth commands", "", "Generated from the engine's stored catalogue by `./formpth agents sync`; do not edit by hand.", ""]
+    groups: dict = {}
+    for e in entries:
+        if e.get("kind", "command") == "command":
+            groups.setdefault(e.get("group", "Other"), []).append(e)
+    for g in sorted(groups):
+        out += [f"## {g}", ""]
+        for e in sorted(groups[g], key=lambda x: x["id"]):
+            line = f"- `{e['id']}` ({e.get('path', e.get('label', ''))}): {e.get('description', '')}"
+            if e.get("when"):
+                line += f" {e['when']}"
+            out.append(line)
+        out.append("")
+    return "\n".join(out)
+
+
 def _files(folder: Path) -> dict:
     return {str(p.relative_to(folder)): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
 
@@ -89,6 +111,13 @@ def sync(check: bool) -> int:
         if not check:
             ref.parent.mkdir(parents=True, exist_ok=True)
             ref.write_text(want, encoding="utf-8")
+    cref, cwant = SKILL / "references" / "commands.md", commands_reference()
+    if cwant is None:
+        print("agents: no stored command catalogue yet; skipping references/commands.md")
+    elif not cref.exists() or cref.read_text(encoding="utf-8") != cwant:
+        drift.append(str(cref.relative_to(ROOT)))
+        if not check:
+            cref.write_text(cwant, encoding="utf-8")
     if not MIRROR.exists() or _files(MIRROR) != _files(SKILL):
         drift.append(str(MIRROR.relative_to(ROOT)))
         if not check:

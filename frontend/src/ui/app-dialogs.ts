@@ -12,6 +12,8 @@ import { readChoice, setAccent, setIntensity, setTheme, themeSwatchesHtml, THEME
 import { toast } from './toast';
 import { ARTBOARD_PRESETS } from '../tools/view';
 import { DXF_UNITS, type DxfUnit } from '../io/dxf';
+import type { TiffCompression } from '../io/tiff';
+import { DEFAULT_MARKS, type PdfMarks } from '../io/pdf-marks';
 
 const UNIT_K: Record<Units, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
 
@@ -375,12 +377,41 @@ export class AboutDialog extends Dialog {
   }
 }
 
-export type ExportFormat = 'svg' | 'pdf' | 'png' | 'jpg' | 'webp' | 'eps' | 'dxf';
+export type ExportFormat = 'svg' | 'pdf' | 'png' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf';
+export interface TiffExportChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface CadChoice { version: 'R12' | '2000'; units: DxfUnit; scale: number; text: 'text' | 'outlines'; lineweights: boolean }
-export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; cmyk?: boolean; cad?: CadChoice }
+export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks }
+
+export function parseArtboardRange(text: string, count: number, current: number): number[] | null {
+  const t = text.trim().toLowerCase();
+  if (!t || t === 'current') return [current];
+  if (t === 'all') return Array.from({ length: count }, (_, i) => i);
+  const out = new Set<number>();
+  for (const part of t.split(/[\s,]+/).filter(Boolean)) {
+    const m = /^(\d+)(?:-(\d+))?$/.exec(part);
+    if (!m) return null;
+    const a = Number(m[1]), b = m[2] ? Number(m[2]) : a;
+    if (a < 1 || b < a || b > count) return null;
+    for (let i = a; i <= b; i++) out.add(i - 1);
+  }
+  return out.size ? [...out].sort((x, y) => x - y) : null;
+}
 
 export class ExportDialog extends Dialog {
-  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)']]);
+  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['tiff', 'TIFF (.tiff)']]);
+  private readonly tiffCompression = selectOf([['none', 'None'], ['packbits', 'PackBits'], ['lzw', 'LZW'], ['deflate', 'Deflate']]);
+  private readonly tiffColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
+  private readonly markTrim = el<HTMLInputElement>('<input type="checkbox">');
+  private readonly markReg = el<HTMLInputElement>('<input type="checkbox">');
+  private readonly markBars = el<HTMLInputElement>('<input type="checkbox">');
+  private readonly markInfo = el<HTMLInputElement>('<input type="checkbox">');
+  private readonly markOffset = numberInput(0, 144, 0.25);
+  private readonly markWeight = numberInput(0.1, 10, 0.05);
+  private readonly bleedMode = selectOf([['none', 'None'], ['document', 'Use Document Bleed'], ['custom', 'Custom']]);
+  private readonly bleedTop = numberInput(0, 720, 0.25);
+  private readonly bleedBottom = numberInput(0, 720, 0.25);
+  private readonly bleedLeft = numberInput(0, 720, 0.25);
+  private readonly bleedRight = numberInput(0, 720, 0.25);
   private readonly epsColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
   private readonly cadVersion = selectOf([['2000', 'AutoCAD 2000 (splines, fills, lineweights)'], ['R12', 'AutoCAD R12 (polylines only)']]);
   private readonly cadUnits = selectOf(DXF_UNITS);
@@ -389,6 +420,8 @@ export class ExportDialog extends Dialog {
   private readonly cadWeights = el<HTMLInputElement>('<input type="checkbox">');
   private readonly scope = selectOf([['artboard', 'Active artboard'], ['all', 'All artboards'], ['art', 'All art (trimmed)'], ['selection', 'Selection']]);
   private readonly scale = selectOf([['0.5', '0.5x (36 ppi)'], ['1', '1x (72 ppi)'], ['2', '2x (144 ppi)'], ['3', '3x'], ['4', '4x'], ['4.1667', '300 ppi']]);
+  private readonly range = el<HTMLInputElement>('<input class="cv-input" type="text" value="Current" placeholder="All, Current or 1-3,5">');
+  private count = 1;
   private readonly quality = numberInput(1, 100);
   private readonly transparent = el<HTMLInputElement>('<input type="checkbox">');
   private readonly outline = el<HTMLInputElement>('<input type="checkbox">');
@@ -402,6 +435,8 @@ export class ExportDialog extends Dialog {
     q<HTMLElement>(this.scrim, '.cv-dialog').classList.add('cv-export');
     this.rows.format = row('Format', this.format);
     this.rows.scope = row('Export', this.scope);
+    this.rows.range = row('Range', this.range);
+    this.range.title = 'All, Current, or artboard numbers such as 1-3,5';
     this.rows.scale = row('Resolution', this.scale);
     this.rows.quality = row('Quality (%)', this.quality);
     this.rows.transparent = row('Transparent background', this.transparent);
@@ -416,16 +451,40 @@ export class ExportDialog extends Dialog {
     this.rows.cadWeights = row('Scale lineweights', this.cadWeights);
     this.cadUnits.value = 'mm';
     this.cadScale.value = '1';
+    this.rows.tiffCompression = row('Compression', this.tiffCompression);
+    this.rows.tiffColor = row('Color', this.tiffColor);
+    this.tiffCompression.value = 'lzw';
+    this.rows.markTrim = row('Trim Marks', this.markTrim);
+    this.rows.markReg = row('Registration Marks', this.markReg);
+    this.rows.markBars = row('Color Bars', this.markBars);
+    this.rows.markInfo = row('Page Information', this.markInfo);
+    this.rows.markOffset = row('Offset (pt)', this.markOffset);
+    this.rows.markWeight = row('Weight (pt)', this.markWeight);
+    this.markOffset.value = String(DEFAULT_MARKS.offset);
+    this.markWeight.value = String(DEFAULT_MARKS.weight);
+    this.rows.bleedMode = row('Bleed', this.bleedMode);
+    this.bleedMode.value = 'document';
+    for (const [i, t] of [[this.bleedTop, 'Top'], [this.bleedBottom, 'Bottom'], [this.bleedLeft, 'Left'], [this.bleedRight, 'Right']] as const) { i.value = '0'; i.setAttribute('aria-label', t); i.title = t; }
+    this.rows.bleedTB = row('Top, Bottom', el('<span class="cv-pair"></span>'));
+    this.rows.bleedTB.lastElementChild?.append(this.bleedTop, this.bleedBottom);
+    this.rows.bleedLR = row('Left, Right', el('<span class="cv-pair"></span>'));
+    this.rows.bleedLR.lastElementChild?.append(this.bleedLeft, this.bleedRight);
+    this.bleedMode.addEventListener('change', () => this.sync());
     this.body.append(...Object.values(this.rows));
     this.format.addEventListener('change', () => this.sync());
+    this.scope.addEventListener('change', () => this.sync());
+    this.range.addEventListener('input', () => setClass(this.range, 'is-invalid', !parseArtboardRange(this.range.value, this.count, this.artboard)));
     this.button('Cancel', 'ghost', () => this.close());
-    this.button('Export', 'primary', () => { const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
+    this.button('Export', 'primary', () => { if (!parseArtboardRange(this.range.value, this.count, this.artboard)) { this.range.focus(); return; } const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
     this.onClose = () => { const r = this.resolve; this.resolve = null; r?.(null); };
     this.quality.value = '92';
   }
 
-  ask(format: ExportFormat, artboard: number, hasSelection: boolean, cmyk = false): Promise<ExportChoice | null> {
+  ask(format: ExportFormat, artboard: number, hasSelection: boolean, cmyk = false, count = 1): Promise<ExportChoice | null> {
     this.format.value = format;
+    this.count = Math.max(1, count);
+    this.range.value = 'Current';
+    setClass(this.range, 'is-invalid', false);
     this.epsColor.value = cmyk ? 'cmyk' : 'rgb';
     this.artboard = artboard;
     (this.scope.querySelector('option[value="selection"]') as HTMLOptionElement).disabled = !hasSelection;
@@ -434,20 +493,26 @@ export class ExportDialog extends Dialog {
   }
 
   private reserve(): void {
-    const keep = this.format.selectedIndex;
+    const keep = this.format.selectedIndex, keepBleed = this.bleedMode.value;
     this.body.style.minHeight = '';
+    this.bleedMode.value = 'custom';
     let h = 0;
     for (let i = 0; i < this.format.options.length; i++) { this.format.selectedIndex = i; this.sync(); h = Math.max(h, this.body.offsetHeight); }
+    this.bleedMode.value = keepBleed;
     this.format.selectedIndex = keep;
     this.sync();
     this.body.style.minHeight = `${h}px`;
   }
 
   private sync(): void {
-    const f = this.format.value, raster = f === 'png' || f === 'jpg' || f === 'webp';
+    const f = this.format.value, raster = f === 'png' || f === 'jpg' || f === 'webp' || f === 'tiff';
+    setHidden(this.rows.range, f === 'dxf' || this.scope.value !== 'artboard');
     setHidden(this.rows.scale, !raster);
     setHidden(this.rows.quality, !(f === 'jpg' || f === 'webp'));
-    setHidden(this.rows.transparent, !(f === 'png' || f === 'webp'));
+    setHidden(this.rows.transparent, !(f === 'png' || f === 'webp' || f === 'tiff'));
+    for (const k of ['tiffCompression', 'tiffColor']) setHidden(this.rows[k], f !== 'tiff');
+    for (const k of ['markTrim', 'markReg', 'markBars', 'markInfo', 'markOffset', 'markWeight', 'bleedMode']) setHidden(this.rows[k], f !== 'pdf');
+    for (const k of ['bleedTB', 'bleedLR']) setHidden(this.rows[k], f !== 'pdf' || this.bleedMode.value !== 'custom');
     setHidden(this.rows.outline, f !== 'svg');
     setHidden(this.rows.preserve, !(f === 'svg' || f === 'pdf' || f === 'eps'));
     setHidden(this.rows.epsColor, f !== 'eps');
@@ -455,8 +520,14 @@ export class ExportDialog extends Dialog {
   }
 
   private value(): ExportChoice {
+    const f = this.format.value as ExportFormat;
     const cad: CadChoice = { version: this.cadVersion.value === 'R12' ? 'R12' : '2000', units: this.cadUnits.value as DxfUnit, scale: Math.max(1e-4, Number(this.cadScale.value) || 1), text: this.cadText.value === 'outlines' ? 'outlines' : 'text', lineweights: this.cadWeights.checked };
-    return { format: this.format.value as ExportFormat, scope: this.scope.value as ExportChoice['scope'], artboard: this.artboard, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, cmyk: this.epsColor.value === 'cmyk', cad };
+    const list = this.scope.value === 'artboard' && f !== 'dxf' ? parseArtboardRange(this.range.value, this.count, this.artboard) : null;
+    const num = (i: HTMLInputElement): number => Math.max(0, Number(i.value) || 0);
+    const scale = Number(this.scale.value) || 1;
+    const tiff: TiffExportChoice = { compression: this.tiffCompression.value as TiffCompression, cmyk: this.tiffColor.value === 'cmyk', ppi: Math.round(72 * scale) };
+    const marks: PdfMarks = { trim: this.markTrim.checked, registration: this.markReg.checked, colorBars: this.markBars.checked, pageInfo: this.markInfo.checked, offset: num(this.markOffset), weight: Math.max(0.1, Number(this.markWeight.value) || DEFAULT_MARKS.weight), bleed: this.bleedMode.value as PdfMarks['bleed'], custom: { t: num(this.bleedTop), b: num(this.bleedBottom), l: num(this.bleedLeft), r: num(this.bleedRight) } };
+    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, cmyk: this.epsColor.value === 'cmyk', cad };
   }
 }
 

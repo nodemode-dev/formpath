@@ -24,6 +24,7 @@ interface GuideDraft { vertical: boolean; pos: number; id: string | null }
 
 export class Stage {
   readonly ctx: ToolContext;
+  readonly painters = new Set<(g: CanvasRenderingContext2D, p: Project) => void>();
   private readonly scene: HTMLCanvasElement;
   private readonly overlay: HTMLCanvasElement;
   private readonly rulerH: HTMLCanvasElement;
@@ -241,7 +242,7 @@ export class Stage {
   }
 
   renderContext(p: Project, scale: number): RenderContext {
-    return { doc: p.doc, scale, outline: this.engine.view.outline, assets: (k) => this.asset(p, k), pixelRatio: this.dpr, outlineColor: paint().rulerText };
+    return { doc: p.doc, scale, outline: this.engine.view.outline, assets: (k) => this.asset(p, k), pixelRatio: this.dpr, outlineColor: paint().rulerText, overprint: this.engine.view.overprintPreview, separation: this.engine.view.separation };
   }
 
   private renderScene(): void {
@@ -416,6 +417,7 @@ export class Stage {
     this.drawArtboardNames(g, p, pal);
     try { this.drawSelection(g, p, pal); this.drawTextPorts(g, p, pal); this.drawPathBrackets(g, p, pal); } catch (err) { console.error(err); }
     this.drawSmart(g, p, pal);
+    for (const fn of this.painters) { try { fn(g, p); } catch (err) { console.error(err); } }
     try { this.tool()?.overlay?.(this.ctx, g); } catch (err) { console.error(err); }
   }
 
