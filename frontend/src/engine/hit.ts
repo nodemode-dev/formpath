@@ -1,6 +1,7 @@
 import { geomBounds, nodePath } from './bounds';
 import { childrenOf } from './doc';
 import { apply, flatIndex, hasIn, hasOut, inflate, invert, nearestOnPath, pointInPolygon, rectContains, rectsTouch, segments, segBounds, flattenSub } from './geometry';
+import { cornered } from './corners';
 import { liveChildren } from './live';
 import { liveFaceNodes } from './livepaint';
 import { intertwineHit } from './intertwine';
@@ -111,7 +112,7 @@ export function symbolPartHit(doc: Doc, n: SymbolNode, p: Pt, o: HitOpts): strin
 }
 
 function pathTouchesRect(d: PathData, r: Rect, filled: boolean, rule: CanvasFillRule): boolean {
-  for (const sp of d) {
+  for (const sp of cornered(d)) {
     for (const a of sp.pts) if (rectContains(r, a)) return true;
     for (const s of segments(sp)) if (rectsTouch(segBounds(s), r)) {
       const pts = flattenSub({ closed: false, pts: [{ x: s[0].x, y: s[0].y, ix: s[0].x, iy: s[0].y, ox: s[1].x, oy: s[1].y }, { x: s[3].x, y: s[3].y, ix: s[2].x, iy: s[2].y, ox: s[3].x, oy: s[3].y }] }, 0.5);

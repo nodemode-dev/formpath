@@ -3,7 +3,9 @@ export type Mat = [number, number, number, number, number, number];
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface RGB { r: number; g: number; b: number }
 
-export interface Anchor { x: number; y: number; ix: number; iy: number; ox: number; oy: number; smooth?: boolean }
+export type CornerType = 'round' | 'inverted' | 'chamfer';
+export interface CornerSpec { type: CornerType; r: number; mode?: 'absolute' | 'relative' }
+export interface Anchor { x: number; y: number; ix: number; iy: number; ox: number; oy: number; smooth?: boolean; corner?: CornerSpec }
 export interface SubPath { pts: Anchor[]; closed: boolean }
 export type PathData = SubPath[];
 export type FillRule = 'nonzero' | 'evenodd';

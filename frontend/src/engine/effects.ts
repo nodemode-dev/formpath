@@ -1,6 +1,7 @@
 import { brushOutline } from './brushes';
 import { FILTER_IDS, filterReach } from './filters';
 import { anchor, apply, bezPoint, bezTangent, centerOf, dist, flattenSub, hasIn, hasOut, pathBounds, pathLength, pointAtLength, rectPath, ellipsePath, roundCorners, segments, transformPath, rotateAbout, scaleAbout, translate, mul } from './geometry';
+import { cornered } from './corners';
 import { offsetPath, strokeToPath } from './kernel';
 import { mapPathNonlinear, warpPoint } from './live';
 import { parseColor, cssColor, BLACK, effect, fill, gradientAt, resolvePaint, rgb, solid, stroke, toRgb } from './paint';
@@ -283,7 +284,8 @@ function scribble(d: PathData, e: Effect): PathData {
 }
 
 const effectCache = new WeakMap<PathData, WeakMap<Effect[], PathData>>();
-export function effectPath(d: PathData, effects: Effect[]): PathData {
+export function effectPath(d0: PathData, effects: Effect[]): PathData {
+  const d = cornered(d0);
   const active = effects.filter((e) => e.visible && !effectDef(e.id)?.raster && EFFECT_IDS.has(e.id));
   if (!active.length) return d;
   let byFx = effectCache.get(d);

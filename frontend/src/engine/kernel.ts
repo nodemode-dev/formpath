@@ -1,4 +1,5 @@
 import paper from 'paper/dist/paper-core';
+import { cornered } from './corners';
 import { anchor, EPS } from './geometry';
 import type { Anchor, FillRule, Join, PathData, Pt, SubPath } from './types';
 
@@ -22,7 +23,7 @@ function toPaperPath(sp: SubPath): paper.Path {
 
 export function toPaper(d: PathData, rule: FillRule = 'nonzero'): paper.PathItem {
   const s = ps();
-  const children = d.filter((sp) => sp.pts.length > 0).map(toPaperPath);
+  const children = cornered(d).filter((sp) => sp.pts.length > 0).map(toPaperPath);
   if (children.length === 1) { children[0].fillRule = rule; return children[0]; }
   const c = new s.CompoundPath({ children, insert: false });
   c.fillRule = rule;

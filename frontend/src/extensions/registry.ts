@@ -3,7 +3,7 @@ import type { SnapLine } from '../engine/snap';
 
 export interface ToolPointer { doc: Pt; raw: Pt; screen: Pt; button: number; shift: boolean; alt: boolean; mod: boolean; clicks: number; pressure: number }
 export interface ViewInfo { zoom: number; dpr: number; width: number; height: number; toScreen(p: Pt): Pt; toDoc(p: Pt): Pt }
-export interface Paint { accent: string; handle: string; antsA: string; antsB: string; layer: string; smart: string }
+export interface Paint { accent: string; handle: string; antsA: string; antsB: string; layer: string; smart: string; danger?: string }
 export interface SnapAt { p: Pt; lines: SnapLine[]; label: string | null }
 export interface ToolContext {
   engine: Engine;

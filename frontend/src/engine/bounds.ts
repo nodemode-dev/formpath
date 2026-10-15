@@ -1,6 +1,7 @@
 import { childrenOf } from './doc';
 import { has3d, threeDFaces } from './effects';
 import { filterReach } from './filters';
+import { cornered } from './corners';
 import { emptyRect, inflate, isEmptyRect, pathBounds, transformRect, unionRect } from './geometry';
 import { liveChildren } from './live';
 import { instanceArt } from './symbolism';
@@ -14,8 +15,8 @@ const epochOf = new WeakMap<VNode, number>();
 export function invalidateBounds(): void { epoch++; }
 
 export function nodePath(n: VNode): PathData | null {
-  if (n.kind === 'path') return n.d;
-  if (n.kind === 'compound') return n.children.flatMap((c) => c.d);
+  if (n.kind === 'path') return cornered(n.d);
+  if (n.kind === 'compound') return n.children.flatMap((c) => cornered(c.d));
   return null;
 }
 

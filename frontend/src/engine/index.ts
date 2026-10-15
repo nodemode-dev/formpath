@@ -11,6 +11,8 @@ import { liveChildren } from './live';
 import { buildMesh } from './mesh';
 import { align, arrange, duplicateNodes, fillRuleTargets, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setFillRule, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
 import { expandAppearance } from './ops/expand';
+import { allTargets, expandCornersOp, setCornersOp, type CornerTargets } from './ops/corner-ops';
+import type { CornerSpec } from './types';
 import { editLive, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
@@ -658,7 +660,19 @@ export class Engine extends Emitter<EngineEvents> {
     });
     p.anchors.clear();
   }
-  run(name: string, op: (doc: Doc, ids: string[]) => OpResult, ids?: string[]): boolean {
+  cornerTargets(): CornerTargets {
+    const p = this.current, m: CornerTargets = new Map();
+    if (!p) return m;
+    for (const [id, set] of p.anchors) if (!(set.size === 1 && set.has(-2))) m.set(id, set.has(-1) ? null : new Set(set));
+    return m.size ? m : allTargets(p.doc, this.targetIds());
+  }
+  setCorners(patch: Partial<CornerSpec> | null, targets?: CornerTargets): boolean {
+    return this.edit('Corners', (d) => setCornersOp(d, targets ?? this.cornerTargets(), patch));
+  }
+  expandCorners(): boolean {
+    return this.edit('Expand Corners', (d) => expandCornersOp(d, this.targetIds()));
+  }
+  run(name: string, op:(doc: Doc, ids: string[]) => OpResult, ids?: string[]): boolean {
     const p = this.current; if (!p) return false;
     const t = this.targetIds(ids);
     return this.edit(name, (d) => { const r = op(d, t); return { doc: r.doc, select: r.ids.length ? r.ids : undefined }; });

@@ -1,3 +1,4 @@
+import { cornered } from './corners';
 import type { Anchor, Mat, PathData, Pt, Rect, SubPath } from './types';
 
 export const KAPPA = 0.5522847498307936;
@@ -183,7 +184,7 @@ export function transformRect(r: Rect, m: Mat): Rect {
 
 export function pathBounds(d: PathData): Rect {
   let r = emptyRect();
-  for (const sp of d) {
+  for (const sp of cornered(d)) {
     if (sp.pts.length === 1) { const a = sp.pts[0]; r = unionRect(r, { x: a.x, y: a.y, w: 0, h: 0 }); continue; }
     for (const s of segments(sp)) r = unionRect(r, segBounds(s));
   }
@@ -196,12 +197,13 @@ export function transformAnchor(a: Anchor, m: Mat): Anchor {
   const p = apply(m, a.x, a.y), i = apply(m, a.ix, a.iy), o = apply(m, a.ox, a.oy);
   const out: Anchor = { x: p.x, y: p.y, ix: i.x, iy: i.y, ox: o.x, oy: o.y };
   if (a.smooth) out.smooth = true;
+  if (a.corner) out.corner = a.corner.mode === 'relative' ? a.corner : { ...a.corner, r: a.corner.r * matScale(m) };
   return out;
 }
 export function translatePath(d: PathData, dx: number, dy: number): PathData { return transformPath(d, translate(dx, dy)); }
 
 export function tracePath(ctx: CanvasRenderingContext2D | Path2D, d: PathData): void {
-  for (const sp of d) {
+  for (const sp of cornered(d)) {
     const n = sp.pts.length;
     if (!n) continue;
     ctx.moveTo(sp.pts[0].x, sp.pts[0].y);
@@ -221,7 +223,7 @@ const fmt = (v: number, prec: number): string => {
 };
 export function toSvgD(d: PathData, prec = 3): string {
   const out: string[] = [];
-  for (const sp of d) {
+  for (const sp of cornered(d)) {
     const n = sp.pts.length;
     if (!n) continue;
     const f = (v: number): string => fmt(v, prec);
@@ -458,7 +460,7 @@ export function roundCorners(d: PathData, radius: number): PathData {
 }
 
 export function reversePath(d: PathData): PathData {
-  return d.map((sp) => ({ closed: sp.closed, pts: [...sp.pts].reverse().map((a) => { const r: Anchor = { x: a.x, y: a.y, ix: a.ox, iy: a.oy, ox: a.ix, oy: a.iy }; if (a.smooth) r.smooth = true; return r; }) }));
+  return d.map((sp) => ({ closed: sp.closed, pts: [...sp.pts].reverse().map((a) => { const r: Anchor = { x: a.x, y: a.y, ix: a.ox, iy: a.oy, ox: a.ix, oy: a.iy }; if (a.smooth) r.smooth = true; if (a.corner) r.corner = a.corner; return r; }) }));
 }
 
 export function pathLength(sp: SubPath): number { return segments(sp).reduce((s, g) => s + segLength(g), 0); }
@@ -496,7 +498,7 @@ export function pointInPolygon(p: Pt, poly: Pt[]): number {
 
 export function windingAt(d: PathData, p: Pt): number {
   let w = 0;
-  for (const sp of d) if (sp.pts.length > 1) w += pointInPolygon(p, flattenSub({ ...sp, closed: true }, 0.5));
+  for (const sp of cornered(d)) if (sp.pts.length > 1) w += pointInPolygon(p, flattenSub({ ...sp, closed: true }, 0.5));
   return w;
 }
 

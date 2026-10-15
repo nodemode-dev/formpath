@@ -1,4 +1,5 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
+import { cornered } from '../engine/corners';
 import { childrenOf } from '../engine/doc';
 import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, threeDFaces } from '../engine/effects';
 import { inflate, isEmptyRect, isLineSeg, pathBounds, segments, unionRect } from '../engine/geometry';
@@ -63,7 +64,7 @@ class Painter {
 
   path(d: PathData): string {
     const out: string[] = [];
-    for (const sp of d) {
+    for (const sp of cornered(d)) {
       if (!sp.pts.length) continue;
       out.push(`${f(sp.pts[0].x)} ${f(sp.pts[0].y)} m`);
       const segs = segments(sp);
