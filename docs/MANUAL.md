@@ -631,7 +631,8 @@ ask it questions.
   and can relink the document to the copies. Window > Document Info lists artboards, objects, fonts, images and their
   resolution, swatches and spot colours.
 - View > Overprint Preview shows how fills and strokes set to overprint will print; Window > Separations Preview shows
-  one process plate (Cyan, Magenta, Yellow, Black) or spot colour at a time in gray.
+  one process plate (Cyan, Magenta, Yellow, Black) or spot colour at a time in gray. Set Overprint Fill or Overprint
+  Stroke in the Attributes panel; PDF export keeps the setting.
 
 - .fpth projects keep everything editable: artboards, layers, live shapes, effects, symbols, swatches, styles,
   brushes and the images inside (linked images keep their link and a cached preview).
@@ -703,8 +704,12 @@ ask it questions.
   for any menu command. Every change is one undo step.
 - The assistant (Window > Assistant) uses a language model you set in Preferences > Plugins (a local Ollama model or
   an OpenAI-compatible endpoint) with the same tools, and Undo This Turn reverses all of its changes at once.
-- Generative Shape Fill (Object > Generative > Shape Fill), Generate Patterns (Object > Pattern) and Retype
-  (Type > Retype) run on that same model; formpth calls no other service. When no model is set, their panels say so
+- Text to Vector Graphic (Object > Generative): choose Subject, Scene, Icon or Pattern, a detail level and up to three
+  variations, describe the art, and place the one you like as editable paths fitted to the selected shape or the
+  artboard. Generative Recolor (in Edit > Edit Colors > Recolor Artwork): describe a mood such as sunset over the
+  ocean and pick one of the palettes to recolour the selection.
+- Generative Shape Fill (Object > Generative > Shape Fill), Generate Patterns (Object > Pattern), Retype
+  (Type > Retype), Text to Vector Graphic and Generative Recolor run on that same model; formpth calls no other service. When no model is set, their panels say so
   and the Generate buttons stay off. Turn on The model reads images in Preferences > Plugins when your model accepts
   images (Retype then reads text in pictures). The tools generative_shape_fill, generate_patterns and retype give
   agents the same features.

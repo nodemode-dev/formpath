@@ -2,6 +2,27 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.31.0 · 2026-10-15
+
+The re-grade, and the rows it found short.
+
+### Added
+
+- Object > Generative > Text to Vector Graphic: Subject, Scene, Icon or Pattern from a prompt, three variations, placed as editable paths; MCP `text_to_vector`.
+- Generative Recolor in Recolor Artwork: palettes from a prompt remap the artwork's colours; MCP `generative_recolor`. Both run on the model set for the Assistant. 88 MCP tools.
+- Stars take a live corner radius; live rectangles, polygons and stars stay live when their corners are rounded.
+- Attributes panel: Overprint Fill and Overprint Stroke; `set_paint` takes `overprint_fill` and `overprint_stroke`.
+
+### Fixed
+
+- Package copies fonts formpth bundles as well as installed ones.
+- Document Setup is one undo step.
+- The preference to show the side column as icons in a narrow window now does so.
+
+### Changed
+
+- `docs/PARITY.md`: 73.5 of 76 (96.7 percent) after a third independent audit (71 at v0.30.0) and the rows built since; the 12 plan additions graded 12 of 12.
+
 ## 0.30.0 · 2026-10-15
 
 Output, and the home screen fixed.
