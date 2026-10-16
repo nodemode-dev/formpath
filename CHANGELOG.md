@@ -2,6 +2,21 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.35.0 · 2026-10-15
+
+Plan v0.6.0 phase 31: the fourth independent audit, and three rows narrowed.
+
+### Added
+
+- DWG R2000, R2004, R2010, R2013 and R2018 open natively, no converter needed; R2007 and older still use an installed converter.
+- 3D Graphic material: an image or symbol as the surface texture with scale, rotation and offset; Roughness and Metallic. MCP `three_d` takes the same.
+- Legacy `.ai` files bring in pattern swatches, symbols and calligraphic, art and pattern brushes.
+- 55 new strings in all 25 languages.
+
+### Changed
+
+- `docs/PARITY.md`: 70.5 of 76 (92.8 percent) from an independent audit of v0.34.0, down from the self-graded 74.5. Eleven rows are Partial; the page lists what each lacks.
+
 ## 0.34.0 · 2026-10-15
 
 Plan v0.6.0 phase 30: printing, import and 3D.

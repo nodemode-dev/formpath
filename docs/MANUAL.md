@@ -670,7 +670,8 @@ ask it questions.
   as short segments, no fills). Choose the units and the scale (drawing units per unit of art, so 100 writes a 1:100
   drawing at full size), type as TEXT objects or outlines, and whether lineweights scale with the drawing. Each layer
   stays a DXF layer.
-- DWG opens through a converter installed on your computer: the free ODA File Converter or LibreDWG's dwg2dxf
+- DWG from AutoCAD 2000 to 2018 (except 2007) opens directly. Other releases open through a converter installed on
+  your computer: the free ODA File Converter or LibreDWG's dwg2dxf
   (set FORMPTH_ODA_CONVERTER to the converter's path if it is somewhere unusual). Without one, formpth says where to
   get it. formpth does not write DWG; export DXF instead.
 - PDF export writes type as live, searchable text with the fonts embedded (Preserve text as live text); type with
