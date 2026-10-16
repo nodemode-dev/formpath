@@ -43,7 +43,7 @@ function typeTool(id: string, label: string, iconName: string, order: number, sh
     options: typeOptions,
     activate: (ctx) => {
       const e = ctx.engine;
-      e.fillPaint = solid(BLACK); e.strokePaint = NONE; e.emit('colors', null);
+      e.fillPaint = e.fillPicked && e.fillPaint.type !== 'none' ? e.fillPaint : solid(BLACK); e.strokePaint = NONE; e.emit('colors', null);
     },
     down: (ctx, p) => {
       const ed = typing.editor;

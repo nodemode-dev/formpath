@@ -1,17 +1,44 @@
-import { allNodes, findNode, isLocked, isVisible } from '../engine/doc';
-import { ellipsePath, fitCurve, nearestOnPath, pathBounds, polyToPath, rectsTouch, reversePath } from '../engine/geometry';
+import { allNodes, childrenOf, findNode, isLocked, isVisible } from '../engine/doc';
+import { ellipsePath, fitCurve, nearestOnPath, pathBounds, polyToPath, rectPath, rectsTouch, reversePath } from '../engine/geometry';
 import { strokeToPath, uniteAll } from '../engine/kernel';
 import { eraseRegion, eraseSegments, geometryOf, joinPaths, knifeCut, scissorsCut, smoothRegion } from '../engine/ops/paths';
 import { fill, NONE, stroke } from '../engine/paint';
 import type { Doc, Engine, PathData, PathNode, Pt, VNode } from '../engine';
-import type { WidthPoint } from '../engine/types';
+import type { StrokeItem, SubPath, WidthPoint } from '../engine/types';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { replaceNode } from './select';
 import { layerColor, stroke2, tolDoc } from './util';
 
-interface F { on: boolean; pts: Pt[]; pr: number[]; last: Pt; ids: string[]; changed: boolean }
-const F: F = { on: false, pts: [], pr: [], last: { x: 0, y: 0 }, ids: [], changed: false };
+interface F { on: boolean; pts: Pt[]; pr: number[]; last: Pt; ids: string[]; changed: boolean; alt: boolean; shift: boolean }
+const F: F = { on: false, pts: [], pr: [], last: { x: 0, y: 0 }, ids: [], changed: false, alt: false, shift: false };
+
+function leaves(doc: Doc, ids: string[] | null): string[] {
+  const out: string[] = [];
+  const visit = (n: VNode): void => {
+    if (n.hidden || n.locked) return;
+    if (n.kind === 'path') { if (!n.guide) out.push(n.id); return; }
+    if (n.kind === 'compound') { out.push(n.id); return; }
+    if (n.kind === 'group' || n.kind === 'layer') childrenOf(n)?.forEach(visit);
+  };
+  if (ids) { for (const id of ids) { const n = findNode(doc, id); if (n && isVisible(doc, id) && !isLocked(doc, id)) visit(n); } } else doc.layers.forEach(visit);
+  return out;
+}
+
+function strokeReach(n: VNode): number {
+  return Math.max(0, ...n.ap.items.filter((i): i is StrokeItem => i.kind === 'stroke' && i.paint.type !== 'none').map((i) => i.width)) / 2;
+}
+
+function straightLine(): Pt[] {
+  if (!F.alt || F.pts.length < 2) return F.pts;
+  const a = F.pts[0];
+  let b = F.pts[F.pts.length - 1];
+  if (F.shift) {
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), step = Math.PI / 4, ang = Math.round(Math.atan2(dy, dx) / step) * step;
+    b = { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
+  }
+  return [a, b];
+}
 
 function collect(ctx: ToolContext, p: ToolPointer): void {
   const z = ctx.view().zoom;
@@ -20,7 +47,7 @@ function collect(ctx: ToolContext, p: ToolPointer): void {
   ctx.redraw();
 }
 
-function begin(p: ToolPointer): void { F.on = true; F.pts = [p.doc]; F.pr = [p.pressure]; F.last = p.doc; F.ids = []; F.changed = false; }
+function begin(p: ToolPointer): void { F.on = true; F.pts = [p.doc]; F.pr = [p.pressure]; F.last = p.doc; F.ids = []; F.changed = false; F.alt = false; F.shift = false; }
 
 function pressureProfile(pr: number[]): WidthPoint[] | null {
   if (pr.length < 3 || pr.every((v) => v >= 0.99)) return null;
@@ -29,10 +56,10 @@ function pressureProfile(pr: number[]): WidthPoint[] | null {
   return out;
 }
 
-function trail(ctx: ToolContext, g: CanvasRenderingContext2D, color?: string): void {
+function trail(ctx: ToolContext, g: CanvasRenderingContext2D, color?: string, pts: Pt[] = F.pts): void {
   if (!F.on) return;
   const v = ctx.view();
-  stroke2(g, F.pts.map((q) => v.toScreen(q)), color ?? layerColor(ctx.engine));
+  stroke2(g, pts.map((q) => v.toScreen(q)), color ?? layerColor(ctx.engine));
 }
 
 function brushCircle(ctx: ToolContext, g: CanvasRenderingContext2D, at: Pt | null, size: number): void {
@@ -242,20 +269,32 @@ registerTool({
   hover: (ctx, p) => { hoverAt = p?.doc ?? null; ctx.redraw(); },
   keydown: (ctx, ev) => { if (ev.key !== '[' && ev.key !== ']') return false; const e = ctx.engine; e.update({ eraserSize: Math.max(1, e.options.eraserSize + (ev.key === ']' ? 2 : -2)) }); ctx.redraw(); return true; },
   down: (_ctx, p) => begin(p),
-  move: (ctx, p) => { hoverAt = p.doc; if (F.on) collect(ctx, p); },
-  up: (ctx) => {
+  move: (ctx, p) => { hoverAt = p.doc; F.alt = p.alt; if (F.on) collect(ctx, p); },
+  up: (ctx, p) => {
     if (!F.on) return;
     F.on = false;
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
-    const region = blobOutline(F.pts, e.options.eraserSize), rb = pathBounds(region);
-    const pool = e.hasSelection ? e.targetIds() : allNodes(pr.doc).filter((n) => (n.kind === 'path' || n.kind === 'compound') && isVisible(pr.doc, n.id) && !isLocked(pr.doc, n.id)).map((n) => n.id);
-    const ids = pool.filter((id) => { const n = findNode(pr.doc, id); return !!n && rectsTouch(e.boundsOf(n), rb); });
+    const region = p.alt && F.pts.length > 0 ? eraserMarquee(F.pts[0], p.doc) : blobOutline(F.pts, e.options.eraserSize), rb = pathBounds(region);
+    const pool = leaves(pr.doc, e.hasSelection ? e.targetIds() : null);
+    const ids = pool.filter((id) => { const n = findNode(pr.doc, id); if (!n) return false; const r = strokeReach(n), b = e.boundsOf(n); return rectsTouch({ x: b.x - r, y: b.y - r, w: b.w + 2 * r, h: b.h + 2 * r }, rb); });
     if (ids.length) e.run('Eraser', (d) => eraseRegion(d, ids, region), ids);
     ctx.redraw();
   },
-  overlay: (ctx, g) => { trail(ctx, g, ctx.paint().accent); brushCircle(ctx, g, hoverAt, ctx.engine.options.eraserSize); },
+  overlay: (ctx, g) => {
+    if (F.on && F.alt && F.pts.length > 0) {
+      const v = ctx.view(), a = v.toScreen(F.pts[0]), b = v.toScreen(F.last);
+      g.save(); g.strokeStyle = ctx.paint().accent; g.lineWidth = 1; g.setLineDash([4, 3]); g.strokeRect(Math.min(a.x, b.x) + 0.5, Math.min(a.y, b.y) + 0.5, Math.abs(a.x - b.x), Math.abs(a.y - b.y)); g.restore();
+      return;
+    }
+    trail(ctx, g, ctx.paint().accent); brushCircle(ctx, g, hoverAt, ctx.engine.options.eraserSize);
+  },
 });
+
+function eraserMarquee(a: Pt, b: Pt): PathData {
+  const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+  return rectPath(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(w, 1e-3), Math.max(h, 1e-3));
+}
 
 registerTool({
   id: 'scissors', label: 'Scissors Tool', group: 'eraser', order: 47, shortcut: 'C',
@@ -265,13 +304,32 @@ registerTool({
   down: (ctx, p) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
-    const h = e.hit(p.doc, 5);
-    if (!h) return;
-    const n = findNode(pr.doc, h.id);
-    if (n?.kind !== 'path') return;
-    const r = nearestOnPath(n.d, p.doc);
-    if (!r || r.d > tolDoc(ctx, 6)) return;
-    e.run('Scissors', (d) => scissorsCut(d, n.id, r.sub, r.seg, r.t), [n.id]);
+    const tol = tolDoc(ctx, 5);
+    let best: { id: string; sub: number; seg: number; t: number; d: number; sp: SubPath } | null = null;
+    for (const id of leaves(pr.doc, null)) {
+      const n = findNode(pr.doc, id);
+      const d = n?.kind === 'path' ? n.d : n?.kind === 'compound' ? n.children.flatMap((c) => c.d) : null;
+      if (!d) continue;
+      const b = pathBounds(d);
+      if (p.doc.x < b.x - tol || p.doc.y < b.y - tol || p.doc.x > b.x + b.w + tol || p.doc.y > b.y + b.h + tol) continue;
+      const r = nearestOnPath(d, p.doc);
+      if (r && r.d <= tol && (!best || r.d <= best.d)) best = { id, sub: r.sub, seg: r.seg, t: r.t, d: r.d, sp: d[r.sub] };
+    }
+    if (!best) return;
+    const { id, sub, seg, sp } = best;
+    let t = best.t;
+    const a = sp.pts[seg], b = sp.pts[(seg + 1) % sp.pts.length];
+    if (Math.hypot(a.x - p.doc.x, a.y - p.doc.y) <= tol) t = 0;
+    else if (Math.hypot(b.x - p.doc.x, b.y - p.doc.y) <= tol) t = 1;
+    if (!e.run('Scissors', (d) => scissorsCut(d, id, sub, seg, t), [id])) return;
+    const now = findNode(e.current?.doc as Doc, id);
+    if (now?.kind !== 'path') return;
+    const first = now.d[0];
+    if (first.closed) return;
+    if (sp.closed) { e.setAnchors(id, new Set([0, first.pts.length - 1])); return; }
+    e.setAnchors(id, new Set([first.pts.length - 1]));
+    const other = e.selectedIds().find((s) => s !== id);
+    if (other) e.setAnchors(other, new Set([0]));
   },
 });
 
@@ -283,20 +341,24 @@ registerTool({
   down: (ctx, p) => begin(ctx.engine.view.smartGuides ? { ...p, doc: ctx.snap(p.doc).p } : p),
   move: (ctx, p) => {
     if (!F.on) return;
+    F.alt = p.alt; F.shift = p.shift;
     collect(ctx, p);
-    if (ctx.engine.view.smartGuides) ctx.snap(p.doc);
+    if (ctx.engine.view.smartGuides && !p.alt) ctx.snap(p.doc);
   },
   up: (ctx, p) => {
     if (!F.on) return;
     F.on = false;
     const e = ctx.engine, pr = e.current;
-    if (e.view.smartGuides && F.pts.length > 1) { F.pts[F.pts.length - 1] = ctx.snap(p.doc).p; e.clearOverlay(); }
-    if (!pr || F.pts.length < 2) { ctx.redraw(); return; }
-    const rb = pathBounds(polyToPath(F.pts, false));
-    const pool = e.hasSelection ? e.targetIds() : allNodes(pr.doc).filter((n) => (n.kind === 'path' || n.kind === 'compound') && isVisible(pr.doc, n.id) && !isLocked(pr.doc, n.id)).map((n) => n.id);
+    F.alt = p.alt; F.shift = p.shift;
+    if (F.pts.length > 1 || F.alt) F.pts[F.pts.length > 1 ? F.pts.length - 1 : 1] = e.view.smartGuides && !F.alt ? ctx.snap(p.doc).p : p.doc;
+    e.clearOverlay();
+    const line = straightLine();
+    if (!pr || line.length < 2) { ctx.redraw(); return; }
+    const rb = pathBounds(polyToPath(line, false));
+    const pool = leaves(pr.doc, e.hasSelection ? e.targetIds() : null);
     const ids = pool.filter((id) => { const n = findNode(pr.doc, id); return !!n && rectsTouch(e.boundsOf(n), rb); });
-    if (ids.length) e.run('Knife', (d) => knifeCut(d, ids, F.pts), ids);
+    if (ids.length) e.run('Knife', (d) => knifeCut(d, ids, line), ids);
     ctx.redraw();
   },
-  overlay: (ctx, g) => trail(ctx, g, ctx.paint().accent),
+  overlay: (ctx, g) => trail(ctx, g, ctx.paint().accent, straightLine()),
 });

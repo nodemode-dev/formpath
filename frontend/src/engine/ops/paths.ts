@@ -1,7 +1,7 @@
 import { geomBounds } from '../bounds';
 import { childrenOf, findNode, newId, parentOf, pathOf, removeNodes, topObjects, updateAt, updateNodes, type IndexPath } from '../doc';
 import { anchor, bezSplit, dist, flatIndex, hasIn, hasOut, isLineSeg, pathBounds, rectPath, rectsTouch, reversePath, segOf, segments, splitSegmentAt, unflatIndex } from '../geometry';
-import { boolean, cleanup, contains, area, offsetPath, polyKnife, simplifyPath, simplifyWith, smoothPath, toPaper, fromPaper, type BoolOp } from '../kernel';
+import { boolean, cleanup, contains, area, intersections, offsetPath, pathSampler, polyKnife, simplifyPath, simplifyWith, smoothPath, splitAtOffsets, toPaper, fromPaper, type BoolOp } from '../kernel';
 import { emptyAppearance, fill, NONE, solid, BLACK } from '../paint';
 import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
 import { brushGeometry } from '../effects';
@@ -292,28 +292,57 @@ export function knifeCut(doc: Doc, ids: string[], stroke: Pt[]): OpResult {
   return { doc: out, ids: made };
 }
 
-export function scissorsCut(doc: Doc, id: string, sub: number, seg: number, t: number): OpResult {
-  const n = findNode(doc, id);
-  if (!n || n.kind !== 'path') return { doc, ids: [id] };
-  const sp = n.d[sub];
-  if (!sp) return { doc, ids: [id] };
+function cutSub(sp: SubPath, seg: number, t: number): SubPath[] | null {
   let cur = sp, cut = seg + 1;
   if (t <= 1e-3) cut = seg;
   else if (t >= 1 - 1e-3) cut = (seg + 1) % sp.pts.length;
   else cur = splitSegmentAt(sp, seg, t);
   const pts = cur.pts.map((p) => ({ ...p }));
-  let pieces: SubPath[];
+  const tail = (p: Anchor): Anchor => ({ ...p, ox: p.x, oy: p.y, smooth: undefined });
+  const head = (p: Anchor): Anchor => ({ ...p, ix: p.x, iy: p.y, smooth: undefined });
   if (sp.closed) {
     const rot = [...pts.slice(cut), ...pts.slice(0, cut)];
-    rot.push({ ...rot[0] });
-    pieces = [{ closed: false, pts: rot }];
-  } else {
-    pieces = [{ closed: false, pts: pts.slice(0, cut + 1) }, { closed: false, pts: [{ ...pts[cut] }, ...pts.slice(cut + 1)] }].filter((p) => p.pts.length > 1);
+    if (rot.length < 2) return null;
+    return [{ closed: false, pts: [head(rot[0]), ...rot.slice(1), tail(rot[0])] }];
   }
+  if (cut <= 0 || cut >= pts.length - 1) return null;
+  return [{ closed: false, pts: [...pts.slice(0, cut), tail(pts[cut])] }, { closed: false, pts: [head(pts[cut]), ...pts.slice(cut + 1)] }];
+}
+
+export function scissorsCut(doc: Doc, id: string, sub: number, seg: number, t: number): OpResult {
+  const n = findNode(doc, id);
+  if (!n || (n.kind !== 'path' && n.kind !== 'compound')) return { doc, ids: [] };
+  if (n.kind === 'compound') {
+    let k = 0, done = false;
+    const kids = n.children.flatMap((c) => {
+      const base = k;
+      k += c.d.length;
+      const hit = c.d.length === 1 && base === sub;
+      const pieces = hit ? cutSub(c.d[0], seg, t) : null;
+      if (!pieces) return [c];
+      done = true;
+      return pieces.map((pc, i) => ({ ...c, id: i === 0 ? c.id : newId('p'), d: [pc], live: undefined }));
+    });
+    if (!done) return { doc, ids: [] };
+    return { doc: updateAt(doc, pathOf(doc, id) as IndexPath, () => [{ ...n, children: kids }]), ids: [id] };
+  }
+  const sp = n.d[sub];
+  const pieces = sp ? cutSub(sp, seg, t) : null;
+  if (!sp || !pieces) return { doc, ids: [] };
   const others = n.d.filter((_, i) => i !== sub);
   const nodes: PathNode[] = pieces.map((p, i) => ({ ...n, id: i === 0 ? n.id : newId('p'), d: i === 0 ? [p, ...others] : [p], live: undefined }));
   const out = updateAt(doc, pathOf(doc, id) as IndexPath, () => nodes);
   return { doc: out, ids: nodes.map((x) => x.id) };
+}
+
+function outsideRegion(sp: SubPath, region: PathData): SubPath[] | null {
+  if (sp.pts.length < 2) return null;
+  const offs: number[] = [];
+  for (const r of region) { try { for (const x of intersections(sp, r)) offs.push(x.offsetA); } catch { } }
+  let pieces: SubPath[] = [sp];
+  if (offs.length) { try { pieces = splitAtOffsets(sp, offs); } catch { pieces = [sp]; } }
+  const keep = pieces.filter((pc) => { const m = pathSampler([pc])?.at(0.5); return !m || !contains(region, 'nonzero', m); });
+  return keep.length === pieces.length ? null : keep;
 }
 
 export function eraseRegion(doc: Doc, ids: string[], region: PathData): OpResult {
@@ -323,12 +352,28 @@ export function eraseRegion(doc: Doc, ids: string[], region: PathData): OpResult
     const n = findNode(out, id);
     const g = n ? geometryOf(n) : null;
     if (!n || !g) continue;
-    if (g.d.every((sp) => sp.closed)) {
+    const filled = n.ap.items.some((i) => i.kind === 'fill' && i.paint.type !== 'none' && i.visible !== false);
+    if (filled && g.d.every((sp) => sp.closed)) {
+      if (!boolean(g.d, region, 'intersect', g.rule, 'nonzero').length) continue;
       const left = boolean(g.d, region, 'subtract', g.rule, 'nonzero');
       const rep = left.length ? splitContours(left).map((d) => shapeNode(d, n)) : [];
       out = updateAt(out, pathOf(out, id) as IndexPath, () => (rep.length ? rep : null));
       res.push(...rep.map((r) => r.id));
+      continue;
     }
+    const sw = Math.max(0, ...n.ap.items.filter((i): i is StrokeItem => i.kind === 'stroke' && i.paint.type !== 'none').map((i) => i.width));
+    let reg = region;
+    if (sw > 0) { try { const grown = offsetPath(region, sw / 2, 'round'); if (grown.length) reg = grown; } catch { } }
+    let touched = false;
+    const kept: SubPath[] = [];
+    for (const sp of g.d) {
+      const r = outsideRegion(sp, reg);
+      if (r) { touched = true; kept.push(...r); } else kept.push(sp);
+    }
+    if (!touched) continue;
+    const rep = kept.map((sp) => shapeNode([sp], n));
+    out = updateAt(out, pathOf(out, id) as IndexPath, () => (rep.length ? rep : null));
+    res.push(...rep.map((r) => r.id));
   }
   return { doc: out, ids: res };
 }
