@@ -3832,3 +3832,10 @@ PsdLayerIn gained key (blend key override, pass for groups), blocks (extra addit
 - logged: v0.44.0 · 2026-10-16
 
 PSD export has three choices: Write layers with Maximum editability (default), Write layers alone (pixel layers per layer as before, selection as one layer), and Flat image (Write layers off). The MCP export reads psd_edit (default true) but the tool schema in backend mcp.py was not extended, so it is only reachable by name until the next agents sync. The export dialog row labels go through t().
+
+### src/styles/tokens.css · the contextual task bar under menus
+- refers-to: src/styles/tokens.css :: --z-taskbar; src/styles/helpbar.css :: .fp-taskbar
+- kind: decision
+- logged: v0.45.0 · 2026-10-16
+
+The seventh audit found the floating contextual task bar drawn over open menus: it covered the left half of Select > Same and swallowed clicks there, and a rectangle drag started under it. --z-taskbar was 900, above --z-menu (200), --z-temp (500) and --z-companion (800). It is now 120: above the canvas chrome (100) so it floats over the stage and docked chrome as before, and below the opening screen (150), menus, popovers, dialogs and toasts, as Illustrator's Contextual Task Bar sits under its menus. Checked in Chromium: with the bar under the Select menu, the left edge of Same now hits the menu label, and the bar computes z-index 120. The note on psd_edit above was resolved in v0.44.0 (the export_file schema declares it).

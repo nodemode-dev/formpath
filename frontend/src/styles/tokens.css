@@ -127,11 +127,11 @@
   --z-selected: 9;
   --z-rail: 10;
   --z-chrome: 100;
+  --z-taskbar: 120;
   --z-home-screen: 150;
   --z-menu: 200;
   --z-temp: 500;
   --z-companion: 800;
-  --z-taskbar: 900;
   --z-modal: 1000;
   --z-settings: 1500;
   --z-context: 2000;
