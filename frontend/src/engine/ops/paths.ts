@@ -1,6 +1,6 @@
 import { geomBounds } from '../bounds';
 import { childrenOf, findNode, newId, parentOf, pathOf, removeNodes, topObjects, updateAt, updateNodes, type IndexPath } from '../doc';
-import { anchor, bezSplit, dist, flatIndex, hasIn, hasOut, isLineSeg, pathBounds, rectPath, rectsTouch, reversePath, segOf, segments, splitSegmentAt, unflatIndex } from '../geometry';
+import { anchor, bezPoint, bezSplit, dist, fitCurve, flatIndex, hasIn, hasOut, isLineSeg, pathBounds, rectPath, rectsTouch, reversePath, segOf, segments, splitSegmentAt, unflatIndex } from '../geometry';
 import { boolean, cleanup, contains, area, intersections, offsetPath, pathSampler, polyKnife, simplifyPath, simplifyWith, smoothPath, splitAtOffsets, toPaper, fromPaper, type BoolOp } from '../kernel';
 import { emptyAppearance, fill, NONE, solid, BLACK } from '../paint';
 import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
@@ -168,7 +168,16 @@ export function pathOperation(doc: Doc, ids: string[], op: PathOp, a: PathOpArgs
       return { doc: eachPathNode(doc, tops, (n) => { const s = sel.get(n.id); if (!s || !s.size) return n; const d = removeAnchors(n.d, s); return d.length ? { ...n, d, live: undefined } : null; }), ids: tops };
     }
     case 'average': {
-      const sel = a.anchors ?? new Map();
+      const picked = new Map<string, Set<number>>();
+      for (const [id, set] of a.anchors ?? new Map<string, Set<number>>()) { const real = [...set].filter((i) => i >= 0); if (real.length && findNode(doc, id)?.kind === 'path') picked.set(id, new Set(real)); }
+      const whole = new Map<string, Set<number>>();
+      const visit = (n: VNode): void => {
+        if (n.kind === 'path') { const c = n.d.reduce((s, sp) => s + sp.pts.length, 0); whole.set(n.id, new Set(Array.from({ length: c }, (_, i) => i))); }
+        else if (n.kind === 'compound') n.children.forEach(visit);
+        else childrenOf(n)?.forEach(visit);
+      };
+      for (const id of tops) { const n = findNode(doc, id); if (n) visit(n); }
+      const sel = picked.size ? picked : whole;
       const pts: Pt[] = [];
       for (const [id, set] of sel) { const n = findNode(doc, id); if (n?.kind === 'path') for (const i of set) { const u = unflatIndex(n.d, i); if (u) pts.push(n.d[u[0]].pts[u[1]]); } }
       if (!pts.length) return { doc, ids: tops };
@@ -403,15 +412,25 @@ export function smoothRegion(d: PathData, region: PathData, strength: number): P
   return d.map((sp) => {
     const pts = sp.pts.map((p) => ({ ...p }));
     const idx = pts.map((p, i) => (contains(region, 'nonzero', p) ? i : -1)).filter((i) => i >= 0);
-    if (idx.length < 3) return sp;
-    const poly = pts.map((p) => ({ x: p.x, y: p.y }));
-    const sub = { closed: sp.closed, pts: idx.map((i) => pts[i]) };
-    const sm = smoothPath(simplifyPath([sub], 0.5 + strength), 0.4)[0];
-    void poly;
-    if (!sm) return sp;
+    if (!idx.length) return sp;
     const first = idx[0], last = idx[idx.length - 1];
     if (last - first + 1 !== idx.length) return sp;
-    return { closed: sp.closed, pts: [...pts.slice(0, first), ...sm.pts, ...pts.slice(last + 1)] };
+    const lo = Math.max(0, first - 1), hi = Math.min(pts.length - 1, last + 1);
+    if (hi - lo < 2) return sp;
+    const samples: Pt[] = [];
+    for (let i = lo; i < hi; i++) {
+      const s = segOf(pts[i], pts[i + 1]), n = 10;
+      for (let k = 0; k < n; k++) samples.push(bezPoint(s, k / n));
+    }
+    samples.push({ x: pts[hi].x, y: pts[hi].y });
+    let cur = samples;
+    for (let it = 0; it < 6; it++) cur = cur.map((q, i) => (i === 0 || i === cur.length - 1 ? q : { x: cur[i - 1].x * 0.25 + q.x * 0.5 + cur[i + 1].x * 0.25, y: cur[i - 1].y * 0.25 + q.y * 0.5 + cur[i + 1].y * 0.25 }));
+    const fit = fitCurve(cur, Math.max(0.05, strength));
+    if (fit.length < 2) return sp;
+    const a0 = pts[lo], a1 = pts[hi], f0 = fit[0], f1 = fit[fit.length - 1];
+    fit[0] = { ...f0, ix: a0.ix, iy: a0.iy, smooth: a0.smooth };
+    fit[fit.length - 1] = { ...f1, ox: a1.ox, oy: a1.oy, smooth: a1.smooth };
+    return { closed: sp.closed, pts: [...pts.slice(0, lo), ...fit, ...pts.slice(hi + 1)] };
   });
 }
 

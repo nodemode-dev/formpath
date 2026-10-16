@@ -193,15 +193,15 @@ export function snapPoint(p: Pt, t: SnapTargets, o: SnapOpts): SnapResult {
   let q = p, hit: SnapResult['hit'] = null;
   if (o.grid.on) {
     const step = o.grid.spacing / Math.max(1, o.grid.sub);
-    q = { x: Math.round(p.x / step) * step, y: Math.round(p.y / step) * step };
-    hit = 'grid';
-    if (!o.smart) return { p: q, lines: [], label: null, hit };
+    const sp = o.smart || o.point ? nearestSpot(t, p, o.tol) : null;
+    if (sp) return { p: { x: sp.x, y: sp.y }, lines: [], label: sp.kind, hit: 'spot' };
+    return { p: { x: Math.round(p.x / step) * step, y: Math.round(p.y / step) * step }, lines: [], label: null, hit: 'grid' };
   }
   if (!o.smart && !o.point) return { p: q, lines: [], label: null, hit };
   const s = nearestSpot(t, q, o.tol);
   if (s) return { p: { x: s.x, y: s.y }, lines: [], label: s.kind, hit: 'spot' };
   if (!o.smart) return { p: q, lines: [], label: null, hit };
-  const ix = o.intersect ? snapIntersect(q, t, o.tol, o.highlight !== false) : null;
+  const ix = o.intersect ? snapIntersect(q, t, o.tol * 1.5, o.highlight !== false) : null;
   if (ix) return ix;
   const col = nearestRule(t.cols, q.x, o.tol), row = nearestRule(t.rows, q.y, o.tol);
   if (!col && !row) return (o.path ? snapPath(q, t, o.tol, o.highlight !== false) : null) ?? { p: q, lines: [], label: null, hit };
@@ -246,9 +246,9 @@ function spacing(r: Rect, boxes: Rect[], vertical: boolean, tol: number): { d: n
 }
 
 export function snapRect(r: Rect, t: SnapTargets, o: SnapOpts): { dx: number; dy: number; lines: SnapLine[]; tags: SnapTag[] } {
-  if (o.grid.on && !o.smart) {
-    const step = o.grid.spacing / Math.max(1, o.grid.sub);
-    return { dx: Math.round(r.x / step) * step - r.x, dy: Math.round(r.y / step) * step - r.y, lines: [], tags: [] };
+  if (o.grid.on) {
+    const step = o.grid.spacing / Math.max(1, o.grid.sub), near = (a: number, b: number): number => { const da = Math.round(a / step) * step - a, db = Math.round(b / step) * step - b; return Math.abs(da) <= Math.abs(db) ? da : db; };
+    return { dx: near(r.x, r.x + r.w), dy: near(r.y, r.y + r.h), lines: [], tags: [] };
   }
   if (!o.smart) return { dx: 0, dy: 0, lines: [], tags: [] };
   const ax = fitAxis(t.cols, [r.x, r.x + r.w / 2, r.x + r.w], o.tol), ay = fitAxis(t.rows, [r.y, r.y + r.h / 2, r.y + r.h], o.tol);

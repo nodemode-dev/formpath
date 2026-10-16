@@ -7,6 +7,7 @@ import type { Anchor, Engine, Mat, PathData, Pt, StrokeItem, VNode, WidthPoint }
 import { registerTool, toolHost, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { beginTransform, dragTransform, endTransform, handleAt, newDrag, replaceNode } from './select';
+import { refine } from './liquify-detail';
 import { fmt, hud, marquee } from './util';
 
 const xf = (e: Engine) => ({ strokes: e.view.scaleStrokes, patterns: e.view.transformPatterns, gradients: true });
@@ -453,13 +454,14 @@ registerTool({
 
 type Liquify = 'warp' | 'twirl' | 'pucker' | 'bloat';
 const L = { on: false, last: { x: 0, y: 0 }, hover: null as Pt | null, ids: [] as string[] };
+const LQ = { detail: 5 };
 function liquifyTool(id: string, label: string, iconName: string, order: number, kind: Liquify, shortcut?: string): void {
   registerTool({
     id, label, group: 'warp', order, shortcut,
     icon: () => iconName,
     hint: () => `Drag over objects to ${kind} them. [ and ] change the brush size.`,
     cursor: () => 'none',
-    options: (e) => [{ kind: 'title', text: label }, { kind: 'range', label: 'Size', min: 4, max: 800, unit: 'pt', get: () => e.options.liquifySize, set: (v) => e.update({ liquifySize: v }) }],
+    options: (e) => [{ kind: 'title', text: label }, { kind: 'range', label: 'Size', min: 4, max: 800, unit: 'pt', get: () => e.options.liquifySize, set: (v) => e.update({ liquifySize: v }) }, { kind: 'range', label: 'Detail', min: 1, max: 10, get: () => LQ.detail, set: (v) => { LQ.detail = v; } }],
     hover: (ctx, p) => { L.hover = p?.doc ?? null; ctx.redraw(); },
     keydown: (ctx, ev) => { if (ev.key !== '[' && ev.key !== ']') return false; const e = ctx.engine; e.update({ liquifySize: Math.max(4, e.options.liquifySize + (ev.key === ']' ? 6 : -6)) }); ctx.redraw(); return true; },
     down: (ctx, p) => {
@@ -484,8 +486,15 @@ function liquifyTool(id: string, label: string, iconName: string, order: number,
         const s = kind === 'pucker' ? -0.05 * k : 0.05 * k;
         return { x: q.x + (q.x - c.x) * s, y: q.y + (q.y - c.y) * s };
       };
+      const gap = Math.max(1.5, (r * 2) / (3 + LQ.detail * 2));
+      const dense = (n: VNode): VNode => {
+        if (n.kind === 'path') { const d = n.d.map((sp) => refine(sp, c, r, gap)); return d.some((sp, i) => sp !== n.d[i]) ? { ...n, d, live: undefined } : n; }
+        if (n.kind === 'compound') { const ch = n.children.map((k) => ({ ...k, d: k.d.map((sp) => refine(sp, c, r, gap)) })); return { ...n, children: ch }; }
+        if (n.kind === 'group') return { ...n, children: n.children.map(dense) };
+        return n;
+      };
       let doc = pr.doc;
-      for (const id of L.ids) { const n = findNode(doc, id); if (n && n.kind !== 'text' && n.kind !== 'image') doc = replaceNode(doc, id, mapAnchorsNode(n, f)); }
+      for (const id of L.ids) { const n = findNode(doc, id); if (n && n.kind !== 'text' && n.kind !== 'image') doc = replaceNode(doc, id, mapAnchorsNode(dense(n), f)); }
       e.dragTo(doc);
     },
     up: (ctx) => { if (!L.on) return; L.on = false; ctx.engine.commitDrag(); },

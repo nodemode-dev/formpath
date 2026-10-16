@@ -157,7 +157,7 @@ export class Stage {
     const tol = Stage.prefs.snapTol / pr.viewport.zoom;
     const r = snapPoint(p, this.targets.t, { tol, smart: v.smartGuides, point: v.snapPoint, path: true, intersect: true, highlight: v.smartHighlight, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
     let out: SnapAt = { p: r.p, lines: r.lines, label: r.label };
-    if (opts.from && v.smartGuides && r.hit !== 'spot' && !(r.hit === 'curve' && r.label === 'intersect')) {
+    if (opts.from && v.smartGuides && r.hit !== 'spot' && r.hit !== 'grid' && !(r.hit === 'curve' && r.label === 'intersect')) {
       const s = snapLine(p, opts.from, this.targets.t, tol, Stage.prefs.snapAngles);
       if (s && (r.hit !== 'curve' || Math.hypot(s.p.x - p.x, s.p.y - p.y) < Math.hypot(r.p.x - p.x, r.p.y - p.y))) out = { p: s.p, lines: s.lines, label: s.label };
     }
@@ -179,8 +179,9 @@ export class Stage {
     if (!this.targets || this.targets.doc !== base || this.targets.key !== key) this.targets = { doc: base, key, t: collectTargets(base, exclude) };
     const tol = Stage.prefs.snapTol / pr.viewport.zoom;
     const s = snapRect(r, this.targets.t, { tol, smart: v.smartGuides, point: false, spacing: v.smartSpacing, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
-    if (ref && v.smartGuides && !s.lines.length && s.dx === 0 && s.dy === 0) {
-      const c = snapIntersect(ref, this.targets.t, tol, v.smartHighlight) ?? snapPath(ref, this.targets.t, tol, v.smartHighlight);
+    const ix = ref && v.smartGuides && !v.snapGrid ? snapIntersect(ref, this.targets.t, tol * 1.5, v.smartHighlight) : null;
+    if (ref && v.smartGuides && (ix || (!v.snapGrid && !s.lines.length && s.dx === 0 && s.dy === 0))) {
+      const c = ix ?? snapPath(ref, this.targets.t, tol, v.smartHighlight);
       if (c) {
         this.engine.setOverlay({ lines: c.lines, label: v.smartLabels ? c.label : null, at: c.p, tags: [] });
         return { dx: c.p.x - ref.x, dy: c.p.y - ref.y };

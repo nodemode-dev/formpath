@@ -247,9 +247,13 @@ export function trapNodes(shapes: Shape[], a: TrapArgs): PathNode[] {
       const aLight = luminance(A.c) >= luminance(B.c), light = aLight ? A : B, dark = aLight ? B : A;
       const spread = a.reverse ? dark : light, target = a.reverse ? light : dark;
       let strip = boolean(offsetPath(transformPath(spread.g.d, down), t, 'miter', 4, spread.g.rule), transformPath(target.g.d, down), 'intersect', 'nonzero', target.g.rule);
+      if (strip.length) strip = boolean(strip, transformPath(spread.g.d, down), 'subtract', 'nonzero', spread.g.rule);
+      if (!strip.length) {
+        const rim = boolean(transformPath(target.g.d, down), offsetPath(transformPath(target.g.d, down), -t, 'miter', 4, target.g.rule), 'subtract', target.g.rule, 'nonzero');
+        strip = rim.length ? boolean(rim, transformPath(spread.g.d, down), 'intersect', 'nonzero', spread.g.rule) : [];
+      }
       if (!strip.length) continue;
-      strip = transformPath(boolean(strip, transformPath(spread.g.d, down), 'subtract', 'nonzero', spread.g.rule), up);
-      if (!strip.length) continue;
+      strip = transformPath(strip, up);
       let c = tinted(spread.c, 100 - Math.max(0, Math.min(100, a.tintReduction)));
       if (a.process) c = toCmyk(c);
       made.push({ id: newId('p'), kind: 'path', d: settle(strip), rule: 'nonzero', opacity: 1, blend: 'multiply', ap: { items: [fill(solid(c))], effects: [] } });

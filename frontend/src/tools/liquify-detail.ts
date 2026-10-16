@@ -19,7 +19,7 @@ function rng(seed: number): () => number {
   };
 }
 
-function refine(sp: SubPath, c: Pt, r: number, gap: number): SubPath {
+export function refine(sp: SubPath, c: Pt, r: number, gap: number): SubPath {
   let cur = sp;
   for (let pass = 0; pass < 5; pass++) {
     const n = cur.pts.length, segs = cur.closed ? n : n - 1;

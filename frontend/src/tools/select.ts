@@ -595,7 +595,7 @@ function directDown(ctx: ToolContext, p: ToolPointer, groupMode: boolean): void 
         e.select([ah.id], 'add');
         e.setAnchors(ah.id, s.size ? s : new Set([-2]));
         if (removing) return;
-      } else if (!cur || !(cur.has(ah.index) || cur.has(-1))) { e.select([ah.id]); e.setAnchors(ah.id, new Set([ah.index])); }
+      } else if (!cur || !(cur.has(ah.index) || cur.has(-1)) || (cur.has(-1) && node?.kind === 'path' && node.live)) { e.select([ah.id]); e.setAnchors(ah.id, new Set([ah.index])); }
       D.mode = 'anchors'; D.grab = a ? { x: a.x, y: a.y } : p.doc; e.beginDrag('Move');
       return;
     }

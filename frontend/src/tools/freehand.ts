@@ -93,7 +93,7 @@ registerTool({
     { kind: 'range', label: 'Fidelity', min: 0, max: 100, unit: '%', get: () => Math.round(e.options.pencilFidelity * 100), set: (v) => e.update({ pencilFidelity: v / 100 }) },
     { kind: 'toggle', label: 'Keep selected', get: () => e.options.keepSelected, set: (v) => e.update({ keepSelected: v }) },
   ],
-  down: (_ctx, p) => begin(p),
+  down: (ctx, p) => begin(ctx.engine.view.smartGuides || ctx.engine.view.snapGrid ? { ...p, doc: ctx.snap(p.doc).p } : p),
   move: (ctx, p) => { if (F.on) collect(ctx, p); },
   up: (ctx, p) => {
     if (!F.on) return;
@@ -125,6 +125,10 @@ registerTool({
   icon: () => 'vSmooth',
   hint: () => 'Drag along a selected path to smooth it.',
   cursor: () => CURSORS.pencil,
+  options: (e) => [
+    { kind: 'title', text: 'Smooth' },
+    { kind: 'range', label: 'Fidelity', min: 0, max: 100, unit: '%', get: () => Math.round(e.options.pencilFidelity * 100), set: (v) => e.update({ pencilFidelity: v / 100 }) },
+  ],
   hover: (ctx, p) => { hoverAt = p?.doc ?? null; ctx.redraw(); },
   down: (ctx, p) => { begin(p); ctx.engine.beginDrag('Smooth'); },
   move: (ctx, p) => {
@@ -132,18 +136,18 @@ registerTool({
     hoverAt = p.doc;
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
-    const r = 10 / ctx.view().zoom, region = ellipsePath(p.doc.x - r, p.doc.y - r, 2 * r, 2 * r);
+    const r = 16 / ctx.view().zoom, region = ellipsePath(p.doc.x - r, p.doc.y - r, 2 * r, 2 * r);
     let doc = pr.doc;
     for (const id of e.selectedIds()) {
       const n = findNode(doc, id);
       if (n?.kind !== 'path') continue;
-      const d = smoothRegion(n.d, region, 0.5 / ctx.view().zoom);
+      const d = smoothRegion(n.d, region, (0.4 + e.options.pencilFidelity * 6) / ctx.view().zoom);
       if (d !== n.d) { doc = replaceNode(doc, id, { ...n, d, live: undefined }); F.changed = true; }
     }
     if (doc !== pr.doc) e.dragTo(doc);
   },
   up: (ctx) => { F.on = false; if (F.changed) ctx.engine.commitDrag(); else ctx.engine.cancelDrag(); },
-  overlay: (ctx, g) => brushCircle(ctx, g, hoverAt, 20 / ctx.view().zoom),
+  overlay: (ctx, g) => brushCircle(ctx, g, hoverAt, 32 / ctx.view().zoom),
 });
 
 registerTool({

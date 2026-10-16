@@ -147,8 +147,9 @@ registerTool({
       const ah = anchorUnder(e, p.doc, t);
       if (ah && ah.part === 'anchor') { deleteAnchorAt(e, ah.id, ah.index); return; }
       const sg = segmentUnder(e, p.doc, t);
-      if (sg) { addAnchorAt(e, sg.id, sg.sub, sg.seg, sg.t); return; }
-      const q = ctx.snap(p.doc).p;
+      const sn = ctx.snap(p.doc);
+      if (sg && (sn.label === null || sn.label === 'path')) { addAnchorAt(e, sg.id, sg.sub, sg.seg, sg.t); return; }
+      const q = sn.p;
       const node = e.makePath([{ closed: false, pts: [anchor(q.x, q.y)] }]);
       node.ap = e.newArtAppearance(false);
       e.addNodes('Pen', [node]);
