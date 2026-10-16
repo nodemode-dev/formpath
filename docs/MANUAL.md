@@ -678,10 +678,12 @@ ask it questions.
   as short segments, no fills). Choose the units and the scale (drawing units per unit of art, so 100 writes a 1:100
   drawing at full size), type as TEXT objects or outlines, and whether lineweights scale with the drawing. Each layer
   stays a DXF layer.
-- DWG from AutoCAD 2000 to 2018 (except 2007) opens directly. Other releases open through a converter installed on
-  your computer: the free ODA File Converter or LibreDWG's dwg2dxf
+- DWG from AutoCAD 2000 to 2018 (R2000, R2004, R2007, R2010, R2013 and R2018) opens directly. Other releases open
+  through a converter installed on your computer: the free ODA File Converter or LibreDWG's dwg2dxf
   (set FORMPTH_ODA_CONVERTER to the converter's path if it is somewhere unusual). Without one, formpth says where to
-  get it. formpth does not write DWG; export DXF instead.
+  get it.
+- File > Export > AutoCAD Drawing (DWG) writes an AutoCAD 2000 binary drawing (layers, lines, arcs, circles, ellipses,
+  polylines, splines, text and hatches) with the same units, scale, text and lineweight choices as DXF.
 - PDF export writes type as live, searchable text with the fonts embedded (Preserve text as live text); type with
   gradients, effects or a font formpth cannot read is outlined. Standard: PDF/X-1a, X-3 and X-4 embed the document's CMYK
   profile as the output intent (X-1a and X-3 flatten transparency), PDF/A-2b embeds sRGB. The PDF options sit in four
@@ -733,9 +735,15 @@ ask it questions.
   for any menu command. Every change is one undo step.
 - The assistant (Window > Assistant) uses a language model you set in Preferences > Plugins (a local Ollama model or
   an OpenAI-compatible endpoint) with the same tools, and Undo This Turn reverses all of its changes at once.
-- Text to Vector Graphic (Object > Generative): choose Subject, Scene, Icon or Pattern, a detail level and up to three
-  variations, describe the art, and place the one you like as editable paths fitted to the selected shape or the
-  artboard. Generative Recolor (in Edit > Edit Colors > Recolor Artwork): describe a mood such as sunset over the
+- Text to Vector Graphic (Object > Generative): choose Subject, Scene, Icon or Pattern, a detail level from 1 to 10
+  and up to three variations, describe the art, and place the one you like as editable paths fitted to the selected
+  shape or the artboard. Generative Shape Fill, Text to Vector Graphic and Generate Patterns share the same options:
+  Detail (limits on shapes, gradients, strokes and holes), a Style preset (Flat, Line Art, Isometric, Hand drawn,
+  Gradient, Retro, Minimal), a Style reference (select artwork or a placed image and press Use Selection), live
+  Effects (Halftone, Grain, Glow, Shadow) and Color and Tone (presets or up to eight document swatches; the result is
+  remapped into the palette, so it always honours it). The panel lists what was dropped or repaired in the model's
+  SVG. Generate Patterns adds Tile Size, a Layout and spacing for the pattern swatch, and a Seamless option that
+  repeats motifs crossing the tile edge and checks the edges. Generative Recolor (in Edit > Edit Colors > Recolor Artwork): describe a mood such as sunset over the
   ocean and pick one of the palettes to recolour the selection.
 - Generative Shape Fill (Object > Generative > Shape Fill), Generate Patterns (Object > Pattern), Retype
   (Type > Retype), Text to Vector Graphic and Generative Recolor run on that same model; formpth calls no other service. When no model is set, their panels say so

@@ -3,7 +3,8 @@ import { findNode, inDocOrder, nodeLabel, updateNodes } from '../engine/doc';
 import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES, widthProfileNamed } from '../engine/effects';
 import { customProfileNames, saveWidthProfile } from '../io/width-profiles';
 import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
-import { LIGHT_LIMIT, LIGHTING_PRESETS, lightsToParam, ROTATION_PRESETS } from '../engine/threed';
+import { LIGHT_LIMIT, LIGHTING_PRESETS, lightsToParam, ROTATION_PRESETS, SURFACE_CHOICES, surfaceSpecs, surfacesToParam, type SurfSpec } from '../engine/threed';
+import { modelSiblings } from '../io/model';
 import { textureAverage, textureName } from '../engine/texture';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, fitRowsToPalette, mapFn, nearestFn, oklab, RECOLOR, recolorDoc, reduceRows, rowReference, rowsFn } from '../engine/ops/recolor';
@@ -39,7 +40,9 @@ import type { BrushDef, Doc, PerspPlane } from '../engine/types';
 import { DXF_UNITS, type DxfImportOptions, type DxfUnit } from '../io/dxf';
 import type { CadChoice } from '../ui/app-dialogs';
 import { compressionFrom, pdfRefusal, securityFrom, standardFrom, type PdfCompression, type PdfSecurity, type PdfStandard } from '../io/pdf-std';
-import { generativePalettes, modelState, PATTERN_PRESETS, patternVariations, placeVector, recolorWithPalette, shapeFillVariations, textToVectorVariations } from '../io/generative';
+import { artParts, generativePalettes, modelState, PATTERN_PRESETS, patternVariations, placeVector, recolorWithPalette, shapeFillVariations, textToVectorVariations, type GenCommon, type PatternLayout, type Variation as GenVariation } from '../io/generative';
+import { detailLevel, EFFECT_NAMES, STYLE_IDS, styleReference, TONE_IDS } from '../io/gen-options';
+import { reportLines } from '../io/gen-repair';
 import { loadPrefs } from '../ui/prefs';
 import { colorManaged, colorSettled, INTENTS, isProofing, proofDevice, refOf, refreshDisplayProfile, refreshProfiles, resolveSettings, setProofing, type ProfileInfo } from '../engine/color-management';
 import { applySettings, convertToProfile, findProfile, settingsPatch } from '../io/color-ops';
@@ -55,7 +58,7 @@ export interface AgentDeps {
   placeLinked?(path: string, at: Pt | null, width: number | null): Promise<string | null>;
   links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
   projectBlob(): Promise<Blob | null>;
-  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
+  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
   image(scope: string, artboard: number | undefined, maxSize: number, outline: boolean): Promise<Blob | null>;
   svg(scope: string, artboard: number | undefined, ids: string[] | undefined): Promise<string>;
   outlines(ids?: string[]): Promise<boolean>;
@@ -488,31 +491,59 @@ export class AgentBridge {
     const d = n.kind === 'path' ? n.d : n.children.flatMap((c) => c.d);
     if (!d.some((s) => s.closed)) return fail('The path is open: Generative Shape Fill fills closed shapes.');
     const fillC = n.ap.items.find((i) => i.kind === 'fill' && i.paint.type === 'color');
-    const detail = { low: 1, medium: 2, high: 3 }[str('detail', 'medium')] ?? 2;
-    const res = await shapeFillVariations({ d, rule: n.rule, color: fillC && fillC.paint.type === 'color' ? fillC.paint.color : null }, { prompt: str('prompt'), strength: num('shape_strength', 50), detail, variations: Math.round(num('variations', 1)) });
+    const common = await this.genCommon(a, st.vision);
+    if (typeof common === 'string') return fail(common);
+    const res = await shapeFillVariations({ d, rule: n.rule, color: fillC && fillC.paint.type === 'color' ? fillC.paint.color : null }, { ...common, prompt: str('prompt'), strength: num('shape_strength', 50), detail: common.detail ?? 5, variations: Math.round(num('variations', 1)) });
     const ok = res.map((r, i) => (r.art ? i : -1)).filter((i) => i >= 0);
     if (!ok.length) return fail(`The model gave no usable art: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
     const pick = has('pick') && ok.includes(Math.round(num('pick', 0))) ? Math.round(num('pick', 0)) : ok[0];
     const art = res[pick].art as VNode;
-    const id = e.replaceWithClip(n.id, art.kind === 'group' && !art.clip ? art.children : [art], 'Generative Shape Fill', 'Generative Shape Fill');
+    const id = e.replaceWithClip(n.id, artParts(art), 'Generative Shape Fill', 'Generative Shape Fill');
     if (!id) return fail('Could not place the art.');
-    return text(`Filled ${n.id} with variation ${pick} of ${res.length} (${st.model}); the art is a clipping group ${id} whose last child is the original shape. get_image shows it.`, { id, shape: n.id, variations: res.map((r, i) => ({ index: i, ok: !!r.art, error: r.error })), picked: pick });
+    const rep = reportLines(res[pick].report ?? { dropped: [], fixed: [], notes: [] });
+    return text(`Filled ${n.id} with variation ${pick} of ${res.length} (${st.model}); the art is a clipping group ${id} whose last child is the original shape.${rep.length ? ` Repairs: ${rep.join('; ')}.` : ''} get_image shows it.`, { id, shape: n.id, variations: this.genRows(res), picked: pick, report: rep });
   }
 
-  private async textToVectorTool(num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
+  private genRows(res: GenVariation[]): Array<{ index: number; ok: boolean; error: string | null; report: string[] }> {
+    return res.map((r, i) => ({ index: i, ok: !!r.art, error: r.error, report: r.report ? reportLines(r.report) : [] }));
+  }
+
+  private async genCommon(a: Record<string, unknown>, vision: boolean): Promise<GenCommon | string> {
+    const style = typeof a.style_preset === 'string' && a.style_preset ? a.style_preset : 'auto';
+    if (style !== 'auto' && !STYLE_IDS.includes(style)) return `style_preset is one of ${STYLE_IDS.join(', ')}.`;
+    const fx = Array.isArray(a.effects) ? a.effects.map((x) => String(x)) : [];
+    const badFx = fx.find((x) => !EFFECT_NAMES.includes(x));
+    if (badFx) return `effects are ${EFFECT_NAMES.join(', ')}; "${badFx}" is not one.`;
+    const tone = typeof a.color_tone === 'string' && a.color_tone ? a.color_tone : 'auto';
+    if (tone !== 'auto' && tone !== 'reference' && !TONE_IDS.includes(tone)) return `color_tone is one of ${TONE_IDS.join(', ')}, reference.`;
+    const palette: Color[] = [];
+    if (Array.isArray(a.palette)) for (const raw of a.palette.slice(0, 8)) { const c = parseColor(String(raw)); if (!c) return `palette colour "${String(raw)}" is not a colour.`; palette.push(c); }
+    let reference = null;
+    if (typeof a.style_reference === 'string' && a.style_reference) {
+      const p = this.engine.current;
+      if (!p) return 'No document is open.';
+      try { reference = await styleReference(p, [this.node(a.style_reference)], vision); } catch (err) { return err instanceof Error ? err.message : String(err); }
+    }
+    if (tone === 'reference' && !reference) return 'color_tone reference needs style_reference.';
+    return { detail: detailLevel(a.detail, 5), style, reference, effects: fx, tone, ...(palette.length ? { palette } : {}) };
+  }
+
+  private async textToVectorTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
     if (!loadPrefs().showGenerative) return fail('Generative features are hidden: turn on View > Generative Features first.');
     const e = this.engine, st = await modelState();
     if (!st.ready) return fail(st.message);
     const type = str('type', 'subject');
     if (!['subject', 'scene', 'icon', 'pattern'].includes(type)) return fail('type is subject, scene, icon or pattern.');
-    const detail = { low: 1, medium: 2, high: 3 }[str('detail', 'medium')] ?? 2;
-    const res = await textToVectorVariations({ prompt: str('prompt'), type, detail, variations: Math.round(num('variations', 1)) });
+    const common = await this.genCommon(a, st.vision);
+    if (typeof common === 'string') return fail(common);
+    const res = await textToVectorVariations({ ...common, prompt: str('prompt'), type, detail: common.detail ?? 5, variations: Math.round(num('variations', 1)) });
     const ok = res.map((r, i) => (r.art ? i : -1)).filter((i) => i >= 0);
     if (!ok.length) return fail(`The model gave no usable art: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
     const pick = has('pick') && ok.includes(Math.round(num('pick', 0))) ? Math.round(num('pick', 0)) : ok[0];
     const id = placeVector(e, res[pick].art as VNode);
     if (!id) return fail('Could not place the art.');
-    return text(`Placed variation ${pick} of ${res.length} (${st.model}) as group ${id}, fitted to the selection or the artboard; every path is editable. get_image shows it.`, { id, variations: res.map((r, i) => ({ index: i, ok: !!r.art, error: r.error })), picked: pick });
+    const rep = reportLines(res[pick].report ?? { dropped: [], fixed: [], notes: [] });
+    return text(`Placed variation ${pick} of ${res.length} (${st.model}) as group ${id}, fitted to the selection or the artboard; every path is editable.${rep.length ? ` Repairs: ${rep.join('; ')}.` : ''} get_image shows it.`, { id, variations: this.genRows(res), picked: pick, report: rep });
   }
 
   private async generativeRecolorTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
@@ -592,14 +623,20 @@ export class AgentBridge {
       if (p === 'document') colors = (e.doc?.swatches ?? []).flatMap((s) => (s.paint.type === 'color' && !s.name.startsWith('[') ? [s.paint.color] : [])).slice(0, 12);
       else { const hit = PATTERN_PRESETS.find(([id]) => id === p); if (!hit) return fail(`preset is one of ${PATTERN_PRESETS.map(([id]) => id).join(', ')}, document.`); colors = hit[2].map((h) => parseColor(h)).filter((c): c is Color => !!c); }
     }
-    const res = await patternVariations({ prompt: str('prompt'), colors, density: num('density', 3), variations: Math.round(num('variations', 2)), tile: num('tile_size', 96) });
+    const common = await this.genCommon(a, st.vision);
+    if (typeof common === 'string') return fail(common);
+    const layouts: Record<string, PatternLayout> = { grid: 'grid', brick_by_row: 'brick_row', brick_by_column: 'brick_col', hex_by_column: 'hex_col', hex_by_row: 'hex_row' };
+    const layout = layouts[str('layout', 'grid')];
+    if (!layout) return fail(`layout is one of ${Object.keys(layouts).join(', ')}.`);
+    const res = await patternVariations({ ...common, prompt: str('prompt'), colors, detail: common.detail ?? 4, density: num('density', 3), variations: Math.round(num('variations', 2)), tile: num('tile_size', 96), seamless: a.seamless !== false, layout, hs: num('h_spacing', 0), vs: num('v_spacing', 0), project: e.current });
     const good = res.filter((r) => r.art);
     if (!good.length) return fail(`The model gave no usable tile: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
     const base = (str('name') || str('prompt') || 'Generated Pattern').replace(/\s+/g, ' ').slice(0, 32);
     const fillIds = a.fill_selection === true ? (this.ids(a) ?? e.selectedIds()) : [];
-    const ids = e.addPatternSwatches(good.map((r, i) => ({ name: `${base} ${i + 1}`, tile: r.tile, art: r.art as VNode })), fillIds);
+    const ids = e.addPatternSwatches(good.map((r, i) => ({ name: `${base} ${i + 1}`, tile: r.tile, art: r.art as VNode, type: r.layout?.type, hs: r.layout?.hs, vs: r.layout?.vs })), fillIds);
     const defs = (e.doc?.patterns ?? []).filter((p) => ids.includes(p.id));
-    return text(`Saved ${ids.length} pattern swatch${ids.length === 1 ? '' : 'es'}: ${defs.map((p) => p.name).join(', ')}${fillIds.length ? '; filled the selection with the first' : ''}. Paint with set_paint using the swatch name.`, { patterns: defs.map((p) => ({ id: p.id, name: p.name })), errors: res.map((r) => r.error).filter(Boolean) });
+    const rep = good.flatMap((r) => (r.report ? reportLines(r.report) : []));
+    return text(`Saved ${ids.length} pattern swatch${ids.length === 1 ? '' : 'es'}: ${defs.map((p) => p.name).join(', ')}${fillIds.length ? '; filled the selection with the first' : ''}. Paint with set_paint using the swatch name.${rep.length ? ` Notes: ${[...new Set(rep)].join('; ')}.` : ''}`, { patterns: defs.map((p) => ({ id: p.id, name: p.name })), errors: res.map((r) => r.error).filter(Boolean), variations: res.map((r, i) => ({ index: i, ok: !!r.art, error: r.error, report: r.report ? reportLines(r.report) : [], seam: r.seam ?? null })) });
   }
 
   private async retypeTool(a: Record<string, unknown>, num: (k: string, d: number) => number, str: (k: string, d?: string) => string, has: (k: string) => boolean): Promise<McpResult> {
@@ -628,6 +665,17 @@ export class AgentBridge {
     return id ? text(`Set "${r.text}" as live ${m.family} ${m.style} (id ${id}).`, { id, family: m.family, style: m.style, matches: list }) : fail('Could not place the text.');
   }
 
+  /** Files that travel with a 3D model (its .mtl, .bin and textures), read from the same folder by the engine service. */
+  private siblings(file: File, a: Record<string, unknown>): void {
+    if (!Array.isArray(a.parts) || !/\.(obj|glb|gltf)$/i.test(file.name)) return;
+    const out: File[] = [];
+    for (const q of a.parts as Array<Record<string, unknown>>) {
+      if (!q || typeof q.name !== 'string' || typeof q.data !== 'string') continue;
+      out.push(new File([Uint8Array.from(atob(q.data), (c) => c.charCodeAt(0))], q.name));
+    }
+    if (out.length) modelSiblings.set(file, out);
+  }
+
   private dxfArgs(a: Record<string, unknown>, place: boolean): Partial<DxfImportOptions> {
     const u = typeof a.units === 'string' && DXF_UNITS.some(([x]) => x === a.units) ? a.units as DxfUnit : undefined;
     return { units: u, scale: typeof a.drawing_scale === 'number' && a.drawing_scale > 0 ? a.drawing_scale : undefined, layout: typeof a.layout === 'string' ? a.layout : undefined, merge: typeof a.merge_layers === 'boolean' ? a.merge_layers : place, fit: a.fit_artboard === true ? 'artboard' : undefined };
@@ -649,6 +697,7 @@ export class AgentBridge {
       }
       if (name === '__open') {
         const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
+        this.siblings(file, a);
         await this.deps.openFile(file, this.dxfArgs(a, false), typeof a.password === 'string' ? a.password : undefined);
         const q = e.current;
         return q ? text(`Opened ${file.name} as ${q.name}: ${q.doc.artboards.length} artboard(s), ${q.doc.layers.length} layer(s).`, { name: q.name }) : fail(`Could not open ${file.name}.`);
@@ -687,7 +736,7 @@ export class AgentBridge {
         case 'variables': return await this.variablesTool(a, num, str, has);
         case 'generative_shape_fill': return await this.shapeFillTool(a, num, str, has);
         case 'generate_patterns': return await this.patternsTool(a, num, str, has);
-        case 'text_to_vector': return await this.textToVectorTool(num, str, has);
+        case 'text_to_vector': return await this.textToVectorTool(a, num, str, has);
         case 'generative_recolor': return await this.generativeRecolorTool(a, num, str, has);
         case 'retype': return await this.retypeTool(a, num, str, has);
         case 'list_color_profiles': case 'set_color_settings': case 'convert_to_profile': case 'proof_colors': return await this.colorTool(name, a, str, has);
@@ -705,14 +754,16 @@ export class AgentBridge {
             return id ? text(`Placed ${str('name')} linked to ${str('path')} (id ${id}); the links tool reports when the file changes.`, { id, linked: true }) : fail(`Could not place ${str('name')}.`);
           }
           const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
+          this.siblings(file, a);
           const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null, this.dxfArgs(a, true));
           return id ? text(`Placed ${file.name} (id ${id}).`, { id }) : fail(`Could not place ${file.name}.`);
         }
         case '__project': { const blob = await this.deps.projectBlob(); return blob ? text('Packed the project.', { data: await b64(blob) }) : fail('Could not pack the project: is the engine running (./formpth boot)?'); }
         case '__export': {
-          const fmt = str('format') as 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf';
+          const fmt = str('format') as 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg';
           const units = str('units', 'mm') as DxfUnit;
-          if (fmt === 'dxf' && !DXF_UNITS.some(([u]) => u === units)) return fail(`units must be one of ${DXF_UNITS.map(([u]) => u).join(', ')}.`);
+          if (fmt === 'dwg' && str('dxf_version', '2000') === 'R12') return fail('DWG is written as AutoCAD 2000 only; dxf_version R12 applies to .dxf.');
+          if ((fmt === 'dxf' || fmt === 'dwg') && !DXF_UNITS.some(([u]) => u === units)) return fail(`units must be one of ${DXF_UNITS.map(([u]) => u).join(', ')}.`);
           const cad: CadChoice = { version: str('dxf_version', '2000') === 'R12' ? 'R12' : '2000', units, scale: Math.max(1e-4, num('drawing_scale', 1)), text: a.outline_text === true ? 'outlines' : 'text', lineweights: a.scale_lineweights === true };
           const pdfOnly = fmt === 'pdf', standard = pdfOnly ? standardFrom(a.pdf_standard) : 'none', security = pdfOnly ? securityFrom(a) : undefined, layers = pdfOnly && a.pdf_layers === true;
           if (pdfOnly) { const refusal = pdfRefusal({ standard, security, layers }); if (refusal) return fail(refusal); }
@@ -1175,6 +1226,26 @@ export class AgentBridge {
           const targets = e.targetIds(ids), before = targets.map((id) => e.nodeById(id)).filter((n): n is VNode => !!n && n.ap.effects.some((x) => x.id.startsWith('3d.')));
           if (!targets.length) return fail('Select objects or pass ids.');
           if (!kind && !before.length) return fail('Pass kind (extrude, revolve, inflate or plane) to give the objects depth.');
+          if (has('surface') && str('surface').toLowerCase() !== 'all') {
+            const sid = str('surface').toLowerCase(), cur0 = before[0]?.ap.effects.find((x) => x.id.startsWith('3d.')), fid = kind ?? cur0?.id ?? '';
+            const choices = SURFACE_CHOICES[fid] ?? [], valid = fid === '3d.model' ? /^g\d+$/.test(sid) : choices.some(([k]) => k === sid);
+            if (!valid) return fail(fid === '3d.model' ? 'surface is a material group of the model: g0, g1 and so on in the order the file lists them (get_object shows the effect), or all.' : choices.length ? `surface is one of ${choices.map(([k]) => k).join(', ')} for this kind, or all.` : 'This kind has one surface: leave surface out.');
+            if (fid === '3d.model' && (has('texture') || has('texture_scale') || has('texture_rotation') || has('texture_offset_x') || has('texture_offset_y'))) return fail('A model surface takes material, color, roughness and metallic; its pictures come from the file.');
+            const all = surfaceSpecs(cur0?.params ?? {}) ?? {}, spec: Record<string, string | number> = { ...(all[sid] ?? {}) };
+            if (has('color')) { const c = typeof a.color === 'string' ? a.color.trim() : ''; if (!c) delete spec.color; else { const pc = this.paint(a.color, 'color'); if (pc.type !== 'color') return fail('color is a colour such as #c0392b, or empty to clear it.'); spec.color = hex(pc.color); } }
+            if (a.reset_surface === true) { delete all[sid]; for (const k of ['material', 'texture', 'texture_color', 'texture_scale', 'texture_rotation', 'texture_offset_x', 'texture_offset_y', 'roughness', 'metallic']) delete patch[k]; }
+            else {
+              for (const k of ['material', 'texture', 'texture_color', 'texture_scale', 'texture_rotation', 'texture_offset_x', 'texture_offset_y', 'roughness', 'metallic']) {
+                if (!(k in patch)) continue;
+                const v = patch[k];
+                if (typeof v === 'boolean' || (v === '' && k !== 'texture')) delete spec[k]; else spec[k] = v;
+                delete patch[k];
+              }
+              if (!spec.texture) delete spec.texture_color;
+              if (Object.keys(spec).length) all[sid] = spec as SurfSpec; else delete all[sid];
+            }
+            patch.surfaces = surfacesToParam(all);
+          }
           const ok = e.set3d(kind, patch, ids), n = e.nodeById(targets[0]), fx = n?.ap.effects.find((x) => x.id.startsWith('3d.'));
           return ok && fx ? text(`${effectDef(fx.id)?.label ?? '3D'}: ${Object.entries(fx.params).filter(([k, v]) => v !== '' && k !== 'texture_color').map(([k, v]) => `${k} ${k === 'map_symbol' ? e.doc?.symbols.find((s) => s.id === v)?.name ?? v : k === 'texture' && e.current ? textureName(e.current, String(v)) : v}`).join(', ')}. get_image shows it; expand makes it plain paths.`) : fail('Nothing changed.');
         }

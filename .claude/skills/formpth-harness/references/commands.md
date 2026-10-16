@@ -152,7 +152,8 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `collect-single` (File > Export > Collect for Export as Single Asset): Collect for Export as Single Asset, as in File > Export > Collect for Export as Single Asset.
 - `document-setup` (File > Document Setup): Opens the document settings for units, bleed and colour mode. Use when changing the basic properties of the document.
 - `download-project` (File > Download Project (.fpth)): Downloads the document as an editable .fpth file. Use when moving the project to another computer.
-- `export-as` (File > Export > Export As): Opens the Export dialog with artboard range, scope and format. Use when saving the artwork as SVG, PDF, EPS, DXF or a raster image.
+- `export-as` (File > Export > Export As): Opens the Export dialog with artboard range, scope and format. Use when saving the artwork as SVG, PDF, EPS, DXF, DWG or a raster image.
+- `export-dwg` (File > Export > AutoCAD Drawing (DWG)): Exports the artwork as an AutoCAD 2000 DWG drawing. Use when a CAD program or a plotter wants a native DWG file.
 - `export-dxf` (File > Export > AutoCAD Interchange (DXF)): Exports the artwork as an AutoCAD DXF drawing. Use when handing outlines to CAD or cutting software.
 - `export-eps` (File > Export > EPS): Exports the artwork as an EPS file. Use when a print workflow asks for EPS.
 - `export-jpg` (File > Export > JPEG): Exports the artwork as a JPEG image. Use when a small photographic raster file is needed.
@@ -357,6 +358,7 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `default-fill-stroke` (Default Fill and Stroke): Default Fill and Stroke, from a panel menu or shortcut.
 - `draw-mode` (Cycle Drawing Modes): Cycle Drawing Modes, from a panel menu or shortcut.
 - `exit-isolation` (Exit Isolation Mode): Exit Isolation Mode, from a panel menu or shortcut.
+- `fx-3d.model` (Model): Model, from a panel menu or shortcut.
 - `graph-size` (Graph Size): Graph Size, from a panel menu or shortcut.
 - `link-goto` (Go To Link): Go To Link, from a panel menu or shortcut.
 - `link-previews` (Save Previews of Linked Images): Save Previews of Linked Images, from a panel menu or shortcut.

@@ -1,12 +1,12 @@
-import type { Color, Engine, Project, Rect, VNode } from '../../engine';
+import type { Engine, Project, Rect, VNode } from '../../engine';
 import { geomBounds } from '../../engine/bounds';
-import { collectColors } from '../../engine/ops/recolor';
-import { hex, parseColor } from '../../engine/paint';
-import { clipToShape, DENSITY, modelState, PATTERN_PRESETS, patternVariations, shapeFillVariations, type ModelState, type PatternVariation, type Variation } from '../../io/generative';
+import { clipToShape, artParts, modelState, PATTERN_LAYOUTS, patternVariations, shapeFillVariations, strengthMode, type ModelState, type PatternLayout, type PatternVariation, type Variation } from '../../io/generative';
+import { reportText } from '../../io/gen-repair';
+import { GenOptionsUi } from './gen-options';
 import { rankFonts, recognize, retypeNode, sourceFromImage, sourceFromOutlines, type FontMatch, type RetypeSource } from '../../io/retype';
 import { api } from '../../io/api';
 import { renderRegion } from '../../io/raster';
-import { el, patchList, q, setClass, setDisabled, setHidden, setStyleVar, setText } from '../dom';
+import { el, patchList, q, setClass, setDisabled, setHidden, setText } from '../dom';
 import { check, page, row, section, seg, selectCtl, slider } from './kit';
 
 export async function paintPreview(cv: HTMLCanvasElement, p: Project, node: VNode, tile: Rect | null = null): Promise<void> {
@@ -69,12 +69,14 @@ export class ShapeFillPanel extends ModelPanel {
   private readonly target = el('<p class="cv-genp-target"></p>');
   private readonly prompt = textArea('Prompt', 'Optional: describe the art, such as tropical leaves and birds');
   private readonly strength;
-  private readonly detail;
+  private readonly strengthNote = el('<p class="cv-genp-target"></p>');
+  private readonly opts;
+  private readonly report = el('<p class="cv-genp-note" role="status"></p>');
   private readonly count;
   private readonly go = el<HTMLButtonElement>('<button class="cv-btn cv-btn-primary" type="button">Generate</button>');
   private readonly apply = el<HTMLButtonElement>('<button class="cv-btn" type="button">Apply</button>');
   private readonly grid;
-  private o = { strength: 50, detail: 2, variations: 3 };
+  private o = { strength: 50, variations: 3 };
   private results: Variation[] = [];
   private picked = -1;
   private busy = false;
@@ -84,17 +86,17 @@ export class ShapeFillPanel extends ModelPanel {
 
   constructor(engine: Engine) {
     super(engine);
-    this.strength = slider(engine, 'Shape Strength', 0, 100, (v) => { this.o.strength = Math.round(v); this.strength.set(this.o.strength); });
-    this.detail = seg([{ id: '1', label: 'Low' }, { id: '2', label: 'Medium' }, { id: '3', label: 'High' }], (id) => { this.o.detail = Number(id); this.detail.set(id); }, 'cv-seg-small');
+    this.strength = slider(engine, 'Shape Strength', 0, 100, (v) => { this.o.strength = Math.round(v); this.strength.set(this.o.strength); this.queue(); });
+    this.opts = new GenOptionsUi(engine, () => this.state.vision, () => this.queue(), 5);
     this.count = seg([{ id: '1', label: '1' }, { id: '2', label: '2' }, { id: '3', label: '3' }], (id) => { this.o.variations = Number(id); this.count.set(id); }, 'cv-seg-small');
     this.grid = tiles(3, 'cv-genp-grid-3');
     this.grid.items.forEach((t, i) => t.b.addEventListener('click', () => { this.picked = i; this.sync(); }));
     this.go.addEventListener('click', () => void this.generate());
     this.apply.addEventListener('click', () => this.applyPicked());
-    const detailRow = el('<div class="cv-genp-field"><span class="cv-pf-label">Detail</span></div>'), countRow = el('<div class="cv-genp-field"><span class="cv-pf-label">Variations</span></div>');
-    detailRow.appendChild(this.detail.el); countRow.appendChild(this.count.el);
-    this.body.append(this.status, this.target, this.prompt, this.strength.el, detailRow, countRow, row(this.go, this.apply), section('Variations'), this.grid.grid);
-    this.strength.set(this.o.strength); this.detail.set('2'); this.count.set('3');
+    const countRow = el('<div class="cv-genp-field"><span class="cv-pf-label">Variations</span></div>');
+    countRow.appendChild(this.count.el);
+    this.body.append(this.status, this.target, this.prompt, this.strength.el, this.strengthNote, this.opts.el, countRow, row(this.go, this.apply), this.report, section('Variations'), this.grid.grid);
+    this.strength.set(this.o.strength); this.count.set('3');
     for (const k of ['selection', 'doc', 'active'] as const) engine.on(k, () => this.queue());
     this.body.addEventListener('pointerenter', () => void this.refresh());
     void this.refresh(true);
@@ -114,7 +116,7 @@ export class ShapeFillPanel extends ModelPanel {
     const d = n.kind === 'path' ? n.d : n.kind === 'compound' ? n.children.flatMap((c) => c.d) : [];
     const fill = n.ap.items.find((i) => i.kind === 'fill' && i.paint.type === 'color');
     try {
-      this.results = await shapeFillVariations({ d, rule: n.kind === 'path' || n.kind === 'compound' ? n.rule : 'nonzero', color: fill && fill.paint.type === 'color' ? fill.paint.color : null }, { prompt: this.prompt.value, strength: this.o.strength, detail: this.o.detail, variations: this.o.variations });
+      this.results = await shapeFillVariations({ d, rule: n.kind === 'path' || n.kind === 'compound' ? n.rule : 'nonzero', color: fill && fill.paint.type === 'color' ? fill.paint.color : null }, { ...this.opts.values(), prompt: this.prompt.value, strength: this.o.strength, detail: this.opts.values().detail ?? 5, variations: this.o.variations });
       const ok = this.results.filter((r) => r.art).length;
       this.picked = this.results.findIndex((r) => r.art);
       this.note = ok ? `${ok} variation${ok === 1 ? '' : 's'} ready. Pick one and Apply.` : `The model gave no usable art: ${this.results.find((r) => r.error)?.error ?? 'unknown error'}`;
@@ -127,7 +129,7 @@ export class ShapeFillPanel extends ModelPanel {
   private applyPicked(): void {
     const r = this.results[this.picked];
     if (!r?.art || !this.targetId) return;
-    const art = r.art.kind === 'group' && !r.art.clip ? r.art.children : [r.art];
+    const art = artParts(r.art);
     const id = this.engine.replaceWithClip(this.targetId, art, 'Generative Shape Fill', 'Generative Shape Fill');
     this.note = id ? 'Applied: the art is clipped to the shape and every path stays editable. Release the clipping mask to edit the shape.' : 'The shape is gone; select a shape and generate again.';
     if (id) { this.results = []; this.picked = -1; this.targetId = null; for (const t of this.grid.items) { const g = t.cv.getContext('2d'); g?.clearRect(0, 0, t.cv.width, t.cv.height); } }
@@ -143,24 +145,30 @@ export class ShapeFillPanel extends ModelPanel {
     setClass(this.go, 'is-busy', this.busy);
     setDisabled(this.apply, this.busy || !this.results[this.picked]?.art);
     this.grid.items.forEach((t, i) => { const r = this.results[i]; setDisabled(t.b, !r?.art); setClass(t.b, 'is-picked', i === this.picked); setClass(t.b, 'is-busy', this.busy && i < this.o.variations); setText(t.note, r?.error ? 'No art' : ''); setHidden(t.b, i >= Math.max(this.o.variations, this.results.length)); });
+    setText(this.strengthNote, `${strengthMode(this.o.strength)}: ${this.o.strength >= 67 ? 'the model fits the silhouette and the art is then clipped to the shape.' : this.o.strength >= 34 ? 'the model follows the outline loosely and the art is clipped.' : 'the model composes freely and the shape only crops it.'}`);
+    const pr = this.results[this.picked];
+    setText(this.report, pr?.report ? (reportText(pr.report) || 'The SVG needed no repairs.') : this.results.find((r) => r.error)?.error ?? '');
+    this.opts.sync();
   }
 }
 
-type PaletteMode = string;
 export class PatternGenPanel extends ModelPanel {
   readonly body = page('cv-genp cv-patgenp');
   private readonly prompt = textArea('Prompt', 'Describe the pattern, such as lemons and leaves on blue');
-  private readonly preset;
-  private readonly custom = el<HTMLInputElement>('<input class="cv-input cv-genp-colors" type="text" spellcheck="false" aria-label="Colours" placeholder="#1d3557, #e63946, #f1faee">');
-  private readonly chips = el('<div class="cv-genp-chips" aria-hidden="true"></div>');
+  private readonly opts;
   private readonly density;
+  private readonly tileSize;
+  private readonly layout;
+  private readonly hSpace;
+  private readonly vSpace;
+  private readonly seamless;
+  private readonly report = el('<p class="cv-genp-note" role="status"></p>');
   private readonly count;
   private readonly fillSel;
   private readonly go = el<HTMLButtonElement>('<button class="cv-btn cv-btn-primary" type="button">Generate</button>');
   private readonly save = el<HTMLButtonElement>('<button class="cv-btn" type="button">Save to Swatches</button>');
   private readonly grid;
-  private mode: PaletteMode = 'any';
-  private o = { density: 3, variations: 4, fill: false };
+  private o = { density: 3, variations: 4, fill: false, tile: 96, layout: 'grid' as PatternLayout, hs: 0, vs: 0, seamless: true };
   private results: PatternVariation[] = [];
   private picked = new Set<number>();
   private busy = false;
@@ -169,35 +177,29 @@ export class PatternGenPanel extends ModelPanel {
 
   constructor(engine: Engine) {
     super(engine);
-    this.preset = selectCtl('Colors', [...PATTERN_PRESETS.map(([id, label]) => [id, label] as const), ['document', 'Document swatches'], ['selection', 'Colours of the selection'], ['custom', 'Custom (up to 12)']], (id) => { this.mode = id; this.sync(); });
+    this.opts = new GenOptionsUi(engine, () => this.state.vision, () => this.queue(), 4);
     this.density = slider(engine, 'Density', 1, 5, (v) => { this.o.density = Math.round(v); this.density.set(this.o.density); });
+    this.tileSize = slider(engine, 'Tile Size', 24, 400, (v) => { this.o.tile = Math.round(v); this.tileSize.set(this.o.tile); }, { unit: 'pt' });
+    this.layout = selectCtl('Layout', PATTERN_LAYOUTS, (id) => { this.o.layout = id as PatternLayout; this.layout.set(id); });
+    this.hSpace = slider(engine, 'H Spacing', -50, 100, (v) => { this.o.hs = Math.round(v); this.hSpace.set(this.o.hs); }, { unit: 'pt' });
+    this.vSpace = slider(engine, 'V Spacing', -50, 100, (v) => { this.o.vs = Math.round(v); this.vSpace.set(this.o.vs); }, { unit: 'pt' });
+    this.seamless = check('Seamless: repeat art that crosses the tile edge', (v) => { this.o.seamless = v; });
     this.count = seg([{ id: '1', label: '1' }, { id: '2', label: '2' }, { id: '3', label: '3' }, { id: '4', label: '4' }], (id) => { this.o.variations = Number(id); this.count.set(id); }, 'cv-seg-small');
     this.fillSel = check('Fill the selection with the first', (v) => { this.o.fill = v; });
-    for (let i = 0; i < 12; i++) this.chips.appendChild(el('<span class="cv-genp-chip"></span>'));
-    this.custom.addEventListener('keydown', (e) => e.stopPropagation());
-    this.custom.addEventListener('input', () => this.sync());
     this.grid = tiles(4, 'cv-genp-grid-4');
     this.grid.items.forEach((t, i) => t.b.addEventListener('click', () => { if (this.picked.has(i)) this.picked.delete(i); else this.picked.add(i); this.sync(); }));
     this.go.addEventListener('click', () => void this.generate());
     this.save.addEventListener('click', () => this.saveSwatches());
     const countRow = el('<div class="cv-genp-field"><span class="cv-pf-label">Variations</span></div>');
     countRow.appendChild(this.count.el);
-    this.body.append(this.status, this.prompt, row(this.preset.el), this.custom, this.chips, this.density.el, countRow, row(this.fillSel.el), row(this.go, this.save), section('Variations'), this.grid.grid);
-    this.preset.set('any'); this.density.set(3); this.count.set('4'); this.fillSel.set(false);
+    this.body.append(this.status, this.prompt, this.opts.el, this.density.el, section('Pattern options'), this.tileSize.el, this.layout.el, this.hSpace.el, this.vSpace.el, row(this.seamless.el), countRow, row(this.fillSel.el), row(this.go, this.save), this.report, section('Variations'), this.grid.grid);
+    this.density.set(3); this.tileSize.set(96); this.layout.set('grid'); this.hSpace.set(0); this.vSpace.set(0); this.seamless.set(true); this.count.set('4'); this.fillSel.set(false);
     for (const k of ['selection', 'doc', 'active'] as const) engine.on(k, () => this.queue());
     this.body.addEventListener('pointerenter', () => void this.refresh());
     void this.refresh(true);
   }
 
   private queue(): void { if (this.frame) return; this.frame = requestAnimationFrame(() => { this.frame = 0; this.sync(); }); }
-
-  palette(): Color[] {
-    const doc = this.engine.doc;
-    if (this.mode === 'custom') return this.custom.value.split(/[\s,;]+/).map((s) => parseColor(s)).filter((c): c is Color => !!c).slice(0, 12);
-    if (this.mode === 'document') return (doc?.swatches ?? []).flatMap((s) => (s.paint.type === 'color' && !s.name.startsWith('[') ? [s.paint.color] : [])).slice(0, 12);
-    if (this.mode === 'selection') return collectColors(this.engine.selected()).slice(0, 12);
-    return (PATTERN_PRESETS.find(([id]) => id === this.mode)?.[2] ?? []).map((h) => parseColor(h)).filter((c): c is Color => !!c);
-  }
 
   async generate(): Promise<void> {
     await this.refresh(true);
@@ -206,7 +208,7 @@ export class PatternGenPanel extends ModelPanel {
     this.busy = true; this.results = []; this.picked.clear(); this.note = `Asking ${this.state.model} for ${this.o.variations} pattern${this.o.variations === 1 ? '' : 's'}.`;
     this.sync();
     try {
-      this.results = await patternVariations({ prompt: this.prompt.value, colors: this.palette(), density: this.o.density, variations: this.o.variations });
+      this.results = await patternVariations({ ...this.opts.values(), prompt: this.prompt.value, colors: [], density: this.o.density, variations: this.o.variations, tile: this.o.tile, seamless: this.o.seamless, layout: this.o.layout, hs: this.o.hs, vs: this.o.vs, project: this.engine.current });
       this.results.forEach((r, i) => { if (r.art) this.picked.add(i); });
       const ok = this.picked.size;
       this.note = ok ? `${ok} pattern${ok === 1 ? '' : 's'} ready. Click a tile to leave it out, then Save to Swatches.` : `The model gave no usable tile: ${this.results.find((r) => r.error)?.error ?? 'unknown error'}`;
@@ -218,7 +220,7 @@ export class PatternGenPanel extends ModelPanel {
 
   private saveSwatches(): void {
     const base = (this.prompt.value.trim() || 'Generated Pattern').replace(/\s+/g, ' ').slice(0, 32);
-    const list = [...this.picked].sort().flatMap((i, k) => { const r = this.results[i]; return r?.art ? [{ name: `${base} ${k + 1}`, tile: r.tile, art: r.art }] : []; });
+    const list = [...this.picked].sort().flatMap((i, k) => { const r = this.results[i]; return r?.art ? [{ name: `${base} ${k + 1}`, tile: r.tile, art: r.art, type: r.layout?.type, hs: r.layout?.hs, vs: r.layout?.vs }] : []; });
     const fillIds = this.o.fill ? this.engine.selectedIds() : [];
     const ids = this.engine.addPatternSwatches(list, fillIds);
     this.note = ids.length ? `Saved ${ids.length} pattern swatch${ids.length === 1 ? '' : 'es'}${fillIds.length ? ' and filled the selection' : ''}. Double-click a pattern swatch to edit its tile.` : 'Nothing to save.';
@@ -229,14 +231,13 @@ export class PatternGenPanel extends ModelPanel {
   protected sync(): void {
     setText(this.status, this.note || this.state.message);
     setClass(this.status, 'is-warn', !this.state.ready);
-    this.preset.set(this.mode);
-    setHidden(this.custom, this.mode !== 'custom');
-    const pal = this.palette();
-    Array.from(this.chips.children).forEach((c, i) => { setStyleVar(c as HTMLElement, '--chip', pal[i] ? hex(pal[i]) : 'transparent'); setClass(c as HTMLElement, 'is-empty', !pal[i]); });
+    this.opts.sync();
     setDisabled(this.go, this.busy || !this.state.ready);
     setClass(this.go, 'is-busy', this.busy);
     setDisabled(this.save, this.busy || ![...this.picked].some((i) => this.results[i]?.art));
     this.grid.items.forEach((t, i) => { const r = this.results[i]; setDisabled(t.b, !r?.art); setClass(t.b, 'is-picked', this.picked.has(i)); setClass(t.b, 'is-busy', this.busy && i < this.o.variations); setText(t.note, r?.error ? 'No tile' : ''); });
+    const last = [...this.picked].sort().map((i) => this.results[i]).find((r) => r?.report) ?? this.results.find((r) => r.report);
+    setText(this.report, last?.report ? (reportText(last.report) || 'The SVG needed no repairs.') : this.results.find((r) => r.error)?.error ?? '');
   }
 }
 

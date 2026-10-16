@@ -91,7 +91,7 @@ export class OpenDialog extends Dialog {
   private readonly list = el('<div class="cv-list" role="listbox" aria-label="Saved projects"></div>');
   private readonly empty = el('<div class="cv-list-empty" hidden>No saved projects yet.</div>');
   private readonly status = el('<p class="cv-note">Projects saved in the formpth library.</p>');
-  private readonly fileInput = el<HTMLInputElement>('<input type="file" accept=".fpth,.svg,.svgz,.pdf,.ai,.eps,.epsf,.ps,.dxf,.dwg,.png,.jpg,.jpeg,.webp,.gif" multiple hidden>');
+  private readonly fileInput = el<HTMLInputElement>('<input type="file" accept=".fpth,.svg,.svgz,.pdf,.ai,.eps,.epsf,.ps,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.gif" multiple hidden>');
   private readonly openBtn: HTMLButtonElement;
   private readonly deleteBtn: HTMLButtonElement;
   private items: LibraryItem[] = [];
@@ -101,7 +101,7 @@ export class OpenDialog extends Dialog {
     super('Open', 520);
     this.body.append(this.status, this.list, this.empty);
     const r = el(`<div class="cv-welcome-actions"><button class="cv-btn" type="button">${icon('upload', 14)}From disk (.fpth, .svg, .pdf, .ai, .eps, .dxf, images)</button></div>`);
-    this.body.append(r, el('<p class="cv-note">DWG drawings from R2000 to R2018 (except R2007) open directly. For other DWG versions, install a DWG converter or save the drawing as DXF in your CAD program.</p>'), this.fileInput);
+    this.body.append(r, el('<p class="cv-note">DWG drawings from R2000 to R2018 open directly. For other DWG versions, install a DWG converter or save the drawing as DXF in your CAD program.</p>'), this.fileInput);
     q(r, 'button').addEventListener('click', () => this.fileInput.click());
     this.deleteBtn = this.button('Delete', 'danger', () => void this.deleteSelected());
     this.button('Cancel', 'ghost', () => this.close());
@@ -379,7 +379,7 @@ export class AboutDialog extends Dialog {
   }
 }
 
-export type ExportFormat = 'svg' | 'pdf' | 'ai' | 'png' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf';
+export type ExportFormat = 'svg' | 'pdf' | 'ai' | 'png' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf' | 'dwg';
 export interface TiffExportChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface CadChoice { version: 'R12' | '2000'; units: DxfUnit; scale: number; text: 'text' | 'outlines'; lineweights: boolean }
 export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks; icc?: boolean }
@@ -402,7 +402,7 @@ export function parseArtboardRange(text: string, count: number, current: number)
 const PDF_TABS: ReadonlyArray<readonly [string, string]> = [['general', 'General'], ['marks', 'Marks and Bleeds'], ['compression', 'Compression'], ['security', 'Security']];
 
 export class ExportDialog extends Dialog {
-  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['ai', 'Illustrator (.ai)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['tiff', 'TIFF (.tiff)']]);
+  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['ai', 'Illustrator (.ai)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['dwg', 'AutoCAD Drawing (.dwg)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['tiff', 'TIFF (.tiff)']]);
   private readonly tiffCompression = selectOf([['none', 'None'], ['packbits', 'PackBits'], ['lzw', 'LZW'], ['deflate', 'Deflate']]);
   private readonly tiffColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
   private readonly embedIcc = el<HTMLInputElement>('<input type="checkbox" checked>');
@@ -569,7 +569,7 @@ export class ExportDialog extends Dialog {
 
   private sync(): void {
     const f = this.format.value, raster = f === 'png' || f === 'jpg' || f === 'webp' || f === 'tiff';
-    setHidden(this.rows.range, f === 'dxf' || this.scope.value !== 'artboard');
+    setHidden(this.rows.range, f === 'dxf' || f === 'dwg' || this.scope.value !== 'artboard');
     setHidden(this.rows.scale, !raster);
     setHidden(this.rows.quality, !(f === 'jpg' || f === 'webp'));
     setHidden(this.rows.transparent, !(f === 'png' || f === 'webp' || f === 'tiff'));
@@ -597,7 +597,7 @@ export class ExportDialog extends Dialog {
     setClass(this.note, 'is-warn', !!refusal);
     setHidden(this.rows.preserve, !(f === 'svg' || onTab('general') || f === 'eps'));
     setHidden(this.rows.epsColor, f !== 'eps');
-    for (const k of ['cadVersion', 'cadUnits', 'cadScale', 'cadText', 'cadWeights']) setHidden(this.rows[k], f !== 'dxf');
+    for (const k of ['cadVersion', 'cadUnits', 'cadScale', 'cadText', 'cadWeights']) setHidden(this.rows[k], f !== 'dxf' && !(f === 'dwg' && k !== 'cadVersion'));
   }
 
   private pdfSecurity(): PdfSecurity | undefined {
@@ -610,7 +610,7 @@ export class ExportDialog extends Dialog {
   private value(): ExportChoice {
     const f = this.format.value as ExportFormat;
     const cad: CadChoice = { version: this.cadVersion.value === 'R12' ? 'R12' : '2000', units: this.cadUnits.value as DxfUnit, scale: Math.max(1e-4, Number(this.cadScale.value) || 1), text: this.cadText.value === 'outlines' ? 'outlines' : 'text', lineweights: this.cadWeights.checked };
-    const list = this.scope.value === 'artboard' && f !== 'dxf' ? parseArtboardRange(this.range.value, this.count, this.artboard) : null;
+    const list = this.scope.value === 'artboard' && f !== 'dxf' && f !== 'dwg' ? parseArtboardRange(this.range.value, this.count, this.artboard) : null;
     const num = (i: HTMLInputElement): number => Math.max(0, Number(i.value) || 0);
     const scale = Number(this.scale.value) || 1;
     const tiff: TiffExportChoice = { compression: this.tiffCompression.value as TiffCompression, cmyk: this.tiffColor.value === 'cmyk', ppi: Math.round(72 * scale) };

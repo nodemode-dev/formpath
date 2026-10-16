@@ -19,11 +19,13 @@ import { exportPdf, readPdfNative } from './io/pdf';
 import { buildPrintPdf, printPdf } from './io/print';
 import { PrintDialog } from './ui/print-dialog';
 import { DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
+import { exportDwg } from './io/dwg-write';
 import { DwgUnsupportedError, parseDwg } from './io/dwg';
 import { exportEps, readEpsNative } from './io/eps';
 import { readEpsVector } from './io/ps-read';
 import { PdfPasswordError, readPdfVector } from './io/pdf-read';
 import { isLegacyAi, readAiLegacy } from './io/ai-legacy';
+import { importModel, MODEL_FILE, MODEL_PART } from './io/model';
 import { docFromManifest, serialize } from './io/project-io';
 import { bakeTraced, canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
@@ -349,6 +351,30 @@ export function startApp(): void {
 
   const imageKey = (blob: Blob): string => `img-${newId('').replace(/[^a-z0-9]/gi, '')}.${(blob.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg').replace(/[^a-z0-9]/g, '') || 'png'}`;
 
+  let modelParts: File[] = [], partsAt = 0;
+  const partsNow = (): File[] => (Date.now() - partsAt < 120000 ? modelParts : []);
+  const splitParts = (files: File[]): File[] => {
+    if (!files.some((f) => MODEL_FILE.test(f.name))) return files;
+    const own = files.filter((f) => MODEL_FILE.test(f.name) || !(MODEL_PART.test(f.name) || f.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(f.name)));
+    if (own.length !== files.length) { modelParts = files; partsAt = Date.now(); }
+    return own;
+  };
+  const modelNote = (m: Awaited<ReturnType<typeof importModel>>, verb: string): string => `${verb} ${m.name}: ${m.faces.toLocaleString('en-US')} triangles in ${m.mesh.groups.length} material group${m.mesh.groups.length === 1 ? '' : 's'}.${m.faces > 4000 ? ' The vector view shows up to 4,000 faces, ray tracing uses them all.' : ''}${m.notes.length ? ` Left out: ${m.notes.join('; ')}.` : ''}`;
+  async function openModel(f: File, parts: File[]): Promise<void> {
+    const m = await importModel(f, parts), s = 640;
+    const p = engine.newDocument(s, s, { title: m.name, units: 'px' });
+    engine.addModel(m.mesh, m.blob, m.key, m.textures, m.name, { x: s / 2, y: s / 2 }, 400);
+    p.history.markSaved();
+    toast(modelNote(m, 'Opened'));
+  }
+  async function placeModel(f: File, at: Pt | null, parts: File[], size: number | null = null): Promise<string | null> {
+    const p = engine.current;
+    if (!p) return null;
+    const m = await importModel(f, parts), v = p.viewport, id = engine.addModel(m.mesh, m.blob, m.key, m.textures, m.name, at ?? v.toDoc(v.centerX, v.height / 2), size && size > 0 ? size : 260);
+    toast(modelNote(m, 'Placed'));
+    return id || null;
+  }
+
   function adopt(doc: Doc, name: string, assets: Map<string, Blob>, libraryName: string | null = null): void {
     const p = engine.addProject(doc, name);
     for (const [k, b] of assets) p.assets.set(k, b);
@@ -441,11 +467,13 @@ export function startApp(): void {
   }
 
   async function openFiles(files: File[], dxf: Partial<DxfImportOptions> | null = null, password?: string): Promise<void> {
+    files = splitParts(files);
     await engine.task(async () => {
       for (const f of files) {
         try {
           const lower = f.name.toLowerCase();
           if (/\.(dxf|dwg|eps|epsf|ps)$/.test(lower)) { const r = await readForeign(f, dxf); if (r) { adopt(r.doc, r.title, r.assets); if (r.note) toast(r.note); } continue; }
+          if (MODEL_FILE.test(lower)) { await openModel(f, partsNow()); continue; }
           if (lower.endsWith('.fpth')) await openFpth(await f.arrayBuffer(), f.name);
           else if (lower.endsWith('.ase')) await openLibraryFile(f, 'swatch');
           else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, patterns, masks, clipping, markers, type and images.${r.leftOut.length ? ` Left out: ${r.leftOut.slice(0, 4).join(' ')}` : ''}`); }
@@ -488,6 +516,7 @@ export function startApp(): void {
   async function placeFile(f: File, at: Pt | null, width: number | null, dxf: Partial<DxfImportOptions> | null = null): Promise<string | null> {
     const p = engine.current;
     if (!p) { await openFiles([f], dxf); const opened = engine.current as { doc: Doc } | null; return opened?.doc.layers[0]?.children[0]?.id ?? null; }
+    if (MODEL_FILE.test(f.name)) return placeModel(f, at, partsNow(), width);
     const v = p.viewport, center = v.toDoc(v.centerX, v.height / 2);
     const foreign = /\.(dxf|dwg|eps|epsf|ps)$/i.test(f.name);
     if (foreign || /\.svgz?$/i.test(f.name) || f.type === 'image/svg+xml') {
@@ -715,7 +744,7 @@ export function startApp(): void {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
       return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
     }
-    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : false, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined });
+    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : true, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined });
     if (c.format === 'eps') {
       const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
       if (scope === 'all' && p.doc.artboards.length > 1) {
@@ -726,11 +755,11 @@ export function startApp(): void {
       const r = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : exportRegion(p, ab);
       return r ? one(r, p.name) : null;
     }
-    if (c.format === 'dxf') {
+    if (c.format === 'dxf' || c.format === 'dwg') {
       const cad = c.cad ?? { version: '2000', units: 'mm', scale: 1, text: 'text', lineweights: false };
       const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
       if (!region) return null;
-      return exportDxf(p, { region, ...cad, ids: scope === 'selection' ? engine.targetIds() : undefined }, async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n); });
+      return (c.format === 'dwg' ? exportDwg : exportDxf)(p, { region, ...cad, ids: scope === 'selection' ? engine.targetIds() : undefined }, async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n); });
     }
     const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
     if (!region) return null;
@@ -892,9 +921,9 @@ export function startApp(): void {
   const about = new AboutDialog();
   const help = new HelpDialog();
   const agentConfirm = new AgentConfirmDialog();
-  const placeInput = el<HTMLInputElement>('<input type="file" accept="image/*,.svg,.svgz,.eps,.epsf,.dxf,.dwg" multiple hidden>');
+  const placeInput = el<HTMLInputElement>('<input type="file" accept="image/*,.svg,.svgz,.eps,.epsf,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin" multiple hidden>');
   document.body.appendChild(placeInput);
-  placeInput.addEventListener('change', () => { const fs = Array.from(placeInput.files ?? []); placeInput.value = ''; void engine.task(async () => { for (const f of fs) { try { await placeFile(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } }); });
+  placeInput.addEventListener('change', () => { const fs = splitParts(Array.from(placeInput.files ?? [])); placeInput.value = ''; void engine.task(async () => { for (const f of fs) { try { await placeFile(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } }); });
 
   const agents = new AgentBridge(engine, {
     userLibraries: () => ({ swatches: userSwatchLibraries(), brushes: userBrushLibraries(), symbols: userSymbolLibraries() }),
@@ -1459,6 +1488,7 @@ export function startApp(): void {
     { id: 'export-webp', label: 'WebP...', enabled: has, run: () => void exportAs('webp') },
     { id: 'export-eps', label: 'EPS...', enabled: has, run: () => void exportAs('eps') },
     { id: 'export-dxf', label: 'AutoCAD Interchange (DXF)...', enabled: has, run: () => void exportAs('dxf') },
+    { id: 'export-dwg', label: 'AutoCAD Drawing (DWG)...', enabled: has, run: () => void exportAs('dwg') },
     { id: 'print', label: 'Print...', keys: ['Mod+P'], enabled: has, run: () => void printDocument() },
     { id: 'document-setup', label: 'Document Setup...', keys: ['Alt+Mod+P'], enabled: has, run: () => void documentSetup() },
     { id: 'mode-rgb', label: 'RGB Color', enabled: has, checked: () => engine.doc?.colorMode === 'rgb', run: () => engine.documentSetup({ colorMode: 'rgb' }) },
@@ -1797,12 +1827,12 @@ export function startApp(): void {
 
   function effectItems(): MenuItem[] {
     const own = new Map<string, string[]>(), ps = new Map<string, string[]>();
-    for (const fx of EFFECTS) { const m = fx.family === 'photoshop' ? ps : own; m.set(fx.menu, [...(m.get(fx.menu) ?? []), `fx-${fx.id}`]); }
+    for (const fx of EFFECTS) { if (fx.id === '3d.model') continue; const m = fx.family === 'photoshop' ? ps : own; m.set(fx.menu, [...(m.get(fx.menu) ?? []), `fx-${fx.id}`]); }
     return [...[...own.entries()].map(([label, items]) => ({ label, items })), '-', 'effect-gallery', ...[...ps.entries()].map(([label, items]) => ({ label, items }))];
   }
 
   const menus: MenuDef[] = [
-    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'package', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
+    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-dwg', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'package', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
     { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['auto-spell-check', 'check-spelling', 'spelling-dictionary'] }, '-', 'color-settings', 'assign-profile', 'convert-to-profile', '-', { label: 'Edit Colors', items: ['recolor', ...(prefs.showGenerative ? ['generative-recolor'] : []), '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: () => [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },
@@ -1986,7 +2016,7 @@ export function startApp(): void {
     e.preventDefault();
     dragDepth = 0;
     setHidden(drop, true);
-    const files = Array.from(e.dataTransfer?.files ?? []), at = stage.docPoint(e.clientX, e.clientY);
+    const files = splitParts(Array.from(e.dataTransfer?.files ?? [])), at = stage.docPoint(e.clientX, e.clientY);
     void (async () => {
       const docs = files.filter((f) => /\.(fpth|pdf|ai)$/i.test(f.name) || !engine.current);
       const places = files.filter((f) => !docs.includes(f));

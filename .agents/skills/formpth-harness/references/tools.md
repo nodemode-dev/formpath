@@ -72,7 +72,7 @@ Opens a new document with one or more artboards.
 
 ## open_file
 
-Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF) as a new document. DWG (R2000, R2004, R2010, R2013 and R2018) is read by formpth itself; other DWG versions open through a DWG converter on this computer (ODA File Converter or LibreDWG dwg2dxf), and without one the call says how to get it.
+Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF) as a new document, or a 3D model (.obj with its .mtl and textures from the same folder, .glb or .gltf) as a new document holding an editable 3D object (see three_d). DWG (R2000, R2004, R2010, R2013 and R2018) is read by formpth itself; other DWG versions open through a DWG converter on this computer (ODA File Converter or LibreDWG dwg2dxf), and without one the call says how to get it.
 
 - `path`: string; required
 - `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); DXF only: what one drawing unit is; default the file's own units, else mm for metric drawings and in otherwise.
@@ -90,7 +90,7 @@ Saves the document as a formpth project (.fpth) at an absolute path; everything 
 
 ## export_file
 
-Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .png, .jpg or .webp.
+Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .dwg (AutoCAD 2000 binary drawing, layers kept, written natively), .png, .jpg or .webp.
 
 - `path`: string; required
 - `scope`: string (artboard | document | selection | all_artboards); default "artboard"
@@ -98,7 +98,7 @@ Exports the art to an absolute path; the extension chooses the format: .svg, .pd
 - `scale`: number; default 1
 - `quality`: number; default 0.92
 - `transparent`: boolean; default false
-- `outline_text`: boolean; default false; SVG and DXF: type as outlines (DXF writes TEXT otherwise).
+- `outline_text`: boolean; default false; SVG, DXF and DWG: type as outlines (DXF and DWG write TEXT otherwise).
 - `live_text`: boolean; default true; PDF only: write type as selectable, searchable text with the fonts embedded (default). Type with gradients, effects, 3D or an unavailable font is outlined either way; false outlines all type.
 - `pdf_standard`: string (none | x1a | x3 | x4 | a2b); default "none"; PDF only: x4 writes PDF/X-4 with the document CMYK profile (set_color_settings) as the output intent, XMP metadata and a document ID, and leaves out formpth editing data. x1a writes PDF/X-1a:2001 (version 1.3, CMYK and spot colours only, transparency flattened into pictures) and x3 writes PDF/X-3:2002 (version 1.3, flattened, RGB stays tagged); both fail with a message naming what could not be flattened. a2b writes PDF/A-2b (sRGB output intent, fonts embedded, XMP identification). The standards cannot be combined with passwords or permissions, and x1a and x3 cannot have layers.
 - `pdf_layers`: boolean; default false; PDF only: Create Acrobat Layers from Top-Level Layers. Each layer becomes an optional content group in the Layers panel (hidden layers start off); needs pdf_standard none, x4 or a2b.
@@ -112,9 +112,9 @@ Exports the art to an absolute path; the extension chooses the format: .svg, .pd
 - `compress_line_art`: boolean; default true; PDF only: Flate-compress page content and line art; false writes it readable.
 - `color`: string (rgb | cmyk); EPS only: colour model; default the document's colour mode.
 - `dxf_version`: string (2000 | R12); default "2000"; DXF only: 2000 writes splines, solid hatches for fills, true colours and lineweights; R12 writes polylines with arcs.
-- `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); default "mm"; DXF only: the drawing units.
-- `drawing_scale`: number; default 1; DXF only: drawing units per unit of art (100 writes a 1:100 drawing at full size).
-- `scale_lineweights`: boolean; default false; DXF only: scale lineweights with drawing_scale.
+- `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); default "mm"; DXF and DWG only: the drawing units.
+- `drawing_scale`: number; default 1; DXF and DWG only: drawing units per unit of art (100 writes a 1:100 drawing at full size).
+- `scale_lineweights`: boolean; default false; DXF and DWG only: scale lineweights with drawing_scale.
 
 ## switch_document
 
@@ -125,7 +125,7 @@ Makes another open document the active one, by its index or name from get_docume
 
 ## place_image
 
-Places an image file (absolute path: PNG, JPEG, WebP, GIF, or SVG, EPS and DXF as editable vector groups) into the document at x, y, embedded; width scales it in proportion. With link true (raster images only) the image stays linked to its file: formpth reads it again when it changes (see the links tool).
+Places an image file (absolute path: PNG, JPEG, WebP, GIF, or SVG, EPS and DXF as editable vector groups) into the document at x, y, embedded; width scales it in proportion. A 3D model (.obj, with the .mtl and texture images beside it, .glb or .gltf) is placed as a live 3D object, width points across, that three_d turns, lights and ray traces and that exports to SVG and PDF as vector faces. With link true (raster images only) the image stays linked to its file: formpth reads it again when it changes (see the links tool).
 
 - `path`: string; required
 - `x`: number
@@ -606,7 +606,7 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 
 ## three_d
 
-3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed surface: depth, volume, and rx, ry, rz to tilt it) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, brushed_metal, wood, rough, wireframe or flat (plane); brushed_metal, wood and rough are textures that show only with ray_trace (vector mode falls back to metal or matte) and texture_scale sets their size in percent. light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. lighting standard, diffuse, top_left or right sets a lighting preset of several lights; lights replaces them with your own array (up to 8) of {color, intensity 0 to 200, rotation -180 to 180 degrees around the object, height 0 to 90 degrees, softness 0 to 100}, and the shading sums every light (omit lights and lighting to keep the single light above). ray_trace true renders the object per pixel with smooth normals, soft shadows from the lights, ambient occlusion and the ground shadow, at quality low, medium or high (high takes a second or two); inflate traces its height field the same way, and a map_symbol is drawn as a texture on the front face, lit with it unless shade_art is false; SVG and PDF export a ray-traced object as an image and expand appearance turns it into an image object. map_symbol wraps a symbol (by name; make one with the symbol tool) onto the front face of an extrude or plane, sized by map_scale percent and moved by map_x, map_y points, shaded with the surface unless shade_art is false; an empty map_symbol clears it. shadow true casts a soft shadow (not for inflate): shadow_position behind or below, shadow_distance and shadow_softness in points, shadow_opacity in percent. Leave kind out to change only the parameters you pass; remove true takes 3D off. A graphic material wraps a picture around every surface: texture is a symbol name, the key of an embedded image or the id of a placed image object (place_image first), empty to clear it; texture_scale (percent, 100 fits the object's longer side), texture_rotation (degrees) and texture_offset_x and texture_offset_y (points) place it. The picture is planar on front and back faces, runs along the outline and the depth on extruded sides, around the axis on revolved surfaces, and is projected from the front on an inflate; vector mode uses its average colour. roughness and metallic (0 to 1) set the highlight spread and the metal reflection of the surface in ray tracing for any material, texture or not; reset_surface true gives the material's own values back. Type and groups extrude as one object; expand turns the result into plain shaded paths.
+3D and Materials: give the objects depth as a live effect, change it, or remove it. kind extrude (depth, cap, bevel none, classic or rounded with bevel_height), revolve (the art is a profile turned around its left or right edge: angle, offset, from), inflate (a puffed surface: depth, volume, and rx, ry, rz to tilt it) or plane (the flat art turned in space). Turn it with position (off_axis_front, front, left, right, top, isometric_left, isometric_right and others) or rx, ry, rz in degrees, and perspective 0 to 160. material plastic, matte, metal, brushed_metal, wood, rough, wireframe or flat (plane); brushed_metal, wood and rough are textures that show only with ray_trace (vector mode falls back to metal or matte) and texture_scale sets their size in percent. light top_left, top, top_right, left, front, right, bottom_left, bottom, bottom_right with intensity, ambient and highlight in percent and shading_color. lighting standard, diffuse, top_left or right sets a lighting preset of several lights; lights replaces them with your own array (up to 8) of {color, intensity 0 to 200, rotation -180 to 180 degrees around the object, height 0 to 90 degrees, softness 0 to 100}, and the shading sums every light (omit lights and lighting to keep the single light above). ray_trace true renders the object per pixel with smooth normals, soft shadows from the lights, ambient occlusion and the ground shadow, at quality low, medium or high (high takes a second or two); inflate traces its height field the same way, and a map_symbol is drawn as a texture on the front face, lit with it unless shade_art is false; SVG and PDF export a ray-traced object as an image and expand appearance turns it into an image object. map_symbol wraps a symbol (by name; make one with the symbol tool) onto the front face of an extrude or plane, sized by map_scale percent and moved by map_x, map_y points, shaded with the surface unless shade_art is false; an empty map_symbol clears it. shadow true casts a soft shadow (not for inflate): shadow_position behind or below, shadow_distance and shadow_softness in points, shadow_opacity in percent. Leave kind out to change only the parameters you pass; remove true takes 3D off. A graphic material wraps a picture around every surface: texture is a symbol name, the key of an embedded image or the id of a placed image object (place_image first), empty to clear it; texture_scale (percent, 100 fits the object's longer side), texture_rotation (degrees) and texture_offset_x and texture_offset_y (points) place it. The picture is planar on front and back faces, runs along the outline and the depth on extruded sides, around the axis on revolved surfaces, and is projected from the front on an inflate; vector mode uses its average colour. roughness and metallic (0 to 1) set the highlight spread and the metal reflection of the surface in ray tracing for any material, texture or not; reset_surface true gives the material's own values back. Per-surface materials: pass surface (front, back, sides, bevel for extrude; outer, inner, caps for revolve; front for plane; g0, g1 and so on for an imported model's material groups) and the material, color (a hex colour), texture and its texture_ settings, roughness and metallic then change that surface only, so an extruded star can have a picture on its front and metal sides; surface all or no surface sets the whole object, each surface that has no value of its own follows it; reset_surface with surface clears that surface; vector mode paints each surface in its flat colour and ray tracing renders every one. Imported models (place_image or open_file with an .obj, .glb or .gltf file) are 3D objects of their own: turn them with rx, ry, rz and perspective, light them, ray_trace them, and use surface g0, g1 for their groups. Type and groups extrude as one object; expand turns the result into plain shaded paths.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `kind`: string (extrude | revolve | inflate | plane)
@@ -633,6 +633,8 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 - `roughness`: number
 - `metallic`: number
 - `reset_surface`: boolean
+- `surface`: string; Which surface material, color, texture, texture_scale, texture_rotation, texture_offset_x, texture_offset_y, roughness, metallic and reset_surface change: all (the default), front, back, sides or bevel for extrude, outer, inner or caps for revolve, front for plane, and g0, g1 and so on (the model's material groups) for an imported model.
+- `color`: string; A surface colour such as #c0392b, with surface; empty clears it.
 - `ray_trace`: boolean
 - `quality`: string (low | medium | high)
 - `lighting`: string (standard | diffuse | top_left | right)
@@ -899,20 +901,25 @@ Makes a pattern swatch from the objects, tiled as a grid, brick or hex, and opti
 
 ## generative_shape_fill
 
-Generative Shape Fill: asks the language model set for the Assistant (Preferences > Plugins) for vector art that fills a closed path, imports it as editable paths, fits it to the shape and clips it there. The result is a clipping group whose last child is the original shape. Fails with a clear message when no model is set.
+Generative Shape Fill: asks the language model set for the Assistant (Preferences > Plugins) for vector art that fills a closed path, imports it as editable paths, fits it to the shape and clips it there. The result is a clipping group whose last child is the original shape, placed as one undo step. The model's SVG is validated and repaired like text_to_vector and the result lists what was dropped. shape_strength, detail, style_preset, style_reference, effects, color_tone and palette steer it; the palette is enforced after generation. Fails with a clear message when no model is set.
 
 - `id`: string; A closed path or compound path; the selection when left out.
 - `prompt`: string; What to draw; optional.
-- `shape_strength`: number; default 50; How closely the art follows the outline: 100 takes its silhouette, 0 composes freely and only crops.
-- `detail`: string (low | medium | high); default "medium"
+- `shape_strength`: number; default 50; Shape Strength, how strictly the art follows the outline: 0 asks the model to compose freely and the shape only clips it (clip only); 34 to 66 follows the outline loosely; 67 to 100 asks the model to fit the silhouette, stretches the art onto the shape's bounds and then clips. The result is always a clip group.
+- `detail`: string or integer; default "medium"; Detail 1 (minimal) to 10 (richly detailed), or low (3), medium (5), high (8). It sets the prompt and hard limits on element count, gradients, strokes and compound shapes: elements beyond the limit are dropped smallest first, extra gradients become solid colours.
 - `variations`: integer; default 1; How many to ask for; one is applied.
 - `pick`: integer; Which variation to apply; default the first that worked.
+- `style_preset`: string (flat | line_art | isometric | hand_drawn | gradient | retro | minimal); A style preset sent to the model as drawing rules; flat, isometric, retro and minimal allow no gradients, line_art allows strokes only.
+- `style_reference`: string; The id of artwork (a path, group or several via a group) or a placed image whose look the result should match. Artwork gives its palette, stroke widths, corner style, gradient use and a reduced SVG outline of its structure; an image gives a palette and tonal summary read from its pixels, and is also sent to the model when the model is marked as reading images.
+- `effects`: array; Live effects added to the result as editable appearance effects.
+- `color_tone`: string (pastel | vibrant | monochrome | black_and_white | warm | cool | earth | forest | ocean | reference); A colour and tone preset. After generation every colour (fills, strokes, gradient stops) is remapped into the preset's palette by the Recolor engine, so the result honours it even if the model drifts. reference uses the style_reference colours.
+- `palette`: array; A custom palette of up to 8 colours (#rrggbb and the like, for example document swatch colours); it wins over color_tone and is enforced the same way.
 
 Note: reaches outside this computer.
 
 ## generate_patterns
 
-Text to Pattern: asks the language model set for the Assistant for seamless vector pattern tiles from a prompt and saves each as a pattern swatch made by formpth's pattern engine (editable with edit_pattern). Fails with a clear message when no model is set.
+Text to Pattern: asks the language model set for the Assistant for seamless vector pattern tiles from a prompt and saves each as a pattern swatch made by formpth's pattern engine (editable with edit_pattern). tile_size sets the tile, seamless repeats motifs that cross a tile edge and checks the edges, layout, h_spacing and v_spacing go to the pattern swatch, and detail, style_preset, style_reference, effects, color_tone and palette steer the art (the palette is enforced afterwards; colors and preset still work). Fails with a clear message when no model is set.
 
 - `prompt`: string; required
 - `colors`: array; Up to 12 colours (#rrggbb and the like); the tiles use only these.
@@ -923,18 +930,33 @@ Text to Pattern: asks the language model set for the Assistant for seamless vect
 - `name`: string; Base name of the swatches.
 - `fill_selection`: boolean; default false; Fill the objects in ids (or the selection) with the first pattern.
 - `ids`: array; Object ids from get_document; the selection when left out.
+- `detail`: string or integer; default "medium"; Detail 1 (minimal) to 10 (richly detailed), or low (3), medium (5), high (8). It sets the prompt and hard limits on element count, gradients, strokes and compound shapes: elements beyond the limit are dropped smallest first, extra gradients become solid colours.
+- `seamless`: boolean; default true; Seamless check: motifs that cross a tile edge are repeated on the opposite side, and the tile's edges are compared after a render (the result reports a mismatch).
+- `layout`: string (grid | brick_by_row | brick_by_column | hex_by_column | hex_by_row); default "grid"; The pattern swatch's tile layout, as in make_pattern.
+- `h_spacing`: number
+- `v_spacing`: number
+- `style_preset`: string (flat | line_art | isometric | hand_drawn | gradient | retro | minimal); A style preset sent to the model as drawing rules; flat, isometric, retro and minimal allow no gradients, line_art allows strokes only.
+- `style_reference`: string; The id of artwork (a path, group or several via a group) or a placed image whose look the result should match. Artwork gives its palette, stroke widths, corner style, gradient use and a reduced SVG outline of its structure; an image gives a palette and tonal summary read from its pixels, and is also sent to the model when the model is marked as reading images.
+- `effects`: array; Live effects added to the result as editable appearance effects.
+- `color_tone`: string (pastel | vibrant | monochrome | black_and_white | warm | cool | earth | forest | ocean | reference); A colour and tone preset. After generation every colour (fills, strokes, gradient stops) is remapped into the preset's palette by the Recolor engine, so the result honours it even if the model drifts. reference uses the style_reference colours.
+- `palette`: array; A custom palette of up to 8 colours (#rrggbb and the like, for example document swatch colours); it wins over color_tone and is enforced the same way.
 
 Note: reaches outside this computer.
 
 ## text_to_vector
 
-Text to Vector Graphic: asks the language model set for the Assistant (Preferences > Plugins) for clean standalone SVG from a prompt, up to 3 variations, and places the picked one as editable groups and paths (not an image) fitted into the selected object's bounds, or the centre of the active artboard, as one undo step. Fails with a clear message when no model is set or Show generative features is off.
+Text to Vector Graphic: asks the language model set for the Assistant (Preferences > Plugins) for clean standalone SVG from a prompt, up to 3 variations, and places the picked one as editable groups and paths (not an image) fitted into the selected object's bounds, or the centre of the active artboard, as one undo step. The model's SVG may carry linear and radial gradients, strokes with caps and joins, evenodd compound paths, named groups, opacity and blend modes; it is validated and repaired (unsupported or broken elements dropped, open filled paths closed, runaway coordinates clamped) and the result lists what was dropped. type scene asks for Background, Midground and Foreground groups. detail, style_preset, style_reference, effects, color_tone and palette shape the prompt, and the palette is enforced afterwards. Fails with a clear message when no model is set or Show generative features is off.
 
 - `prompt`: string; required; What to draw.
 - `type`: string (subject | scene | icon | pattern); default "subject"
-- `detail`: string (low | medium | high); default "medium"
+- `detail`: string or integer; default "medium"; Detail 1 (minimal) to 10 (richly detailed), or low (3), medium (5), high (8). It sets the prompt and hard limits on element count, gradients, strokes and compound shapes: elements beyond the limit are dropped smallest first, extra gradients become solid colours.
 - `variations`: integer; default 1; How many to ask for; one is placed.
 - `pick`: integer; Which variation to place; default the first that worked.
+- `style_preset`: string (flat | line_art | isometric | hand_drawn | gradient | retro | minimal); A style preset sent to the model as drawing rules; flat, isometric, retro and minimal allow no gradients, line_art allows strokes only.
+- `style_reference`: string; The id of artwork (a path, group or several via a group) or a placed image whose look the result should match. Artwork gives its palette, stroke widths, corner style, gradient use and a reduced SVG outline of its structure; an image gives a palette and tonal summary read from its pixels, and is also sent to the model when the model is marked as reading images.
+- `effects`: array; Live effects added to the result as editable appearance effects.
+- `color_tone`: string (pastel | vibrant | monochrome | black_and_white | warm | cool | earth | forest | ocean | reference); A colour and tone preset. After generation every colour (fills, strokes, gradient stops) is remapped into the preset's palette by the Recolor engine, so the result honours it even if the model drifts. reference uses the style_reference colours.
+- `palette`: array; A custom palette of up to 8 colours (#rrggbb and the like, for example document swatch colours); it wins over color_tone and is enforced the same way.
 
 Note: reaches outside this computer.
 

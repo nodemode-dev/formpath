@@ -2,11 +2,17 @@ import { geomBounds } from '../engine/bounds';
 import { cloneNode, newDoc, newId } from '../engine/doc';
 import { isEmptyRect, mul, pathBounds, toSvgD, transformPath } from '../engine/geometry';
 import { transformNode } from '../engine/transform';
-import { collectColors, fitRowsToPalette, mapNodeColors, nearestFn, recolorDoc, rowsFn } from '../engine/ops/recolor';
-import { hex, parseColor, rgb } from '../engine/paint';
+import { collectColors, fitRowsToPalette, recolorDoc, rowsFn } from '../engine/ops/recolor';
+import { hex, parseColor } from '../engine/paint';
 import type { Color, Doc, Engine, FillRule, Mat, PathData, Rect, VNode } from '../engine';
+import type { Project } from '../engine';
 import { api } from './api';
+import { applyEffects, constraints, enforcePalette, type Constraints, type GenCommon } from './gen-options';
+import { emptyReport, extractSvg, finishNodes, reportLines, repairSvg, seamCheck, seamlessWrap, type Report, type SeamCheck } from './gen-repair';
 import { importSvg } from './svg';
+
+export { extractSvg } from './gen-repair';
+export type { GenCommon, StyleRef } from './gen-options';
 
 export interface ModelState { ready: boolean; vision: boolean; model: string; message: string }
 export const NO_MODEL = 'No language model is set. Generative features use the model you choose for the Assistant: set it in Preferences > Plugins (Ollama, LM Studio or any OpenAI-compatible service).';
@@ -18,49 +24,36 @@ export async function modelState(): Promise<ModelState> {
   return { ready: true, vision: !!s.vision, model: s.model, message: `Uses ${s.model}${s.vision ? ', which reads images' : ''}.` };
 }
 
-const ALLOWED = new Set(['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'defs', 'lineargradient', 'radialgradient', 'stop', 'clippath', 'title', 'desc']);
-const ATTRS = new Set(['viewbox', 'width', 'height', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'fx', 'fy', 'd', 'points', 'transform', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'fill-rule', 'clip-rule', 'opacity', 'fill-opacity', 'stroke-opacity', 'offset', 'stop-color', 'stop-opacity', 'gradientunits', 'gradienttransform', 'spreadmethod', 'clip-path', 'id', 'style', 'xmlns', 'href', 'xlink:href']);
-const MAX_SVG = 600_000, MAX_NODES = 6000;
+export function sanitizeSvg(src: string): string { return repairSvg(src, 1000, 1000).svg; }
 
-export function extractSvg(text: string): string | null {
-  const a = text.search(/<svg[\s>]/i), z = text.toLowerCase().lastIndexOf('</svg>');
-  if (a < 0 || z < a) return null;
-  return text.slice(a, z + 6);
-}
+const SYSTEM = 'You draw vector graphics as SVG. Answer with one complete <svg> element and nothing else: no prose, no code fences. Use only g, path, rect, circle, ellipse, polygon, polyline, line, defs, linearGradient, radialGradient and stop. Paint with solid colours, and with gradients only when the brief allows them: define each gradient in defs with an id and two or more stops (offset 0 to 1), then use fill="url(#id)". Strokes may set stroke-width, stroke-linecap and stroke-linejoin. Make holes with one path of several subpaths and fill-rule="evenodd". Group related shapes in named groups such as <g id="sky" data-name="Sky">; opacity on groups is fine, and mix-blend-mode in a style attribute (multiply, screen or overlay) is allowed for shadows and highlights. Close every filled path with Z. No text, images, filters, masks, scripts, CSS classes or external references.';
 
-export function sanitizeSvg(src: string): string {
-  if (src.length > MAX_SVG) throw new Error('The model answered with an SVG too large to use.');
-  const dom = new DOMParser().parseFromString(src, 'image/svg+xml');
-  const root = dom.documentElement;
-  if (!root || root.nodeName.toLowerCase() !== 'svg' || dom.querySelector('parsererror')) throw new Error('The model did not answer with readable SVG.');
-  let count = 0;
-  const clean = (e: Element): void => {
-    for (const c of Array.from(e.children)) {
-      if (!ALLOWED.has(c.nodeName.toLowerCase()) || ++count > MAX_NODES) { c.remove(); continue; }
-      for (const a of Array.from(c.attributes)) {
-        const n = a.name.toLowerCase(), v = a.value;
-        if (!ATTRS.has(n)) { c.removeAttribute(a.name); continue; }
-        if ((n === 'href' || n === 'xlink:href') && !/^#[\w-]+$/.test(v)) c.removeAttribute(a.name);
-        else if (/url\(\s*['"]?(?!#)/i.test(v) || /expression|javascript:|@import/i.test(v)) c.removeAttribute(a.name);
-      }
-      clean(c);
-    }
-  };
-  for (const a of Array.from(root.attributes)) if (!ATTRS.has(a.name.toLowerCase())) root.removeAttribute(a.name);
-  clean(root);
-  return new XMLSerializer().serializeToString(root);
-}
+interface SvgArt { nodes: VNode[]; report: Report }
 
-async function svgNodes(text: string, vw: number, vh: number): Promise<VNode[]> {
+async function svgNodes(text: string, vw: number, vh: number, c: Constraints, scene = false): Promise<SvgArt> {
   const svg = extractSvg(text);
   if (!svg) throw new Error('The model did not answer with SVG.');
-  const dom = new DOMParser().parseFromString(sanitizeSvg(svg), 'image/svg+xml'), root = dom.documentElement;
-  root.setAttribute('viewBox', root.getAttribute('viewBox') ?? `0 0 ${vw} ${vh}`);
-  root.setAttribute('width', String(vw)); root.setAttribute('height', String(vh));
+  const fixed = repairSvg(svg, vw, vh), dom = new DOMParser().parseFromString(fixed.svg, 'image/svg+xml'), root = dom.documentElement;
+  const vb = (root.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+  const hasVb = vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0;
+  if (!hasVb) root.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  root.setAttribute('width', String(hasVb ? vb[2] : vw)); root.setAttribute('height', String(hasVb ? vb[3] : vh));
+  const wrap = dom.createElementNS(root.namespaceURI, 'g');
+  wrap.setAttribute('data-name', 'Generated');
+  while (root.firstChild) wrap.appendChild(root.firstChild);
+  root.appendChild(wrap);
   const r = await importSvg(new XMLSerializer().serializeToString(root), 'Generated');
-  const nodes = r.doc.layers.flatMap((l) => l.children);
-  if (!nodes.length) throw new Error('The model answered with an SVG that has no shapes.');
-  return nodes;
+  const report = fixed.report;
+  report.notes.push(...r.leftOut);
+  const nodes = finishNodes(r.doc.layers.flatMap((l) => l.children), { vbW: hasVb ? vb[2] : vw, vbH: hasVb ? vb[3] : vh, limits: c.limits, scene }, report);
+  if (!nodes.length) throw new Error(`The model answered with an SVG that has no usable shapes${reportLines(report).length ? ` (${reportLines(report).join('; ')})` : ''}.`);
+  return { nodes, report };
+}
+
+const MAX_TOKENS = 12000;
+async function ask(c: Constraints, user: string, i: number, n: number, temperature: number): Promise<string> {
+  const res = await api.llmGenerate(SYSTEM, n > 1 ? `${user}\nVariation ${i + 1} of ${n}: make it distinct from the others.` : user, { temperature, maxTokens: MAX_TOKENS, ...(c.image ? { image: c.image } : {}) });
+  return res.text;
 }
 
 const wrapGroup = (children: VNode[], name: string): VNode => ({ id: newId('g'), kind: 'group', name, clip: false, children, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } });
@@ -68,44 +61,47 @@ const moved = (n: VNode, m: Mat): VNode => transformNode(n, m);
 const boundsOf = (n: VNode): Rect => { const d: Doc = { ...newDoc(10, 10), layers: [{ ...newDoc(10, 10).layers[0], children: [n] }] }; return geomBounds(d, n); };
 
 export interface ShapeTarget { d: PathData; rule: FillRule; color: Color | null }
-export interface ShapeFillOptions { prompt: string; strength: number; detail: number; variations: number }
-export interface Variation { art: VNode | null; error: string | null }
-const DETAIL = ['', 'low detail: 8 to 25 shapes, bold and simple', 'medium detail: 25 to 70 shapes', 'high detail: 70 to 180 shapes with fine features'];
+export interface ShapeFillOptions extends GenCommon { prompt: string; strength: number; detail: number; variations: number }
+export interface Variation { art: VNode | null; error: string | null; report?: Report | null }
+export const strengthMode = (s: number): string => (s >= 67 ? 'Fit silhouette, then clip' : s >= 34 ? 'Follow loosely, then clip' : 'Clip only');
 
 export async function shapeFillVariations(t: ShapeTarget, o: ShapeFillOptions): Promise<Variation[]> {
   const b = pathBounds(t.d);
   if (isEmptyRect(b) || b.w < 1 || b.h < 1) throw new Error('The shape is too small to fill.');
   const k = 1000 / Math.max(b.w, b.h), W = Math.round(b.w * k), H = Math.round(b.h * k);
   const outline = toSvgD(transformPath(t.d, [k, 0, 0, k, -b.x * k, -b.y * k]), 1);
-  const strength = Math.max(0, Math.min(100, o.strength)), detail = Math.max(1, Math.min(3, Math.round(o.detail)));
-  const system = 'You draw vector illustrations as SVG. Answer with one complete <svg> element and nothing else: no prose, no code fences. Use only path, rect, circle, ellipse, polygon, polyline, line, g, linearGradient and radialGradient with solid fills. No text, images, filters, scripts, masks, CSS classes or external references.';
+  const strength = Math.max(0, Math.min(100, o.strength));
+  const c = constraints(o, 5);
   const user = [
     `Make SVG art with viewBox="0 0 ${W} ${H}" that fills this outline: <path d="${outline}"${t.rule === 'evenodd' ? ' fill-rule="evenodd"' : ''}/>.`,
     `Subject: ${o.prompt.trim() || 'an ornamental illustration that suits the outline'}.`,
-    `Shape strength ${strength} of 100: ${strength >= 67 ? 'the subject must take the silhouette of the outline and reach every edge of it' : strength >= 34 ? 'arrange the subject to follow the outline loosely and cover it' : 'compose freely; the outline only crops the art, so cover the whole viewBox'}.`,
-    `Use ${DETAIL[detail]}.`,
-    t.color ? `Work with a palette that suits ${hex(t.color)}.` : 'Choose a harmonious palette.',
+    `Shape strength ${strength} of 100 (${strengthMode(strength)}): ${strength >= 67 ? 'fit the silhouette first: the subject must take the shape of the outline and reach every edge of it, and formpth then clips it to the outline' : strength >= 34 ? 'arrange the subject to follow the outline loosely and cover it; formpth then clips it to the outline' : 'compose freely: the outline only crops the art, so cover the whole viewBox'}.`,
+    c.text,
+    c.palette.length || o.reference?.palette.length || o.style !== undefined && o.style !== 'auto' ? '' : t.color ? `Work with a palette that suits ${hex(t.color)}.` : 'Choose a harmonious palette.',
     'The art will be clipped to the outline, so let shapes run past its edge rather than leave gaps.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
   const n = Math.max(1, Math.min(3, Math.round(o.variations)));
   const runs = Array.from({ length: n }, async (_, i): Promise<Variation> => {
     try {
-      const res = await api.llmGenerate(system, `${user}\nVariation ${i + 1} of ${n}: make it distinct from the others.`, { temperature: 0.6 + i * 0.25, maxTokens: 8000 });
-      const nodes = await svgNodes(res.text, W, H);
-      let art = wrapGroup(nodes, 'Generated Art');
+      const made = await svgNodes(await ask(c, user, i, n, 0.6 + i * 0.25), W, H, c);
+      let art = wrapGroup(made.nodes, 'Generated Art');
+      art = enforcePalette(art, c.palette);
       art = moved(art, [1 / k, 0, 0, 1 / k, b.x, b.y]);
       if (strength >= 67) {
-        const ab = boundsOf(art);
+        const raw = boundsOf(art), x0 = Math.max(raw.x, b.x - b.w * 0.1), y0 = Math.max(raw.y, b.y - b.h * 0.1);
+        const ab: Rect = { x: x0, y: y0, w: Math.min(raw.x + raw.w, b.x + b.w * 1.1) - x0, h: Math.min(raw.y + raw.h, b.y + b.h * 1.1) - y0 };
         if (!isEmptyRect(ab) && ab.w > 0.5 && ab.h > 0.5) art = moved(art, mul([b.w / ab.w, 0, 0, b.h / ab.h, b.x, b.y], [1, 0, 0, 1, -ab.x, -ab.y]));
       }
-      return { art, error: null };
+      return { art: applyEffects(art, o.effects ?? [], c.palette), error: null, report: made.report };
     } catch (err) { return { art: null, error: err instanceof Error ? err.message : String(err) }; }
   });
   return Promise.all(runs);
 }
 
+export function artParts(art: VNode): VNode[] { return art.kind === 'group' && !art.clip && !art.ap.effects.length ? art.children : [art]; }
+
 export function clipToShape(art: VNode, shape: VNode): VNode {
-  const kids = art.kind === 'group' && !art.clip ? art.children : [art];
+  const kids = artParts(art);
   return { id: newId('g'), kind: 'group', name: 'Generative Shape Fill', clip: true, children: [...kids, shape], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
 }
 
@@ -121,58 +117,73 @@ export const PATTERN_PRESETS: ReadonlyArray<readonly [string, string, string[]]>
   ['ocean', 'Ocean', ['#03256c', '#2541b2', '#1768ac', '#06bee1', '#a7e8f0', '#ffffff']],
 ];
 export const DENSITY = ['', 'very sparse: 2 to 4 motifs', 'sparse: 4 to 8 motifs', 'balanced: 8 to 14 motifs', 'dense: 14 to 24 motifs', 'packed: 24 to 40 motifs'];
-export interface PatternGenOptions { prompt: string; colors: Color[]; density: number; variations: number; tile?: number }
-export interface PatternVariation { art: VNode | null; tile: Rect; error: string | null }
+export type PatternLayout = 'grid' | 'brick_row' | 'brick_col' | 'hex_col' | 'hex_row';
+export const PATTERN_LAYOUTS: ReadonlyArray<readonly [PatternLayout, string]> = [['grid', 'Grid'], ['brick_row', 'Brick by row'], ['brick_col', 'Brick by column'], ['hex_col', 'Hex by column'], ['hex_row', 'Hex by row']];
+export interface PatternGenOptions extends GenCommon { prompt: string; colors: Color[]; density: number; variations: number; tile?: number; seamless?: boolean; layout?: PatternLayout; hs?: number; vs?: number; project?: Project | null }
+export interface PatternVariation { art: VNode | null; tile: Rect; error: string | null; report?: Report | null; seam?: SeamCheck | null; layout?: { type: PatternLayout; hs: number; vs: number } }
 
 export async function patternVariations(o: PatternGenOptions): Promise<PatternVariation[]> {
   const V = 200, T = Math.max(12, Math.min(720, o.tile ?? 96)), density = Math.max(1, Math.min(5, Math.round(o.density)));
-  const colors = o.colors.slice(0, 12).map((c) => hex(c));
-  const system = 'You design seamless repeating pattern tiles as SVG. Answer with one complete <svg> element and nothing else: no prose, no code fences. Use only path, rect, circle, ellipse, polygon, polyline, line and g with solid fills and strokes. No text, images, filters, gradients, scripts or external references.';
+  const common: GenCommon = { ...o, palette: o.palette?.length || (o.tone && o.tone !== 'auto') ? o.palette : o.colors.slice(0, 12) };
+  const c = constraints(common, 4, 1 + density, 'for each motif');
+  const layout = { type: o.layout ?? 'grid', hs: o.hs ?? 0, vs: o.vs ?? 0 };
   const user = [
     `Make one tile of a seamless repeating pattern, viewBox="0 0 ${V} ${V}".`,
     `Theme: ${o.prompt.trim() || 'an elegant decorative motif'}.`,
     `Density: ${DENSITY[density]} per tile.`,
-    colors.length ? `Use only these colours: ${colors.join(', ')}. You may put a full-tile background rect in one of them first.` : 'Choose a harmonious palette and a background rect first.',
-    'Motifs may cross the tile edges: formpth repeats the tile so anything past an edge shows on the opposite side. Do not draw the wrapped copies yourself.',
+    c.text,
+    c.palette.length ? 'You may put a full-tile background rect in one of the colours first.' : 'Choose a harmonious palette and a background rect first.',
+    'Motifs may cross the tile edges: formpth repeats the tile so anything past an edge shows on the opposite side. Draw each crossing motif once, at its true position; do not draw the wrapped copies yourself.',
   ].join('\n');
   const n = Math.max(1, Math.min(4, Math.round(o.variations)));
-  const snap = colors.length ? nearestFn(colors.map((c) => parseColor(c) ?? rgb(0, 0, 0))) : null;
   const tile: Rect = { x: 0, y: 0, w: T, h: T };
   return Promise.all(Array.from({ length: n }, async (_, i): Promise<PatternVariation> => {
     try {
-      const res = await api.llmGenerate(system, `${user}\nVariation ${i + 1} of ${n}: make it distinct from the others.`, { temperature: 0.6 + i * 0.2, maxTokens: 8000 });
-      let art = wrapGroup(await svgNodes(res.text, V, V), 'Pattern Tile');
+      const made = await svgNodes(await ask(c, user, i, n, 0.6 + i * 0.2), V, V, c);
+      let art = wrapGroup(made.nodes, 'Pattern Tile');
       art = moved(art, [T / V, 0, 0, T / V, 0, 0]);
-      if (snap) art = mapNodeColors(art, snap);
-      return { art, tile, error: null };
-    } catch (err) { return { art: null, tile, error: err instanceof Error ? err.message : String(err) }; }
+      art = enforcePalette(art, c.palette);
+      let seam: SeamCheck | null = null;
+      if (o.seamless !== false && art.kind === 'group') {
+        const w = seamlessWrap(art, tile);
+        art = w.art;
+        if (w.crossing) made.report.notes.push(`${w.crossing} motif${w.crossing === 1 ? '' : 's'} cross the tile edge: ${w.copies} cop${w.copies === 1 ? 'y was' : 'ies were'} added on the opposite side${w.skipped ? `; ${w.skipped} translucent motif${w.skipped === 1 ? '' : 's'} left to the pattern engine` : ''}.`);
+        else made.report.notes.push('No motif crosses the tile edge.');
+      }
+      if (o.project) {
+        try { seam = await seamCheck(o.project, art, tile); made.report.notes.push(seam.ok ? `Seamless check passed (edge mismatch ${Math.round(Math.max(seam.x, seam.y) * 1000) / 10}%).` : `Seamless check: the edges differ by ${Math.round(Math.max(seam.x, seam.y) * 1000) / 10}%, a seam may show.`); } catch { seam = null; }
+      }
+      return { art: applyEffects(art, o.effects ?? [], c.palette), tile, error: null, report: made.report, seam, layout };
+    } catch (err) { return { art: null, tile, error: err instanceof Error ? err.message : String(err), layout }; }
   }));
 }
 
 export const VECTOR_TYPES: ReadonlyArray<readonly [string, string, string]> = [
   ['subject', 'Subject', 'one centred subject on a transparent background, with no background rectangle'],
-  ['scene', 'Scene', 'a full scene with a background, middle ground and foreground that fills the whole viewBox edge to edge'],
+  ['scene', 'Scene', 'a full scene that fills the whole viewBox edge to edge, built as exactly three top-level groups in this order: <g id="background" data-name="Background"> (sky, ground, distant shapes), <g id="midground" data-name="Midground"> (the main elements) and <g id="foreground" data-name="Foreground"> (near details and framing)'],
   ['icon', 'Icon', 'a simple flat icon: one bold glyph with at most six colours, centred with padding, no background'],
   ['pattern', 'Pattern', 'a decorative repeating pattern of motifs laid out in a grid that covers the whole viewBox'],
 ];
-export interface TextToVectorOptions { prompt: string; type: string; detail: number; variations: number }
+export interface TextToVectorOptions extends GenCommon { prompt: string; type: string; detail: number; variations: number }
 
 export async function textToVectorVariations(o: TextToVectorOptions): Promise<Variation[]> {
-  const kind = VECTOR_TYPES.find(([id]) => id === o.type) ?? VECTOR_TYPES[0], detail = Math.max(1, Math.min(3, Math.round(o.detail)));
+  const kind = VECTOR_TYPES.find(([id]) => id === o.type) ?? VECTOR_TYPES[0];
   if (!o.prompt.trim()) throw new Error('Describe what to draw first.');
-  const system = 'You draw vector graphics as SVG. Answer with one complete <svg> element and nothing else: no prose, no code fences. Use only path, rect, circle, ellipse, polygon, polyline, line, g, linearGradient and radialGradient with solid fills and strokes. No text, images, filters, scripts, masks, CSS classes or external references.';
+  const c = constraints(o, 5);
   const user = [
-    `Make a ${kind[1].toLowerCase()} vector graphic with viewBox="0 0 1000 1000".`,
+    `Make ${/^[aeiou]/i.test(kind[1]) ? 'an' : 'a'} ${kind[1].toLowerCase()} vector graphic with viewBox="0 0 1000 1000".`,
     `Prompt: ${o.prompt.trim()}.`,
     `Type ${kind[1]}: ${kind[2]}.`,
-    `Use ${DETAIL[detail]}.`,
-    'Choose a harmonious palette. Keep every shape closed and editable.',
-  ].join('\n');
+    c.text,
+    c.palette.length || o.reference?.palette.length || (o.style && o.style !== 'auto') ? '' : 'Choose a harmonious palette.',
+    'Keep every shape closed and editable.',
+  ].filter(Boolean).join('\n');
   const n = Math.max(1, Math.min(3, Math.round(o.variations)));
   return Promise.all(Array.from({ length: n }, async (_, i): Promise<Variation> => {
     try {
-      const res = await api.llmGenerate(system, `${user}\nVariation ${i + 1} of ${n}: make it distinct from the others.`, { temperature: 0.6 + i * 0.25, maxTokens: 8000 });
-      return { art: wrapGroup(await svgNodes(res.text, 1000, 1000), 'Text to Vector Graphic'), error: null };
+      const made = await svgNodes(await ask(c, user, i, n, 0.6 + i * 0.25), 1000, 1000, c, kind[0] === 'scene');
+      const art = enforcePalette(wrapGroup(made.nodes, 'Text to Vector Graphic'), c.palette);
+      return { art: applyEffects(art, o.effects ?? [], c.palette), error: null, report: made.report };
     } catch (err) { return { art: null, error: err instanceof Error ? err.message : String(err) }; }
   }));
 }

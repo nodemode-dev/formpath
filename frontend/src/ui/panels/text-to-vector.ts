@@ -1,7 +1,9 @@
 import type { Engine } from '../../engine';
 import type { VNode } from '../../engine';
 import { placeVector, textToVectorVariations, VECTOR_TYPES, type Variation } from '../../io/generative';
+import { reportText } from '../../io/gen-repair';
 import { el, setClass, setDisabled, setText } from '../dom';
+import { GenOptionsUi } from './gen-options';
 import { ModelPanel, paintPreview, textArea, tiles } from './generative';
 import { page, row, section, seg } from './kit';
 
@@ -10,12 +12,13 @@ export class TextToVectorPanel extends ModelPanel {
   private readonly target = el('<p class="cv-genp-target"></p>');
   private readonly prompt = textArea('Prompt', 'Describe the art, such as a red fox in a snowy pine forest');
   private readonly type;
-  private readonly detail;
+  private readonly opts;
+  private readonly report = el('<p class="cv-genp-note" role="status"></p>');
   private readonly count;
   private readonly go = el<HTMLButtonElement>('<button class="cv-btn cv-btn-primary" type="button">Generate</button>');
   private readonly place = el<HTMLButtonElement>('<button class="cv-btn" type="button">Place</button>');
   private readonly grid;
-  private o = { type: 'subject', detail: 2, variations: 3 };
+  private o = { type: 'subject', variations: 3 };
   private results: Variation[] = [];
   private picked = -1;
   private busy = false;
@@ -25,15 +28,15 @@ export class TextToVectorPanel extends ModelPanel {
   constructor(engine: Engine) {
     super(engine);
     this.type = seg(VECTOR_TYPES.map(([id, label]) => ({ id, label })), (id) => { this.o.type = id; this.type.set(id); }, 'cv-seg-small');
-    this.detail = seg([{ id: '1', label: 'Low' }, { id: '2', label: 'Medium' }, { id: '3', label: 'High' }], (id) => { this.o.detail = Number(id); this.detail.set(id); }, 'cv-seg-small');
+    this.opts = new GenOptionsUi(engine, () => this.state.vision, () => this.queue(), 5);
     this.count = seg([{ id: '1', label: '1' }, { id: '2', label: '2' }, { id: '3', label: '3' }], (id) => { this.o.variations = Number(id); this.count.set(id); }, 'cv-seg-small');
     this.grid = tiles(3, 'cv-genp-grid-3');
     this.grid.items.forEach((t, i) => t.b.addEventListener('click', () => { this.picked = i; this.sync(); }));
     this.go.addEventListener('click', () => void this.generate());
     this.place.addEventListener('click', () => this.placePicked());
     const field = (label: string, ctl: HTMLElement): HTMLElement => { const f = el(`<div class="cv-genp-field"><span class="cv-pf-label">${label}</span></div>`); f.appendChild(ctl); return f; };
-    this.body.append(this.status, this.target, this.prompt, field('Type', this.type.el), field('Detail', this.detail.el), field('Variations', this.count.el), row(this.go, this.place), section('Variations'), this.grid.grid);
-    this.type.set('subject'); this.detail.set('2'); this.count.set('3');
+    this.body.append(this.status, this.target, this.prompt, field('Type', this.type.el), this.opts.el, field('Variations', this.count.el), row(this.go, this.place), this.report, section('Variations'), this.grid.grid);
+    this.type.set('subject'); this.count.set('3');
     for (const k of ['selection', 'doc', 'active'] as const) engine.on(k, () => this.queue());
     this.body.addEventListener('pointerenter', () => void this.refresh());
     void this.refresh(true);
@@ -48,7 +51,7 @@ export class TextToVectorPanel extends ModelPanel {
     this.busy = true; this.results = []; this.picked = -1; this.note = `Asking ${this.state.model} for ${this.o.variations} variation${this.o.variations === 1 ? '' : 's'}.`;
     this.sync();
     try {
-      this.results = await textToVectorVariations({ prompt: this.prompt.value, type: this.o.type, detail: this.o.detail, variations: this.o.variations });
+      this.results = await textToVectorVariations({ ...this.opts.values(), prompt: this.prompt.value, type: this.o.type, detail: this.opts.values().detail ?? 5, variations: this.o.variations });
       const ok = this.results.filter((r) => r.art).length;
       this.picked = this.results.findIndex((r) => r.art);
       this.note = ok ? `${ok} variation${ok === 1 ? '' : 's'} ready. Pick one and Place.` : `The model gave no usable art: ${this.results.find((r) => r.error)?.error ?? 'unknown error'}`;
@@ -75,5 +78,8 @@ export class TextToVectorPanel extends ModelPanel {
     setClass(this.go, 'is-busy', this.busy);
     setDisabled(this.place, this.busy || !this.results[this.picked]?.art);
     this.grid.items.forEach((t, i) => { const r = this.results[i]; setDisabled(t.b, !r?.art); setClass(t.b, 'is-picked', i === this.picked); setClass(t.b, 'is-busy', this.busy); setText(t.note, r?.error ? 'No art' : ''); });
+    const pr = this.results[this.picked];
+    setText(this.report, pr?.report ? (reportText(pr.report) || 'The SVG needed no repairs.') : this.results.find((r) => r.error)?.error ?? '');
+    this.opts.sync();
   }
 }
