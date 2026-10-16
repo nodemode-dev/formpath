@@ -27,10 +27,11 @@ import type { PrintSettings } from './print-layout';
 import { embeddedMarkFont, LiveFonts, liveStream, type Ink, type LiveText } from './pdf-text';
 import { downsampled, encodePixels, hasAlpha, pixelsOf, rasterPpi, withMask, type Pixels } from './pdf-image';
 import { makeSealer, sealStrings, type Sealer } from './pdf-crypt';
+import { aiThumbSize, buildAiPrivate } from './ai-private';
 import { pdfaParts, pdfString as pdfTextString, xmpPdfA } from './pdf-x';
 import { DEFAULT_COMPRESSION, pdfRefusal, permissionValue, securityActive, standardRules, STANDARD_LABELS, type PdfCompression, type PdfSecurity, type PdfStandard } from './pdf-std';
 
-export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: PdfStandard; sheet?: PrintSettings; compression?: PdfCompression; security?: PdfSecurity; layers?: boolean }
+export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: PdfStandard; sheet?: PrintSettings; compression?: PdfCompression; security?: PdfSecurity; layers?: boolean; aiPrivate?: boolean }
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
 export const PDF_MAX_SIDE = 14400;
@@ -600,6 +601,9 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   if (o.layers) for (const l of p.doc.layers) if (!l.template) ocgs.set(l, pdf.add(`<< /Type /OCG /Name ${pdfTextString(l.name || 'Layer')} /Usage << /Print << /Subtype /Print /PrintState /${l.hidden || l.printable === false ? 'OFF' : 'ON'} >> /View << /ViewState /${l.hidden ? 'OFF' : 'ON'} >> >> >>`));
   RES = pdf.reserve();
   const pagesId = pdf.reserve();
+  const aiOn = !!o.aiPrivate && o.preserve && std === 'none' && !secure && !o.sheet;
+  const pieceId = aiOn ? pdf.reserve() : 0;
+  const aiStamp = (() => { const d = new Date(), z = (v: number): string => String(v).padStart(2, '0'); return `D:${d.getUTCFullYear()}${z(d.getUTCMonth() + 1)}${z(d.getUTCDate())}${z(d.getUTCHours())}${z(d.getUTCMinutes())}${z(d.getUTCSeconds())}+00'00'`; })();
   await painter.prepare();
   const pageIds: number[] = [], sheets: Array<() => number> = [];
   const usesMarkFont = !!o.marks?.pageInfo;
@@ -637,7 +641,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     const content = pdf.add('<< /Filter /FlateDecode >>', packed);
     const W = geo.width * s, H = geo.height * s, box = (x0: number, y0: number, x1: number, y1: number): string => `[${f(x0)} ${f(y0)} ${f(x1)} ${f(y1)}]`;
     const bleedBox = bleed.t + bleed.b + bleed.l + bleed.r > 0 ? ` /BleedBox ${box(ox - bleed.l * s, oy - bleed.b * s, ox + (a.w + bleed.r) * s, oy + (a.h + bleed.t) * s)}` : '';
-    pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(W)} ${f(H)}]${bleedBox} /TrimBox ${box(ox, oy, ox + a.w * s, oy + a.h * s)}${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
+    pageIds.push(pdf.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${f(W)} ${f(H)}]${bleedBox} /TrimBox ${box(ox, oy, ox + a.w * s, oy + a.h * s)}${uu > 1 ? ` /UserUnit ${f6(uu)}` : ''}${pieceId ? ` /LastModified (${aiStamp}) /PieceInfo << /Illustrator ${pieceId} 0 R >>` : ''} /Resources ${RES} 0 R /Contents ${content} 0 R >>`));
   }
   if (o.sheet) pageIds.push(...inCopies(sheets, o.sheet));
   await painter.flush();
@@ -654,6 +658,21 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const spaces = `${res(painter.spaces, 'CS')}${defaultRgb ? ` /DefaultRGB ${defaultRgb} 0 R` : ''}`.trim();
   pdf.set(RES, `<< /ProcSet [/PDF /ImageC /ImageB] /ExtGState << ${res(painter.gs, 'GS')} >> /Pattern << ${res(painter.patterns, 'P')} >> /Shading << ${res(painter.shadings, 'Sh')} >> /XObject << ${res(painter.xobjects, 'Im')} >>${fontId || liveFonts ? ` /Font << ${fontId ? `/FMark ${fontId} 0 R ` : ''}${liveFonts} >>` : ''}${spaces ? ` /ColorSpace << ${spaces} >>` : ''}${props.size ? ` /Properties << ${res(props, 'OC')} >>` : ''} >>`);
   pdf.set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((x) => `${x} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
+  if (pieceId) {
+    const first = p.doc.artboards[o.artboards[0] ?? 0] ?? p.doc.artboards[0], tn = aiThumbSize(first.w, first.h);
+    let thumb: { width: number; height: number; data: Uint8ClampedArray } | null = null;
+    try {
+      const cv = await renderRegion(p, { region: { x: first.x, y: first.y, w: first.w, h: first.h }, scale: tn.width / first.w, transparent: false, bg: { kind: 'rgb', r: 255, g: 255, b: 255 } });
+      const cx = cv.getContext('2d'), tc = document.createElement('canvas');
+      tc.width = tn.width; tc.height = tn.height;
+      const tg = tc.getContext('2d');
+      if (cx && tg) { tg.fillStyle = '#fff'; tg.fillRect(0, 0, tn.width, tn.height); tg.drawImage(cv, 0, 0, tn.width, tn.height); thumb = { width: tn.width, height: tn.height, data: tg.getImageData(0, 0, tn.width, tn.height).data }; }
+    } catch { thumb = null; }
+    const ai = await buildAiPrivate({ p, boards: o.artboards, outlines, title: o.title ?? p.doc.title ?? p.name, version: o.version ?? '', deflate, thumb });
+    const meta = pdf.add('<< >>', ai.meta), blocks = ai.blocks.map((b) => pdf.add('<< >>', b));
+    const priv = pdf.add(`<< /AIMetaData ${meta} 0 R ${blocks.map((id, i) => `/AIPrivateData${i + 1} ${id} 0 R`).join(' ')} /ContainerVersion 11 /CreatorVersion ${ai.creator} /NumBlock ${blocks.length} /RoundtripStreamType 1 /RoundtripVersion 17 >>`);
+    pdf.set(pieceId, `<< /LastModified (${aiStamp}) /Private ${priv} 0 R >>`);
+  }
   let names = '';
   if (o.preserve && std === 'none' && !secure) {
     const { manifest, files } = serialize(p);
