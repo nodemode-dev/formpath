@@ -2,6 +2,18 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.45.0 · 2026-10-16
+
+Plan v0.9.0 phase 42: the seventh independent audit, the first to drive every row through the interface.
+
+### Fixed
+
+- The floating contextual task bar drew over open menus and swallowed clicks on them; it now sits under menus, popovers and dialogs.
+
+### Changed
+
+- `docs/PARITY.md`: 65.5 of 76 (86.2 percent), 55 Full and 21 Partial, from the seventh independent audit; additions 11 of 12. Each Partial row names the interface defect the audit found.
+
 ## 0.44.0 · 2026-10-16
 
 Plan v0.9.0 phase 41: files and 3D.

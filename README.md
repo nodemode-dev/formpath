@@ -2,7 +2,7 @@
 <h1 align="center">formpth</h1>
 <p align="center"><b>Vector illustration for the web and the desktop, in the NodeMode design system.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-0.44.0-f97316" alt="version 0.44.0">
+<img src="https://img.shields.io/badge/version-0.45.0-f97316" alt="version 0.45.0">
 <img src="https://img.shields.io/badge/node-22-339933" alt="node 22">
 <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
 <img src="https://img.shields.io/badge/tauri-2-24C8DB" alt="tauri 2">
@@ -120,7 +120,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 75.5 of 76 rows against Illustrator 30, self-graded at v0.44.0 after Smart Guides path and intersection snapping, fixes to Scissors, Knife and Eraser, editable PSD export, linked placement through file handles and a live 3D rotation widget; only `.ai` stays Partial. A seventh audit grades it again; the sixth independent audit graded 73 of 76 (70 Full, 6 Partial, 0 None), 96.1 percent, of the code at v0.41.0. It confirmed the layer commands and vector effects on groups and type as Full. Partial: Placed images (a multi-artboard `.ai` page defect, fixed in v0.42.0), `.ai` (written Illustrator data unconfirmed in Illustrator), Raster export (flat PSD layers; PNG and JPEG ppi fixed in v0.42.0), 3D (no real-time viewport), Smart Guides and Scissors and Knife (graded from code or an inconclusive run). DWG R2000 to R2018 reads natively since v0.35.0. The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
+- **Parity.** 65.5 of 76 rows against Illustrator 30 (55 Full, 21 Partial, 0 None), 86.2 percent, from a seventh independent audit of the code at v0.44.0 that drove every row through the interface with real mouse and keyboard input. Every row is built; the Partial rows are interface defects it found by using the app (layer rename, intersection snap in the tools, the Smooth tool, colour fields, swatch editing, gradient mesh, the Effect Gallery, asset export settings, saving after a linked file changed, the print preview and others), listed in `docs/PARITY.md`. Earlier audits read code and graded higher (73 of 76 at v0.41.0). The 12 plan additions grade 11 of 12.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors
