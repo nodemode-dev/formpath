@@ -1,4 +1,5 @@
-import { ARROWHEADS, brushGeometry, WIDTH_PROFILES } from '../../engine/effects';
+import { ARROWHEADS, brushGeometry, CUSTOM_WIDTH_PROFILES, WIDTH_PROFILES } from '../../engine/effects';
+import { customProfileNames, deleteWidthProfile, isCustomProfile, onWidthProfiles, resetWidthProfiles, saveWidthProfile } from '../../io/width-profiles';
 import { geomBounds } from '../../engine/bounds';
 import { anchor, toPath2D } from '../../engine/geometry';
 import { cssColor, firstStroke, parseColor, rgb, solid, stroke as makeStroke } from '../../engine/paint';
@@ -37,6 +38,7 @@ export class StrokePanel {
   private readonly endScale;
   private readonly arrowAlign;
   private readonly profile;
+  private readonly profBtns: Record<'along' | 'across' | 'add' | 'del' | 'reset', HTMLButtonElement>;
   private readonly dashBox = el('<div class="cv-strokep-dash"></div>');
 
   constructor(private readonly engine: Engine) {
@@ -59,7 +61,16 @@ export class StrokePanel {
     this.startScale = numField('Scale', '%', (v) => set({ arrowScale: [v, currentStroke(engine).arrowScale[1]] }), { min: 1, max: 1000 });
     this.endScale = numField('Scale', '%', (v) => set({ arrowScale: [currentStroke(engine).arrowScale[0], v] }), { min: 1, max: 1000 });
     this.arrowAlign = seg([{ id: 'extend', label: 'Extend arrow tip beyond end of path' }, { id: 'tip', label: 'Place arrow tip at end of path' }], (id) => set({ arrowAlign: id as 'extend' | 'tip' }));
-    this.profile = selectCtl('Profile', Object.keys(WIDTH_PROFILES).map((k) => [k, label(k)] as const), (v) => engine.setWidthProfile(v));
+    this.profile = selectCtl('Profile', this.profileChoices(), (v) => { if (v !== '__custom') engine.setWidthProfile(v); });
+    const pbtn = (name: string, title: string, run: () => void): HTMLButtonElement => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${title}" aria-label="${title}">${icon(name, 16)}</button>`); b.addEventListener('click', run); return b; };
+    this.profBtns = {
+      along: pbtn('flipH', 'Flip Along', () => { engine.flipWidthProfile(true, false); }),
+      across: pbtn('flipV', 'Flip Across', () => { engine.flipWidthProfile(false, true); }),
+      add: pbtn('add', 'Add to Profiles', () => void this.saveProfile()),
+      del: pbtn('delete', 'Delete Profile', () => this.removeProfile()),
+      reset: pbtn('refresh', 'Reset Profiles', () => void this.resetProfiles()),
+    };
+    onWidthProfiles(() => this.queue());
     this.body.append(
       row(this.weight.el, this.miter.el),
       section('Cap'), this.cap.el,
@@ -67,10 +78,35 @@ export class StrokePanel {
       section('Align Stroke'), this.align.el,
       this.dashed.el, this.dashBox, this.corners.el,
       section('Arrowheads'), row(this.startArrow.el, this.startScale.el), row(this.endArrow.el, this.endScale.el), this.arrowAlign.el,
-      this.profile.el,
+      this.profile.el, row(...Object.values(this.profBtns)),
     );
     for (const k of ['selection', 'doc', 'colors', 'active'] as const) engine.on(k, () => this.queue());
     this.sync();
+  }
+
+  private profileChoices(): Array<readonly [string, string]> {
+    return [...Object.keys(WIDTH_PROFILES).map((k) => [k, label(k)] as const), ...customProfileNames().map((k) => [k, k] as const), ['__custom', 'Custom width points'] as const];
+  }
+
+  private async saveProfile(): Promise<void> {
+    const s = currentStroke(this.engine);
+    if (!s.profile?.length) { this.engine.notice('Choose a profile or use the Width tool first: the stroke has no width points to save.'); return; }
+    const v = await askForm('Add to Profiles', [{ kind: 'text', key: 'name', label: 'Name', value: `Profile ${customProfileNames().length + 1}` }], { ok: 'Add' });
+    if (!v) return;
+    const key = saveWidthProfile(String(v.name), s.profile);
+    if (key) this.engine.notice(`Added ${key} to the profiles.`);
+    else this.engine.notice('Choose a name that is not one of the built-in profiles.', 'error');
+  }
+
+  private removeProfile(): void {
+    const s = currentStroke(this.engine), name = Object.entries(CUSTOM_WIDTH_PROFILES).find(([, v]) => JSON.stringify(v) === JSON.stringify(s.profile))?.[0];
+    if (!name || !deleteWidthProfile(name)) this.engine.notice('Only profiles you added can be deleted. Select one in the Profile menu first.');
+  }
+
+  private async resetProfiles(): Promise<void> {
+    if (!customProfileNames().length) { this.engine.notice('There are no added profiles to remove.'); return; }
+    const v = await askForm('Reset Profiles', [{ kind: 'note', text: 'This removes every profile you added and keeps the built-in ones. Strokes keep their width points.' }], { ok: 'Reset' });
+    if (v) resetWidthProfiles();
   }
 
   private applyDashes(): void {
@@ -99,8 +135,16 @@ export class StrokePanel {
     this.startScale.set(s.arrowScale[0]);
     this.endScale.set(s.arrowScale[1]);
     this.arrowAlign.set(s.arrowAlign);
-    const prof = s.profile ? Object.entries(WIDTH_PROFILES).find(([, v]) => JSON.stringify(v) === JSON.stringify(s.profile))?.[0] ?? '' : 'uniform';
-    if (prof) this.profile.set(prof);
+    this.profile.setChoices(this.profileChoices());
+    const sig = JSON.stringify(s.profile);
+    const prof = s.profile ? [...Object.entries(WIDTH_PROFILES), ...Object.entries(CUSTOM_WIDTH_PROFILES)].find(([, v]) => JSON.stringify(v) === sig)?.[0] ?? '__custom' : 'uniform';
+    this.profile.set(prof);
+    const has = !!s.profile?.length;
+    setDisabled(this.profBtns.along, !has);
+    setDisabled(this.profBtns.across, !has);
+    setDisabled(this.profBtns.add, !has);
+    setDisabled(this.profBtns.del, !isCustomProfile(prof));
+    setDisabled(this.profBtns.reset, !customProfileNames().length);
   }
 }
 

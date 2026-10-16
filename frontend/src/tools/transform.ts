@@ -1,8 +1,9 @@
 import { findNode } from '../engine/doc';
-import { apply, mul, nearestOnPath, normRect, rotateAbout, scaleAbout, segLength, segments } from '../engine/geometry';
+import { apply, mul, nearestOnPath, normRect, rotateAbout, scaleAbout } from '../engine/geometry';
+import { normalizeWidthPoints, profileAt, widthAxisNearest, widthFrames } from '../engine/effects';
 import { transformNodes } from '../engine/ops/objects';
 import { firstStroke, withFirstStroke } from '../engine/paint';
-import type { Anchor, Engine, Mat, PathData, Pt, VNode, WidthPoint } from '../engine';
+import type { Anchor, Engine, Mat, PathData, Pt, StrokeItem, VNode, WidthPoint } from '../engine';
 import { registerTool, toolHost, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { beginTransform, dragTransform, endTransform, handleAt, newDrag, replaceNode } from './select';
@@ -253,51 +254,200 @@ registerTool({
   up: (ctx) => { const e = ctx.engine; if (!R.on) return; R.on = false; if (R.moved) e.commitDrag(); else e.cancelDrag(); },
 });
 
-function lengthAt(d: PathData, sub: number, seg: number, t: number): number {
-  const sp = d[sub], segs = segments(sp), total = segs.reduce((s, g) => s + segLength(g), 0);
-  let acc = 0;
-  for (let i = 0; i < seg; i++) acc += segLength(segs[i]);
-  acc += segLength(segs[seg], 0, t);
-  return total ? acc / total : 0;
+type WSide = 'l' | 'r';
+const W = { mode: '' as '' | 'create' | 'move' | 'side', id: '', sub: 0, hoverId: '', hover: null as Pt | null, moved: false, t0: 0, anchor: { x: 0, y: 0 }, pick: -1, side: 'l' as WSide, dup: false, clickSel: -1, base: [] as number[], subs: new Map<string, number>() };
+
+interface WPos { i: number; c: Pt; a: Pt; b: Pt }
+const strokeOf = (n: VNode | null | undefined): StrokeItem | null => (n?.kind === 'path' ? firstStroke(n.ap) : null);
+
+function shownIds(e: Engine): string[] {
+  const pr = e.current, out: string[] = [];
+  if (!pr) return out;
+  for (const id of [...e.selectedIds().slice(0, 8), W.hoverId]) if (id && !out.includes(id) && strokeOf(findNode(pr.doc, id))) out.push(id);
+  return out;
 }
 
-const W = { on: false, id: '', t: 0, anchor: { x: 0, y: 0 }, moved: false, hover: null as Pt | null };
+function widthLayout(d: PathData, sub: number, s: StrokeItem, zoom: number): WPos[] {
+  const prof = s.profile ?? [], sp = d[Math.min(sub, d.length - 1)];
+  if (!sp || !prof.length) return [];
+  const fr = widthFrames(sp, prof.map((q) => q.t)), hw = s.width / 2, group = new Map<number, number[]>();
+  if (fr.length !== prof.length) return [];
+  prof.forEach((q, i) => { const g = group.get(q.t); if (g) g.push(i); else group.set(q.t, [i]); });
+  return prof.map((q, i) => {
+    const f = fr[i], g = group.get(q.t) as number[], off = (g.indexOf(i) - (g.length - 1) / 2) * (10 / zoom);
+    const c = { x: f.p.x + f.u.x * off, y: f.p.y + f.u.y * off };
+    return { i, c, a: { x: c.x + f.n.x * hw * q.l, y: c.y + f.n.y * hw * q.l }, b: { x: c.x - f.n.x * hw * q.r, y: c.y - f.n.y * hw * q.r } };
+  });
+}
+
+function pickWidth(ctx: ToolContext, p: ToolPointer): { id: string; i: number; handle: WSide | null } | null {
+  const e = ctx.engine, pr = e.current, v = ctx.view();
+  if (!pr) return null;
+  const at = v.toScreen(p.doc);
+  let best: { id: string; i: number; handle: WSide | null; d: number } | null = null;
+  for (const id of shownIds(e)) {
+    const n = findNode(pr.doc, id), s = strokeOf(n);
+    if (n?.kind !== 'path' || !s) continue;
+    for (const L of widthLayout(n.d, W.subs.get(id) ?? 0, s, v.zoom)) {
+      const c = v.toScreen(L.c), a = v.toScreen(L.a), b = v.toScreen(L.b);
+      const dc = Math.hypot(c.x - at.x, c.y - at.y), da = Math.hypot(a.x - at.x, a.y - at.y), db = Math.hypot(b.x - at.x, b.y - at.y);
+      const cand: Array<[number, WSide | null]> = [[dc, null], [da + 2, 'l'], [db + 2, 'r']];
+      for (const [d, handle] of cand) if (d <= 7 && (!best || d < best.d)) best = { id, i: L.i, handle, d };
+    }
+  }
+  return best ? { id: best.id, i: best.i, handle: best.handle } : null;
+}
+
 registerTool({
   id: 'width', label: 'Width Tool', group: 'width', order: 56, shortcut: 'Shift+W',
   icon: () => 'vWidth',
-  hint: () => 'Drag out from a stroke to change its width at that point; Alt drags one side only.',
+  hint: () => 'Drag along a stroke to add a width point, drag a point to move it, drag a handle to change the width. Alt on a handle changes one side; Alt-drag a point copies it; Shift-click selects more; Delete removes; double-click edits.',
   cursor: () => CURSORS.cross,
-  hover: (ctx, p) => { W.hover = p?.doc ?? null; ctx.redraw(); },
+  hover: (ctx, p) => {
+    W.hover = p?.doc ?? null;
+    const e = ctx.engine, pr = e.current;
+    if (!p) W.hoverId = '';
+    else if (pr && !W.mode && !pickWidth(ctx, p)) {
+      const h = e.hit(p.doc, 6), n = h ? findNode(pr.doc, h.id) : null;
+      if (n?.kind === 'path' && firstStroke(n.ap)) {
+        W.hoverId = n.id;
+        const r = nearestOnPath(n.d, p.doc);
+        if (r) W.subs.set(n.id, r.sub);
+      } else if (W.hoverId) {
+        const m = findNode(pr.doc, W.hoverId), r = m?.kind === 'path' ? nearestOnPath(m.d, p.doc) : null;
+        if (!r || r.d * ctx.view().zoom > 30) W.hoverId = '';
+      }
+    }
+    ctx.redraw();
+  },
   down: (ctx, p) => {
     const e = ctx.engine, pr = e.current;
     if (!pr) return;
-    const h = e.hit(p.doc, 6);
-    const n = h ? findNode(pr.doc, h.id) : null;
-    if (n?.kind !== 'path' || !firstStroke(n.ap)) return;
-    const r = nearestOnPath(n.d, p.doc);
-    if (!r) return;
+    W.moved = false; W.mode = ''; W.clickSel = -1; W.dup = false;
+    const k = pickWidth(ctx, p);
+    if (k) {
+      const n = findNode(pr.doc, k.id), s = strokeOf(n);
+      if (n?.kind !== 'path' || !s?.profile) return;
+      if (!pr.selection.has(k.id)) e.select([k.id]);
+      if (e.widthSel.id !== k.id) e.widthSel = { id: k.id, idx: [] };
+      const ws = e.widthSel, on = ws.idx.includes(k.i);
+      if (k.handle) ws.idx = on ? ws.idx : p.shift ? [...ws.idx, k.i] : [k.i];
+      else if (p.shift) { ws.idx = on ? ws.idx.filter((x) => x !== k.i) : [...ws.idx, k.i]; if (on) { ctx.redraw(); return; } }
+      else if (on) W.clickSel = k.i;
+      else ws.idx = [k.i];
+      const sub = W.subs.get(k.id) ?? 0, near = n.d[sub] ? widthAxisNearest(n.d[sub], p.doc) : null;
+      W.id = k.id; W.sub = sub; W.t0 = near?.t ?? s.profile[k.i].t; W.pick = k.i; W.side = k.handle ?? 'l'; W.dup = !k.handle && p.alt;
+      W.mode = k.handle ? 'side' : 'move';
+      W.base = [...ws.idx];
+      e.beginDrag(k.handle ? 'Change Width' : W.dup ? 'Duplicate Width Points' : 'Move Width Points');
+      ctx.redraw();
+      return;
+    }
+    const h = e.hit(p.doc, 6), n = h ? findNode(pr.doc, h.id) : null;
+    if (n?.kind !== 'path' || !firstStroke(n.ap)) { e.widthSel = { id: '', idx: [] }; ctx.redraw(); return; }
+    let sub = 0, best: { t: number; pt: Pt; d: number } | null = null;
+    for (let i = 0; i < n.d.length; i++) { const r = widthAxisNearest(n.d[i], p.doc); if (r && (!best || r.d < best.d)) { best = r; sub = i; } }
+    if (!best) return;
     if (!pr.selection.has(n.id)) e.select([n.id]);
-    W.on = true; W.id = n.id; W.t = lengthAt(n.d, r.sub, r.seg, r.t); W.anchor = r.pt; W.moved = false;
-    e.beginDrag('Width');
+    e.widthSel = { id: n.id, idx: [] };
+    W.subs.set(n.id, sub);
+    W.mode = 'create'; W.id = n.id; W.sub = sub; W.t0 = best.t; W.anchor = best.pt;
+    e.beginDrag('Add Width Point');
   },
   move: (ctx, p) => {
     const e = ctx.engine, base = e.dragOrigin;
-    if (!W.on || !base) return;
-    const n = findNode(base, W.id), s = n ? firstStroke(n.ap) : null;
-    if (!n || !s) return;
-    W.moved = true;
-    const half = Math.max(0.01, Math.hypot(p.doc.x - W.anchor.x, p.doc.y - W.anchor.y)), w = s.width || 1, k = half / (w / 2);
-    const prof: WidthPoint[] = (s.profile?.length ? s.profile : [{ t: 0, l: 1, r: 1 }, { t: 1, l: 1, r: 1 }]).filter((x) => Math.abs(x.t - W.t) > 0.02);
-    prof.push({ t: W.t, l: k, r: p.alt ? (prof.find((x) => x.t > W.t)?.r ?? 1) : k });
-    prof.sort((a, b) => a.t - b.t);
-    e.dragTo(replaceNode(base, W.id, { ...n, ap: withFirstStroke(n.ap, { profile: prof }) }));
     W.hover = p.doc;
+    if (!W.mode || !base) return;
+    const n = findNode(base, W.id), s = strokeOf(n), sp = n?.kind === 'path' ? n.d[W.sub] : null;
+    if (n?.kind !== 'path' || !s || !sp) return;
+    W.moved = true;
+    const hw = Math.max(1e-6, (s.width || 1) / 2), prof0 = normalizeWidthPoints(s.profile?.length ? s.profile : [{ t: 0, l: 1, r: 1 }, { t: 1, l: 1, r: 1 }]);
+    const sel0 = W.base.filter((i) => i >= 0 && i < prof0.length);
+    let out: WidthPoint[], sel: number[];
+    if (W.mode === 'create') {
+      const fr = widthFrames(sp, [W.t0])[0], dx = p.doc.x - W.anchor.x, dy = p.doc.y - W.anchor.y, cur = profileAt(prof0, W.t0);
+      const k = Math.max(0.01, Math.hypot(dx, dy)) / hw;
+      let q: WidthPoint = { t: W.t0, l: k, r: k };
+      if (p.alt && fr) { const along = dx * fr.n.x + dy * fr.n.y, kk = Math.max(0.01, Math.abs(along)) / hw; q = along >= 0 ? { t: W.t0, l: kk, r: cur.r } : { t: W.t0, l: cur.l, r: kk }; }
+      out = prof0.filter((x) => Math.abs(x.t - W.t0) > 0.02);
+      out.push(q);
+      out.sort((a, b) => a.t - b.t);
+      sel = [out.indexOf(q)];
+    } else if (W.mode === 'move') {
+      const near = widthAxisNearest(sp, p.doc);
+      if (!near || !sel0.length) return;
+      const items = prof0.map((q) => ({ q: { ...q }, mv: false })), moving = W.dup ? sel0.map((i) => ({ q: { ...prof0[i] }, mv: true })) : sel0.map((i) => { items[i].mv = true; return items[i]; });
+      if (W.dup) items.push(...moving);
+      const lo = Math.min(...moving.map((x) => x.q.t)), hi = Math.max(...moving.map((x) => x.q.t)), dt = Math.max(-lo, Math.min(1 - hi, near.t - W.t0));
+      for (const m of moving) {
+        let t = m.q.t + dt;
+        for (const o of items) if (!o.mv && Math.abs(o.q.t - t) < 0.003) { t = o.q.t; break; }
+        m.q.t = t;
+      }
+      items.sort((a, b) => a.q.t - b.q.t);
+      out = items.map((x) => x.q);
+      sel = items.flatMap((x, i) => (x.mv ? [i] : []));
+    } else {
+      const q0 = prof0[W.pick], fr = q0 ? widthFrames(sp, [q0.t])[0] : null;
+      if (!q0 || !fr) return;
+      const proj = (((p.doc.x - fr.p.x) * fr.n.x + (p.doc.y - fr.p.y) * fr.n.y) * (W.side === 'l' ? 1 : -1)) / hw, delta = Math.max(0, proj) - q0[W.side];
+      out = prof0.map((q) => ({ ...q }));
+      for (const i of sel0) {
+        const q = out[i];
+        if (p.alt) q[W.side] = Math.max(0, q[W.side] + delta);
+        else { q.l = Math.max(0, q.l + delta); q.r = Math.max(0, q.r + delta); }
+      }
+      sel = sel0;
+    }
+    e.widthSel.idx = sel;
+    e.dragTo(replaceNode(base, W.id, { ...n, ap: withFirstStroke(n.ap, { profile: out }) }));
   },
-  up: (ctx) => { const e = ctx.engine; if (!W.on) return; W.on = false; if (W.moved) e.commitDrag(); else e.cancelDrag(); },
+  up: (ctx) => {
+    const e = ctx.engine;
+    if (!W.mode) return;
+    W.mode = '';
+    if (W.moved) e.commitDrag();
+    else { e.cancelDrag(); if (W.clickSel >= 0) e.widthSel.idx = [W.clickSel]; }
+    W.clickSel = -1;
+    ctx.redraw();
+  },
+  cancel: (ctx) => { if (!W.mode) return; W.mode = ''; ctx.engine.cancelDrag(); ctx.redraw(); },
+  deactivate: () => { W.mode = ''; W.hoverId = ''; },
+  keydown: (ctx, ev) => {
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return false;
+    const e = ctx.engine, ws = e.widthSel, s = strokeOf(e.current ? findNode(e.current.doc, ws.id) : null);
+    if (!s?.profile || !ws.idx.length) return false;
+    const keep = s.profile.filter((_, i) => !ws.idx.includes(i));
+    e.setWidthPoints(keep.length ? keep : null, [ws.id], 'Delete Width Points');
+    e.widthSel = { id: ws.id, idx: [] };
+    ctx.redraw();
+    return true;
+  },
+  dblclick: (ctx, p) => {
+    const k = pickWidth(ctx, p);
+    if (!k) return;
+    ctx.engine.widthSel = { id: k.id, idx: [k.i] };
+    toolHost.run('width-point-edit');
+  },
   overlay: (ctx, g) => {
-    if (!W.on || !W.hover) return;
-    const v = ctx.view(), a = v.toScreen(W.anchor), b = v.toScreen(W.hover);
-    g.save(); g.strokeStyle = ctx.paint().accent; g.beginPath(); g.moveTo(2 * a.x - b.x, 2 * a.y - b.y); g.lineTo(b.x, b.y); g.stroke(); g.restore();
+    const e = ctx.engine, pr = e.current;
+    if (!pr) return;
+    const v = ctx.view(), pal = ctx.paint();
+    g.save();
+    g.lineWidth = 1;
+    for (const id of shownIds(e)) {
+      const n = findNode(pr.doc, id), s = strokeOf(n);
+      if (n?.kind !== 'path' || !s) continue;
+      const sel = e.widthSel.id === id ? e.widthSel.idx : [];
+      for (const L of widthLayout(n.d, W.subs.get(id) ?? 0, s, v.zoom)) {
+        const c = v.toScreen(L.c), a = v.toScreen(L.a), b = v.toScreen(L.b), on = sel.includes(L.i);
+        g.strokeStyle = pal.accent; g.fillStyle = on ? pal.accent : pal.handle;
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+        for (const h of [a, b]) { g.beginPath(); g.rect(h.x - 3, h.y - 3, 6, 6); g.fill(); g.stroke(); }
+        g.beginPath(); g.moveTo(c.x, c.y - 5); g.lineTo(c.x + 5, c.y); g.lineTo(c.x, c.y + 5); g.lineTo(c.x - 5, c.y); g.closePath(); g.fill(); g.stroke();
+      }
+    }
+    g.restore();
   },
 });
 

@@ -50,7 +50,7 @@ export class TaskBar {
 
   private kindOf(): string {
     const p = this.engine.current;
-    if (!p || p.anchors.size || !this.engine.hasSelection) return '';
+    if (!p || p.anchors.size || !this.engine.hasSelection || this.engine.tool === 'width') return '';
     const sel = this.engine.selected();
     if (!sel.length) return '';
     if (sel.length > 1) return 'multiple';
