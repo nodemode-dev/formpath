@@ -643,7 +643,9 @@ ask it questions.
   LZW or Deflate compression at the resolution you set.
 - Raster export also writes GIF and PNG-8 (choose Perceptual, Selective or Adaptive colour reduction, 2 to 256
   colours, dither amount, interlacing, transparency and a matte colour for edge pixels), 24-bit BMP, and Photoshop
-  PSD with each top-level layer as a named pixel layer under a flattened composite. Every raster format takes a
+  PSD under a flattened composite: with Write Layers and Maximum Editability, layers and groups become Photoshop
+  groups, point and area type become editable type layers and plain filled or stroked paths become shape layers;
+  anything else becomes a pixel layer and the export message names it. Every raster format takes a
   resolution in ppi and an anti-aliasing choice: Art Optimized, Type Optimized (shapes smooth, plain type sharp) or
   None.
 - File > Place takes PDF and .ai files (pick the page and Crop To Bounding Box, Art or Media; link it as a picture
@@ -715,6 +717,11 @@ ask it questions.
 - 3D and Materials: Lighting takes a preset or up to eight lights; Render with Ray Tracing, at Low, Medium or High,
   adds soft shadows and ambient occlusion and shows the brushed metal, wood and rough materials. Inflate and Map Art
   are ray traced too.
+- A selected 3D object shows rotation rings on the canvas: drag a ring to turn one axis, drag inside to rotate
+  freely, hold Shift for 15 degree steps, double-click to reset. The 3D panel's preview can be orbited, and its light
+  handles dragged to set each light's direction.
+- In Chrome or Edge, File > Place keeps a link to the file, so placed images, PDFs, Photoshop and TIFF files can stay
+  linked; other browsers embed them, and the Place dialog says so first.
 - File > Print (Ctrl+P) sets paper, orientation, scaling (fit, percent or tiled pages), printer's marks and bleed,
   composite or separations, and whether formpth or the printer manages colour; the printer itself is chosen in the
   system print dialog that opens next. Proof Setup shows the display profile proofing uses; Preserve CMYK Numbers

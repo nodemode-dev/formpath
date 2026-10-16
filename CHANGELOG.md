@@ -2,6 +2,19 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.44.0 · 2026-10-16
+
+Plan v0.9.0 phase 41: files and 3D.
+
+### Added
+
+- Photoshop export with Write Layers and Maximum Editability: layer groups, editable type layers and shape layers (solid or gradient fill, vector mask, vector stroke), with anything else as pixel layers and named in the export message. `export_file` takes `psd_edit`.
+- 3D: an on-canvas rotation widget (X, Y and Z rings, free rotate, Shift for 15 degrees, double-click to reset) that redraws the object while you drag, and a live preview in the 3D panel to orbit, with draggable light handles.
+
+### Fixed
+
+- In a browser, File > Place, Relink, Relink from Folder and Unembed now keep file handles, so PNG and JPEG can be placed linked and PDF, PSD and TIFF offer Link; the Place dialog says when a file cannot be linked.
+
 ## 0.43.0 · 2026-10-16
 
 Plan v0.9.0 phase 40: canvas proof and snapping.
