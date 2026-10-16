@@ -3727,3 +3727,108 @@ An audit reported that the Scissors click and Knife drag changed nothing. Driven
 - logged: v0.43.0 · 2026-10-16
 
 New documents were created with whatever fill the previous document left, and `addText` used the current fill, which is white at start, so type made without choosing the Type tool (agents, scripts) was invisible on a white artboard. Shapes already matched Illustrator (white fill, black 1 pt stroke) and stay as they are. `newDocument` now resets the current fill and stroke to that default and clears `fillPicked`; `setFill` sets it and `defaultFillStroke` clears it. `typeFill` gives type black when the current fill is none, or white-ish while the user has not picked a fill, and the user's fill otherwise; the stroke of new type is always none. The Type tool's activate keeps a picked fill instead of forcing black over it. Opened files and existing documents are untouched.
+
+### src/ui/three-d-widget.ts · on-canvas rotation widget
+- refers-to: src/ui/three-d-widget.ts :: ThreeDWidget; src/app.ts; src/engine/threed-view.ts
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+The widget is a stage painter plus capture-phase listeners on the overlay canvas, so stage.ts is untouched: a pointer that lands on a ring or inside the sphere is swallowed before the Selection tool sees it, anything else passes through, and Alt passes through too so Alt-drag still copies. It shows for one selected object with a 3D effect while the Selection or Direct Selection tool is active. The rings are the Euler axes themselves (X world, Y after rx, Z after rx and ry), so a ring drag changes exactly one of rx, ry, rz and the panel fields stay honest; the rings are drawn through a fixed display tilt so none is edge-on, and a ring that is still near edge-on falls back to 0.5 degrees per pixel. Dragging inside rotates freely (rx and ry), Shift snaps to 15 degrees, double-click sets 0, 0, 0. A drag opens one engine gesture on its first 3 px of movement and writes through set3d once per animation frame, so it is one undo step. During the drag the scene uses the draft tessellation (below) and on release the final values are written with draft off so the cached faces are full quality.
+
+### src/engine/threed.ts · draft tessellation
+- refers-to: src/engine/threed.ts :: setSceneDraft, scene3dWith, modelScene
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+Interactive rotation needs vector faces fast, so `setSceneDraft(true)` coarsens flattening (tolerance size/70 against size/300), uses one bevel step for rounded bevels, 20 instead of 48 revolve steps per turn, and at most 1500 model faces. Shading stays the same (no flat-shading fallback) so the colours do not jump on release. Ray tracing keeps its own draft through beginGesture. The flag is module state set by the widget and the panel preview only around a drag or a preview draw; it is never saved and never reaches export.
+
+### src/engine/threed-view.ts · rotation helpers
+- refers-to: src/engine/threed-view.ts :: ringBases, ringAngle, freeRotate, lightFromOffset
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+Pure maths for the widget and the preview, no DOM. ringAngle solves the pointer against the ring's two projected basis vectors and returns null near edge-on, where the callers use a linear fallback. Drags accumulate per-event angle deltas rather than an absolute angle, so switching between the two methods mid-drag does not jump. freeRotate maps a pointer delta to rx and ry at 0.5 degrees per pixel (dragging right turns the front face right). lightFromOffset and lightOffset map a light's rotation and height to a point in the preview disc: radius is cos(height), so height 90 sits at the centre.
+
+### src/ui/panels/three-d-preview.ts · panel preview
+- refers-to: src/ui/panels/three-d-preview.ts :: ThreeDPreview; src/ui/panels/three-d.ts
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+A fixed 232 by 156 canvas at the top of the 3D panel form, reserved with the form so nothing shifts. It renders the selected object through threeDFaces on a clone with the local rotation and lights and the draft tessellation, ray tracing off, and fits it to the box. Dragging orbits (Shift snaps), dragging a light handle changes that light's rotation and height, double-click resets rotation; the preview alone updates during the drag and the document is written once on release, one undo step. A press on a handle also selects that light in the panel. The panel hides the preview with the form when no 3D effect is selected.
+
+### src/ui/panels/three-d.ts · preview wiring
+- refers-to: src/ui/panels/three-d.ts :: ThreeDPanel.view
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+The panel owns a ThreeDPreview as the first child of the form and calls its sync at the end of every sync, passing the selected node, its 3D effect and the active light index. Picking a light handle in the preview sets lightAt and queues a sync.
+
+### src/styles/formpth.css · 3D preview box
+- refers-to: src/styles/formpth.css :: .cv-3dp-view, .cv-3dp-canvas
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+The preview box has a fixed height (156 px) and a canvas of fixed intrinsic size, with touch-action none so a touch drag orbits instead of scrolling the panel. No z-index is used.
+
+### src/app.ts · 3D widget mount
+- refers-to: src/app.ts :: ThreeDWidget
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+One line after the Stage is created attaches the rotation widget to the stage painters and the overlay canvas.
+
+### src/app.ts · File > Place and drop keep file handles
+- refers-to: src/app.ts :: useHandles, placePicked, placeHandled, linkHint, placeDeps, chooseLinkFile, relinkFolder, unembed, drop handler; src/io/links.ts :: pickPlaceFiles, dropHandles
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+`caps` is set whenever the engine service answers, not only on the desktop, so a web page with a local engine used to take the server-side path dialog for every link and File > Place (a plain input) never linked at all. `useHandles` (File System Access API present and not the desktop shell) now routes Place, Place Linked, Relink, Relink Missing from Folder and Unembed through showOpenFilePicker, showDirectoryPicker and showSaveFilePicker, and drop reads DataTransferItem.getAsFileSystemHandle synchronously in the drop event. Raster images placed this way are linked by default; PDF, PSD and TIFF reach the Place dialog with Link available. Where the picker or a handle is missing, the dialog now says why before placing (PlaceSpec.linkHint). The desktop keeps its path route unchanged.
+
+### src/io/links.ts · picker for Place, drop handles, .psb
+- refers-to: src/io/links.ts :: pickPlaceFiles, dropHandles, linkable, IMAGE_KINDS, FileHandle
+- kind: warning-context
+- logged: v0.44.0 · 2026-10-16
+
+`dropHandles` must be called synchronously from the drop event because DataTransferItems are dead after the first await. Only linkable kinds keep a handle in IndexedDB; SVG, EPS and models come back as plain files. Playwright cannot drive showOpenFilePicker (the filechooser event does not fire; the call rejects with AbortError), so the browser tests replace the pickers with OPFS handles, which are real FileSystemFileHandles; real permission prompts are therefore untested.
+
+### src/ui/place-dialog.ts · link hint
+- refers-to: src/ui/place-dialog.ts :: sync; src/io/place.ts :: PlaceSpec.linkHint
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+When Link is not offered the note shows `linkHint` (browser without the API, or a file that arrived without a handle) instead of the fixed Place Linked sentence, so the person knows before pressing Place.
+
+### src/io/place.ts · PlaceSpec.linkHint
+- refers-to: src/io/place.ts :: PlaceSpec
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+PlaceSpec carries an optional `linkHint` set by the app wrapper around the ask function; placeSpecial itself is unchanged.
+
+### src/io/psd-vector.ts · editable PSD blocks
+- refers-to: src/io/psd-vector.ts :: typeBlock, vectorMaskBlock, solidBlock, gradientBlock, strokeBlock, sectionBlock
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+Clean-room from Adobe's Photoshop File Formats Specification (https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/) and real PSD files used as data only. The spec gives the descriptor structure, TySh, SoCo, GdFl, vmsk and vstk framing but not the EngineData text dictionary, the path-record operation field or the vstk keys, which were learned by parsing real files with an own throwaway reader: a subpath length record carries the operation as int16 at byte 4 (1 combine, 2 subtract, 3 intersect, 0 exclude), a constant 1, and the subpath index at byte 14; initial fill rule record is 0; shape layers are SoCo or GdFl then vmsk then vstk, with layer flags 8 plus 16; type layers carry the warp rect as 16 zero bytes, not the 4 doubles the spec table shows. Blocks are padded to 4 bytes as Photoshop does. Honest limit: Photoshop itself was not available, so no output was opened in it; the check is psd-tools as a black-box reader (kinds, text, fonts, paths, composite) and the layer bytes against real files. Even-odd compound paths use exclude for every subpath after the first; non-zero uses subtract only for an opposite-wound subpath that lies inside an earlier one, else combine. Font names are the installed PostScript name when the font list has one, else Family-Style with spaces removed.
+
+### src/io/psd-layers.ts · what becomes what
+- refers-to: src/io/psd-layers.ts :: buildPsdLayers, shapeReason, textReason
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+Layers, sublayers and plain groups become Photoshop groups (open, pass-through when Normal at 100 percent, else with the real blend key in lsct); point and area type become TySh layers with the rendered pixels; paths and compound paths with one solid or linear or radial gradient fill and at most one solid stroke become shape layers with the rendered pixels. Stays pixels, and is listed in PSD_NOTES which the export toast shows: type on a path, vertical, threaded or multi-column type, wrap, gradient or stroked type, effects, opacity masks, perspective, several fills or strokes, fill opacity or blend, patterns, freeform gradients, width profiles, brushes, arrowheads, clip groups and live groups (trace, Live Paint, dimension, graph). Stroke alignment, cap, join, miter and dashes map to vstk; a gradient angle comes from the gradient geometry. Type leading, size and tracking are written in canvas pixels (size times export scale) with the node matrix as the type transform. Unverified without Photoshop: that it opens every block without a repair prompt, the type metrics after a reflow, and gradient placement.
+
+### src/io/psd-write.ts · layer record extras
+- refers-to: src/io/psd-write.ts :: PsdLayerIn
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+PsdLayerIn gained key (blend key override, pass for groups), blocks (extra additional-layer-info blocks written after luni) and irrelevant (flag bit 4, which psd-tools needs to classify a SoCo plus vmsk layer as a shape). Out and BLEND_KEYS are exported for psd-vector.ts. Section dividers use an empty pixel layer.
+
+### src/io/raster.ts · psdEdit option
+- refers-to: src/io/raster.ts :: RasterExtra.psdEdit, exportOther; src/ui/app-dialogs.ts; src/automation/agent-bridge.ts :: psd_edit
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+PSD export has three choices: Write layers with Maximum editability (default), Write layers alone (pixel layers per layer as before, selection as one layer), and Flat image (Write layers off). The MCP export reads psd_edit (default true) but the tool schema in backend mcp.py was not extended, so it is only reachable by name until the next agents sync. The export dialog row labels go through t().

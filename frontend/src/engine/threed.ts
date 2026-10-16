@@ -260,13 +260,15 @@ function ringSigns(list: Array<{ pts: Pt[]; closed: boolean }>): number[] {
 
 export function scene3d(solids: Solid[], e: Effect): Face[] { return scene3dWith(solids, e).faces; }
 
+let sceneDraft = false;
+export function setSceneDraft(on: boolean): void { sceneDraft = on; }
 export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
   const p = e.params, kind = e.id, res = surfaceResolver(p), texUv = trace && (textureOf(p) !== null || (res !== null && surfaceTextured(p)));
   let b = emptyRect();
   for (const s of solids) b = unionRect(b, pathBounds(s.d));
   if (!Number.isFinite(b.x)) return { faces: [], project: (x, y) => ({ x, y }), center: { x: 0, y: 0 }, trace: null };
   if (kind === '3d.model') return modelScene(solids, e, b, trace, res);
-  const size = Math.max(b.w, b.h, 1), tol = Math.max(0.2, size / 300), raws: Raw[] = [];
+  const size = Math.max(b.w, b.h, 1), tol = sceneDraft ? Math.max(0.8, size / 70) : Math.max(0.2, size / 300), raws: Raw[] = [];
   const memo = new Map<Solid, Array<{ pts: Pt[]; closed: boolean }>>();
   const polys = (s: Solid): Array<{ pts: Pt[]; closed: boolean }> => { let l = memo.get(s); if (!l) { l = s.d.map((sp) => ({ pts: flattenSub(sp, tol), closed: sp.closed })).filter((q) => q.pts.length > 1); memo.set(s, l); } return l; };
   let center: V3 = [b.x + b.w / 2, b.y + b.h / 2, 0];
@@ -277,7 +279,7 @@ export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
     for (const s of solids) {
       const list = polys(s);
       const outer = list.reduce((m, q) => (Math.abs(area(q.pts)) > Math.abs(m) ? area(q.pts) : m), 0), sign = outer >= 0 ? 1 : -1;
-      const steps = bh > 0 ? (bevel === 'rounded' ? 4 : 1) : 0;
+      const steps = bh > 0 ? (bevel === 'rounded' && !sceneDraft ? 4 : 1) : 0;
       const ring = (pts: Pt[], k: number): { pts: Pt[]; z: number } => { if (!steps) return { pts, z: 0 }; const t = k / steps, th = (t * Math.PI) / 2, inAmt = bevel === 'rounded' ? bh * (1 - Math.sin(th)) : bh * (1 - t), z = bevel === 'rounded' ? bh * (1 - Math.cos(th)) : bh * t; return { pts: inAmt > 1e-6 ? inset(pts, inAmt, sign) : pts, z }; };
       const hs = trace ? ringSigns(list) : [];
       for (const [qi, q] of list.entries()) {
@@ -309,7 +311,7 @@ export function scene3dWith(solids: Solid[], e: Effect, trace = false): Scene {
     }
   } else if (kind === '3d.revolve') {
     const right = str(p, 'from', 'left') === 'right', axis = right ? b.x + b.w + num(p, 'offset', 0) : b.x - num(p, 'offset', 0), ang = clamp(num(p, 'angle', 360), 1, 360);
-    const steps = Math.max(6, Math.ceil((ang / 360) * 48)), th = (k: number): number => ((k / steps) * ang * Math.PI) / 180;
+    const steps = Math.max(6, Math.ceil((ang / 360) * (sceneDraft ? 20 : 48))), th = (k: number): number => ((k / steps) * ang * Math.PI) / 180;
     center = [axis, b.y + b.h / 2, 0];
     const rev = (v: Pt, t: number): V3 => { const r = v.x - axis; return [axis + r * Math.cos(t), v.y, -r * Math.sin(t)]; };
     const signs = new Map<Solid, number[]>();
@@ -375,7 +377,7 @@ function modelScene(solids: Solid[], e: Effect, b: { x: number; y: number; w: nu
   const mesh = getMesh(str(p, 'model', ''));
   if (!mesh) return out(solids.map((s, i) => ({ d: s.d, rule: s.rule, fill: [0.84, 0.84, 0.84], stroke: [0.5, 0.5, 0.5], strokeWidth: 1, depth: 0, solid: i, cap: false, t: 1, s: 0 })), null);
   const L = lighting(p), wire = L.material === 'wireframe', seam = Math.max(0.15, size / 1500), cull = flag(p, 'cull', true);
-  const m = simplifyMesh(mesh, clamp(num(p, 'max_faces', MODEL_FACES), 100, MODEL_FACES_MAX)), nv = m.pos.length / 3, nt = m.idx.length / 3;
+  const m = simplifyMesh(mesh, Math.min(clamp(num(p, 'max_faces', MODEL_FACES), 100, MODEL_FACES_MAX), sceneDraft ? 1500 : MODEL_FACES_MAX)), nv = m.pos.length / 3, nt = m.idx.length / 3;
   const vx = new Float64Array(nv), vy = new Float64Array(nv), vz = new Float64Array(nv), nx = new Float64Array(nv), ny = new Float64Array(nv), nz = new Float64Array(nv), sx = new Float64Array(nv), sy = new Float64Array(nv);
   for (let i = 0; i < nv; i++) {
     const r = rot(R, [m.pos[i * 3] * size, m.pos[i * 3 + 1] * size, m.pos[i * 3 + 2] * size]), q = rot(R, [m.nrm[i * 3], m.nrm[i * 3 + 1], m.nrm[i * 3 + 2]]), kp = f > 0 ? f / Math.max(f * 0.05, f + r[2]) : 1;

@@ -29,6 +29,10 @@
 .cv-3dp-form[hidden], .cv-3dp-part[hidden], .cv-3dp .cv-props-none[hidden] { display: none; }
 .cv-3dp-form, .cv-3dp-part { display: flex; flex-direction: column; gap: var(--space-2); }
 .cv-3dp-kind button { flex: 1 1 0; }
+.cv-3dp-view { display: block; box-sizing: border-box; width: 100%; max-width: 232px; height: 156px; flex: 0 0 156px; align-self: center; border: 1px solid var(--glass-border); border-radius: 8px; background: var(--glass-bg); overflow: hidden; }
+.cv-3dp-view[hidden] { display: none; }
+.cv-3dp-canvas { display: block; width: 232px; height: 156px; max-width: 100%; cursor: grab; touch-action: none; }
+.cv-3dp-canvas:active { cursor: grabbing; }
 .cv-3dp .cv-kit-slider { grid-template-columns: 78px minmax(0, 1fr) 70px; }
 .cv-tracep [hidden] { display: none; }
 .cv-tracep .cv-patp-status { min-height: calc(11px * 1.4 * 4); }

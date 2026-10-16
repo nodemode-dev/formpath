@@ -5,6 +5,7 @@ import { allNodes, newId } from '../../engine/doc';
 import { imageAverage, textureAverage, textureName } from '../../engine/texture';
 import { el, setDisabled, setHidden, setValue } from '../dom';
 import { check, empty, page, row, section, seg, selectCtl, slider } from './kit';
+import { ThreeDPreview } from './three-d-preview';
 
 type Params = Effect['params'];
 interface Settable { set(v: number | string | boolean): void; enable?(on: boolean): void }
@@ -38,6 +39,7 @@ export class ThreeDPanel {
   private readonly lctl: Record<string, Settable> = {};
   private readonly lbtn: { add: HTMLButtonElement; dup: HTMLButtonElement; del: HTMLButtonElement };
   private lightAt = 0;
+  private readonly view: ThreeDPreview;
   private frame = 0;
   private surface = 'all';
   private readonly surfaces: ReturnType<typeof selectCtl>;
@@ -109,7 +111,9 @@ export class ThreeDPanel {
     const shadeArt = check('Shade Artwork', (v) => set({ shade_art: v })), shadow = check('Shadow', (v) => set({ shadow: v }));
     this.ctl.shade_art = shadeArt;
     this.ctl.shadow = shadow;
+    this.view = new ThreeDPreview(engine, (i) => { this.lightAt = i; this.queue(); });
     this.form.append(
+      this.view.el,
       part('extrude', section('Extrude'), sl('depth', 'Depth', 0, 500, 'pt'), row(cap.el), pick('bevel', 'Bevel', [['none', 'None'], ['classic', 'Classic'], ['rounded', 'Rounded']]), sl('bevel_height', 'Bevel Height', 0, 50, 'pt')),
       part('revolve', section('Revolve'), sl('angle', 'Angle', 1, 360, '°'), sl('offset', 'Offset', 0, 500, 'pt'), pick('from', 'From', [['left', 'Left Edge'], ['right', 'Right Edge']])),
       part('inflate', section('Inflate'), inflate.el, sl('volume', 'Volume', 10, 100, '%')),
@@ -281,5 +285,6 @@ export class ThreeDPanel {
     const rx = num(p, 'rx', 0), ry = num(p, 'ry', 0), rz = num(p, 'rz', 0);
     c.preset?.set(Object.entries(ROTATION_PRESETS).find(([, r]) => Math.abs(r[0] - rx) < 0.01 && Math.abs(r[1] - ry) < 0.01 && Math.abs(r[2] - rz) < 0.01)?.[0] ?? 'custom');
     setValue(this.shade, str(p, 'shading_color', '#000000'));
+    this.view.sync(t?.n ?? null, e, this.lightAt);
   }
 }

@@ -29,6 +29,8 @@ import { guardAi, guardNotice } from './io/ai-guard';
 import { isLegacyAi, readAiLegacy } from './io/ai-legacy';
 import { importModel, MODEL_FILE, MODEL_PART } from './io/model';
 import { docFromManifest, serialize } from './io/project-io';
+import { PSD_NOTES } from './io/psd-layers';
+import { t } from './i18n';
 import { bakeTraced, canvasBlob, exportAssetsZip, exportForScreens, exportRaster, rasterExt, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
 import { exportRegion, exportSvg, importSvg } from './io/svg';
@@ -83,8 +85,8 @@ import { BrushesPanel, StrokePanel, TransparencyPanel } from './ui/panels/stroke
 import { ArtboardsPanel, LinksPanel, SymbolLibraryPanel, SymbolsPanel } from './ui/panels/symbols';
 import { SYMBOL_LIBRARIES, symbolLibraryFromDoc, type SymbolLibrary } from './engine/symbol-libraries';
 import { SYMBOL_REGISTRATIONS, type SymbolRegistration } from './engine/symbols';
-import { canLinkHandles, IMAGE_KINDS, LinkManager, linkKey, linkOf, pickLinkedFile, pickLinkFolder, saveLinkedFile, type LinkFile } from './io/links';
-import { displayBlob, placeKind, placeSpecial, type PlaceOptions } from './io/place';
+import { canLinkHandles, dropHandles, IMAGE_KINDS, LinkManager, linkKey, linkOf, pickLinkedFile, pickLinkFolder, pickPlaceFiles, saveLinkedFile, type LinkFile } from './io/links';
+import { displayBlob, placeKind, placeSpecial, type PlaceOptions, type PlaceSpec } from './io/place';
 import { askPlace } from './ui/place-dialog';
 import { FilePathDialog } from './ui/file-dialog';
 import { areaTypeOptionsDialog, CharacterPanel, findReplaceDialog, GlyphsPanel, hyphenationDialog, justificationDialog, ParagraphPanel, pathTypeOptionsDialog, TabsPanel } from './ui/panels/type';
@@ -118,6 +120,7 @@ import { assignPdfProfile } from './io/pdf-icc';
 import { DocumentInfoDialog } from './ui/panels/document-info';
 import { packageProject } from './io/package';
 import { SpellMarks } from './ui/spell-marks';
+import { ThreeDWidget } from './ui/three-d-widget';
 import { Tabs } from './ui/tabs';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
@@ -204,6 +207,7 @@ export function startApp(): void {
   applyPrefs(engine, prefs);
   const stageEl = q(root, '.cv-stage');
   const stage = new Stage(stageEl, engine);
+  new ThreeDWidget(stage, engine, q<HTMLCanvasElement>(stageEl, '.cv-overlay-canvas'));
   const spellMarks = new SpellMarks(engine, stage.painters);
   spellMarks.set(prefs.autoSpell);
   const typing = new TextEditor(stageEl, engine);
@@ -472,7 +476,20 @@ export function startApp(): void {
     return { doc: r.doc, assets: r.assets, title, note: `Opened ${f.name} by running its PostScript: paths, fills, strokes, clipping, gradients, images and text.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
   }
 
-  const placeDeps = { ask: askPlace, password: askPassword };
+  const useHandles = (): boolean => canLinkHandles() && !caps?.desktop;
+  const linkHint = (): string => (caps?.desktop ? '' : canLinkHandles() ? 'This file came without a file handle, so it is embedded. Choose it with File > Place to keep it linked.' : 'This browser cannot keep links to files (it has no File System Access API), so the file is embedded. Chrome and Edge can link.');
+  const placeDeps = { ask: (spec: PlaceSpec) => askPlace(spec.canLink ? spec : { ...spec, linkHint: linkHint() }), password: askPassword };
+
+  const placeHandled = async (f: LinkFile, at: Pt | null, width: number | null): Promise<void> => {
+    if (f.handle && (placeKind(f.name) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name))) await placeLinked(f, at, width);
+    else await placeFile(f.blob as File, at, width);
+  };
+  async function placePicked(): Promise<void> {
+    if (!useHandles()) { placeInput.click(); return; }
+    const fs = await pickPlaceFiles();
+    if (!fs) return;
+    await engine.task(async () => { for (const f of fs) { try { await placeHandled(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } });
+  }
 
   async function openRaster(f: File, quiet: boolean): Promise<void> {
     const r = await placeSpecial(engine, { blob: f, name: f.name }, null, null, quiet ? {} : undefined, placeDeps, true);
@@ -584,7 +601,7 @@ export function startApp(): void {
   const sameLink = (n: ImageNode): string[] => links.images().filter((x) => (n.linked && x.linked ? linkKey(x.linked) === linkKey(n.linked) : x.src === n.src)).map((x) => x.id);
 
   async function chooseLinkFile(title: string): Promise<LinkFile | null> {
-    if (caps) {
+    if (caps && !useHandles()) {
       const path = await fileDialog.choose({ title, mode: 'file', kinds: IMAGE_KINDS, ok: 'Link', note: 'formpth keeps the path and reads the file again when it changes.' });
       if (!path) return null;
       try { return await links.readPath(path); } catch (err) { toast(message(err), 'error'); return null; }
@@ -631,7 +648,7 @@ export function startApp(): void {
     for (const n of missing) { const k = linkKey(n.linked as NonNullable<ImageNode['linked']>); groups.set(k, [...(groups.get(k) ?? []), n]); }
     if (!p || !groups.size) { toast('No links are missing.'); return { done: 0, total: 0 }; }
     let find: ((name: string) => Promise<LinkFile | null>) | null = null;
-    if (caps) {
+    if (caps && !useHandles()) {
       const folder = await fileDialog.choose({ title: 'Relink Missing Links from a Folder', mode: 'folder', kinds: IMAGE_KINDS, note: '' });
       if (!folder) return { done: 0, total: groups.size };
       const list = await api.listFolder(folder, IMAGE_KINDS);
@@ -683,7 +700,7 @@ export function startApp(): void {
     const blob = ext === 'png' && raw.type !== 'image/png' ? await (async () => { const b = await createImageBitmap(raw), c = new OffscreenCanvas(b.width, b.height); c.getContext('2d')?.drawImage(b, 0, 0); b.close(); return c.convertToBlob({ type: 'image/png' }); })() : raw;
     const base = (n.name ?? n.link ?? 'Image').replace(/\.[a-z0-9]+$/i, '').replace(/[^A-Za-z0-9 ._()-]+/g, '_').trim() || 'Image', fname = `${base}.${ext}`;
     let f: LinkFile | null = null;
-    if (caps) {
+    if (caps && !useHandles()) {
       const lib = (await api.libraryFolder())?.folder ?? caps.libraryDir;
       const folder = `${lib.replace(/[\\/]$/, '')}/${p.name.replace(/[\\/:*?"<>|]+/g, '_')} Links`;
       try { f = await links.readPath(await api.writeFile(folder, fname, blob)); } catch (err) { toast(message(err), 'error'); return false; }
@@ -811,7 +828,9 @@ export function startApp(): void {
     if (!region) return null;
     const only = scope === 'selection' ? engine.targetIds().map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n) : undefined;
     const bg = scope === 'artboard' ? p.doc.artboards[ab]?.bg ?? null : null;
-    return exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only, tiff: c.format === 'tiff' ? c.tiff : undefined, icc: c.icc, extra: c.raster });
+    const rasterBlob = await exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only, tiff: c.format === 'tiff' ? c.tiff : undefined, icc: c.icc, extra: c.raster });
+    if (c.format === 'psd' && PSD_NOTES.last.length) toast(`${t('Photoshop export')}: ${PSD_NOTES.last.length} ${t('object(s) written as pixels')}. ${PSD_NOTES.last.slice(0, 3).join('; ')}`);
+    return rasterBlob;
   }
 
   const exportDialog = new ExportDialog(), screensDialog = new ScreensDialog();
@@ -1522,7 +1541,7 @@ export function startApp(): void {
     { id: 'save', label: 'Save', keys: ['Mod+S'], enabled: has, run: () => void save(false) },
     { id: 'save-as', label: 'Save As...', keys: ['Shift+Mod+S'], enabled: has, run: () => void save(true) },
     { id: 'download-project', label: 'Download Project (.fpth)', keys: ['Alt+Mod+S'], enabled: has, run: () => void engine.task(async () => { const b = await projectZip(); const p = engine.current; if (b && p) await deliver(b, `${p.name}.fpth`); }) },
-    { id: 'place', label: 'Place...', keys: ['Shift+Mod+P'], enabled: has, run: () => placeInput.click() },
+    { id: 'place', label: 'Place...', keys: ['Shift+Mod+P'], enabled: has, run: () => void placePicked() },
     { id: 'export-screens', label: 'Export for Screens...', keys: ['Alt+Mod+E'], enabled: has, run: () => void exportScreens() },
     { id: 'collect-single', label: 'Collect for Export as Single Asset', enabled: sel, run: () => { if (engine.addExportAssets(true).length) showPanel('asset-export'); } },
     { id: 'collect-multiple', label: 'Collect for Export as Multiple Assets', enabled: sel, run: () => { if (engine.addExportAssets(false).length) showPanel('asset-export'); } },
@@ -2081,12 +2100,13 @@ export function startApp(): void {
     e.preventDefault();
     dragDepth = 0;
     setHidden(drop, true);
-    const files = splitParts(Array.from(e.dataTransfer?.files ?? [])), at = stage.docPoint(e.clientX, e.clientY);
+    const files = splitParts(Array.from(e.dataTransfer?.files ?? [])), at = stage.docPoint(e.clientX, e.clientY), held = useHandles() ? dropHandles(e.dataTransfer) : null;
     void (async () => {
       const docs = files.filter((f) => /\.(fpth|pdf|ai)$/i.test(f.name) || !engine.current);
       const places = files.filter((f) => !docs.includes(f));
+      const handles = held ? await held : new Map<string, () => Promise<LinkFile>>();
       if (docs.length) await openFiles(docs);
-      if (places.length) await engine.task(async () => { for (const f of places) { try { await placeFile(f, at, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } });
+      if (places.length) await engine.task(async () => { for (const f of places) { try { const get = handles.get(f.name); if (get) await placeHandled(await get(), at, null); else await placeFile(f, at, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } });
     })();
   });
 
