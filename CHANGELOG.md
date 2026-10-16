@@ -2,6 +2,23 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.38.0 · 2026-10-16
+
+Plan v0.7.0 phase 34: generative controls, DWG, 3D models.
+
+### Added
+
+- Text to Vector Graphic, Generative Shape Fill and Text to Pattern: Detail, style presets, style reference from artwork or an image, effects, colour and tone presets or a custom palette; repaired and validated output with gradients, strokes and compound paths; Shape Strength; pattern tile size, layout, spacing and a seamless check. The MCP tools take the same options.
+- File > Export > AutoCAD Drawing (.dwg), written as AutoCAD 2000; `export_file` writes .dwg.
+- DWG R2007 opens natively.
+- 3D per-surface materials; File > Open and Place read .obj (with .mtl) and .glb or .gltf models as 3D objects.
+- Illustrator (.ai) export writes top-level layers as Acrobat layers.
+- 62 new strings in all 25 languages.
+
+### Changed
+
+- `docs/PARITY.md`: 74.5 of 76 (98.0 percent), self-graded pending the next independent audit.
+
 ## 0.37.0 · 2026-10-16
 
 Plan v0.7.0 phase 33: files.
