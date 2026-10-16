@@ -153,14 +153,19 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `document-setup` (File > Document Setup): Opens the document settings for units, bleed and colour mode. Use when changing the basic properties of the document.
 - `download-project` (File > Download Project (.fpth)): Downloads the document as an editable .fpth file. Use when moving the project to another computer.
 - `export-as` (File > Export > Export As): Opens the Export dialog with artboard range, scope and format. Use when saving the artwork as SVG, PDF, EPS, DXF, DWG or a raster image.
+- `export-bmp` (File > Export > BMP): Exports the artwork as a 24-bit or 32-bit BMP image. Use when a Windows bitmap is asked for.
 - `export-dwg` (File > Export > AutoCAD Drawing (DWG)): Exports the artwork as an AutoCAD 2000 DWG drawing. Use when a CAD program or a plotter wants a native DWG file.
 - `export-dxf` (File > Export > AutoCAD Interchange (DXF)): Exports the artwork as an AutoCAD DXF drawing. Use when handing outlines to CAD or cutting software.
 - `export-eps` (File > Export > EPS): Exports the artwork as an EPS file. Use when a print workflow asks for EPS.
+- `export-gif` (File > Export > GIF): Exports the artwork as a GIF with a chosen palette, dither, transparency and interlace. Use when a GIF is asked for or a web image needs at most 256 colours.
 - `export-jpg` (File > Export > JPEG): Exports the artwork as a JPEG image. Use when a small photographic raster file is needed.
 - `export-pdf` (File > Export > PDF): Exports the artwork as a PDF with the chosen artboards. Use when sending print-ready or shareable pages.
 - `export-png` (File > Export > PNG): Exports the artwork as a PNG image. Use when a transparent raster image is needed.
+- `export-png8` (File > Export > PNG-8): Exports the artwork as an indexed PNG-8 image with a palette of 2 to 256 colours. Use when a small PNG with a limited palette or hard transparency is needed.
+- `export-psd` (File > Export > Photoshop (PSD)): Exports the artwork as a Photoshop file with one layer per top-level layer, in RGB or CMYK. Use when the result goes on to Photoshop with its layers kept.
 - `export-screens` (File > Export > Export for Screens): Exports chosen artboards at several scales and formats into a zip. Use when producing assets for screens in more than one size.
 - `export-svg` (File > Export > SVG): Exports the artwork as an SVG file. Use when the result goes on the web or into another vector tool.
+- `export-tiff` (File > Export > TIFF): Exports the artwork as a TIFF image. Use when a print or archive workflow asks for TIFF.
 - `export-webp` (File > Export > WebP): Exports the artwork as a WebP image. Use when a compact web image is needed.
 - `history-new-document` (File > Automate > New Document from History State): New Document from History State, as in File > Automate > New Document from History State.
 - `history-options` (File > Automate > History Options): History Options, as in File > Automate > History Options.
@@ -183,6 +188,19 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `about` (Help > About formpth): About formpth, as in Help > About formpth.
 - `copy-error-log` (Help > Copy Error Log): Copy Error Log, as in Help > Copy Error Log.
 - `help` (Help > formpth Help): formpth Help, as in Help > formpth Help.
+
+## Layers
+
+- `layers-duplicate` (Duplicate Layer): Duplicates the selected layers or sublayers, with every sublayer and object inside them getting new ids, names the copy "<name> copy" and places it directly above the original. Pass ids to name the layers. Use when a layer should be tried in a variation or kept as a backup before editing.
+- `layers-duplicate-selection` (Duplicate Selection): Duplicates the selected objects in place, each copy directly above its original in the same layer or group. Use when the Layers panel has objects selected and a copy in the same stack is needed.
+- `layers-flatten` (Flatten Artwork): Merges every visible layer into the active layer. Hidden layers and hidden art are discarded or kept as told by discard_hidden; without it a dialog asks. Use when the document should end up with a single layer, for example before handing it over.
+- `layers-locate` (Locate Object): Opens the layers that contain the selection and scrolls the Layers panel to the first selected object. Use when an object is selected and its row in the Layers panel is out of sight.
+- `layers-merge` (Merge Selected): Merges the selected layers or sublayers into the topmost selected one; the objects keep their stacking order and the other layers are removed. Use when several layers should become one without changing how the art looks.
+- `layers-new-sublayer` (New Sublayer): Adds a new empty sublayer inside the active layer. Use when a layer needs its own internal structure.
+- `layers-options` (Layer Options): Opens Layer Options for the active layer: name, colour, template, show, lock, print and dim. Use when renaming or recolouring a layer.
+- `layers-release-build` (Release to Layers (Build)): Releases the children of a layer or group into new sublayers that accumulate: the first holds the first object, the next that one plus the second, and so on. Use when a build-up sequence of frames is needed.
+- `layers-release-sequence` (Release to Layers (Sequence)): Releases the children of a layer or group into their own new sublayers, one object each, in the same stacking order. Use when objects must be animated or exported one layer at a time.
+- `layers-reverse` (Reverse Order): Reverses the stacking order of the selected layers, or of the selected objects that share a parent. Use when a set of layers or objects should be flipped front to back.
 
 ## Object
 
@@ -354,7 +372,7 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 ## Panels
 
 - `clear-recent` (Clear Recent): Clear Recent, from a panel menu or shortcut.
-- `collect-layer` (Collect in New Layer): Collect in New Layer, from a panel menu or shortcut.
+- `collect-layer` (Collect in New Layer): Moves the selected objects into a new layer on top of the stack, keeping their order. Use when art scattered over several layers should be gathered in one place.
 - `default-fill-stroke` (Default Fill and Stroke): Default Fill and Stroke, from a panel menu or shortcut.
 - `draw-mode` (Cycle Drawing Modes): Cycle Drawing Modes, from a panel menu or shortcut.
 - `exit-isolation` (Exit Isolation Mode): Exit Isolation Mode, from a panel menu or shortcut.

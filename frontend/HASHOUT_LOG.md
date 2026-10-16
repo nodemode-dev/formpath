@@ -35,6 +35,7 @@ frontend/
     │   ├── render.ts           Canvas 2D renderer with Path2D cache
     │   ├── paint.ts            colours, paints, gradients, appearance items, parsing
     │   ├── effects.ts          effect catalogue and evaluation
+    │   ├── groupfx.ts          vector effects on groups, layers and live type: the effected shadow node
     │   ├── live.ts             live shapes, blends, repeats, envelopes
     │   ├── envelope.ts         envelope meshes, homographies, adaptive curve mapping
     │   ├── mesh.ts             gradient mesh
@@ -3416,3 +3417,110 @@ The Registration colour of the marks was always [/Separation /All /DeviceCMYK ..
 - logged: v0.39.0 · 2026-10-16
 
 The Open Design Specification orders the common entity handles as owner (entity mode 0), reactors, extension dictionary (R2004 and later only when present, always counted for R13 to R2000), then for R2000 and earlier the previous and next entity handles (only when the no-links bit is 0), then layer, linetype, material and plot style. R2004 and later have no previous or next handles at all; the code already skipped them for versions other than 15. The code read the previous and next pair before the reactors; it now reads them after the extension dictionary. The values are not used, and the same number of handles is read either way, so the layer handle that follows was always the same one: all 104 sample drawings (2000, 2004, 2010, 2013, 2018 and the example and sample files) give identical per-layer entity counts, kind counts, block counts, layer tables and coordinate deviations before and after, and 22 of them have entities with reactors (the R2000 ones among them: Constraints, Leader, PolyLine2D, TS1 and example_2000, where 2, 6, 1, 5 and 14 entities carry both reactors and links), checked against reference DXFs from the converter used as a black box. So this is a correctness fix of the stream order with no change in any result today; it matters when something later reads those handles. Not verified: an R13 or R14 drawing, which the samples do not contain.
+
+## src/engine/groupfx.ts (vector effects on groups, layers and type)
+
+### src/engine/groupfx.ts · vector effects act on a group, layer or live type through one shadow node
+- refers-to: src/engine/groupfx.ts :: fxNode, isGeomFx, hasGeomFx, fxBase; src/engine/render.ts :: renderNode; src/engine/bounds.ts :: visualBounds; src/engine/hit.ts :: deepHit; src/io/svg.ts :: node; src/io/pdf.ts :: node; src/io/eps.ts :: node; src/io/dxf.ts :: exportDxf; src/engine/ops/expand.ts :: expandFx; src/engine/index.ts :: expandNode
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+Warp, Distort and Transform, Path, Round Corners, Scribble and Convert to Shape were evaluated only for path and compound nodes (effectPath in drawBody and in the four writers), so on a group, a layer or live type the effect was stored and did nothing. One function now answers for every output: fxNode(doc, n) returns a shadow of the node, or null when it has no geometry effect. For a group or layer the shadow is the same node with its children replaced by the effected art and the geometry effects removed from its appearance; for type it is a group of path nodes (one per run of equal fill and stroke, glyph outlines from textOutlineGlyphs) carrying each run's fill and stroke plus the type's own fill items, and the type's opacity, blend, mask and raster effects. renderNode, visualBounds, hit testing, the SVG, PDF, EPS and DXF writers and Expand Appearance each add one line that swaps the node for its shadow, so a document without such an effect takes the old code path and writes the same bytes (6 sample documents with path effects, plain and clipped groups, type, raster effects on groups and type, 3D, Pathfinder effects, repeat and envelope hash identically at 1x, 2x and outline canvases and in SVG, PDF, EPS and DXF before and after). The order is the Appearance stack's: a member's own effects first (effectPath), then the group's effects in their order, then the group's raster effects and opacity on the shadow, so a Drop Shadow on a warped group shadows the warped art. Pathfinder effects stay as liveArt computes them and the geometry effects run on that result; 3D effects keep their own face path (a node with a vector 3D effect is not shadowed). Results are cached per node identity, the text epoch and the symbol table; the per-member results are cached again per path identity, effect and frame, so dragging one member of a warped group of 20 recomputes one path unless the group's bounds change.
+
+### src/engine/groupfx.ts · warps, Twist, Pucker and Bloat, Free Distort and Transform use the group's frame; the rest apply per member
+- refers-to: src/engine/groupfx.ts :: SHARED, run, op; src/engine/effects.ts :: applyOne
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+The effect's reference frame is the union of the geometric bounds of the group's effected members (for a clipping group only the clip path, since that is what the group's bounds are). Warps, Free Distort, Twist (whose radius is the farthest point of the whole group), Pucker and Bloat and Transform use that one frame so the whole group bends, tilts or puffs as one; Transform with copies repeats the whole group (every member, each keeping its paint) and a clipping group drops the copies, because its clip must stay the last child. Roughen, Tweak, Zig Zag, Round Corners, Scribble, Offset Path and Outline Stroke run per member with the group's parameters on the member's own bounds, so a Roughen size in percent means the same on a small member as on a large one; Roughen, Tweak and Scribble add 131 times the member's index to the seed so identical members do not jitter identically (member 0 equals the single path result). Convert to Shape collapses the group to one shape over the frame painted like the first member (an assumption: Illustrator paints it with the group's appearance). applyOne in effects.ts got two optional arguments, the frame and the points a Twist radius is measured around; with neither it computes what it always did, so path results are unchanged. The Illustrator behaviour for Pucker and Bloat on a group (group centre versus each member's centre) is from memory and was not checked against the product.
+
+### src/engine/text.ts · textOutlineGlyphs
+- refers-to: src/engine/text.ts :: textOutlineGlyphs, textOutlineRuns
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+textOutlineRuns merges the glyphs of a run into one path, which is right for painting but wrong as the unit of an effect: a Roughen size relative to a whole word's bounds is huge for each letter. textOutlineGlyphs returns one path per glyph (outer contour and counters together) with its style and the effect code merges them back into runs after the effect. Underline and strikethrough are not part of the outlines, so effected type drops them; a gradient fill on effected type is laid over each run's own bounds instead of the whole text's.
+
+### src/engine/ops/expand.ts · Expand Appearance on a group or type with geometry effects
+- refers-to: src/engine/ops/expand.ts :: expandFx; src/engine/index.ts :: expandNode
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+Expand Appearance on a group gives the group (same id) of the effected members, each then expanded as a path is (a fill path plus the outlined stroke, as Illustrator keeps paint and structure), with the geometry effects gone from its appearance and its raster effects, opacity and blend kept; on type it gives a new group of the effected run paths. The ids of Transform copies carry a ~fx marker inside the engine and are replaced by fresh ids when expanding. It is one history step (Expand). Checked on a warped group of three stroked shapes (group of 3 groups, 0 effects left, undo restores the group with its warp, 459 px of anti-aliasing difference against the live render) and on stroked, roughened type (1 step, 28 px).
+
+### src/engine/groupfx.ts · what is not done
+- refers-to: src/engine/groupfx.ts
+- kind: todo
+- logged: v0.40.0 · 2026-10-16
+
+Images and gradient meshes inside an effected group stay as they are (the effect reaches vector members only). Live paint, tracing, shaper and intertwine groups are not shadowed. Hit testing of a Pathfinder-live group does not test the effected art, only a plain group, a layer and type do. Layers have no Expand Appearance. Appearance item effects on type (an effect on one of its fill items) still do nothing. Opacity masks of a member are copied to Transform copies unmoved. Export shows the effect as baked paths; PDF text with an effect is outlines, not live text. The existing difference between the canvas and PDF or EPS strokes for Outline Stroke on a single path (about 1100 px on a stroked rectangle) predates this and shows the same on groups.
+
+### src/engine/ops/layers.ts · layer commands model
+- refers-to: src/engine/ops/layers.ts; src/engine/index.ts :: layerSelection; src/app.ts :: layers-duplicate
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+The Layers panel gets its own multi-selection, `Project.layerSel` (a set of layer ids), separate from the object selection and cleared by `select()`. Each operation is one `engine.edit` step. Merge Selected moves the contents of the other picked layers into the topmost picked one in stacking order. Flatten Artwork merges all visible layers into the bottom visible one and asks (`askForm`) when hidden art exists. Release to Layers (Sequence) puts each child on its own sublayer; (Build) clones the children cumulatively so the top sublayer holds all of them. Releasing a group turns it into a sublayer that keeps its opacity, blend, appearance, hidden and locked. A layer with look attributes (hidden, locked, clip, opacity, blend, appearance) is wrapped in a group by `carry()` when it is merged or flattened, so nothing visual is lost. The commands live in src/app.ts, not ui/commands.ts. The MCP tool is `layer_action`.
+
+### src/io/raster-aa.ts · anti-aliasing None
+- refers-to: src/io/raster-aa.ts; src/io/raster.ts :: renderRegion
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+Canvas 2D cannot switch anti-aliasing off, so None renders at up to 8x (`hardScale`) and `reduceHard` point-samples the most uniform sub-pixel per output pixel; `hardEdges` is the fallback when the supersample would not fit. Type Optimized re-renders plain text only and lifts its coverage curve (`sharpenType`). Sub-0.25 pt hairlines stay unresolved under None; type sharpening skips text with effects, opacity, a mask or a clip.
+
+### src/io/psd-write.ts · PSD composite
+- refers-to: src/io/psd-write.ts; src/io/icc-embed.ts :: embedPsd
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+The merged composite is stored pre-matted on white when it has alpha (readers un-matte it), CMYK is stored inverted, hidden layers use flag 2, names carry a 'luni' block, and each layer is trimmed to its bounds. ICC goes in as image resource 1039. GIF/PNG-8/BMP encoders live in src/io/{gif,png8,bmp,palette}.ts; the transparent palette entry is index 0.
+
+### src/io/raster.ts · what is not done
+- refers-to: src/io/raster.ts; src/ui/layers.ts
+- kind: todo
+- logged: v0.40.0 · 2026-10-16
+
+PNG-8 has no interlace option. Deleting several picked layers at once is not wired to the panel selection. Merge, flatten and release do not carry layer attributes beyond opacity, blend, appearance, hidden, locked and clip.
+
+### src/io/place.ts · one entry for Place, Place Linked, drops and Open
+- refers-to: src/io/place.ts :: placeSpecial; src/ui/place-dialog.ts; src/app.ts :: placeFile
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+`placeSpecial(engine, src, at, width, given, deps, fresh)` serves PDF, AI, PSD and TIFF. `given === undefined` shows the dialog; an object (the MCP path, or `{}`) never asks. `fresh` is Open: it makes a new document sized from the image at its resolution, leaves it unmodified, and does not use the CMYK profile. Each place is one `beginStep` and `endStep`. Embed of a PDF page is a group, wrapped in a clip group whose last child is the box rectangle for every crop except Bounding Box (which uses the art's visual bounds), so transparent margins cannot change the size. Legacy .ai (non-PDF) goes through readAiLegacy as embed only. The dialog has fixed-size thumbnail cells loaded lazily in a serial queue, so layout shift stays 0.
+
+### src/io/pdf-read.ts · page options, box clipping and the session
+- refers-to: src/io/pdf-read.ts :: readPdfVector; src/io/pdf-read.ts :: probePdf
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+`PdfReadOpts { pages, box, session }` reads chosen pages only, against one `PdfSession` so the file is parsed once for the dialog, thumbnails and the final read. Media, Crop, Trim, Bleed and Art boxes are clipped to the media box (`within`) and MediaBox, CropBox and Rotate are inherited from the page tree; without the clipping a rotated page with an oversized CropBox did not match poppler.
+
+### src/io/links.ts · Link is a raster, Embed is vector
+- refers-to: src/io/links.ts :: LinkManager.read; src/io/place.ts :: displayBlob, linkScale
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+A linked PDF, AI, PSD or TIFF is an image node showing a raster of the file (scale `linkScale`, 4x to 16x and at most 8192 px) because the engine has no placed-vector node. `ImageLink` keeps `page`, `crop` and `layers`; `LinkManager.read` wraps `readRaw` and converts through `displayBlob`, so Update and hydrate re-render the new file, and the stored scale is not reused (a page that changed size would give a huge raster). Embed is the way to get editable vector art. The Links panel Embed on a linked PDF only drops the link.
+
+### src/io/psd-read.ts · reader decisions
+- refers-to: src/io/psd-read.ts :: readPsdComposite; src/io/psd-read.ts :: readPsdLayers
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+Clean-room, no dependency. Alpha of the merged image is taken from the first extra channel only when the layer count is negative (the spec rule), and then un-matted against white. 16-bit samples use round(v/257). Layer masks are baked into the layer alpha. Blend modes map through BLEND_KEYS; dissolve, linear burn, linear dodge, vivid, linear and pin light, hard mix, subtract and divide become Normal and are reported. Text layers come in as pixels and are reported; clipping masks, effects, adjustment layers and layer comps are not applied (adjustment layers are skipped and reported). The embedded ICC profile is not used to convert: psd-tools applies it by default, and with `apply_icc=False` 3 of 5 real Photoshop files matched exactly. 32-bit files throw a clear error.
+
+### src/io/tiff-read.ts · reader decisions
+- refers-to: src/io/tiff-read.ts :: decodeTiffPage
+- kind: decision
+- logged: v0.40.0 · 2026-10-16
+
+Strips and tiles, chunky and planar, None, PackBits, LZW (predictor 2), Deflate and JPEG with JPEGTables (an Adobe APP14 marker is injected for RGB photometric so the browser does not treat it as YCbCr). Orientation is applied; resolution tags give the placed size, and no tags means 1 px = 1 pt. CMYK uses the document profile when set, else the plain formula. Palette conversion rounds v/257 where Pillow uses v>>8, hence a difference of 1. Not done: BigTIFF, old-style JPEG, CCITT, float samples.
+
+### backend · restart the engine after this change
+- refers-to: backend/app/routers/mcp.py :: place_image; backend/app/routers/batch.py :: READABLE
+- kind: todo
+- logged: v0.40.0 · 2026-10-16
+
+place_image gained `page`, `crop`, `psd_import` and `link`, and the openable and placeable lists and batch READABLE gained psd, psb, tif and tiff. A running engine must be restarted to pick this up (a stale one refuses .tif with 422).

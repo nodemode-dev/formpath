@@ -13,6 +13,7 @@ import { toast } from './toast';
 import { ARTBOARD_PRESETS } from '../tools/view';
 import { DXF_UNITS, type DxfUnit } from '../io/dxf';
 import type { TiffCompression } from '../io/tiff';
+import { parseScale, RASTER_EXTRA, type RasterExtra } from '../io/raster';
 import { DEFAULT_MARKS, type PdfMarks } from '../io/pdf-marks';
 import { seg } from './panels/kit';
 import { DEFAULT_COMPRESSION, DEFAULT_PERMISSIONS, pdfRefusal, securityActive, standardFrom, standardRules, STANDARD_LABELS, STANDARD_NOTES, type PdfChanges, type PdfCompression, type PdfPrinting, type PdfSecurity, type PdfStandard } from '../io/pdf-std';
@@ -91,7 +92,7 @@ export class OpenDialog extends Dialog {
   private readonly list = el('<div class="cv-list" role="listbox" aria-label="Saved projects"></div>');
   private readonly empty = el('<div class="cv-list-empty" hidden>No saved projects yet.</div>');
   private readonly status = el('<p class="cv-note">Projects saved in the formpth library.</p>');
-  private readonly fileInput = el<HTMLInputElement>('<input type="file" accept=".fpth,.svg,.svgz,.pdf,.ai,.eps,.epsf,.ps,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.gif" multiple hidden>');
+  private readonly fileInput = el<HTMLInputElement>('<input type="file" accept=".fpth,.svg,.svgz,.pdf,.ai,.eps,.epsf,.ps,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.gif,.bmp,.psd,.psb,.tif,.tiff" multiple hidden>');
   private readonly openBtn: HTMLButtonElement;
   private readonly deleteBtn: HTMLButtonElement;
   private items: LibraryItem[] = [];
@@ -379,10 +380,10 @@ export class AboutDialog extends Dialog {
   }
 }
 
-export type ExportFormat = 'svg' | 'pdf' | 'ai' | 'png' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf' | 'dwg';
+export type ExportFormat = 'svg' | 'pdf' | 'ai' | 'png' | 'png8' | 'gif' | 'bmp' | 'psd' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf' | 'dwg';
 export interface TiffExportChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface CadChoice { version: 'R12' | '2000'; units: DxfUnit; scale: number; text: 'text' | 'outlines'; lineweights: boolean }
-export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks; icc?: boolean }
+export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks; icc?: boolean; raster?: Partial<RasterExtra> }
 
 export function parseArtboardRange(text: string, count: number, current: number): number[] | null {
   const t = text.trim().toLowerCase();
@@ -400,9 +401,12 @@ export function parseArtboardRange(text: string, count: number, current: number)
 }
 
 const PDF_TABS: ReadonlyArray<readonly [string, string]> = [['general', 'General'], ['marks', 'Marks and Bleeds'], ['compression', 'Compression'], ['security', 'Security']];
+const RASTER_TABS: ReadonlyArray<readonly [string, string]> = [['general', 'General'], ['options', 'Format Options']];
+const RASTER_FORMATS = new Set(['png', 'png8', 'gif', 'bmp', 'psd', 'jpg', 'webp', 'tiff']);
+const RASTER_TABBED = new Set(['png8', 'gif', 'bmp', 'psd', 'tiff']);
 
 export class ExportDialog extends Dialog {
-  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['ai', 'Illustrator (.ai)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['dwg', 'AutoCAD Drawing (.dwg)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['tiff', 'TIFF (.tiff)']]);
+  private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['ai', 'Illustrator (.ai)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['dwg', 'AutoCAD Drawing (.dwg)'], ['png', 'PNG (.png)'], ['png8', 'PNG-8 (.png)'], ['gif', 'GIF (.gif)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['bmp', 'BMP (.bmp)'], ['psd', 'Photoshop (.psd)'], ['tiff', 'TIFF (.tiff)']]);
   private readonly tiffCompression = selectOf([['none', 'None'], ['packbits', 'PackBits'], ['lzw', 'LZW'], ['deflate', 'Deflate']]);
   private readonly tiffColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
   private readonly embedIcc = el<HTMLInputElement>('<input type="checkbox" checked>');
@@ -424,7 +428,18 @@ export class ExportDialog extends Dialog {
   private readonly cadText = selectOf([['text', 'Text objects'], ['outlines', 'Outlines']]);
   private readonly cadWeights = el<HTMLInputElement>('<input type="checkbox">');
   private readonly scope = selectOf([['artboard', 'Active artboard'], ['all', 'All artboards'], ['art', 'All art (trimmed)'], ['selection', 'Selection']]);
-  private readonly scale = selectOf([['0.5', '0.5x (36 ppi)'], ['1', '1x (72 ppi)'], ['2', '2x (144 ppi)'], ['3', '3x'], ['4', '4x'], ['4.1667', '300 ppi']]);
+  private readonly scale = selectOf([['0.5', '0.5x (36 ppi)'], ['1', '1x (72 ppi)'], ['2', '2x (144 ppi)'], ['3', '3x (216 ppi)'], ['4', '4x (288 ppi)'], ['4.1667', '300 ppi'], ['custom', 'Custom']]);
+  private readonly ppi = numberInput(1, 2400, 1);
+  private readonly aa = selectOf([['art', 'Art Optimized (Supersampling)'], ['none', 'None'], ['type', 'Type Optimized (Hinted)']]);
+  private readonly colors = numberInput(2, 256, 1);
+  private readonly palette = selectOf([['perceptual', 'Perceptual'], ['selective', 'Selective'], ['adaptive', 'Adaptive']]);
+  private readonly dither = selectOf([['diffusion', 'Diffusion'], ['none', 'None']]);
+  private readonly ditherAmount = numberInput(0, 100, 1);
+  private readonly matte = el<HTMLInputElement>('<input class="cv-color" type="color" value="#ffffff" aria-label="Matte">');
+  private readonly interlace = el<HTMLInputElement>('<input type="checkbox">');
+  private readonly bmpBits = selectOf([['24', '24-bit (no transparency)'], ['32', '32-bit with alpha']]);
+  private readonly psdColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
+  private readonly psdLayers = el<HTMLInputElement>('<input type="checkbox" checked>');
   private readonly range = el<HTMLInputElement>('<input class="cv-input" type="text" value="Current" placeholder="All, Current or 1-3,5">');
   private count = 1;
   private readonly quality = numberInput(1, 100);
@@ -450,6 +465,7 @@ export class ExportDialog extends Dialog {
   private readonly note = el('<p class="cv-note cv-export-note"></p>');
   private tab = 'general';
   private readonly tabs = seg(PDF_TABS.map(([id, label]) => ({ id, label })), (id) => { this.tab = id; this.tabs.set(id); this.sync(); }, 'cv-seg-small');
+  private readonly rtabs = seg(RASTER_TABS.map(([id, label]) => ({ id, label })), (id) => { this.tab = id; this.rtabs.set(id); this.sync(); }, 'cv-seg-small');
   private readonly rows: Record<string, HTMLElement> = {};
   private resolve: ((c: ExportChoice | null) => void) | null = null;
   private artboard = 0;
@@ -464,7 +480,34 @@ export class ExportDialog extends Dialog {
     this.rows.pdfTabs = el('<div></div>');
     this.rows.pdfTabs.appendChild(this.tabs.el);
     this.tabs.set(this.tab);
+    this.rows.rasterTabs = el('<div></div>');
+    this.rows.rasterTabs.appendChild(this.rtabs.el);
+    this.rtabs.set(this.tab);
     this.rows.scale = row('Resolution', this.scale);
+    this.rows.ppi = row('Resolution (ppi)', this.ppi);
+    this.ppi.value = '72';
+    this.scale.value = '1';
+    this.ppi.title = 'Pixels per inch of the artwork at 72 points to the inch: 300 ppi makes an artboard 4.17 times as wide in pixels as in points';
+    this.rows.aa = row('Anti-aliasing', this.aa);
+    this.aa.title = 'Art Optimized smooths the edges of shapes. None draws hard edges only. Type Optimized smooths shapes and sharpens plain type.';
+    this.scale.addEventListener('change', () => { if (this.scale.value !== 'custom') this.ppi.value = String(Math.round(72 * Number(this.scale.value))); this.sync(); });
+    this.ppi.addEventListener('input', () => { const v = Number(this.ppi.value), hit = [...this.scale.options].find((o) => o.value !== 'custom' && Math.round(72 * Number(o.value)) === v); this.scale.value = hit ? hit.value : 'custom'; });
+    this.rows.colors = row('Colors', this.colors);
+    this.colors.value = String(RASTER_EXTRA.colors);
+    this.colors.title = '2 to 256; one entry of the palette is the transparent color when transparency is on';
+    this.rows.palette = row('Palette', this.palette);
+    this.palette.title = 'Perceptual favors colors the eye is most sensitive to. Selective favors broad areas of color and keeps Web-safe colors. Adaptive uses the colors that occur most.';
+    this.rows.dither = row('Dither', this.dither);
+    this.rows.ditherAmount = row('Dither amount (%)', this.ditherAmount);
+    this.ditherAmount.value = String(RASTER_EXTRA.amount);
+    this.rows.matte = row('Matte', this.matte);
+    this.matte.title = 'Partly transparent edge pixels blend into this color; it also fills the background when transparency is off';
+    this.rows.interlace = row('Interlaced', this.interlace);
+    this.rows.bmpBits = row('Depth', this.bmpBits);
+    this.rows.psdColor = row('Color', this.psdColor);
+    this.rows.psdLayers = row('Write layers (one per top-level layer)', this.psdLayers);
+    this.psdLayers.title = 'Each top-level layer becomes a pixel layer that keeps its name, visibility and opacity, under a flattened composite';
+    this.dither.addEventListener('change', () => this.sync());
     this.rows.quality = row('Quality (%)', this.quality);
     this.rows.transparent = row('Transparent background', this.transparent);
     this.rows.preserve = row('Preserve formpth editing (reopens fully editable)', this.preserve);
@@ -545,6 +588,7 @@ export class ExportDialog extends Dialog {
     this.range.value = 'Current';
     setClass(this.range, 'is-invalid', false);
     this.epsColor.value = cmyk ? 'cmyk' : 'rgb';
+    this.psdColor.value = cmyk ? 'cmyk' : 'rgb';
     this.artboard = artboard;
     (this.scope.querySelector('option[value="selection"]') as HTMLOptionElement).disabled = !hasSelection;
     if (this.scope.value === 'selection' && !hasSelection) this.scope.value = 'artboard';
@@ -558,7 +602,7 @@ export class ExportDialog extends Dialog {
     let h = 0;
     for (let i = 0; i < this.format.options.length; i++) {
       this.format.selectedIndex = i;
-      for (const [t] of this.format.value === 'pdf' ? PDF_TABS : [[keepTab]]) { this.tab = t; this.sync(); h = Math.max(h, this.body.offsetHeight); }
+      for (const [t] of this.format.value === 'pdf' ? PDF_TABS : RASTER_TABBED.has(this.format.value) ? RASTER_TABS : [[keepTab]]) { this.tab = t; this.sync(); h = Math.max(h, this.body.offsetHeight); }
     }
     this.bleedMode.value = keepBleed;
     this.tab = keepTab;
@@ -568,13 +612,23 @@ export class ExportDialog extends Dialog {
   }
 
   private sync(): void {
-    const f = this.format.value, raster = f === 'png' || f === 'jpg' || f === 'webp' || f === 'tiff';
+    const f = this.format.value, raster = RASTER_FORMATS.has(f), tabbed = RASTER_TABBED.has(f);
+    const known = f === 'pdf' ? PDF_TABS.some(([t]) => t === this.tab) : tabbed ? RASTER_TABS.some(([t]) => t === this.tab) : true;
+    if (!known) this.tab = 'general';
+    this.tabs.set(this.tab); this.rtabs.set(this.tab);
+    const rg = raster && (!tabbed || this.tab === 'general'), ro = raster && tabbed && this.tab === 'options';
     setHidden(this.rows.range, f === 'dxf' || f === 'dwg' || this.scope.value !== 'artboard');
-    setHidden(this.rows.scale, !raster);
-    setHidden(this.rows.quality, !(f === 'jpg' || f === 'webp'));
-    setHidden(this.rows.transparent, !(f === 'png' || f === 'webp' || f === 'tiff'));
-    for (const k of ['tiffCompression', 'tiffColor']) setHidden(this.rows[k], f !== 'tiff');
-    setHidden(this.rows.embedIcc, !raster);
+    setHidden(this.rows.rasterTabs, !tabbed);
+    for (const k of ['scale', 'ppi', 'aa']) setHidden(this.rows[k], !rg);
+    setHidden(this.rows.quality, !(rg && (f === 'jpg' || f === 'webp')));
+    setHidden(this.rows.transparent, !(rg && f !== 'jpg'));
+    for (const k of ['tiffCompression', 'tiffColor']) setHidden(this.rows[k], !(ro && f === 'tiff'));
+    for (const k of ['colors', 'palette', 'dither', 'ditherAmount', 'matte']) setHidden(this.rows[k], !(ro && (f === 'gif' || f === 'png8')));
+    setHidden(this.rows.interlace, !(ro && f === 'gif'));
+    setHidden(this.rows.bmpBits, !(ro && f === 'bmp'));
+    for (const k of ['psdColor', 'psdLayers']) setHidden(this.rows[k], !(ro && f === 'psd'));
+    setDisabled(this.ditherAmount, this.dither.value === 'none');
+    setHidden(this.rows.embedIcc, !(rg && f !== 'gif'));
     const onTab = (t: string): boolean => f === 'pdf' && this.tab === t;
     setHidden(this.rows.pdfTabs, f !== 'pdf');
     setClass(this.note, 'is-off', f !== 'pdf');
@@ -612,10 +666,10 @@ export class ExportDialog extends Dialog {
     const cad: CadChoice = { version: this.cadVersion.value === 'R12' ? 'R12' : '2000', units: this.cadUnits.value as DxfUnit, scale: Math.max(1e-4, Number(this.cadScale.value) || 1), text: this.cadText.value === 'outlines' ? 'outlines' : 'text', lineweights: this.cadWeights.checked };
     const list = this.scope.value === 'artboard' && f !== 'dxf' && f !== 'dwg' ? parseArtboardRange(this.range.value, this.count, this.artboard) : null;
     const num = (i: HTMLInputElement): number => Math.max(0, Number(i.value) || 0);
-    const scale = Number(this.scale.value) || 1;
+    const scale = Math.max(1, Math.min(2400, Number(this.ppi.value) || 72)) / 72;
     const tiff: TiffExportChoice = { compression: this.tiffCompression.value as TiffCompression, cmyk: this.tiffColor.value === 'cmyk', ppi: Math.round(72 * scale) };
     const marks: PdfMarks = { trim: this.markTrim.checked, registration: this.markReg.checked, colorBars: this.markBars.checked, pageInfo: this.markInfo.checked, offset: num(this.markOffset), weight: Math.max(0.1, Number(this.markWeight.value) || DEFAULT_MARKS.weight), bleed: this.bleedMode.value as PdfMarks['bleed'], custom: { t: num(this.bleedTop), b: num(this.bleedBottom), l: num(this.bleedLeft), r: num(this.bleedRight) } };
-    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, liveText: this.liveText.checked, standard: standardFrom(this.standard.value), layers: this.layers.checked && standardRules(standardFrom(this.standard.value)).layers, compression: { images: this.imageMode.value as PdfCompression['images'], jpegQuality: Math.max(0.05, Math.min(1, (Number(this.jpegQuality.value) || 80) / 100)), downsamplePpi: num(this.downsample), downsampleAbove: num(this.downsampleAbove), flate: this.flate.checked }, security: this.pdfSecurity(), cmyk: this.epsColor.value === 'cmyk', cad, icc: this.embedIcc.checked };
+    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale, raster: { aa: this.aa.value as RasterExtra['aa'], colors: Math.max(2, Math.min(256, Math.round(Number(this.colors.value) || 256))), palette: this.palette.value as RasterExtra['palette'], dither: this.dither.value as RasterExtra['dither'], amount: Math.max(0, Math.min(100, Number(this.ditherAmount.value) || 0)), matte: this.matte.value, interlace: this.interlace.checked, bmpBits: this.bmpBits.value === '32' ? 32 : 24, psdCmyk: this.psdColor.value === 'cmyk', psdLayers: this.psdLayers.checked }, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, liveText: this.liveText.checked, standard: standardFrom(this.standard.value), layers: this.layers.checked && standardRules(standardFrom(this.standard.value)).layers, compression: { images: this.imageMode.value as PdfCompression['images'], jpegQuality: Math.max(0.05, Math.min(1, (Number(this.jpegQuality.value) || 80) / 100)), downsamplePpi: num(this.downsample), downsampleAbove: num(this.downsampleAbove), flate: this.flate.checked }, security: this.pdfSecurity(), cmyk: this.epsColor.value === 'cmyk', cad, icc: this.embedIcc.checked };
   }
 }
 
@@ -626,7 +680,7 @@ export class ScreensDialog extends Dialog {
 
   constructor() {
     super('Export for Screens', 560);
-    this.body.append(el('<h3 class="cv-prefs-sub">Artboards</h3>'), this.boards, el('<h3 class="cv-prefs-sub">Formats</h3>'), this.formats);
+    this.body.append(el('<h3 class="cv-prefs-sub">Artboards</h3>'), this.boards, el('<h3 class="cv-prefs-sub">Formats</h3>'), this.formats, el('<datalist id="cv-screen-scales"><option value="0.5x"></option><option value="1x"></option><option value="1.5x"></option><option value="2x"></option><option value="3x"></option><option value="4x"></option><option value="150 ppi"></option><option value="300 ppi"></option><option value="600 ppi"></option></datalist>'));
     const add = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Add Scale</button>');
     add.addEventListener('click', () => this.addRow(2, 'png', '@2x'));
     this.body.appendChild(add);
@@ -640,9 +694,10 @@ export class ScreensDialog extends Dialog {
 
   private addRow(scale: number, format: string, suffix: string): void {
     const r = el('<div class="cv-screens-row"></div>');
-    const s = selectOf([['0.5', '0.5x'], ['1', '1x'], ['1.5', '1.5x'], ['2', '2x'], ['3', '3x'], ['4', '4x']]), f = selectOf([['png', 'PNG'], ['jpg', 'JPG'], ['webp', 'WebP'], ['svg', 'SVG'], ['pdf', 'PDF']]), x = el<HTMLInputElement>('<input class="cv-input" type="text" aria-label="Suffix" placeholder="suffix">');
-    s.value = String(scale); f.value = format; x.value = suffix;
+    const s = el<HTMLInputElement>('<input class="cv-input" type="text" list="cv-screen-scales" aria-label="Scale" placeholder="2x or 300 ppi">'), f = selectOf([['png', 'PNG'], ['png8', 'PNG-8'], ['gif', 'GIF'], ['jpg', 'JPG'], ['webp', 'WebP'], ['bmp', 'BMP'], ['psd', 'PSD'], ['tiff', 'TIFF'], ['svg', 'SVG'], ['pdf', 'PDF']]), x = el<HTMLInputElement>('<input class="cv-input" type="text" aria-label="Suffix" placeholder="suffix">');
+    s.value = `${scale}x`; f.value = format; x.value = suffix;
     x.addEventListener('keydown', (e) => e.stopPropagation());
+    s.addEventListener('keydown', (e) => e.stopPropagation());
     const del = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" aria-label="Remove">${icon('close', 14)}</button>`);
     del.addEventListener('click', () => r.remove());
     r.append(s, x, f, del);
@@ -656,7 +711,7 @@ export class ScreensDialog extends Dialog {
 
   private value(): { artboards: number[]; items: Array<{ scale: number; format: string; suffix: string }> } {
     const artboards = Array.from(this.boards.querySelectorAll<HTMLInputElement>('input:checked')).map((c) => Number(c.dataset.i));
-    const items = Array.from(this.formats.children).map((r) => { const [s, x, f] = Array.from(r.querySelectorAll<HTMLInputElement | HTMLSelectElement>('select, input')); return { scale: Number(s.value) || 1, suffix: x.value, format: f.value }; });
+    const items = Array.from(this.formats.children).map((r) => { const [s, x, f] = Array.from(r.querySelectorAll<HTMLInputElement | HTMLSelectElement>('select, input')); return { scale: parseScale(s.value) ?? 1, suffix: x.value, format: f.value }; });
     return { artboards, items };
   }
 }

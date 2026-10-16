@@ -4,6 +4,7 @@ import { ARROWHEADS, arrowGeometry, brushGeometry, effectPath, has3d, rasterEffe
 import { apply, bezTangent, emptyRect, inflate as inflateRect, invert as invertMat, isEmptyRect, mul, parseSvgD, pathBounds, segments, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
+import { fxNode } from '../engine/groupfx';
 import { derivedArt } from '../engine/shaper';
 import { meshQuads } from '../engine/mesh';
 import { isMeshMime } from '../engine/modelmesh';
@@ -320,6 +321,7 @@ class Writer {
 
   node(n: VNode): string {
     if (n.hidden) return '';
+    if (n.ap.effects.length) n = fxNode(this.doc, n) ?? n;
     const baked = this.baked(n);
     if (baked !== null) return n.kind === 'layer' ? `<g id="${esc(n.id)}" data-name="${esc(n.name ?? 'Layer')}">${baked}</g>` : baked;
     const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(this.doc, n) : null;

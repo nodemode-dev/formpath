@@ -5,6 +5,8 @@ import { customProfileNames, saveWidthProfile } from '../io/width-profiles';
 import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
 import { LIGHT_LIMIT, LIGHTING_PRESETS, lightsToParam, ROTATION_PRESETS, SURFACE_CHOICES, surfaceSpecs, surfacesToParam, type SurfSpec } from '../engine/threed';
 import { modelSiblings } from '../io/model';
+import type { RasterExtra } from '../io/raster';
+import { CROP_CHOICES, type CropTo, type PlaceOptions } from '../io/place';
 import { textureAverage, textureName } from '../engine/texture';
 import { anchor, flatIndex, inflate, isEmptyRect, isLineSeg, segOf, normRect, reflectAbout, rotateAbout, scaleAbout, shearAbout, splitSegmentAt, translate, unflatIndex, mul, emptyRect, unionRect } from '../engine/geometry';
 import { collectColors, fitRowsToPalette, mapFn, nearestFn, oklab, RECOLOR, recolorDoc, reduceRows, rowReference, rowsFn } from '../engine/ops/recolor';
@@ -54,11 +56,11 @@ export interface AgentDeps {
   note(text: string): void;
   allow(): void;
   openFile(file: File, dxf?: Partial<DxfImportOptions> | null, password?: string): Promise<void>;
-  placeFile(file: File, at: Pt | null, width: number | null, dxf?: Partial<DxfImportOptions> | null): Promise<string | null>;
-  placeLinked?(path: string, at: Pt | null, width: number | null): Promise<string | null>;
+  placeFile(file: File, at: Pt | null, width: number | null, dxf?: Partial<DxfImportOptions> | null, placing?: PlaceOptions): Promise<string | null>;
+  placeLinked?(path: string, at: Pt | null, width: number | null, placing?: PlaceOptions): Promise<string | null>;
   links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
   projectBlob(): Promise<Blob | null>;
-  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
+  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'png8' | 'gif' | 'bmp' | 'psd' | 'tiff' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg', o: { raster?: Partial<RasterExtra>; scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
   image(scope: string, artboard: number | undefined, maxSize: number, outline: boolean): Promise<Blob | null>;
   svg(scope: string, artboard: number | undefined, ids: string[] | undefined): Promise<string>;
   outlines(ids?: string[]): Promise<boolean>;
@@ -749,25 +751,35 @@ export class AgentBridge {
         case 'get_svg': { const s = await this.deps.svg(str('scope', 'artboard'), has('artboard') ? Math.round(num('artboard', 0)) : undefined, Array.isArray(a.ids) ? a.ids.map(String) : undefined); return text(s.length > 200000 ? `${s.slice(0, 200000)}\n<!-- truncated -->` : s); }
         case 'get_object': { const n = this.node(a.id); const out = { ...JSON.parse(JSON.stringify(n)) as Record<string, unknown>, bounds: box(geomBounds(p.doc, n)), visual_bounds: box(visualBounds(p.doc, n)), ...(n.kind === 'text' ? { text: plainText(n), overflow: layoutText(n).overflow >= 0 } : {}), ...(n.kind === 'path' && n.live ? { shape: { kind: n.live.kind, ...liveParams(n.live) } } : {}) }; return text(JSON.stringify(out).slice(0, 100000), out); }
         case '__place': {
+          const crop = str('crop', 'bounding') as CropTo;
+          if (has('crop') && !CROP_CHOICES.some(([c]) => c === crop)) return fail(`crop must be one of ${CROP_CHOICES.map(([c]) => c).join(', ')}.`);
+          if (has('psd_import') && !['objects', 'flatten'].includes(str('psd_import'))) return fail('psd_import must be objects or flatten.');
+          const placing: PlaceOptions = { ...(has('page') ? { page: Math.max(1, Math.round(num('page', 1))) } : {}), ...(has('crop') ? { crop } : {}), ...(has('psd_import') ? { psd: str('psd_import') === 'flatten' ? 'flatten' as const : 'layers' as const } : {}), mode: a.link === true ? 'link' as const : 'embed' as const };
           if (a.link === true && has('path') && this.deps.placeLinked) {
-            const id = await this.deps.placeLinked(str('path'), has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null);
+            const id = await this.deps.placeLinked(str('path'), has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null, placing);
             return id ? text(`Placed ${str('name')} linked to ${str('path')} (id ${id}); the links tool reports when the file changes.`, { id, linked: true }) : fail(`Could not place ${str('name')}.`);
           }
           const bytes = Uint8Array.from(atob(str('data')), (c) => c.charCodeAt(0)), file = new File([bytes], str('name'));
           this.siblings(file, a);
-          const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null, this.dxfArgs(a, true));
+          const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null, this.dxfArgs(a, true), placing);
           return id ? text(`Placed ${file.name} (id ${id}).`, { id }) : fail(`Could not place ${file.name}.`);
         }
         case '__project': { const blob = await this.deps.projectBlob(); return blob ? text('Packed the project.', { data: await b64(blob) }) : fail('Could not pack the project: is the engine running (./formpth boot)?'); }
         case '__export': {
-          const fmt = str('format') as 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg';
+          const asked = str('format') as 'svg' | 'pdf' | 'ai' | 'png' | 'gif' | 'bmp' | 'psd' | 'tiff' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg';
+          const fmt = asked === 'png' && has('colors') ? 'png8' : asked;
+          const oneOf = (key: string, list: readonly string[], dflt: string): string => { const v = str(key, dflt); return list.includes(v) ? v : ''; };
+          const aa = oneOf('anti_aliasing', ['art', 'none', 'type'], 'art'), palette = oneOf('palette', ['perceptual', 'selective', 'adaptive'], 'perceptual'), dither = oneOf('dither', ['diffusion', 'none'], 'diffusion');
+          if (!aa || !palette || !dither) return fail(`${!aa ? 'anti_aliasing must be art, none or type' : !palette ? 'palette must be perceptual, selective or adaptive' : 'dither must be diffusion or none'}.`);
+          if (has('matte') && !/^#?[0-9a-fA-F]{6}$/.test(str('matte'))) return fail('matte must be a hex colour such as #ffffff.');
+          const raster: Partial<RasterExtra> = { aa: aa as RasterExtra['aa'], colors: Math.max(2, Math.min(256, Math.round(num('colors', 256)))), palette: palette as RasterExtra['palette'], dither: dither as RasterExtra['dither'], amount: Math.max(0, Math.min(100, num('dither_amount', 88))), matte: has('matte') ? '#' + str('matte').replace('#', '') : '#ffffff', interlace: a.interlaced === true, bmpBits: num('bmp_bits', 24) === 32 ? 32 : 24, psdCmyk: fmt === 'psd' && str('color') === 'cmyk', psdLayers: a.psd_layers !== false };
           const units = str('units', 'mm') as DxfUnit;
           if (fmt === 'dwg' && str('dxf_version', '2000') === 'R12') return fail('DWG is written as AutoCAD 2000 only; dxf_version R12 applies to .dxf.');
           if ((fmt === 'dxf' || fmt === 'dwg') && !DXF_UNITS.some(([u]) => u === units)) return fail(`units must be one of ${DXF_UNITS.map(([u]) => u).join(', ')}.`);
           const cad: CadChoice = { version: str('dxf_version', '2000') === 'R12' ? 'R12' : '2000', units, scale: Math.max(1e-4, num('drawing_scale', 1)), text: a.outline_text === true ? 'outlines' : 'text', lineweights: a.scale_lineweights === true };
           const pdfOnly = fmt === 'pdf', standard = pdfOnly ? standardFrom(a.pdf_standard) : 'none', security = pdfOnly ? securityFrom(a) : undefined, layers = pdfOnly && a.pdf_layers === true;
           if (pdfOnly) { const refusal = pdfRefusal({ standard, security, layers }); if (refusal) return fail(refusal); }
-          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, scale: Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
+          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, raster, scale: has('ppi') ? Math.max(1, Math.min(2400, num('ppi', 72))) / 72 : Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
           return blob ? text(`Exported ${fmt.toUpperCase()}.`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {
@@ -1046,6 +1058,29 @@ export class AgentBridge {
           return text('Updated the layer.');
         }
         case 'delete_layer': { const l = this.node(a.id); if (l.kind !== 'layer') return fail(`${l.id} is not a layer.`); e.deleteLayer(l.id); return text('Deleted the layer.'); }
+        case 'layer_action': {
+          const act = str('action'), given = Array.isArray(a.ids) ? a.ids.map(String) : undefined, doc = e.doc as Doc;
+          const missing = (given ?? []).filter((id) => !findNode(doc, id));
+          if (missing.length) return fail(`No object has the id ${missing.join(', ')}: call get_document for current ids.`);
+          const notLayers = (given ?? []).filter((id) => findNode(doc, id)?.kind !== 'layer');
+          if ((act === 'duplicate' || act === 'merge') && notLayers.length) return fail(`${notLayers.join(', ')} ${notLayers.length === 1 ? 'is' : 'are'} not a layer id: layers are listed by get_document.`);
+          if (act === 'duplicate') { const made = e.duplicateLayers(given); return made.length ? text(`Duplicated ${made.length} layer${made.length === 1 ? '' : 's'}.`, { ids: made }) : fail('There is no layer to duplicate: pass ids.'); }
+          if (act === 'merge') { const pick = given ?? e.layerSelection; if (pick.length < 2) return fail('Merge needs two or more layer ids in ids.'); return e.mergeLayers(pick) ? text('Merged the layers into the topmost one.', { id: e.activeLayer }) : fail('Nothing was merged.'); }
+          if (act === 'flatten') {
+            const target = str('id') || undefined;
+            if (target && findNode(doc, target)?.kind !== 'layer') return fail(`${target} is not a layer id.`);
+            return e.flattenArtwork(a.discard_hidden === true, target) ? text(`Flattened the artwork into one layer${a.discard_hidden === true ? ', hidden art discarded' : ''}.`, { id: e.activeLayer }) : fail('Nothing to flatten.');
+          }
+          if (act === 'release_sequence' || act === 'release_build') {
+            const host = str('id') || undefined, hn = host ? findNode(doc, host) : null;
+            if (host && (!hn || (hn.kind !== 'layer' && hn.kind !== 'group'))) return fail(`${host} is not a layer or group id.`);
+            const made = e.releaseToLayers(act === 'release_build' ? 'build' : 'sequence', host);
+            return made.length ? text(`Released into ${made.length} sublayer${made.length === 1 ? '' : 's'}.`, { ids: made }) : fail('Nothing to release: the layer or group has no objects.');
+          }
+          if (act === 'reverse_order') return e.reverseOrder(given) ? text('Reversed the stacking order.') : fail('Reverse Order needs two or more layers or objects with the same parent.');
+          if (act === 'collect') { const ids = given ?? this.ids(a); const before = doc.layers.length; e.collectInNewLayer(ids); return e.doc && e.doc.layers.length > before ? text('Collected the objects in a new layer.') : fail('Nothing was collected: pass object ids.'); }
+          return fail('action must be duplicate, merge, flatten, release_sequence, release_build, reverse_order or collect.');
+        }
         case 'move_to_layer': { const l = this.node(a.layer); if (l.kind !== 'layer') return fail(`${l.id} is not a layer.`); e.moveToLayer(l.id, this.ids(a)); return text(`Moved to ${nodeLabel(l)}.`); }
         case 'transform': {
           const ids = this.ids(a) ?? e.targetIds();

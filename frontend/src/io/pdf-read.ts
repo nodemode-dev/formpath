@@ -364,20 +364,54 @@ class FontNames {
 
 export interface PdfImport { doc: Doc; assets: Map<string, Blob>; pages: number; skipped: string[]; fonts: Array<[string, string]> }
 
-export async function readPdfVector(data: ArrayBuffer, title: string, password?: string): Promise<PdfImport> {
+export type PdfBox = 'media' | 'crop' | 'bleed' | 'trim' | 'art';
+export class PdfSession { pdf: PdfFile | null = null; }
+export interface PdfReadOpts { pages?: number[]; box?: PdfBox; session?: PdfSession }
+export interface PdfPageInfo { index: number; boxes: Record<PdfBox, [number, number, number, number]>; rotate: number }
+interface PageRec { page: PDict; res: PDict | null; box: number[]; boxes: Record<PdfBox, [number, number, number, number]>; rotate: number }
+
+async function openPdf(data: ArrayBuffer, password: string | undefined, session: PdfSession | undefined): Promise<PdfFile> {
+  if (session?.pdf) return session.pdf;
   const pdf = new PdfFile(new Uint8Array(data));
   await pdf.init(password);
+  if (session) session.pdf = pdf;
+  return pdf;
+}
+
+function pageRecords(pdf: PdfFile): PageRec[] {
   const catalog = pdf.dict(pdf.trailer.get('Root')) ?? findCatalog(pdf);
   if (!catalog) throw new Error('no page tree was found in it');
-  const pages: Array<{ page: PDict; res: PDict | null; box: number[] }> = [];
-  const walk = (node: PDict | null, res: PDict | null, box: number[] | null, depth: number): void => {
+  const pages: PageRec[] = [];
+  const quad = (v: number[]): [number, number, number, number] | null => (v.length === 4 ? [Math.min(v[0], v[2]), Math.min(v[1], v[3]), Math.max(v[0], v[2]), Math.max(v[1], v[3])] : null);
+  const walk = (node: PDict | null, res: PDict | null, media: number[] | null, crop: number[] | null, rot: number, depth: number): void => {
     if (!node || depth > 32) return;
-    const r = pdf.dict(node.get('Resources')) ?? res, cb = pdf.nums(node.get('CropBox')), mb = pdf.nums(node.get('MediaBox')), b = cb.length === 4 ? cb : mb.length === 4 ? mb : box;
-    if (nameOf(node.get('Type')) === 'Page' || (!node.has('Kids') && node.has('Contents'))) { pages.push({ page: node, res: r, box: b ?? [0, 0, 612, 792] }); return; }
-    for (const k of pdf.arr(node.get('Kids'))) walk(pdf.dict(k), r, b, depth + 1);
+    const r = pdf.dict(node.get('Resources')) ?? res, cb = pdf.nums(node.get('CropBox')), mb = pdf.nums(node.get('MediaBox'));
+    const m = mb.length === 4 ? mb : media, c = cb.length === 4 ? cb : crop, rt = node.has('Rotate') ? pdf.n(node.get('Rotate')) : rot;
+    if (nameOf(node.get('Type')) === 'Page' || (!node.has('Kids') && node.has('Contents'))) {
+      const media0 = quad(m ?? [0, 0, 612, 792]) as [number, number, number, number];
+      const within = (b: [number, number, number, number]): [number, number, number, number] => { const o: [number, number, number, number] = [Math.max(b[0], media0[0]), Math.max(b[1], media0[1]), Math.min(b[2], media0[2]), Math.min(b[3], media0[3])]; return o[2] > o[0] && o[3] > o[1] ? o : media0; };
+      const crop0 = within(quad(c ?? media0) ?? media0);
+      const pick = (key: string): [number, number, number, number] => { const b = quad(pdf.nums(node.get(key))); return b ? within(b) : crop0; };
+      pages.push({ page: node, res: r, box: c && quad(c) ? crop0 : media0, boxes: { media: media0, crop: crop0, bleed: pick('BleedBox'), trim: pick('TrimBox'), art: pick('ArtBox') }, rotate: ((rt % 360) + 360) % 360 });
+      return;
+    }
+    for (const k of pdf.arr(node.get('Kids'))) walk(pdf.dict(k), r, m, c, rt, depth + 1);
   };
-  walk(pdf.dict(catalog.get('Pages')), null, null, 0);
+  walk(pdf.dict(catalog.get('Pages')), null, null, null, 0, 0);
   if (!pages.length) throw new Error('it has no pages');
+  return pages;
+}
+
+export async function probePdf(data: ArrayBuffer, password?: string, session?: PdfSession): Promise<PdfPageInfo[]> {
+  const pdf = await openPdf(data, password, session);
+  return pageRecords(pdf).map((p, index) => ({ index, boxes: p.boxes, rotate: p.rotate }));
+}
+
+export async function readPdfVector(data: ArrayBuffer, title: string, password?: string, opts: PdfReadOpts = {}): Promise<PdfImport> {
+  const pdf = await openPdf(data, password, opts.session);
+  const catalog = pdf.dict(pdf.trailer.get('Root')) ?? findCatalog(pdf);
+  if (!catalog) throw new Error('no page tree was found in it');
+  const pages = pageRecords(pdf);
   const doc = newDoc(612, 792, { title });
   doc.artboards = [];
   const layer = makeLayer('Layer 1', 0), assets = new Map<string, Blob>(), images: Record<string, ImageAsset> = {}, skipped = new Set<string>(), patterns: PatternDef[] = [];
@@ -399,8 +433,9 @@ export async function readPdfVector(data: ArrayBuffer, title: string, password?:
   if (pages.length > 200) skipped.add(`pages 201 to ${pages.length}`);
   let x0 = 0;
   for (const [pi, pg] of pages.slice(0, 200).entries()) {
-    const [bx0, by0, bx1, by1] = pg.box, w = Math.abs(bx1 - bx0), h = Math.abs(by1 - by0), left = Math.min(bx0, bx1), top = Math.max(by0, by1);
-    const rot = ((pdf.n(pg.page.get('Rotate')) % 360) + 360) % 360, side = rot === 90 || rot === 270;
+    if (opts.pages && !opts.pages.includes(pi)) continue;
+    const [bx0, by0, bx1, by1] = opts.box ? pg.boxes[opts.box] : pg.box, w = Math.abs(bx1 - bx0), h = Math.abs(by1 - by0), left = Math.min(bx0, bx1), top = Math.max(by0, by1);
+    const rot = pg.rotate, side = rot === 90 || rot === 270;
     const aw = side ? h : w, ah = side ? w : h;
     const flip: Mat = [1, 0, 0, -1, -left, top], R: Mat = rot === 90 ? [0, 1, -1, 0, h, 0] : rot === 180 ? [-1, 0, 0, -1, w, h] : rot === 270 ? [0, -1, 1, 0, 0, w] : IDENTITY;
     const P = mul([1, 0, 0, 1, x0, 0], mul(R, flip));

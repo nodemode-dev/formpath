@@ -9,7 +9,7 @@ Generated from the engine's catalogue by `./formpth agents sync`; do not edit by
 - Selecting: `select`, `select_same`, `select_similar`
 - Drawing: `draw_path`, `draw_shape`, `edit_shape`, `add_text`, `edit_anchors`, `add_dimension`, `perspective`
 - Paint and appearance: `set_paint`, `set_stroke`, `set_appearance`, `add_swatch`, `swatch_library`, `swatch_group`, `color_harmony`, `graphic_style`
-- Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `opacity_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`
+- Objects and layers: `set_object`, `arrange`, `group`, `compound_path`, `attributes`, `clipping_mask`, `opacity_mask`, `delete_objects`, `duplicate_objects`, `add_layer`, `set_layer`, `delete_layer`, `move_to_layer`, `layer_action`
 - Transform and align: `transform`, `align`, `puppet_warp`
 - Path operations: `pathfinder`, `path_operation`, `shape_builder`, `shaper`
 - Effects and live objects: `apply_effect`, `three_d`, `expand`, `make_blend`, `envelope`, `repeat`, `symbol`, `apply_brush`, `new_brush`, `brush_library`, `image_trace`, `live_paint`, `intertwine`, `gradient_mesh`, `symbolism`, `make_pattern`, `edit_pattern`, `recolor`
@@ -72,7 +72,7 @@ Opens a new document with one or more artboards.
 
 ## open_file
 
-Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF) as a new document, or a 3D model (.obj with its .mtl and textures from the same folder, .glb or .gltf) as a new document holding an editable 3D object (see three_d). DWG (R2000, R2004, R2010, R2013 and R2018) is read by formpth itself; other DWG versions open through a DWG converter on this computer (ODA File Converter or LibreDWG dwg2dxf), and without one the call says how to get it.
+Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF, TIFF, or a Photoshop PSD with its layers as objects) as a new document sized from the image at its resolution, or a 3D model (.obj with its .mtl and textures from the same folder, .glb or .gltf) as a new document holding an editable 3D object (see three_d). DWG (R2000, R2004, R2010, R2013 and R2018) is read by formpth itself; other DWG versions open through a DWG converter on this computer (ODA File Converter or LibreDWG dwg2dxf), and without one the call says how to get it.
 
 - `path`: string; required
 - `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); DXF only: what one drawing unit is; default the file's own units, else mm for metric drawings and in otherwise.
@@ -90,7 +90,7 @@ Saves the document as a formpth project (.fpth) at an absolute path; everything 
 
 ## export_file
 
-Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .dwg (AutoCAD 2000 binary drawing, layers kept, written natively), .png, .jpg or .webp.
+Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .dwg (AutoCAD 2000 binary drawing, layers kept, written natively), .png (with colors it writes an indexed PNG-8), .jpg, .webp, .gif (2 to 256 colors, transparency with a matte, optional interlace), .bmp (24-bit or 32-bit with alpha), .psd (flattened composite plus one pixel layer per top-level layer, RGB or CMYK) or .tiff. Every raster format takes ppi (any resolution) and anti_aliasing.
 
 - `path`: string; required
 - `scope`: string (artboard | document | selection | all_artboards); default "artboard"
@@ -115,6 +115,16 @@ Exports the art to an absolute path; the extension chooses the format: .svg, .pd
 - `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); default "mm"; DXF and DWG only: the drawing units.
 - `drawing_scale`: number; default 1; DXF and DWG only: drawing units per unit of art (100 writes a 1:100 drawing at full size).
 - `scale_lineweights`: boolean; default false; DXF and DWG only: scale lineweights with drawing_scale.
+- `ppi`: number; Raster formats: resolution in pixels per inch (72 ppi is 1 pixel per point); takes the place of scale. 300 makes an artboard 4.17 times as wide in pixels as in points.
+- `anti_aliasing`: string (art | none | type); default "art"; Raster formats: art smooths shape edges (default); none draws hard edges only, no smoothing; type also sharpens plain type.
+- `colors`: integer; Palette size, 2 to 256. Given with a .png path it writes an indexed PNG-8; .gif always uses it (default 256). One entry is the transparent color when transparent is true.
+- `palette`: string (perceptual | selective | adaptive); default "perceptual"; GIF and PNG-8: how the palette is chosen. selective favors broad areas and Web-safe colors, perceptual the colors the eye is most sensitive to, adaptive the most frequent ones.
+- `dither`: string (diffusion | none); default "diffusion"; GIF and PNG-8: error-diffusion dither, used only when the art has more colors than the palette.
+- `dither_amount`: number; default 88; GIF and PNG-8: dither strength in percent.
+- `matte`: string; GIF and PNG-8: hex color (such as #ffffff, the default) that partly transparent edge pixels blend into; it also fills the background when transparent is false.
+- `interlaced`: boolean; default false; GIF only: write the rows interlaced.
+- `bmp_bits`: integer (24 | 32); default 24; BMP only: 24 writes RGB, 32 writes RGBA (alpha when transparent is true).
+- `psd_layers`: boolean; default true; PSD only: write one pixel layer per top-level layer (name, visibility and opacity kept) under the flattened composite; false writes the composite only. The color parameter (rgb or cmyk) chooses 8-bit RGB or CMYK.
 
 ## switch_document
 
@@ -125,13 +135,16 @@ Makes another open document the active one, by its index or name from get_docume
 
 ## place_image
 
-Places an image file (absolute path: PNG, JPEG, WebP, GIF, or SVG, EPS and DXF as editable vector groups) into the document at x, y, embedded; width scales it in proportion. A 3D model (.obj, with the .mtl and texture images beside it, .glb or .gltf) is placed as a live 3D object, width points across, that three_d turns, lights and ray traces and that exports to SVG and PDF as vector faces. With link true (raster images only) the image stays linked to its file: formpth reads it again when it changes (see the links tool).
+Places an image file (absolute path: PNG, JPEG, WebP, GIF, or SVG, EPS and DXF as editable vector groups) into the document at x, y, embedded; width scales it in proportion. A 3D model (.obj, with the .mtl and texture images beside it, .glb or .gltf) is placed as a live 3D object, width points across, that three_d turns, lights and ray traces and that exports to SVG and PDF as vector faces. A PDF or an Illustrator file (.pdf, .ai) places one page (page, 1-based, default 1) cropped to the crop box (bounding, art, crop, trim, bleed or media; default bounding, the bounds of the page's art): embedded it becomes an editable group of paths, type and images, width points across; with link true it stays a linked high-resolution picture of the page, not vector. A Photoshop file (.psd) places flattened (psd_import flatten) or with each pixel layer as an image object in groups (psd_import objects, the default, with names, opacity, visibility and blend modes); a TIFF (.tif, .tiff; page picks one of several) is placed at its resolution. With link true (raster images, PDF, AI, PSD and TIFF) the image stays linked to its file: formpth reads it again when it changes (see the links tool).
 
 - `path`: string; required
 - `x`: number
 - `y`: number
 - `width`: number
 - `link`: boolean; default false
+- `page`: integer; PDF, AI or TIFF page, 1-based.
+- `crop`: string (bounding | art | crop | trim | bleed | media); PDF or AI Crop To box; default bounding.
+- `psd_import`: string (objects | flatten); PSD: layers as objects (default) or one flattened image.
 
 ## links
 
@@ -488,6 +501,15 @@ Moves the objects to the top of a layer.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `layer`: string; required; A layer id.
+
+## layer_action
+
+Layers panel menu commands, each one undo step. duplicate: deep copies of the layers (and their sublayers and objects, all with new ids) named '<name> copy' directly above each original. merge: the layers (two or more) merge into the topmost of them, objects keep their stacking order, the others are removed. flatten: every visible layer merges into one (the layer in id, else the active layer); hidden layers and hidden art are discarded when discard_hidden is true and kept when false. release_sequence: each child of the layer or group in id becomes the only content of its own new sublayer. release_build: like sequence but the sublayers accumulate (the first holds object 1, the next objects 1 and 2, and so on). reverse_order: reverses the stacking of the layers in ids, or of the objects in ids that share a parent. collect: moves the objects in ids into a new layer on top. Returns the ids of the layers made or kept; call get_document to see the result.
+
+- `action`: string (duplicate | merge | flatten | release_sequence | release_build | reverse_order | collect); required
+- `ids`: array; Layer ids (duplicate, merge, reverse_order) or object ids (reverse_order, collect). Left out: the layers selected in the Layers panel, else the active layer or the selected objects.
+- `id`: string; A layer or group id for release_sequence and release_build, or the layer flatten keeps; the active layer when left out.
+- `discard_hidden`: boolean; default false; flatten only: discard hidden layers and hidden art instead of keeping hidden layers.
 
 ## transform
 

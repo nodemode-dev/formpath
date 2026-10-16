@@ -4,6 +4,7 @@ import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterE
 import { inflate, isEmptyRect, isLineSeg, segments } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
+import { fxNode } from '../engine/groupfx';
 import { derivedArt } from '../engine/shaper';
 import { isLive } from '../engine/pathfinder';
 import { instanceArt } from '../engine/symbolism';
@@ -209,6 +210,7 @@ class PsPainter {
   async node(n: VNode): Promise<string> {
     if (n.hidden) return '';
     if (n.kind === 'layer' && (n.printable === false || n.template)) return '';
+    if (n.ap.effects.length) n = fxNode(this.doc, n) ?? n;
     if (n.kind !== 'layer' && this.needsRaster(n)) return this.rasterize(n);
     return this.body(n);
   }

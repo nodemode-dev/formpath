@@ -5,6 +5,7 @@ import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterE
 import { inflate, isEmptyRect, isLineSeg, pathBounds, segments, unionRect } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
+import { fxNode } from '../engine/groupfx';
 import { derivedArt } from '../engine/shaper';
 import { isLive } from '../engine/pathfinder';
 import { latticeCopies, patternLattice } from '../engine/pattern';
@@ -457,6 +458,7 @@ export class Painter {
   async node(n: VNode, page: Mat): Promise<string> {
     if (n.hidden) return '';
     if (n.kind === 'layer' && (n.printable === false || n.template)) return '';
+    if (n.ap.effects.length) n = fxNode(this.doc, n) ?? n;
     const flat = await this.flat(n);
     if (flat !== null) return flat;
     if (this.needsRaster(n)) return this.rasterize(n);

@@ -2,13 +2,14 @@ import { allNodes, newId } from '../engine/doc';
 import { invalidateLayers } from '../engine/render';
 import type { Engine, ImageLink, ImageNode, Project } from '../engine';
 import { api } from './api';
+import { displayBlob, placeKind } from './place';
 
 export type LinkState = 'linked' | 'modified' | 'missing' | 'embedded' | 'unknown';
 export interface LinkStatus { state: LinkState; size?: number; mtime?: number }
-export interface LinkFile { blob: Blob; name: string; size: number; mtime: number; path?: string; handle?: string }
+export interface LinkFile { blob: Blob; name: string; size: number; mtime: number; path?: string; handle?: string; shown?: boolean }
 
 export const linkKey = (l: ImageLink): string => (l.path ? `path:${l.path}` : `handle:${l.handle ?? ''}`);
-export const IMAGE_KINDS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'];
+export const IMAGE_KINDS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.pdf', '.ai', '.psd', '.tif', '.tiff'];
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' };
 export function typed(blob: Blob, name: string): Blob {
   const t = MIME[(name.split('.').pop() ?? '').toLowerCase()];
@@ -142,6 +143,12 @@ export class LinkManager {
   }
 
   async read(l: ImageLink, ask = false): Promise<LinkFile | null> {
+    const f = await this.readRaw(l, ask);
+    if (!f || !placeKind(l.name)) return f;
+    try { return { ...f, blob: await displayBlob(f.blob, l.name, l), shown: true }; } catch { return null; }
+  }
+
+  private async readRaw(l: ImageLink, ask: boolean): Promise<LinkFile | null> {
     if (l.path) { if (!this.service()) return null; try { return await this.readPath(l.path); } catch { return null; } }
     const h = l.handle ? await getHandle(l.handle) : null;
     if (!h) return null;

@@ -27,7 +27,7 @@ import { PdfPasswordError, readPdfVector } from './io/pdf-read';
 import { isLegacyAi, readAiLegacy } from './io/ai-legacy';
 import { importModel, MODEL_FILE, MODEL_PART } from './io/model';
 import { docFromManifest, serialize } from './io/project-io';
-import { bakeTraced, canvasBlob, exportAssetsZip, exportForScreens, exportRaster, renderRegion, type AssetItem } from './io/raster';
+import { bakeTraced, canvasBlob, exportAssetsZip, exportForScreens, exportRaster, rasterExt, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
 import { exportRegion, exportSvg, importSvg } from './io/svg';
 import { TRACE_VIEWS, traceImage, traceOptions, type TraceOpts, type TraceRun } from './io/trace';
@@ -82,6 +82,8 @@ import { ArtboardsPanel, LinksPanel, SymbolLibraryPanel, SymbolsPanel } from './
 import { SYMBOL_LIBRARIES, symbolLibraryFromDoc, type SymbolLibrary } from './engine/symbol-libraries';
 import { SYMBOL_REGISTRATIONS, type SymbolRegistration } from './engine/symbols';
 import { canLinkHandles, IMAGE_KINDS, LinkManager, linkKey, linkOf, pickLinkedFile, pickLinkFolder, saveLinkedFile, type LinkFile } from './io/links';
+import { displayBlob, placeKind, placeSpecial, type PlaceOptions } from './io/place';
+import { askPlace } from './ui/place-dialog';
 import { FilePathDialog } from './ui/file-dialog';
 import { areaTypeOptionsDialog, CharacterPanel, findReplaceDialog, GlyphsPanel, hyphenationDialog, justificationDialog, ParagraphPanel, pathTypeOptionsDialog, TabsPanel } from './ui/panels/type';
 import { TextStylesPanel } from './ui/panels/text-styles';
@@ -276,7 +278,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
   new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }, { id: 'shape-fill', label: 'Generative Shape Fill', body: shapeFillP.body }, { id: 'generate-patterns', label: 'Generate Patterns', body: patternGenP.body }, { id: 'text-to-vector', label: 'Text to Vector Graphic', body: textToVectorP.body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'variables', label: 'Variables', body: variablesP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
-  new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers');
+  new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers').setMenu(() => ['new-layer', 'layers-new-sublayer', 'layers-duplicate', 'layers-duplicate-selection', '-', 'layers-options', 'layers-locate', 'collect-layer', '-', 'layers-merge', 'layers-flatten', 'layers-release-sequence', 'layers-release-build', 'layers-reverse']);
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
   new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }, { id: 'tabs', label: 'Tabs', body: tabsP.body }, { id: 'retype', label: 'Retype', body: retypeP.body }], 'Type');
   const dock = new Dock(dockHost, sideHost);
@@ -466,6 +468,15 @@ export function startApp(): void {
     return { doc: r.doc, assets: r.assets, title, note: `Opened ${f.name} by running its PostScript: paths, fills, strokes, clipping, gradients, images and text.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
   }
 
+  const placeDeps = { ask: askPlace, password: askPassword };
+
+  async function openRaster(f: File, quiet: boolean): Promise<void> {
+    const r = await placeSpecial(engine, { blob: f, name: f.name }, null, null, quiet ? {} : undefined, placeDeps, true);
+    if (r.id) engine.current?.history.markSaved();
+    const text = `${r.id ? `Opened ${f.name}.` : r.cancelled ? '' : `${f.name} could not be opened.`} ${r.notes.join(' ')}`.trim();
+    if (text) toast(text, r.id || r.cancelled ? 'info' : 'error');
+  }
+
   async function openFiles(files: File[], dxf: Partial<DxfImportOptions> | null = null, password?: string): Promise<void> {
     files = splitParts(files);
     await engine.task(async () => {
@@ -474,6 +485,7 @@ export function startApp(): void {
           const lower = f.name.toLowerCase();
           if (/\.(dxf|dwg|eps|epsf|ps)$/.test(lower)) { const r = await readForeign(f, dxf); if (r) { adopt(r.doc, r.title, r.assets); if (r.note) toast(r.note); } continue; }
           if (MODEL_FILE.test(lower)) { await openModel(f, partsNow()); continue; }
+          if (placeKind(lower) === 'psd' || placeKind(lower) === 'tiff') { await openRaster(f, dxf !== null); continue; }
           if (lower.endsWith('.fpth')) await openFpth(await f.arrayBuffer(), f.name);
           else if (lower.endsWith('.ase')) await openLibraryFile(f, 'swatch');
           else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, patterns, masks, clipping, markers, type and images.${r.leftOut.length ? ` Left out: ${r.leftOut.slice(0, 4).join(' ')}` : ''}`); }
@@ -513,10 +525,11 @@ export function startApp(): void {
     });
   }
 
-  async function placeFile(f: File, at: Pt | null, width: number | null, dxf: Partial<DxfImportOptions> | null = null): Promise<string | null> {
+  async function placeFile(f: File, at: Pt | null, width: number | null, dxf: Partial<DxfImportOptions> | null = null, placing?: PlaceOptions): Promise<string | null> {
     const p = engine.current;
     if (!p) { await openFiles([f], dxf); const opened = engine.current as { doc: Doc } | null; return opened?.doc.layers[0]?.children[0]?.id ?? null; }
     if (MODEL_FILE.test(f.name)) return placeModel(f, at, partsNow(), width);
+    if (placeKind(f.name)) { const r = await placeSpecial(engine, { blob: f, name: f.name }, at, width, placing, placeDeps); if (r.notes.length) toast(r.notes.join(' ')); return r.id; }
     const v = p.viewport, center = v.toDoc(v.centerX, v.height / 2);
     const foreign = /\.(dxf|dwg|eps|epsf|ps)$/i.test(f.name);
     if (foreign || /\.svgz?$/i.test(f.name) || f.type === 'image/svg+xml') {
@@ -559,17 +572,27 @@ export function startApp(): void {
   async function linkFileTo(ids: string[], f: LinkFile, name: string): Promise<boolean> {
     const p = engine.current;
     if (!p || !ids.length) return false;
-    const s = await imageSize(f.blob), key = imageKey(f.blob);
-    p.assets.set(key, f.blob);
-    const ok = engine.setImageSource(name, ids, { key, mime: f.blob.type || 'image/png', w: s.w, h: s.h }, linkOf(f));
-    void links.preview(p, key, f.blob);
+    const keep = links.images(p).find((n) => ids.includes(n.id))?.linked, shown = f.shown || !placeKind(f.name) ? f.blob : await displayBlob(f.blob, f.name, keep);
+    const s = await imageSize(shown), key = imageKey(shown);
+    p.assets.set(key, shown);
+    const extra = keep ? { ...(keep.page ? { page: keep.page } : {}), ...(keep.crop ? { crop: keep.crop } : {}), ...(keep.layers ? { layers: keep.layers } : {}) } : {};
+    const ok = engine.setImageSource(name, ids, { key, mime: shown.type || 'image/png', w: s.w, h: s.h }, { ...linkOf(f), ...extra });
+    void links.preview(p, key, shown);
     void links.check();
     return ok;
   }
 
-  async function placeLinked(f: LinkFile | null, at: Pt | null = null, width: number | null = null): Promise<string | null> {
+  async function placeLinked(f: LinkFile | null, at: Pt | null = null, width: number | null = null, placing?: PlaceOptions): Promise<string | null> {
     const p = engine.current;
     if (!p || !f) return null;
+    if (placeKind(f.name)) {
+      const r = await placeSpecial(engine, { blob: f.blob, name: f.name, link: linkOf(f) }, at, width, placing ? { ...placing, mode: placing.mode ?? 'link' } : undefined, placeDeps);
+      if (r.notes.length) toast(r.notes.join(' '));
+      const node = links.images(p).find((n) => n.id === r.id), shown = node ? p.assets.get(node.src) : undefined;
+      if (node && shown) void links.preview(p, node.src, shown);
+      void links.check();
+      return r.id;
+    }
     const s = await imageSize(f.blob), key = imageKey(f.blob), v = p.viewport, center = v.toDoc(v.centerX, v.height / 2);
     const w = width ?? s.w, h = (w / s.w) * s.h;
     const id = engine.addImage(key, f.blob, s.w, s.h, at ?? { x: center.x - w / 2, y: center.y - h / 2 }, w, undefined, linkOf(f)) || null;
@@ -765,7 +788,7 @@ export function startApp(): void {
     if (!region) return null;
     const only = scope === 'selection' ? engine.targetIds().map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n) : undefined;
     const bg = scope === 'artboard' ? p.doc.artboards[ab]?.bg ?? null : null;
-    return exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only, tiff: c.format === 'tiff' ? c.tiff : undefined, icc: c.icc });
+    return exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only, tiff: c.format === 'tiff' ? c.tiff : undefined, icc: c.icc, extra: c.raster });
   }
 
   const exportDialog = new ExportDialog(), screensDialog = new ScreensDialog();
@@ -802,7 +825,7 @@ export function startApp(): void {
           const files: Array<{ name: string; blob: Blob }> = [];
           for (const i of c.artboards) {
             const one = await exportBlob({ ...c, artboard: i, artboards: undefined });
-            if (one) files.push({ name: `${p.name}-${i + 1}.${c.format}`.replace(/[\\/:*?"<>|]+/g, '-'), blob: one });
+            if (one) files.push({ name: `${p.name}-${i + 1}.${rasterExt(c.format)}`.replace(/[\\/:*?"<>|]+/g, '-'), blob: one });
           }
           if (!files.length) { toast('There is nothing to export there.', 'error'); return; }
           await deliver(await zipFiles(files), `${p.name}.zip`.replace(/[\\/:*?"<>|]+/g, '-'));
@@ -811,7 +834,7 @@ export function startApp(): void {
         const blob = await exportBlob(c);
         if (!blob) { toast('There is nothing to export there.', 'error'); return; }
         const suffix = c.scope === 'artboard' && p.doc.artboards.length > 1 ? `-${p.doc.artboards[c.artboard]?.name ?? ''}` : '';
-        const ext = c.format === 'eps' && c.scope === 'all' && p.doc.artboards.length > 1 ? 'zip' : c.format;
+        const ext = c.format === 'eps' && c.scope === 'all' && p.doc.artboards.length > 1 ? 'zip' : rasterExt(c.format);
         await deliver(blob, `${p.name}${suffix}.${ext}`.replace(/[\\/:*?"<>|]+/g, '-'));
       } catch (err) { toast(message(err), 'error'); }
     });
@@ -921,7 +944,7 @@ export function startApp(): void {
   const about = new AboutDialog();
   const help = new HelpDialog();
   const agentConfirm = new AgentConfirmDialog();
-  const placeInput = el<HTMLInputElement>('<input type="file" accept="image/*,.svg,.svgz,.eps,.epsf,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin" multiple hidden>');
+  const placeInput = el<HTMLInputElement>('<input type="file" accept="image/*,.svg,.svgz,.eps,.epsf,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin,.pdf,.ai,.psd,.psb,.tif,.tiff" multiple hidden>');
   document.body.appendChild(placeInput);
   placeInput.addEventListener('change', () => { const fs = splitParts(Array.from(placeInput.files ?? [])); placeInput.value = ''; void engine.task(async () => { for (const f of fs) { try { await placeFile(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } }); });
 
@@ -931,11 +954,11 @@ export function startApp(): void {
     note: (t) => status.setEngine(t),
     allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpth:agents', { detail: true })); },
     openFile: (f, dxf, password) => openFiles([f], dxf ?? { merge: false }, password),
-    placeFile: (f, at, w, dxf) => placeFile(f, at, w, dxf ?? { merge: true }),
-    placeLinked: async (path, at, width) => placeLinked(await links.readPath(path), at, width),
+    placeFile: (f, at, w, dxf, placing) => placeFile(f, at, w, dxf ?? { merge: true }, placing ?? {}),
+    placeLinked: async (path, at, width, placing) => placeLinked(await links.readPath(path), at, width, placing ?? {}),
     links: (a) => linkTool(a),
     projectBlob: projectZip,
-    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' || format === 'eps', liveText: o.liveText, standard: o.standard, layers: o.layers, compression: o.compression, security: o.security, cmyk: o.cmyk, cad: o.cad }); },
+    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, raster: o.raster, tiff: format === 'tiff' ? { compression: 'lzw', cmyk: o.cmyk === true, ppi: Math.round(72 * o.scale) } : undefined, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' || format === 'eps', liveText: o.liveText, standard: o.standard, layers: o.layers, compression: o.compression, security: o.security, cmyk: o.cmyk, cad: o.cad }); },
     image: async (scope, artboard, maxSize, outline) => {
       const p = engine.current;
       if (!p) return null;
@@ -1486,6 +1509,11 @@ export function startApp(): void {
     { id: 'export-png', label: 'PNG...', enabled: has, run: () => void exportAs('png') },
     { id: 'export-jpg', label: 'JPEG...', enabled: has, run: () => void exportAs('jpg') },
     { id: 'export-webp', label: 'WebP...', enabled: has, run: () => void exportAs('webp') },
+    { id: 'export-png8', label: 'PNG-8...', enabled: has, run: () => void exportAs('png8') },
+    { id: 'export-gif', label: 'GIF...', enabled: has, run: () => void exportAs('gif') },
+    { id: 'export-bmp', label: 'BMP...', enabled: has, run: () => void exportAs('bmp') },
+    { id: 'export-psd', label: 'Photoshop (PSD)...', enabled: has, run: () => void exportAs('psd') },
+    { id: 'export-tiff', label: 'TIFF...', enabled: has, run: () => void exportAs('tiff') },
     { id: 'export-eps', label: 'EPS...', enabled: has, run: () => void exportAs('eps') },
     { id: 'export-dxf', label: 'AutoCAD Interchange (DXF)...', enabled: has, run: () => void exportAs('dxf') },
     { id: 'export-dwg', label: 'AutoCAD Drawing (DWG)...', enabled: has, run: () => void exportAs('dwg') },
@@ -1670,6 +1698,20 @@ export function startApp(): void {
     { id: 'artboard-options', label: 'Artboard Options...', enabled: has, run: () => { const p = engine.current; if (p) void artboardsP.options(p.activeArtboard); } },
     { id: 'collect-layer', label: 'Collect in New Layer', enabled: sel, run: () => engine.collectInNewLayer() },
     { id: 'new-layer', label: 'New Layer', keys: ['Mod+L'], enabled: has, run: () => engine.addLayer(undefined, { above: engine.activeLayer || undefined }) },
+    { id: 'layers-new-sublayer', label: 'New Sublayer', group: 'Layers', enabled: () => has() && !!engine.activeLayer, run: () => engine.addLayer(undefined, { sublayerOf: engine.activeLayer }) },
+    { id: 'layers-duplicate', label: 'Duplicate Layer', group: 'Layers', enabled: has, params: { ids: { type: 'array', description: 'Layer ids to duplicate; the layers selected in the Layers panel, or the active layer, when left out.' } }, run: (a) => engine.duplicateLayers(Array.isArray(a?.ids) ? (a?.ids as string[]) : undefined) },
+    { id: 'layers-duplicate-selection', label: 'Duplicate Selection', group: 'Layers', enabled: sel, run: () => engine.duplicate() },
+    { id: 'layers-merge', label: 'Merge Selected', group: 'Layers', enabled: () => engine.layerSelection.length > 1, params: { ids: { type: 'array', description: 'Layer ids to merge (two or more); the layers selected in the Layers panel when left out.' } }, run: (a) => engine.mergeLayers(Array.isArray(a?.ids) ? (a?.ids as string[]) : undefined) },
+    { id: 'layers-flatten', label: 'Flatten Artwork', group: 'Layers', enabled: has, params: { discard_hidden: { type: 'boolean', description: 'true discards hidden layers and hidden art, false keeps hidden layers as they are; when left out and hidden art exists, a dialog asks.' } }, run: (a) => {
+      const given = typeof a?.discard_hidden === 'boolean' ? a.discard_hidden : null, n = engine.hiddenArtCount;
+      if (given !== null || !n) { engine.flattenArtwork(given === true); return; }
+      void askForm('Flatten Artwork', [{ kind: 'note', text: `${n} hidden layer${n === 1 ? '' : 's'} or object${n === 1 ? '' : 's'} found. Flattening merges every visible layer into one.` }, { kind: 'select', key: 'hidden', label: 'Hidden art', value: 'discard', choices: [['discard', 'Discard hidden art'], ['keep', 'Keep hidden layers']] }], { ok: 'Flatten' }).then((v) => { if (v) engine.flattenArtwork(v.hidden === 'discard'); });
+    } },
+    { id: 'layers-release-sequence', label: 'Release to Layers (Sequence)', group: 'Layers', enabled: has, params: { id: { type: 'string', description: 'A layer or group id; the selected layer or group when left out.' } }, run: (a) => engine.releaseToLayers('sequence', typeof a?.id === 'string' ? a.id : undefined) },
+    { id: 'layers-release-build', label: 'Release to Layers (Build)', group: 'Layers', enabled: has, params: { id: { type: 'string', description: 'A layer or group id; the selected layer or group when left out.' } }, run: (a) => engine.releaseToLayers('build', typeof a?.id === 'string' ? a.id : undefined) },
+    { id: 'layers-reverse', label: 'Reverse Order', group: 'Layers', enabled: () => engine.layerSelection.length > 1 || engine.selected().length > 1, params: { ids: { type: 'array', description: 'Layer or object ids to reverse; the layers selected in the Layers panel, or else the selected objects, when left out.' } }, run: (a) => engine.reverseOrder(Array.isArray(a?.ids) ? (a?.ids as string[]) : undefined) },
+    { id: 'layers-locate', label: 'Locate Object', group: 'Layers', enabled: sel, run: () => layersP.locate() },
+    { id: 'layers-options', label: 'Layer Options...', group: 'Layers', enabled: () => has() && !!engine.activeLayer, run: () => { const l = engine.doc ? findNode(engine.doc, engine.activeLayer) : null; if (l && l.kind === 'layer') void layersP.layerOptions(l); } },
     { id: 'new-symbol', label: 'New Symbol...', keys: ['F8'], enabled: () => sel() && !engine.symbolSession, run: () => void symbolOptions(true) },
     { id: 'break-symbol', label: 'Break Link to Symbol', enabled: () => kindSel('symbol'), run: () => engine.breakSymbolLink() },
     { id: 'symbol-edit', label: 'Edit Symbol', enabled: () => !!engine.symbolDef() || kindSel('symbol'), run: () => { const inst = engine.selectedInstances()[0]; engine.enterSymbolEdit(inst?.symbol ?? engine.currentSymbol, inst?.id); } },
@@ -1832,7 +1874,7 @@ export function startApp(): void {
   }
 
   const menus: MenuDef[] = [
-    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-dwg', 'export-png', 'export-jpg', 'export-webp', '-', 'collect-single', 'collect-multiple'] }, '-', 'package', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
+    { label: 'File', items: () => ['new', 'open', 'open-file', ...(recent.length ? [{ label: 'Open Recent', items: [...recent.map((_, i) => `recent-${i}`), '-', 'clear-recent'] }] : []), '-', 'close-tab', 'save', 'save-as', 'download-project', '-', 'place', 'place-linked', '-', { label: 'Automate', items: ['play-action', 'action-batch', '-', 'history-new-document', 'history-options'] }, '-', { label: 'Export', items: ['export-screens', 'export-as', '-', 'export-svg', 'export-pdf', 'export-eps', 'export-dxf', 'export-dwg', 'export-png', 'export-png8', 'export-gif', 'export-jpg', 'export-webp', 'export-bmp', 'export-psd', 'export-tiff', '-', 'collect-single', 'collect-multiple'] }, '-', 'package', 'document-setup', { label: 'Document Color Mode', items: ['mode-rgb', 'mode-cmyk'] }, '-', 'send-nodemode', 'print'] },
     { label: 'Edit', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-front', 'paste-back', 'paste-in-place', 'paste-on-selected-artboards', 'clear', '-', 'find-replace', { label: 'Spelling', items: ['auto-spell-check', 'check-spelling', 'spelling-dictionary'] }, '-', 'color-settings', 'assign-profile', 'convert-to-profile', '-', { label: 'Edit Colors', items: ['recolor', ...(prefs.showGenerative ? ['generative-recolor'] : []), '-', 'colors-invert', 'colors-grayscale', 'colors-cmyk', 'colors-rgb'] }, '-', 'shortcuts', 'settings'] },
     { label: 'Object', items: () => [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },

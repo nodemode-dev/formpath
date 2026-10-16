@@ -3,6 +3,7 @@ import { effectPath, has3d, threeDFaces } from '../engine/effects';
 import { anchor, apply, arcSegmentPath, ellipsePath, flattenSeg, fitCurve, matAngle, matScale, mul, segments, transformPath, isLineSeg, type Seg } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
+import { fxNode } from '../engine/groupfx';
 import { derivedArt } from '../engine/shaper';
 import { isLive } from '../engine/pathfinder';
 import { instanceArt } from '../engine/symbolism';
@@ -505,6 +506,7 @@ export async function exportDxf(p: Project, o: DxfExportOptions, outline: (n: Te
   const solidOf = (raw: VNode['ap']['items'][number]['paint']): Color | null => { const q = resolvePaint(doc, raw); return q.type === 'color' ? q.color : q.type === 'gradient' && q.gradient.stops.length ? gradientAt(q.gradient, 0.5).color : null; };
   const visit = async (n: VNode, layer: string, inside: boolean): Promise<void> => {
     if (n.hidden) return;
+    if (n.ap.effects.length) n = fxNode(doc, n) ?? n;
     if (n.kind === 'layer') { if (n.template) return; for (const c of n.children) await visit(c, layerName(n.name ?? 'Layer'), inside); return; }
     const on = inside || !only || only.has(n.id);
     const faces = has3d(n) ? threeDFaces(doc, n) : null;
