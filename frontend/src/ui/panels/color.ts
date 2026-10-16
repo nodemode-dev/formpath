@@ -412,7 +412,9 @@ export class GradientPanel {
     this.method = seg([{ id: 'linear', label: 'Classic' }, { id: 'perceptual', label: 'Perceptual' }], (id) => { const g = this.gradient(); if (g) this.set(setGradientBlend(g, id === 'perceptual' ? 'perceptual' : 'linear')); });
     this.dither.addEventListener('change', () => { const g = this.gradient(); if (g) this.set(setGradientDither(g, this.dither.checked)); });
     this.ditherRow.prepend(this.dither);
-    this.linearBox.append(geo, this.bar, stopRow, this.strokeMode.el, this.method.el, this.ditherRow);
+    const methodRow = el('<div class="cv-kit-row cv-gradp-method" title="Method: Classic mixes each pair of stops in the color space directly; Perceptual mixes in OKLab for smoother, more natural transitions"><span>Method</span></div>');
+    methodRow.append(this.method.el);
+    this.linearBox.append(geo, this.bar, stopRow, this.strokeMode.el, methodRow, this.ditherRow);
     this.body.append(top, this.linearBox, this.ffBox);
     this.bindBar();
     for (const k of ['colors', 'selection', 'active', 'doc', 'options'] as const) engine.on(k, () => this.queue());

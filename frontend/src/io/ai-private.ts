@@ -2,7 +2,7 @@ import { visualBounds } from '../engine/bounds';
 import { cornered } from '../engine/corners';
 import { childrenOf } from '../engine/doc';
 import { isLineSeg, segments } from '../engine/geometry';
-import { resolvePaint, toCmyk, toRgb } from '../engine/paint';
+import { mixOklab, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { gradientGeom } from '../engine/render';
 import { instanceArt } from '../engine/symbolism';
 import type { Artboard, BlendMode, Color, Doc, Gradient, ImageNode, LayerNode, Mat, Paint, PathData, Project, Rect, StrokeItem, Swatch, VNode } from '../engine';
@@ -393,11 +393,12 @@ class Emit {
       out.push('%AI5_BeginGradient: ' + ps(name), `${ps(name)} ${g.kind === 'radial' ? 1 : 0} ${stops.length} Bd`, '[');
       for (let seg = 0; seg < stops.length - 1; seg++) {
         const a = comps[seg], b = comps[seg + 1];
+        const ramp = g.blend === 'perceptual' ? Array.from({ length: 256 }, (_, i) => { const m = mixOklab(stops[seg].color, stops[seg + 1].color, i / 255), k = cmykOf(m), v = toRgb(m); return [k.c, k.m, k.y, k.k, v.r / 255, v.g / 255, v.b / 255]; }) : null;
         for (let ch = 0; ch < 7; ch++) {
-          if (Math.abs(a[ch] - b[ch]) < 1e-9) { out.push(cf(a[ch])); continue; }
+          if (!ramp && Math.abs(a[ch] - b[ch]) < 1e-9) { out.push(cf(a[ch])); continue; }
           out.push('<');
           let hex = '';
-          for (let i = 0; i < 256; i++) hex += Math.round(255 * (a[ch] + ((b[ch] - a[ch]) * i) / 255)).toString(16).padStart(2, '0').toUpperCase();
+          for (let i = 0; i < 256; i++) hex += Math.round(255 * (ramp ? ramp[i][ch] : a[ch] + ((b[ch] - a[ch]) * i) / 255)).toString(16).padStart(2, '0').toUpperCase();
           for (let i = 0; i < hex.length; i += 80) out.push(hex.slice(i, i + 80));
           out.push('>');
         }

@@ -202,8 +202,8 @@ Draws a path from an SVG path d string (M, L, H, V, C, S, Q, T, A, Z, absolute o
 - `points`: array
 - `smooth`: boolean; default false
 - `closed`: boolean; default false
-- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
-- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
+- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `stroke_width`: number
 - `name`: string
 - `layer`: string; A layer id; the active layer when left out.
@@ -227,8 +227,8 @@ Draws a live shape: x and y are the top-left of its bounds (for line and arc the
 - `rows`: integer
 - `columns`: integer
 - `rotation`: number
-- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
-- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
+- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `stroke_width`: number
 - `name`: string
 - `layer`: string
@@ -268,7 +268,7 @@ Adds type: point type at x, y (the first baseline), area type filling a width by
 - `font`: string; A font family, such as Inter.
 - `style`: string; Regular, Bold, Italic, Bold Italic, or a weight such as 600.
 - `size`: number; default 24
-- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `align`: string (left | center | right | justify); default "left"
 - `leading`: number
 - `tracking`: number; In thousandths of an em.
@@ -295,8 +295,8 @@ Edits a path's anchor points: move some by dx, dy; replace them all; insert one 
 Sets the fill and or stroke of the objects (their first fill and first stroke): a colour, none, a swatch name or a gradient; a fill can also be a freeform gradient. Without ids it also sets the paint new art gets. overprint_fill and overprint_stroke mark the first fill or stroke to overprint (previewed with Overprint Preview, written to PDF).
 
 - `ids`: array; Object ids from get_document; the selection when left out.
-- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}. Or a freeform gradient {type: freeform, mode: points|lines, points: [{x, y, color, spread}]} with x, y and spread as fractions 0..1 of each object's bounds (absolute true for document points), or {type: freeform, colors: [...]} to place the points automatically.
-- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops). Or a freeform gradient {type: freeform, mode: points|lines, points: [{x, y, color, spread}]} with x, y and spread as fractions 0..1 of each object's bounds (absolute true for document points), or {type: freeform, colors: [...]} to place the points automatically.
+- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `overprint_fill`: boolean
 - `overprint_stroke`: boolean
 
@@ -331,7 +331,7 @@ Edits the appearance stack: object opacity and blend mode, an added fill or stro
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `opacity`: number
 - `blend_mode`: string (normal | darken | multiply | color_burn | lighten | screen | color_dodge | overlay | soft_light | hard_light | difference | exclusion | hue | saturation | color | luminosity)
-- `add_fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `add_fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `add_stroke`: object
 - `items`: array; The whole stack bottom to top: {kind: fill|stroke, color, width, opacity, blend_mode, visible, dash, cap, join, align}.
 - `clear`: boolean
@@ -342,7 +342,7 @@ Edits the appearance stack: object opacity and blend mode, an added fill or stro
 Adds a swatch to the document: a colour or gradient, optionally global (editing it recolours every use) or spot (its own plate: PDF writes it as a Separation colour space), into a colour group; or a tint of a global or spot swatch with tint_of and tint.
 
 - `name`: string; required
-- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `global`: boolean; default false
 - `spot`: boolean; default false
 - `group`: string
@@ -665,7 +665,7 @@ Adds a live effect to the objects (it stays editable in the Appearance panel), o
 - `intensity`: number
 - `ambient`: number
 - `highlight`: number
-- `shading_color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `shading_color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `map_symbol`: string
 - `map_scale`: number
 - `map_x`: number
@@ -755,8 +755,8 @@ Symbols: create one from the objects (type dynamic or static, registration point
 - `slice_guides`: array
 - `new_name`: string
 - `part`: string
-- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
-- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `fill`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
+- `stroke`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `stroke_width`: number
 - `opacity`: number
 - `library`: string; A symbol library id or name (place, load_library).
@@ -845,7 +845,7 @@ Live Paint: make a Live Paint group from paths (their crossings divide the area 
 - `id`: string; The Live Paint group for fill, edge and gap.
 - `x`: number
 - `y`: number
-- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `width`: number; Stroke width in points for edge; 0 hides the edge.
 - `gap`: number
 
@@ -869,7 +869,7 @@ Shaper: turn rough drawn points into a live shape the way the Shaper tool recogn
 - `id`: string; fill and expand: the Shaper Group (defaults to the selected one).
 - `x`: number
 - `y`: number
-- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `ids`: array; Object ids from get_document; the selection when left out.
 
 ## gradient_mesh
@@ -1093,7 +1093,7 @@ Changes a type object: its words, and its font, style, size, colour, leading, tr
 - `font`: string
 - `style`: string
 - `size`: number
-- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, stops: [{offset 0..1, color, opacity}]}.
+- `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
 - `leading`: number
 - `tracking`: number
 - `align`: string (left | center | right | justify | justify_center | justify_right | justify_all)

@@ -406,3 +406,11 @@ Decision: formpth still ships only the built-in sRGB and the synthetic formpth G
 - logged: v0.38.0 · 2026-10-16
 
 export_file accepts a .dwg path next to .dxf: the extension list, the description and the dxf_version text now say that .dwg is written as AutoCAD 2000 and that R12 is refused for it. The writing itself happens in the window (frontend/src/io/dwg-write.ts), so the engine only passes the format through; `./formpth agents sync` regenerated the tool reference and the .agents mirror. The DWG writer was built clean room: spec as remembered, byte-level study of samples, LibreDWG only as a black box (dwgread and dwg2dxf output), no GPL code read or copied.
+
+### app/routers/mcp.py · gradient method in set_paint
+
+- refers-to: app/routers/mcp.py :: _COLOR; frontend/src/engine/paint.ts :: paintFromInput
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+The shared colour description for set_paint and the other paint parameters now documents `method: classic|perceptual` on a linear or radial gradient. It is a description change only (no new parameter on the schema level, the paint is a free object), and ./formpth agents sync regenerated the tool reference.

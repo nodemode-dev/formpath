@@ -8,7 +8,7 @@ import { fxNode } from '../engine/groupfx';
 import { derivedArt } from '../engine/shaper';
 import { isLive } from '../engine/pathfinder';
 import { instanceArt } from '../engine/symbolism';
-import { gradientAt, resolvePaint, toCmyk, toRgb } from '../engine/paint';
+import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { clipGeometry, gradientGeom } from '../engine/render';
 import { gradientStrokeArt, strokeGradient } from '../engine/stroke-gradient';
 import type { Color, Doc, Gradient, PathData, Project, Rect, VNode } from '../engine';
@@ -93,7 +93,9 @@ class PsPainter {
     const stops = [...gr.stops].sort((a, b) => a.offset - b.offset);
     const pts: Array<{ t: number; c: Color }> = [];
     if (stops[0].offset > 0) pts.push({ t: 0, c: stops[0].color });
-    stops.forEach((s, i) => { pts.push({ t: s.offset, c: s.color }); const nx = stops[i + 1]; if (nx && Math.abs(s.mid - 0.5) > 0.01) pts.push({ t: s.offset + (nx.offset - s.offset) * s.mid, c: gradientAt(gr, s.offset + (nx.offset - s.offset) * s.mid).color }); });
+    const pst = perceptualStops(gr);
+    if (pst) for (const s of pst) pts.push({ t: s.t, c: s.color });
+    else stops.forEach((s, i) => { pts.push({ t: s.offset, c: s.color }); const nx = stops[i + 1]; if (nx && Math.abs(s.mid - 0.5) > 0.01) pts.push({ t: s.offset + (nx.offset - s.offset) * s.mid, c: gradientAt(gr, s.offset + (nx.offset - s.offset) * s.mid).color }); });
     if (stops[stops.length - 1].offset < 1) pts.push({ t: 1, c: stops[stops.length - 1].color });
     const fns: string[] = [], bounds: string[] = [], encode: string[] = [];
     for (let i = 0; i < pts.length - 1; i++) {

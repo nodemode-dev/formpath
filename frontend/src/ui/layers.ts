@@ -6,7 +6,7 @@ import { icon } from './icons';
 import { askForm } from './form-dialog';
 import { LAYER_COLORS } from '../engine/doc';
 
-interface Row { node: VNode; depth: number; layer: LayerNode; container: boolean; open: boolean }
+interface Row { node: VNode; depth: number; layer: LayerNode; container: boolean; open: boolean; y: number }
 
 const ROW_H = 28, LAYER_H = 32, OVERSCAN = 420, STEP = 10, VIEW_MIN = 900;
 
@@ -68,7 +68,7 @@ export class LayersPanel {
       for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i], l = n.kind === 'layer' ? n : (layer as LayerNode);
         const kids = n.kind === 'compound' ? null : childrenOf(n), open = !!kids && (this.isOpen(n) || (!!this.filter && kids.length > 0));
-        if (!this.filter || n.kind === 'layer' || nodeLabel(n).toLowerCase().includes(this.filter)) out.push({ node: n, depth, layer: l, container: !!kids && kids.length > 0, open });
+        if (!this.filter || n.kind === 'layer' || nodeLabel(n).toLowerCase().includes(this.filter)) out.push({ node: n, depth, layer: l, container: !!kids && kids.length > 0, open, y: 0 });
         if (kids && open) walk(kids, depth + 1, l);
       }
     };
@@ -84,7 +84,7 @@ export class LayersPanel {
     if (p) for (const id of sel) for (const a of ancestors(p.doc, id)) anc.add(a.id);
     const rows = this.flat(), tops = new Array<number>(rows.length + 1);
     let y = 0;
-    for (let i = 0; i < rows.length; i++) { tops[i] = y; y += rows[i].node.kind === 'layer' ? LAYER_H : ROW_H; }
+    for (let i = 0; i < rows.length; i++) { tops[i] = y; rows[i].y = y; y += rows[i].node.kind === 'layer' ? LAYER_H : ROW_H; }
     tops[rows.length] = y;
     this.flatRows = rows; this.tops = tops; this.sel = sel; this.anc = anc; this.span = [-1, -1];
     this.paint();
@@ -103,8 +103,7 @@ export class LayersPanel {
     const e = Math.min(n, Math.ceil(lo / STEP) * STEP);
     if (s === this.span[0] && e === this.span[1]) return;
     this.span = [s, e];
-    setStyleVar(this.rows, '--pt', `${tops[s]}px`);
-    setStyleVar(this.rows, '--pb', `${tops[n] - tops[e]}px`);
+    setStyleVar(this.rows, '--h', `${tops[n]}px`);
     const sel = this.sel, anc = this.anc;
     patchList<Row>(this.rows, rows.slice(s, e), {
       key: (r) => r.node.id,
@@ -116,6 +115,7 @@ export class LayersPanel {
   private fill(n: HTMLElement, r: Row, sel: Set<string>, anc: Set<string>): void {
     const node = r.node, isLayer = node.kind === 'layer', p = this.engine.current;
     setStyleVar(n, '--depth', String(r.depth));
+    setStyleVar(n, '--y', `${r.y}px`);
     setStyleVar(n, '--lc', r.layer?.color ?? '#4f80ff');
     setHtml(q(n, '.cv-lrow-eye'), icon(node.hidden ? 'eyeOff' : 'eye', 14), node.hidden ? 'off' : 'on');
     setHtml(q(n, '.cv-lrow-lock'), node.locked ? icon('lock', 12) : '', node.locked ? 'l' : 'u');

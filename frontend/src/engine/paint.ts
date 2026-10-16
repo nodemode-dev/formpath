@@ -254,11 +254,12 @@ export function paintFromInput(raw: unknown, doc?: Doc): Paint | null {
     return c ? solid(c) : null;
   }
   if (typeof raw === 'object') {
-    const o = raw as { type?: string; angle?: number; stops?: Array<{ offset?: number; color?: string; opacity?: number; mid?: number }>; color?: string };
+    const o = raw as { type?: string; method?: string; angle?: number; stops?: Array<{ offset?: number; color?: string; opacity?: number; mid?: number }>; color?: string };
     if (o.type === 'linear' || o.type === 'radial') {
       const stops = (o.stops ?? []).map((st, i, arr) => stop(typeof st.offset === 'number' ? Math.max(0, Math.min(1, st.offset)) : i / Math.max(1, arr.length - 1), parseColor(String(st.color ?? '#000')) ?? BLACK, typeof st.opacity === 'number' ? st.opacity : 1, typeof st.mid === 'number' ? st.mid : 0.5));
       if (stops.length < 2) return null;
-      return { type: 'gradient', gradient: o.type === 'linear' ? linearGradient(stops, o.angle ?? 0) : radialGradient(stops) };
+      const made = o.type === 'linear' ? linearGradient(stops, o.angle ?? 0) : radialGradient(stops);
+      return { type: 'gradient', gradient: o.method === 'perceptual' ? setGradientBlend(made, 'perceptual') : made };
     }
     if (typeof o.color === 'string') return paintFromInput(o.color, doc);
   }
@@ -268,7 +269,7 @@ export function paintFromInput(raw: unknown, doc?: Doc): Paint | null {
 export function describePaint(p: Paint, doc?: Doc): string {
   if (p.type === 'none') return 'none';
   if (p.type === 'color') { const sw = p.swatch && doc ? doc.swatches.find((s) => s.id === p.swatch) : null; return sw ? `${sw.name} (${hex(p.color)})` : p.color.kind === 'cmyk' ? `cmyk(${p.color.c},${p.color.m},${p.color.y},${p.color.k})` : hex(p.color); }
-  if (p.type === 'gradient') return `${p.gradient.kind} gradient ${p.gradient.stops.map((s) => hex(s.color)).join(' to ')}${p.gradient.strokeMode === 'along' || p.gradient.strokeMode === 'across' ? ` (${p.gradient.strokeMode} the stroke)` : ''}`;
+  if (p.type === 'gradient') return `${p.gradient.kind} gradient${p.gradient.blend === 'perceptual' ? ' (perceptual method)' : ''} ${p.gradient.stops.map((s) => hex(s.color)).join(' to ')}${p.gradient.strokeMode === 'along' || p.gradient.strokeMode === 'across' ? ` (${p.gradient.strokeMode} the stroke)` : ''}`;
   return `pattern ${p.pattern}`;
 }
 
