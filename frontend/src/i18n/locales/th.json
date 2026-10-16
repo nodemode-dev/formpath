@@ -1656,6 +1656,7 @@
 "It will be able to change the open document through formpth's tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.": "ปลั๊กอินจะเปลี่ยนเอกสารที่เปิดอยู่ผ่านเครื่องมือของ formpth ได้ (ทุกการเปลี่ยนแปลงเลิกทำได้) แต่จะไม่เห็นคีย์หรือไฟล์ของคุณ เพิ่มเฉพาะปลั๊กอินที่คุณเชื่อถือ",
 "Italic": "ตัวเอียง",
 "Ivory": "สีงาช้าง",
+"JFIF\\0": "JFIF\\0",
 "JPEG (.jpg)": "JPEG (.jpg)",
 "JPEG Quality (%)": "คุณภาพ JPEG (%)",
 "JPEG compression is only supported for 8-bit grey and RGB images": "การบีบอัด JPEG รองรับเฉพาะภาพสีเทาและ RGB 8 บิต",

@@ -1656,6 +1656,7 @@
 "It will be able to change the open document through formpth's tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.": "Nó sẽ có thể thay đổi tài liệu đang mở thông qua các công cụ của formpth (mỗi thay đổi đều hoàn tác được). Nó không thể thấy khóa hoặc tệp của bạn. Chỉ thêm các plugin bạn tin tưởng.",
 "Italic": "Nghiêng",
 "Ivory": "Ngà voi",
+"JFIF\\0": "JFIF\\0",
 "JPEG (.jpg)": "JPEG (.jpg)",
 "JPEG Quality (%)": "Chất lượng JPEG (%)",
 "JPEG compression is only supported for 8-bit grey and RGB images": "Nén JPEG chỉ hỗ trợ ảnh xám và RGB 8 bit",

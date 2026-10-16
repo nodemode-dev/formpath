@@ -1656,6 +1656,7 @@
 "It will be able to change the open document through formpth's tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.": "Potrà modificare il documento aperto tramite gli strumenti di formpth (ogni modifica è annullabile). Non può vedere le tue chiavi né i tuoi file. Aggiungi solo plug-in di cui ti fidi.",
 "Italic": "Corsivo",
 "Ivory": "Avorio",
+"JFIF\\0": "JFIF\\0",
 "JPEG (.jpg)": "JPEG (.jpg)",
 "JPEG Quality (%)": "Qualità JPEG (%)",
 "JPEG compression is only supported for 8-bit grey and RGB images": "La compressione JPEG è supportata solo per immagini a 8 bit in scala di grigio e RGB",

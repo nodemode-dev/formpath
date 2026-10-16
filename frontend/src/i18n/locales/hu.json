@@ -1656,6 +1656,7 @@
 "It will be able to change the open document through formpth's tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.": "A formpth eszközein keresztül módosíthatja a megnyitott dokumentumot (minden módosítás visszavonható). Nem látja a kulcsait és a fájljait. Csak megbízható bővítményeket adjon hozzá.",
 "Italic": "Dőlt",
 "Ivory": "Elefántcsont",
+"JFIF\\0": "JFIF\\0",
 "JPEG (.jpg)": "JPEG (.jpg)",
 "JPEG Quality (%)": "JPEG-minőség (%)",
 "JPEG compression is only supported for 8-bit grey and RGB images": "A JPEG-tömörítés csak 8 bites szürkeárnyalatos és RGB-képeknél támogatott",

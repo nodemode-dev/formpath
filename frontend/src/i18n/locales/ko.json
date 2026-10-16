@@ -1656,6 +1656,7 @@
 "It will be able to change the open document through formpth's tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.": "formpth의 도구를 통해 열려 있는 문서를 변경할 수 있게 됩니다(변경마다 실행 취소 가능). 키나 파일은 볼 수 없습니다. 신뢰하는 플러그인만 추가하십시오.",
 "Italic": "기울임꼴",
 "Ivory": "아이보리",
+"JFIF\\0": "JFIF\\0",
 "JPEG (.jpg)": "JPEG (.jpg)",
 "JPEG Quality (%)": "JPEG 품질(%)",
 "JPEG compression is only supported for 8-bit grey and RGB images": "JPEG 압축은 8비트 회색 및 RGB 이미지에만 지원됩니다",

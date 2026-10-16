@@ -1656,6 +1656,7 @@
 "It will be able to change the open document through formpth's tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.": "它將能夠透過 formpth 的工具變更開啟的文件(每項變更皆可還原)。它無法看到您的金鑰或檔案。請只新增您信任的外掛程式。",
 "Italic": "斜體",
 "Ivory": "象牙白",
+"JFIF\\0": "JFIF\\0",
 "JPEG (.jpg)": "JPEG (.jpg)",
 "JPEG Quality (%)": "JPEG 品質 (%)",
 "JPEG compression is only supported for 8-bit grey and RGB images": "僅支援對 8 位元灰階和 RGB 影像進行 JPEG 壓縮",

@@ -1656,6 +1656,7 @@
 "It will be able to change the open document through formpth's tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.": "Se voi muuttaa avointa asiakirjaa formpthin työkaluilla (jokainen muutos on kumottavissa). Se ei näe avaimiasi eikä tiedostojasi. Lisää vain luotettavia laajennuksia.",
 "Italic": "Kursivoitu",
 "Ivory": "Norsunluu",
+"JFIF\\0": "JFIF\\0",
 "JPEG (.jpg)": "JPEG (.jpg)",
 "JPEG Quality (%)": "JPEG-laatu (%)",
 "JPEG compression is only supported for 8-bit grey and RGB images": "JPEG-pakkausta tuetaan vain 8-bittisille harmaasävy- ja RGB-kuville",
