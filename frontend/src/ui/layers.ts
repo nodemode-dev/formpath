@@ -8,6 +8,8 @@ import { LAYER_COLORS } from '../engine/doc';
 
 interface Row { node: VNode; depth: number; layer: LayerNode; container: boolean; open: boolean }
 
+const ROW_H = 28, LAYER_H = 32, OVERSCAN = 420, STEP = 10, VIEW_MIN = 900;
+
 const KIND_ICON: Record<string, string> = { layer: 'layers', group: 'folder', path: 'vPen', compound: 'pPathfinder', text: 'vType', image: 'image', symbol: 'pSymbols', blend: 'vBlend', envelope: 'envelope', mesh: 'vMesh', repeat: 'repeatRadial' };
 
 export class LayersPanel {
@@ -19,6 +21,12 @@ export class LayersPanel {
   private readonly open = new Set<string>();
   private readonly shut = new Set<string>();
   private frame = 0;
+  private scrollFrame = 0;
+  private flatRows: Row[] = [];
+  private tops: number[] = [0];
+  private sel = new Set<string>();
+  private anc = new Set<string>();
+  private span: [number, number] = [-1, -1];
   private drag: { ids: string[]; y0: number; moving: boolean; target: { id: string; where: 'above' | 'below' | 'inside' } | null } | null = null;
 
   constructor(private readonly engine: Engine, private readonly menu: PopupMenu) {
@@ -37,6 +45,8 @@ export class LayersPanel {
     input.addEventListener('keydown', (e) => e.stopPropagation());
     input.addEventListener('input', () => { this.filter = input.value.trim().toLowerCase(); this.sync(); });
     this.bind();
+    this.list.addEventListener('scroll', () => { if (!this.scrollFrame) this.scrollFrame = requestAnimationFrame(() => { this.scrollFrame = 0; this.paint(); }); }, { passive: true });
+    new ResizeObserver(() => this.paint()).observe(this.list);
     for (const k of ['doc', 'selection', 'active', 'projects'] as const) engine.on(k, () => this.queue());
     this.sync();
   }
@@ -57,8 +67,7 @@ export class LayersPanel {
       for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i], l = n.kind === 'layer' ? n : (layer as LayerNode);
         const kids = n.kind === 'compound' ? null : childrenOf(n), open = !!kids && (this.isOpen(n) || (!!this.filter && kids.length > 0));
-        const name = nodeLabel(n).toLowerCase();
-        if (!this.filter || name.includes(this.filter) || n.kind === 'layer') out.push({ node: n, depth, layer: l, container: !!kids && kids.length > 0, open });
+        if (!this.filter || n.kind === 'layer' || nodeLabel(n).toLowerCase().includes(this.filter)) out.push({ node: n, depth, layer: l, container: !!kids && kids.length > 0, open });
         if (kids && open) walk(kids, depth + 1, l);
       }
     };
@@ -71,14 +80,35 @@ export class LayersPanel {
     const sel = new Set(p?.selection ?? []);
     const anc = new Set<string>();
     if (p) for (const id of sel) for (const a of ancestors(p.doc, id)) anc.add(a.id);
-    const rows = this.flat();
-    patchList<Row>(this.rows, rows, {
-      key: (r) => r.node.id,
-      create: (r) => { const n = el(`<div class="cv-lrow" role="treeitem"><button class="cv-lrow-eye" type="button" aria-label="Toggle visibility"></button><button class="cv-lrow-lock" type="button" aria-label="Toggle lock"></button><span class="cv-lrow-indent"></span><button class="cv-lrow-disc" type="button" aria-label="Expand or collapse"></button><span class="cv-lrow-kind"></span><span class="cv-lrow-name"></span><button class="cv-lrow-target" type="button" aria-label="Select"></button><span class="cv-lrow-sel"></span></div>`); this.fill(n, r, sel, anc); return n; },
-      update: (n, r) => this.fill(n, r, sel, anc),
-    });
+    const rows = this.flat(), tops = new Array<number>(rows.length + 1);
+    let y = 0;
+    for (let i = 0; i < rows.length; i++) { tops[i] = y; y += rows[i].node.kind === 'layer' ? LAYER_H : ROW_H; }
+    tops[rows.length] = y;
+    this.flatRows = rows; this.tops = tops; this.sel = sel; this.anc = anc; this.span = [-1, -1];
+    this.paint();
     const layers = p?.doc.layers.length ?? 0;
     setText(this.count, p ? `${layers} Layer${layers === 1 ? '' : 's'}` : '');
+  }
+
+  private paint(): void {
+    const rows = this.flatRows, tops = this.tops, n = rows.length;
+    const top = this.list.scrollTop, from = top - OVERSCAN, to = top + Math.max(this.list.clientHeight, VIEW_MIN) + OVERSCAN;
+    let lo = 0, hi = n;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (tops[m + 1] > from) hi = m; else lo = m + 1; }
+    const s = lo - (lo % STEP);
+    hi = n;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (tops[m] >= to) hi = m; else lo = m + 1; }
+    const e = Math.min(n, Math.ceil(lo / STEP) * STEP);
+    if (s === this.span[0] && e === this.span[1]) return;
+    this.span = [s, e];
+    setStyleVar(this.rows, '--pt', `${tops[s]}px`);
+    setStyleVar(this.rows, '--pb', `${tops[n] - tops[e]}px`);
+    const sel = this.sel, anc = this.anc;
+    patchList<Row>(this.rows, rows.slice(s, e), {
+      key: (r) => r.node.id,
+      create: (r) => { const x = el(`<div class="cv-lrow" role="treeitem"><button class="cv-lrow-eye" type="button" aria-label="Toggle visibility"></button><button class="cv-lrow-lock" type="button" aria-label="Toggle lock"></button><span class="cv-lrow-indent"></span><button class="cv-lrow-disc" type="button" aria-label="Expand or collapse"></button><span class="cv-lrow-kind"></span><span class="cv-lrow-name"></span><button class="cv-lrow-target" type="button" aria-label="Select"></button><span class="cv-lrow-sel"></span></div>`); this.fill(x, r, sel, anc); return x; },
+      update: (x, r) => this.fill(x, r, sel, anc),
+    });
   }
 
   private fill(n: HTMLElement, r: Row, sel: Set<string>, anc: Set<string>): void {
@@ -244,7 +274,12 @@ export class LayersPanel {
     for (const id of p.selection) for (const a of ancestors(p.doc, id)) { if (a.kind === 'layer') this.shut.delete(a.id); else this.open.add(a.id); }
     this.sync();
     const first = [...p.selection][0];
-    if (first) (this.rows.querySelector(`[data-key="${CSS.escape(first)}"]`) as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
+    const at = first ? this.flatRows.findIndex((r) => r.node.id === first) : -1;
+    if (at < 0) return;
+    const l = this.list, a = this.tops[at] + this.rows.offsetTop, b = this.tops[at + 1] + this.rows.offsetTop;
+    if (a < l.scrollTop) l.scrollTop = a;
+    else if (b > l.scrollTop + l.clientHeight) l.scrollTop = b - l.clientHeight;
+    this.paint();
   }
 
   private toggleLayerClip(): void {

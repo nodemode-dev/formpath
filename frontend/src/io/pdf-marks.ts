@@ -36,7 +36,7 @@ export function pageGeometry(w: number, h: number, bleed: Bleed, m?: PdfMarks): 
   return { ml, mb, mr, mt, bleed, start, width: w + ml + mr, height: h + mb + mt };
 }
 
-export function marksContent(g: PageGeometry, w: number, h: number, m: PdfMarks, s: number, cs: string, fontRef: string, info: string): string {
+export function marksContent(g: PageGeometry, w: number, h: number, m: PdfMarks, s: number, cs: string, fontRef: string, info: string, rgb = false): string {
   const out: string[] = [`q /${cs} cs 1 scn /${cs} CS 1 SCN ${f(m.weight * s)} w`];
   const X0 = g.ml * s, Y0 = g.mb * s, X1 = (g.ml + w) * s, Y1 = (g.mb + h) * s;
   const st = { l: g.start.l * s, r: g.start.r * s, b: g.start.b * s, t: g.start.t * s }, L = MARK_LEN * s;
@@ -62,7 +62,12 @@ export function marksContent(g: PageGeometry, w: number, h: number, m: PdfMarks,
     const sz = 9 * s, y = Y0 - st.b - sz, tints: string[] = [];
     const inks = ['1 0 0 0', '0 1 0 0', '0 0 1 0', '0 0 0 1', '0 1 1 0', '1 0 1 0', '1 1 0 0', '0.5 0 0 0', '0 0.5 0 0', '0 0 0.5 0', '0 0 0 0.5', '1 1 1 0'];
     const room = Math.max(0, Math.floor(((X1 - X0) / 2 - 16 * s) / sz));
-    inks.slice(0, room).forEach((ink, i) => tints.push(`${ink} k ${f(X0 + 16 * s + i * sz)} ${f(y)} ${f(sz)} ${f(sz)} re f`));
+    const paintOf = (ink: string): string => {
+      if (!rgb) return `${ink} k`;
+      const [c, m, yy, k] = ink.split(' ').map(Number);
+      return `${f((1 - c) * (1 - k))} ${f((1 - m) * (1 - k))} ${f((1 - yy) * (1 - k))} rg`;
+    };
+    inks.slice(0, room).forEach((ink, i) => tints.push(`${paintOf(ink)} ${f(X0 + 16 * s + i * sz)} ${f(y)} ${f(sz)} ${f(sz)} re f`));
     if (tints.length) out.push(`q ${tints.join(' ')} Q`);
   }
   if (m.pageInfo) out.push(`q /${cs} cs 1 scn BT /${fontRef} ${f(6 * s)} Tf ${f(X0 + 16 * s)} ${f(Y1 + st.t + 3 * s)} Td ${info} Tj ET Q`);

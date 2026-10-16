@@ -603,7 +603,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const usesMarkFont = !!o.marks?.pageInfo;
   const regSpace = (): number => {
     let id = painter.spaces.get('[Registration]');
-    if (!id) { id = pdf.add('[/Separation /All /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 1 1 1] /N 1 >>]'); painter.spaces.set('[Registration]', id); }
+    if (!id) { id = pdf.add(painter.rgbOnly ? '[/Separation /All /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [0 0 0] /N 1 >>]' : '[/Separation /All /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 1 1 1] /N 1 >>]'); painter.spaces.set('[Registration]', id); }
     return id;
   };
   for (const i of o.artboards.length ? o.artboards : p.doc.artboards.map((_, k) => k)) {
@@ -628,7 +628,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     if (marksActive(o.marks) && o.marks) {
       const reg = regSpace();
       const info = pdfString(`${o.title ?? p.doc.title ?? p.name}   ${a.name}   ${p.doc.colorMode.toUpperCase()}   ${new Date().toISOString().slice(0, 10)}`);
-      parts.push(marksContent(geo, a.w, a.h, o.marks, s, `CS${reg}`, 'FMark', info));
+      parts.push(marksContent(geo, a.w, a.h, o.marks, s, `CS${reg}`, 'FMark', info, painter.rgbOnly));
     }
     const packed = await deflate(new TextEncoder().encode(parts.filter(Boolean).join('\n')));
     if (o.sheet) { sheets.push(...sheetPages(pdf, `${RES} 0 R`, pagesId, packed, geo.width * s, geo.height * s, uu, { w: geo.width, h: geo.height }, o.sheet)); continue; }

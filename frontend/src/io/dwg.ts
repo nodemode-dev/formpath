@@ -103,9 +103,9 @@ function commonHandles(r: Rd, c: Common): void {
   const h = r.h, own = c.handle;
   if (c.hasEnt && c.mode === 0) c.owner = h.h(own);
   else if (!c.hasEnt) c.owner = h.h(own);
-  if (c.hasEnt && r.ver === 15 && c.nolinks === 0) { h.h(own); h.h(own); }
   for (let i = 0; i < c.nreact; i++) h.h(own);
   if (r.ver === 15 || !c.xdicMissing) h.h(own);
+  if (c.hasEnt && r.ver === 15 && c.nolinks === 0) { h.h(own); h.h(own); }
   if (!c.hasEnt) return;
   c.layer = h.h(own);
   if (c.lt === 3) h.h(own);

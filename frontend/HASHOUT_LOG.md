@@ -3387,3 +3387,32 @@ R2007 used to go to the converter. The container is not the R2004 page layout: t
 - logged: v0.38.0 · 2026-10-16
 
 Only the keys of this change were added (the DWG menu label, the dialog title and note, and the reworded open note) and the old "DWG R2007 is not read natively." and its open note were removed; `./formpth i18n import` filled the 25 locales and `i18n check` passes. Internal error messages stay in English, as elsewhere.
+
+## src/ui/layers.ts
+
+### src/ui/layers.ts · the Layers panel draws only the rows in view
+- refers-to: src/ui/layers.ts :: LayersPanel, sync, paint, locate; src/styles/formpth.css :: .cv-lp-rows
+- kind: decision
+- logged: v0.39.0 · 2026-10-16
+
+Opening Dynblocks.dwg (33,288 paths in 34 layers, all layers open) took 13 to 20 s in the window although the native parse takes 0.2 to 0.5 s. A profile of the open showed none of the import: the Layers panel built one row of eight elements for each of the 33,288 paths, and the Tabs strip then paid for it, because its render reads getBoundingClientRect on the tab strip, which forces a layout of the whole 33,000 row document (7.5 to 10.4 s of the profile; row creation was the other 2 to 5 s: setHtml, el, insertBefore). Phases before and after at 1400x900, in the window: parseDwg 0.2 s and dxfToDoc 0.2 s and addProject 0.01 s both times; the two frames after adoption 13.0 s before, 0.5 s after; first usable frame after confirming the open dialog 12 to 20 s before, 1.1 to 1.5 s after. The same cure applies to any large file: a 33,000 path SVG opened in 12.1 s and now 2.2 s, a 66,000 path flattened PDF opens in 1.9 s, a 33,000 path preserved PDF (30 MB) in 1.0 s, and the same drawing as a 9.8 MB DXF from the converter (27,919 paths) in 1.3 s. Counts are unchanged (34 layers, 33,288 paths, 33,335 nodes).
+
+The panel still computes the flat row list for the whole tree, with a cumulative top per row (28 px for objects, 32 px for layers, the CSS heights), and paints only the rows between the scroll position minus and plus 420 px, in steps of 10 rows; padding-top and padding-bottom on .cv-lp-rows, set from the custom properties --pt and --pb, stand in for the rows left out so the scroll height and thumb are exact. A scroll event or a resize of the list repaints through requestAnimationFrame and does nothing when the window of rows has not moved; rows that stay in the window keep their elements, so nothing flashes and the 420 px margin means no blank row shows while scrolling. Locate Object, which used scrollIntoView on a row that may not exist, now finds the row in the flat list and sets the scroll position. If the CSS row heights change, ROW_H and LAYER_H change with them. The flat list also stopped lowercasing every label when there is no filter. Select All on 33,300 objects takes 0.75 s end to end; that path (ancestors for every selected id) is unchanged and is the next cost if it matters.
+
+## src/io/pdf.ts (PDF/A marks)
+
+### src/io/pdf.ts · printer's marks in PDF/A-2b are drawn in the RGB intent
+- refers-to: src/io/pdf.ts :: regSpace, exportPdf; src/io/pdf-marks.ts :: marksContent
+- kind: decision
+- logged: v0.39.0 · 2026-10-16
+
+The Registration colour of the marks was always [/Separation /All /DeviceCMYK ...] and the colour bars were written with the k operator, so a PDF/A-2b file with marks carried DeviceCMYK although its only output intent is sRGB, which PDF/A-2 forbids. Two ways out: refuse marks with PDF/A, or draw them in RGB. Illustrator itself offers no PDF/A preset (its Save as PDF presets are PDF/X), so there is no Illustrator behaviour to copy, and InDesign, which does export PDF/A, keeps Marks and Bleeds available as far as I recall (not checked against the product here). Marks are page content in the trim margin, not archival data, and refusing would take a working option away, so they stay: with the PDF/A rules (painter.rgbOnly) the Registration space is [/Separation /All /DeviceRGB ...] with tint 1 giving black, exactly as the Registration swatch already was when it is used in artwork under PDF/A, and the colour bars are written with rg from the plain (1-c)(1-k) conversion of their CMYK ink values. They are swatches for a press operator and an RGB intent has no press, so the conversion is not profile managed. Every other standard writes the same bytes as before. pdfstd_check.py (scratchpad) already flagged DeviceCMYK resources and k operators in a2b; it now also sweeps every object for a /DeviceCMYK name (nested separation alternates, forms, functions), and a PDF/A-2b with trim, registration, colour bars and page information all on passes with 0 CMYK operators, while an x1a file with the same marks is flagged by it as expected.
+
+## src/io/dwg.ts (common entity handles)
+
+### src/io/dwg.ts · commonHandles reads reactors and the extension dictionary before the entity links
+- refers-to: src/io/dwg.ts :: commonHandles
+- kind: decision
+- logged: v0.39.0 · 2026-10-16
+
+The Open Design Specification orders the common entity handles as owner (entity mode 0), reactors, extension dictionary (R2004 and later only when present, always counted for R13 to R2000), then for R2000 and earlier the previous and next entity handles (only when the no-links bit is 0), then layer, linetype, material and plot style. R2004 and later have no previous or next handles at all; the code already skipped them for versions other than 15. The code read the previous and next pair before the reactors; it now reads them after the extension dictionary. The values are not used, and the same number of handles is read either way, so the layer handle that follows was always the same one: all 104 sample drawings (2000, 2004, 2010, 2013, 2018 and the example and sample files) give identical per-layer entity counts, kind counts, block counts, layer tables and coordinate deviations before and after, and 22 of them have entities with reactors (the R2000 ones among them: Constraints, Leader, PolyLine2D, TS1 and example_2000, where 2, 6, 1, 5 and 14 entities carry both reactors and links), checked against reference DXFs from the converter used as a black box. So this is a correctness fix of the stream order with no change in any result today; it matters when something later reads those handles. Not verified: an R13 or R14 drawing, which the samples do not contain.
