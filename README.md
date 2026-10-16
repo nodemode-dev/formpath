@@ -2,7 +2,7 @@
 <h1 align="center">formpth</h1>
 <p align="center"><b>Vector illustration for the web and the desktop, in the NodeMode design system.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-0.38.0-f97316" alt="version 0.38.0">
+<img src="https://img.shields.io/badge/version-0.39.0-f97316" alt="version 0.39.0">
 <img src="https://img.shields.io/badge/node-22-339933" alt="node 22">
 <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
 <img src="https://img.shields.io/badge/tauri-2-24C8DB" alt="tauri 2">
@@ -120,7 +120,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 74.5 of 76 rows against Illustrator 30 (73 Full, 3 Partial, 0 None), 98.0 percent, self-graded: the last independent audit (v0.34.0) graded 70.5, and v0.36.0 to v0.38.0 built eight of its gaps (live Pathfinder, live corners, Width editing, SVG import, generative controls, DWG export and R2007), which the next audit grades again. Partial: `.ai` (no Illustrator private data), colour management (no bundled press CMYK profile) and 3D (no Substance). DWG R2000 to R2018 reads natively since v0.35.0. The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
+- **Parity.** 73.5 of 76 rows against Illustrator 30 (71 Full, 5 Partial, 0 None), 96.7 percent, from a fifth independent audit of the code at v0.38.0. Partial: Distort and Transform (vector effects ignore groups and live type), `.ai` (no Illustrator private data), Placed images (no PDF, AI, PSD, TIFF), Layers (no Duplicate, Merge, Flatten, Release to Layers) and Raster export (no PSD, GIF, BMP, PNG-8). DWG R2000 to R2018 reads natively since v0.35.0. The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors

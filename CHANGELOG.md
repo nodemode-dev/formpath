@@ -2,6 +2,20 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.39.0 · 2026-10-16
+
+Plan v0.7.0 phase 35: the fifth independent audit, and three known defects.
+
+### Fixed
+
+- A 33,000-object DWG opened in 12 to 20 seconds (88 in one run) because the Layers panel built a row for every object; the panel now draws only the rows in view, and the same file opens in about 1.3 seconds. Large SVG and PDF files benefit the same way.
+- PDF/A-2b with printer's marks wrote a CMYK registration colour the standard forbids; marks are drawn in RGB under PDF/A.
+- The DWG reader reads an entity's handles in the specified order (reactors and extension dictionary before the R2000 neighbour links); no sample changed.
+
+### Changed
+
+- `docs/PARITY.md`: 73.5 of 76 (96.7 percent) from the fifth independent audit, which graded five rows Partial: Layers, Distort and Transform, `.ai`, Raster export and Placed images.
+
 ## 0.38.0 · 2026-10-16
 
 Plan v0.7.0 phase 34: generative controls, DWG, 3D models.
