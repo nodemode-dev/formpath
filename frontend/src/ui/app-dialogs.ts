@@ -4,7 +4,7 @@ import { api, type Capabilities, type LibraryItem } from '../io/api';
 import { comboOf, formatKeys, type Commands } from './commands';
 import { confirmAction, Dialog } from './dialogs';
 import { el, escapeHtml, patchList, q, setClass, setDisabled, setHidden, setText, setValue } from './dom';
-import { LANGUAGES, language, setLanguage } from '../i18n';
+import { LANGUAGES, language, setLanguage, t } from '../i18n';
 import { icon } from './icons';
 import { brandMark } from './brand';
 import { ANCHOR_SIZES, CHECKER_COLORS, CHECKER_SIZES, SNAP_ANGLE_SETS, loadPrefs, RECOVERY_CHOICES, savePrefs, UNIT_CHOICES, type CheckerColors, type CheckerSize, type Prefs } from './prefs';
@@ -440,6 +440,7 @@ export class ExportDialog extends Dialog {
   private readonly bmpBits = selectOf([['24', '24-bit (no transparency)'], ['32', '32-bit with alpha']]);
   private readonly psdColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
   private readonly psdLayers = el<HTMLInputElement>('<input type="checkbox" checked>');
+  private readonly psdEdit = el<HTMLInputElement>('<input type="checkbox" checked>');
   private readonly range = el<HTMLInputElement>('<input class="cv-input" type="text" value="Current" placeholder="All, Current or 1-3,5">');
   private count = 1;
   private readonly quality = numberInput(1, 100);
@@ -505,8 +506,11 @@ export class ExportDialog extends Dialog {
     this.rows.interlace = row('Interlaced', this.interlace);
     this.rows.bmpBits = row('Depth', this.bmpBits);
     this.rows.psdColor = row('Color', this.psdColor);
-    this.rows.psdLayers = row('Write layers (one per top-level layer)', this.psdLayers);
-    this.psdLayers.title = 'Each top-level layer becomes a pixel layer that keeps its name, visibility and opacity, under a flattened composite';
+    this.rows.psdLayers = row(t('Write layers'), this.psdLayers);
+    this.psdLayers.title = t('Layers and groups become Photoshop layers that keep their names, visibility, opacity and blend modes, under a flattened composite. Off writes a flat image');
+    this.rows.psdEdit = row(t('Maximum editability'), this.psdEdit);
+    this.psdEdit.title = t('Point and area type become Photoshop type layers and plain filled or stroked paths become shape layers, each with rendered pixels. Off writes pixel layers only');
+    this.psdLayers.addEventListener('change', () => this.sync());
     this.dither.addEventListener('change', () => this.sync());
     this.rows.quality = row('Quality (%)', this.quality);
     this.rows.transparent = row('Transparent background', this.transparent);
@@ -626,7 +630,8 @@ export class ExportDialog extends Dialog {
     for (const k of ['colors', 'palette', 'dither', 'ditherAmount', 'matte']) setHidden(this.rows[k], !(ro && (f === 'gif' || f === 'png8')));
     setHidden(this.rows.interlace, !(ro && f === 'gif'));
     setHidden(this.rows.bmpBits, !(ro && f === 'bmp'));
-    for (const k of ['psdColor', 'psdLayers']) setHidden(this.rows[k], !(ro && f === 'psd'));
+    for (const k of ['psdColor', 'psdLayers', 'psdEdit']) setHidden(this.rows[k], !(ro && f === 'psd'));
+    setDisabled(this.psdEdit, !this.psdLayers.checked);
     setDisabled(this.ditherAmount, this.dither.value === 'none');
     setHidden(this.rows.embedIcc, !(rg && f !== 'gif'));
     const onTab = (t: string): boolean => f === 'pdf' && this.tab === t;
@@ -669,7 +674,7 @@ export class ExportDialog extends Dialog {
     const scale = Math.max(1, Math.min(2400, Number(this.ppi.value) || 72)) / 72;
     const tiff: TiffExportChoice = { compression: this.tiffCompression.value as TiffCompression, cmyk: this.tiffColor.value === 'cmyk', ppi: Math.round(72 * scale) };
     const marks: PdfMarks = { trim: this.markTrim.checked, registration: this.markReg.checked, colorBars: this.markBars.checked, pageInfo: this.markInfo.checked, offset: num(this.markOffset), weight: Math.max(0.1, Number(this.markWeight.value) || DEFAULT_MARKS.weight), bleed: this.bleedMode.value as PdfMarks['bleed'], custom: { t: num(this.bleedTop), b: num(this.bleedBottom), l: num(this.bleedLeft), r: num(this.bleedRight) } };
-    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale, raster: { aa: this.aa.value as RasterExtra['aa'], colors: Math.max(2, Math.min(256, Math.round(Number(this.colors.value) || 256))), palette: this.palette.value as RasterExtra['palette'], dither: this.dither.value as RasterExtra['dither'], amount: Math.max(0, Math.min(100, Number(this.ditherAmount.value) || 0)), matte: this.matte.value, interlace: this.interlace.checked, bmpBits: this.bmpBits.value === '32' ? 32 : 24, psdCmyk: this.psdColor.value === 'cmyk', psdLayers: this.psdLayers.checked }, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, liveText: this.liveText.checked, standard: standardFrom(this.standard.value), layers: this.layers.checked && standardRules(standardFrom(this.standard.value)).layers, compression: { images: this.imageMode.value as PdfCompression['images'], jpegQuality: Math.max(0.05, Math.min(1, (Number(this.jpegQuality.value) || 80) / 100)), downsamplePpi: num(this.downsample), downsampleAbove: num(this.downsampleAbove), flate: this.flate.checked }, security: this.pdfSecurity(), cmyk: this.epsColor.value === 'cmyk', cad, icc: this.embedIcc.checked };
+    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale, raster: { aa: this.aa.value as RasterExtra['aa'], colors: Math.max(2, Math.min(256, Math.round(Number(this.colors.value) || 256))), palette: this.palette.value as RasterExtra['palette'], dither: this.dither.value as RasterExtra['dither'], amount: Math.max(0, Math.min(100, Number(this.ditherAmount.value) || 0)), matte: this.matte.value, interlace: this.interlace.checked, bmpBits: this.bmpBits.value === '32' ? 32 : 24, psdCmyk: this.psdColor.value === 'cmyk', psdLayers: this.psdLayers.checked, psdEdit: this.psdEdit.checked }, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, liveText: this.liveText.checked, standard: standardFrom(this.standard.value), layers: this.layers.checked && standardRules(standardFrom(this.standard.value)).layers, compression: { images: this.imageMode.value as PdfCompression['images'], jpegQuality: Math.max(0.05, Math.min(1, (Number(this.jpegQuality.value) || 80) / 100)), downsamplePpi: num(this.downsample), downsampleAbove: num(this.downsampleAbove), flate: this.flate.checked }, security: this.pdfSecurity(), cmyk: this.epsColor.value === 'cmyk', cad, icc: this.embedIcc.checked };
   }
 }
 

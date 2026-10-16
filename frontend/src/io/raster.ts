@@ -16,11 +16,12 @@ import { encodeGif } from './gif';
 import { encodePng8 } from './png8';
 import { encodeBmp } from './bmp';
 import { encodePsd, type PsdLayerIn } from './psd-write';
+import { buildPsdLayers } from './psd-layers';
 import { hardEdges, hardScale, reduceHard, sharpenType, typeTree, type AntiAlias } from './raster-aa';
 
 export type RasterFormat = 'png' | 'jpg' | 'webp' | 'tiff' | 'gif' | 'png8' | 'bmp' | 'psd';
-export interface RasterExtra { aa: AntiAlias; colors: number; palette: PaletteMethod; dither: PaletteDither; amount: number; matte: string; interlace: boolean; bmpBits: 24 | 32; psdCmyk: boolean; psdLayers: boolean }
-export const RASTER_EXTRA: RasterExtra = { aa: 'art', colors: 256, palette: 'perceptual', dither: 'diffusion', amount: 88, matte: '#ffffff', interlace: false, bmpBits: 24, psdCmyk: false, psdLayers: true };
+export interface RasterExtra { aa: AntiAlias; colors: number; palette: PaletteMethod; dither: PaletteDither; amount: number; matte: string; interlace: boolean; bmpBits: 24 | 32; psdCmyk: boolean; psdLayers: boolean; psdEdit: boolean }
+export const RASTER_EXTRA: RasterExtra = { aa: 'art', colors: 256, palette: 'perceptual', dither: 'diffusion', amount: 88, matte: '#ffffff', interlace: false, bmpBits: 24, psdCmyk: false, psdLayers: true, psdEdit: true };
 export const rasterExt = (f: string): string => (f === 'png8' ? 'png' : f);
 export const isRasterFormat = (f: string): f is RasterFormat => f === 'png' || f === 'jpg' || f === 'webp' || f === 'tiff' || f === 'gif' || f === 'png8' || f === 'bmp' || f === 'psd';
 
@@ -217,7 +218,8 @@ async function exportOther(p: Project, o: RasterOpts): Promise<Blob> {
   }
   const cmyk = x.psdCmyk, icc = want || cmyk ? await rasterIcc(p, cmyk) : null;
   const c = await renderRegion(p, { ...base, transparent: o.transparent && !cmyk }), layers: PsdLayerIn[] = [];
-  if (x.psdLayers) {
+  if (x.psdLayers && x.psdEdit) layers.push(...await buildPsdLayers(o.only ?? p.doc.layers, { doc: p.doc, region: o.region, k, w: c.width, h: c.height, render: async (only) => pixelsOf(await renderRegion(p, { ...base, only, transparent: true, bg: null })) }, 'editable'));
+  else if (x.psdLayers) {
     const list = o.only ? [{ name: 'Selection', only: o.only, hidden: false, opacity: 1, blend: 'normal' as BlendMode }] : p.doc.layers.map((l) => ({ name: nodeLabel(l), only: [{ ...l, hidden: false, opacity: 1, blend: 'normal' } as VNode], hidden: !!l.hidden, opacity: l.opacity, blend: l.blend }));
     for (const l of list) layers.push({ name: l.name, rgba: pixelsOf(await renderRegion(p, { ...base, only: l.only, transparent: true, bg: null })), hidden: l.hidden, opacity: l.opacity, blend: l.blend });
   }

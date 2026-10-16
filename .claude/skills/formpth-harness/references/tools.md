@@ -90,7 +90,7 @@ Saves the document as a formpth project (.fpth) at an absolute path; everything 
 
 ## export_file
 
-Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .dwg (AutoCAD 2000 binary drawing, layers kept, written natively), .png (with colors it writes an indexed PNG-8), .jpg, .webp, .gif (2 to 256 colors, transparency with a matte, optional interlace), .bmp (24-bit or 32-bit with alpha), .psd (flattened composite plus one pixel layer per top-level layer, RGB or CMYK) or .tiff. Every raster format takes ppi (any resolution) and anti_aliasing.
+Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .dwg (AutoCAD 2000 binary drawing, layers kept, written natively), .png (with colors it writes an indexed PNG-8), .jpg, .webp, .gif (2 to 256 colors, transparency with a matte, optional interlace), .bmp (24-bit or 32-bit with alpha), .psd (flattened composite plus layers, RGB or CMYK: with psd_edit, layers and groups become Photoshop groups, point and area type become editable type layers and filled paths become shape layers; otherwise one pixel layer per top-level layer) or .tiff. Every raster format takes ppi (any resolution) and anti_aliasing.
 
 - `path`: string; required
 - `scope`: string (artboard | document | selection | all_artboards); default "artboard"
@@ -125,6 +125,7 @@ Exports the art to an absolute path; the extension chooses the format: .svg, .pd
 - `interlaced`: boolean; default false; GIF only: write the rows interlaced.
 - `bmp_bits`: integer (24 | 32); default 24; BMP only: 24 writes RGB, 32 writes RGBA (alpha when transparent is true).
 - `psd_layers`: boolean; default true; PSD only: write one pixel layer per top-level layer (name, visibility and opacity kept) under the flattened composite; false writes the composite only. The color parameter (rgb or cmyk) chooses 8-bit RGB or CMYK.
+- `psd_edit`: boolean; default true; PSD only, with psd_layers: maximum editability. Sublayers and groups become Photoshop layer groups, point and area type become editable type layers, filled paths become shape layers (solid or gradient fill, vector mask, vector stroke); anything Photoshop cannot hold that way (effects, type on a path, patterns, images) stays a pixel layer. false writes one pixel layer per top-level layer.
 
 ## switch_document
 

@@ -1,7 +1,7 @@
 import { rgbToCmyk } from '../engine/paint';
 import type { BlendMode } from '../engine/types';
 
-export interface PsdLayerIn { name: string; rgba: Uint8ClampedArray | Uint8Array; hidden: boolean; opacity: number; blend: BlendMode }
+export interface PsdLayerIn { name: string; rgba: Uint8ClampedArray | Uint8Array; hidden: boolean; opacity: number; blend: BlendMode; key?: string; blocks?: Uint8Array; irrelevant?: boolean }
 export interface PsdOpts {
   width: number;
   height: number;
@@ -13,12 +13,12 @@ export interface PsdOpts {
   convert?: (r: number, g: number, b: number, out: Uint8Array, at: number) => void;
 }
 
-const BLEND_KEYS: Record<BlendMode, string> = {
+export const BLEND_KEYS: Record<BlendMode, string> = {
   normal: 'norm', darken: 'dark', multiply: 'mul ', color_burn: 'idiv', lighten: 'lite', screen: 'scrn', color_dodge: 'div ', overlay: 'over',
   soft_light: 'sLit', hard_light: 'hLit', difference: 'diff', exclusion: 'smud', hue: 'hue ', saturation: 'sat ', color: 'colr', luminosity: 'lum ',
 };
 
-class Out {
+export class Out {
   buf = new Uint8Array(1 << 16);
   n = 0;
   private room(extra: number): void { if (this.n + extra > this.buf.length) { let len = this.buf.length; while (len < this.n + extra) len *= 2; const b = new Uint8Array(len); b.set(this.buf.subarray(0, this.n)); this.buf = b; } }
@@ -101,7 +101,7 @@ export function encodePsd(o: PsdOpts): Blob {
     layerInfo.u16(o.alpha && !o.cmyk ? 0x10000 - o.layers.length : o.layers.length);
     for (const L of o.layers) {
       let x0 = w, y0 = h, x1 = -1, y1 = -1;
-      for (let y = 0; y < h; y++) {
+      for (let y = 0; y < (L.rgba.length ? h : 0); y++) {
         const row = y * w * 4;
         let first = -1, last = -1;
         for (let x = 0; x < w; x++) if (L.rgba[row + x * 4 + 3] > 0) { if (first < 0) first = x; last = x; }
@@ -121,7 +121,7 @@ export function encodePsd(o: PsdOpts): Blob {
       layerInfo.u32(box.y); layerInfo.u32(box.x); layerInfo.u32(box.y + box.h); layerInfo.u32(box.x + box.w);
       layerInfo.u16(chans.length);
       for (const c of chans) { layerInfo.u16(c.id < 0 ? 0xffff : c.id); layerInfo.u32(c.data.length); }
-      layerInfo.tag('8BIM'); layerInfo.tag(BLEND_KEYS[L.blend] ?? 'norm'); layerInfo.u8(Math.max(0, Math.min(255, Math.round(L.opacity * 255)))); layerInfo.u8(0); layerInfo.u8(L.hidden ? 2 : 0); layerInfo.u8(0);
+      layerInfo.tag('8BIM'); layerInfo.tag(L.key ?? BLEND_KEYS[L.blend] ?? 'norm'); layerInfo.u8(Math.max(0, Math.min(255, Math.round(L.opacity * 255)))); layerInfo.u8(0); layerInfo.u8((L.hidden ? 2 : 0) | (L.blocks ? 8 : 0) | (L.irrelevant ? 16 : 0)); layerInfo.u8(0);
       const extra = new Out();
       extra.u32(0); extra.u32(0); extra.bytes(pascal(L.name));
       const uni = new Out(), name = Array.from(L.name);
@@ -129,6 +129,7 @@ export function encodePsd(o: PsdOpts): Blob {
       for (const c of name) { const code = c.codePointAt(0) ?? 63; if (code > 0xffff) { const v = code - 0x10000; uni.u16(0xd800 + (v >> 10)); uni.u16(0xdc00 + (v & 0x3ff)); } else uni.u16(code); }
       uni.pad(4);
       extra.tag('8BIM'); extra.tag('luni'); extra.u32(uni.n); extra.bytes(uni.done());
+      if (L.blocks) extra.bytes(L.blocks);
       layerInfo.u32(extra.n); layerInfo.bytes(extra.done());
       for (const c of chans) pixelData.bytes(c.data);
     }

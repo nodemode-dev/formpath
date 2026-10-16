@@ -414,3 +414,10 @@ export_file accepts a .dwg path next to .dxf: the extension list, the descriptio
 - logged: v0.43.0 · 2026-10-16
 
 The shared colour description for set_paint and the other paint parameters now documents `method: classic|perceptual` on a linear or radial gradient. It is a description change only (no new parameter on the schema level, the paint is a free object), and ./formpth agents sync regenerated the tool reference.
+
+### app/routers/mcp.py · psd_edit on export_file
+- refers-to: app/routers/mcp.py :: export_file
+- kind: decision
+- logged: v0.44.0 · 2026-10-16
+
+The bridge already read `psd_edit` (default true) after the editable PSD writer landed, but the catalogue did not declare it, so agents could not discover it. export_file now declares `psd_edit` beside `psd_layers`, and its description says what a .psd holds with and without it: Photoshop groups, editable type layers and shape layers, or one pixel layer per top-level layer. ./formpth agents sync regenerated the tool reference.
