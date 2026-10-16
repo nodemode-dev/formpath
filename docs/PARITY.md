@@ -12,6 +12,10 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list. The v0.23.0 grades come from a second independent audit of the code at commit 803e327, done without this page, with one row held stricter than the auditor graded it (PDF, see its row).
 
+## Score at v0.47.0
+
+Still the seventh audit's 65.5 of 76. v0.47.0 finishes plan v0.10.0 phase 43: on top of v0.46.0 it fixes the defects behind Image Trace, the Effect Gallery, Text to Pattern, the Print preview, the RGB working spaces and Proof Setup presets, saving after a linked file changed, OpenType options and per-asset export settings, each reproduced and checked with real input. The gradient mesh reload defect was not reproducible after v0.46.0's colour change. Every row the audit graded Partial on a found defect has now had that defect worked on; SVG, EPS, DXF and DWG were Partial only because their import was not reached. The eighth driven audit (phase 44) regrades all of it.
+
 ## Score at v0.46.0
 
 Unchanged at the seventh audit's 65.5 of 76. v0.46.0 fixes defects behind eleven of the 21 Partial rows (Layers, Direct Selection, Smart Guides intersection snap, Snap to Grid, the Smooth tool, Average, the Colour panel fields, swatch editing, the Gradient tool on strokes, gradient mesh colour; Intertwine was driven and works as Illustrator's does) and two additions (Liquify, Trap), each reproduced and checked with real mouse input. This page does not regrade them: every self-grade so far has been audited down, so they wait for the eighth driven audit.

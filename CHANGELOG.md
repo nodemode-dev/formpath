@@ -2,6 +2,26 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.47.0 · 2026-10-16
+
+Plan v0.10.0 phase 43, second part: the rest of the defects the seventh audit found.
+
+### Added
+
+- Adobe RGB (1998) compatible and Display P3 working spaces, built by formpth from their published definitions.
+- View > Proof Setup presets: Working CMYK, each installed CMYK profile, Monitor RGB.
+- The Effect Gallery groups its filters in folders (Artistic, Brush Strokes, Distort, Sketch, Stylize, Texture), includes the vector Distort and Stylize effects, and stacks several effect layers as one effect.
+- Asset Export settings per asset, with several assets edited at once; Collect for Export in the canvas context menu.
+
+### Fixed
+
+- Image Trace keeps rectangle corners sharp and edges straight.
+- Text to Pattern scales the generated art into the tile; pattern swatches show their tile.
+- The Print dialog preview shows marks and bleed, a chosen plate and the colour-managed look.
+- Saving and downloading a project after a linked file changed on disk; a link that cannot be read is named.
+- The Links panel shows which PDF or AI page is placed.
+- OpenType options a font does not have are disabled one by one.
+
 ## 0.46.0 · 2026-10-16
 
 Plan v0.10.0 phase 43, first part: defects the seventh audit found by driving the interface.
