@@ -33,7 +33,7 @@ import { symbolPartHit } from './hit';
 import type { ImageLink, ImageNode, ShapeMode, SymbolDef } from './types';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans, touchSpans } from './text';
 import { transformNode } from './transform';
-import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, CharTouch,Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
+import type { Appearance, Artboard, ExportAsset, ExportAssetItem, BlendMode, BrushDef, BrushKind, CharStyle, CharTouch,Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
 import { Viewport } from './viewport';
 import { styleLibrary } from './style-libraries';
 import type { SwatchLibrary } from './swatch-libraries';
@@ -667,6 +667,14 @@ export class Engine extends Emitter<EngineEvents> {
     this.lastEffect = { id, params: prm };
     if (item !== undefined) return this.applyToSelection('Effect', (n) => (n.ap.items[item] ? { ...n, ap: { ...n.ap, items: n.ap.items.map((it, i) => (i === item ? { ...it, effects: [...it.effects, effect(id, prm)] } : it)) } } : n), ids);
     return this.applyToSelection('Effect', (n) => ({ ...n, ap: { ...n.ap, effects: [...n.ap.effects, effect(id, prm)] } }), ids);
+  }
+  addEffects(list: Array<{ id: string; params: Record<string, number | string | boolean> }>, ids?: string[], item?: number): boolean {
+    const fx = list.filter((e) => EFFECT_IDS.has(e.id)).map((e) => effect(e.id, { ...effectDefaults(e.id), ...e.params }));
+    if (!fx.length) return false;
+    const last = fx[fx.length - 1];
+    this.lastEffect = { id: last.id, params: last.params };
+    if (item !== undefined) return this.applyToSelection('Effect Gallery', (n) => (n.ap.items[item] ? { ...n, ap: { ...n.ap, items: n.ap.items.map((it, i) => (i === item ? { ...it, effects: [...it.effects, ...fx] } : it)) } } : n), ids);
+    return this.applyToSelection('Effect Gallery', (n) => ({ ...n, ap: { ...n.ap, effects: [...n.ap.effects, ...fx] } }), ids);
   }
   applyLastEffect(): void { if (this.lastEffect) this.addEffect(this.lastEffect.id, this.lastEffect.params); }
   set3d(kind: string | null, patch: Record<string, number | string | boolean>, ids?: string[]): boolean {
@@ -2261,6 +2269,11 @@ export class Engine extends Emitter<EngineEvents> {
   renameExportAsset(id: string, name: string): boolean {
     const v = name.trim();
     return !!v && this.edit('Rename Asset', (d) => ({ ...d, exportAssets: (d.exportAssets ?? []).map((a) => (a.id === id ? { ...a, name: v } : a)) }));
+  }
+  setExportAssetItems(ids: string[], items: ExportAssetItem[]): boolean {
+    const set = new Set(ids);
+    if (!set.size || !this.exportAssets.some((a) => set.has(a.id))) return false;
+    return this.edit('Asset Export Settings', (d) => ({ ...d, exportAssets: (d.exportAssets ?? []).map((a) => (set.has(a.id) ? { ...a, items: items.map((i) => ({ ...i })) } : a)) }));
   }
   removeExportAssets(ids: string[]): boolean {
     const drop = new Set(ids);

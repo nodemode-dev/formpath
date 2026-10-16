@@ -186,6 +186,9 @@ export class CharacterPanel {
     this.otPos.enable([...POS_TAGS].some(has));
     this.sset.set([...f].find((t) => /^ss\d\d$/.test(t)) ?? '');
     this.sset.enable(SETS.some(([t]) => !!t && has(t)));
+    this.figures.allow((v) => v.split('+').some(has));
+    this.otPos.allow(has);
+    this.sset.allow(has);
   }
 }
 

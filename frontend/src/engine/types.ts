@@ -243,7 +243,8 @@ export const BRISTLE_SHAPES: ReadonlyArray<readonly [BristleShape, string]> = [[
 export interface BrushDef { id: string; name: string; brush: BrushKind; colorize: 'none' | 'tints' | 'tints_shades' | 'hue_shift' }
 export interface PatternDef { id: string; name: string; tile: Rect; art: VNode; type: 'grid' | 'brick_row' | 'brick_col' | 'hex_col' | 'hex_row'; hs: number; vs: number; brick?: number; overlap?: ['left' | 'right', 'top' | 'bottom'] }
 export interface Guide { id: string; vertical: boolean; pos: number }
-export interface ExportAsset { id: string; name: string; ids: string[] }
+export interface ExportAssetItem { scale: string; format: string; suffix: string }
+export interface ExportAsset { id: string; name: string; ids: string[]; items?: ExportAssetItem[] }
 export interface ImageAsset { mime: string; w: number; h: number }
 export type Units = 'pt' | 'px' | 'mm' | 'cm' | 'in' | 'pc';
 

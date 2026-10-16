@@ -17,6 +17,9 @@ export function typed(blob: Blob, name: string): Blob {
   return t && blob.type !== t ? new Blob([blob], { type: t }) : blob;
 }
 
+/** A File from a handle points at the file on disk and goes stale when that file changes, so the document keeps a copy of the bytes instead. */
+async function snap(f: File): Promise<Blob> { return typed(new Blob([await f.arrayBuffer()], { type: f.type }), f.name); }
+
 export interface FileHandle { kind: 'file'; name: string; getFile(): Promise<File>; queryPermission?(o: { mode: string }): Promise<string>; requestPermission?(o: { mode: string }): Promise<string>; createWritable?(): Promise<{ write(b: Blob): Promise<void>; close(): Promise<void> }> }
 interface DirHandle { kind: 'directory'; name: string; values(): AsyncIterable<FileHandle | DirHandle> }
 type Picker = { showOpenFilePicker?(o: unknown): Promise<FileHandle[]>; showSaveFilePicker?(o: unknown): Promise<FileHandle>; showDirectoryPicker?(o?: unknown): Promise<DirHandle> };
@@ -50,12 +53,12 @@ export async function pickLinkedFile(): Promise<LinkFile | null> {
   const h = hs[0];
   if (!h) return null;
   const f = await h.getFile();
-  return { blob: f, name: f.name, size: f.size, mtime: f.lastModified, handle: await keepHandle(h) };
+  return { blob: await snap(f), name: f.name, size: f.size, mtime: f.lastModified, handle: await keepHandle(h) };
 }
 
 async function linkFromHandle(h: FileHandle, keep: boolean): Promise<LinkFile> {
   const f = await h.getFile();
-  return { blob: f, name: f.name, size: f.size, mtime: f.lastModified, ...(keep ? { handle: await keepHandle(h) } : {}) };
+  return { blob: await snap(f), name: f.name, size: f.size, mtime: f.lastModified, ...(keep ? { handle: await keepHandle(h) } : {}) };
 }
 
 /** File > Place: the picker returns handles, so a linkable file keeps its handle; anything else (SVG, EPS, models) comes back as a plain file. */
@@ -88,7 +91,7 @@ export async function pickLinkFolder(): Promise<Map<string, () => Promise<LinkFi
   let dir: DirHandle;
   try { dir = await p.showDirectoryPicker(); } catch { return null; }
   const out = new Map<string, () => Promise<LinkFile>>();
-  for await (const h of dir.values()) if (h.kind === 'file') { const fh = h; out.set(fh.name.toLowerCase(), async () => { const f = await fh.getFile(); return { blob: f, name: f.name, size: f.size, mtime: f.lastModified, handle: await keepHandle(fh) }; }); }
+  for await (const h of dir.values()) if (h.kind === 'file') { const fh = h; out.set(fh.name.toLowerCase(), async () => { const f = await fh.getFile(); return { blob: await snap(f), name: f.name, size: f.size, mtime: f.lastModified, handle: await keepHandle(fh) }; }); }
   return out;
 }
 
@@ -101,7 +104,7 @@ export async function saveLinkedFile(blob: Blob, name: string): Promise<LinkFile
   if (!w) return null;
   await w.write(blob); await w.close();
   const f = await h.getFile();
-  return { blob: f, name: f.name, size: f.size, mtime: f.lastModified, handle: await keepHandle(h) };
+  return { blob: await snap(f), name: f.name, size: f.size, mtime: f.lastModified, handle: await keepHandle(h) };
 }
 
 export function linkOf(f: LinkFile): ImageLink { return { name: f.name, size: f.size, mtime: f.mtime, ...(f.path ? { path: f.path } : {}), ...(f.handle ? { handle: f.handle } : {}) }; }
@@ -185,11 +188,22 @@ export class LinkManager {
     try {
       if (h.queryPermission && (await h.queryPermission({ mode: 'read' })) !== 'granted') { if (!ask || !h.requestPermission || (await h.requestPermission({ mode: 'read' })) !== 'granted') return null; }
       const f = await h.getFile();
-      return { blob: f, name: f.name, size: f.size, mtime: f.lastModified, handle: l.handle };
+      return { blob: await snap(f), name: f.name, size: f.size, mtime: f.lastModified, handle: l.handle };
     } catch { return null; }
   }
 
   async readPath(path: string): Promise<LinkFile> { const r = await api.readFileInfo(path); return { blob: typed(r.blob, r.name), name: r.name, size: r.size, mtime: r.mtime, path: r.path }; }
+
+  /** Names of linked files whose cached bytes can no longer be read, so a save can name them instead of blaming the engine. */
+  async unreadable(p: Project): Promise<string[]> {
+    const bad = new Set<string>();
+    for (const n of this.images(p)) {
+      const b = p.assets.get(n.src);
+      if (!b) continue;
+      try { await b.slice(0, 1).arrayBuffer(); } catch { bad.add(n.linked?.name ?? n.name ?? n.src); }
+    }
+    return [...bad];
+  }
 
   async preview(p: Project, key: string, blob: Blob): Promise<void> {
     try {

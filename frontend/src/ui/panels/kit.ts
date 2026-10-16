@@ -83,7 +83,7 @@ export function seg(choices: ReadonlyArray<{ id: string; label: string; icon?: s
   return { el: n, set: (v) => { for (const x of bs) { setClass(x.b, 'is-on', x.id === v); x.b.setAttribute('aria-pressed', String(x.id === v)); } }, enable: (on) => { for (const x of bs) setDisabled(x.b, !on); } };
 }
 
-export function selectCtl(label: string, choices: ReadonlyArray<readonly [string, string]>, change: (id: string) => void): Ctl<string> & { setChoices(c: ReadonlyArray<readonly [string, string]>): void } {
+export function selectCtl(label: string, choices: ReadonlyArray<readonly [string, string]>, change: (id: string) => void): Ctl<string> & { setChoices(c: ReadonlyArray<readonly [string, string]>): void; allow(ok: (id: string) => boolean): void } {
   const n = el('<label class="cv-props-field is-wide"><span class="cv-pf-label"></span><select class="cv-select"></select></label>');
   setText(q(n, '.cv-pf-label'), label);
   const s = q<HTMLSelectElement>(n, 'select');
@@ -99,7 +99,8 @@ export function selectCtl(label: string, choices: ReadonlyArray<readonly [string
   s.addEventListener('change', () => change(s.value));
   enhanceSelect(s);
   if (!label) q(n, '.cv-pf-label').remove();
-  return { el: n, set: (v) => setValue(s, v), enable: (on) => setDisabled(s, !on), setChoices: fill };
+  const allow = (ok: (id: string) => boolean): void => { for (const o of Array.from(s.options)) { const off = !!o.value && !ok(o.value); if (o.disabled !== off) o.disabled = off; } };
+  return { el: n, set: (v) => setValue(s, v), enable: (on) => setDisabled(s, !on), setChoices: fill, allow };
 }
 
 export function check(label: string, change: (v: boolean) => void): Ctl<boolean> {

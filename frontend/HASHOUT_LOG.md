@@ -3938,9 +3938,149 @@ Choosing a plate switches Overprint Preview on and remembers the earlier state; 
 
 The switch still reloads, but first writes every open document to the recovery store and sets a session flag; the next start reopens them silently (modified state kept) whether or not restore-session is on. Undo history is not carried over. Driven: two rectangles drawn, language changed to Spanish in Preferences, the unsaved document came back with both.
 
+### src/io/generative.ts · generated pattern art is fitted into the tile
+- refers-to: src/io/generative.ts :: svgNodes, patternVariations
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+svgNodes now returns the viewBox it used (vbW, vbH) and patternVariations scales the art by tile / max(vbW, vbH) and centres it, instead of the fixed tile / 200. A model that answers with its own 1000 unit viewBox (or 480 wide art) used to land five times too large, so the tile showed one clipped colour and the previews and swatches looked solid. The 200 unit request is kept; only the scale follows what came back.
+
+### src/ui/pattern-thumb.ts · pattern swatch thumbnails from the tile art
+- refers-to: src/ui/pattern-thumb.ts :: patternThumb, onPatternThumb; src/ui/rail.ts :: paintCss; src/ui/panels/color.ts :: SwatchesPanel
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+paintCss returned a grey checker for every pattern paint. patternThumb renders the tile art once per PatternDef object (WeakMap, so an edited pattern re-renders) into a 64 px canvas repeated two by two and keeps a data URL; until it is ready paintCss still returns the checker, and the Swatches panel re-syncs through onPatternThumb when a thumbnail lands, so tiles patch in place without a rebuild.
+
+### src/ui/print-dialog.ts · live preview of marks, bleed, plates and colour management
+- refers-to: src/ui/print-dialog.ts :: thumb, paint, plate; src/io/print.ts :: managed
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+The preview canvas keeps its fixed size. Marks (trim, registration, colour bars, page information) are drawn on it with the same pageGeometry numbers the PDF uses; the bleed is rendered into the thumbnail (region grown by the bleed) so art runs past the trim; with Output set to Separations a new Preview plate select picks one plate and the thumbnail renders it in grey through renderRegion's separation option; a chosen printer profile runs the thumbnail through the exported managed() conversion, the same one the PDF uses. Thumbnails are cached by artboard, bleed, plate and profile key, and the previous image stays on screen until the next one lands, so changing an option never blanks the preview.
+
+### src/io/print.ts · managed is exported
+- refers-to: src/io/print.ts :: managed
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+managed() only gained export so the Print dialog preview converts through the identical path as the printed PDF.
+
+### src/ui/color-settings.ts · Proof Setup presets
+- refers-to: src/ui/color-settings.ts :: proofPreset, proofPresetOn; src/app.ts :: proof-working-cmyk, proof-profile-N, proof-monitor-rgb
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+View > Proof Setup lists Customize, Working CMYK, each installed CMYK profile and Monitor RGB. Working CMYK clears the proof device so the document CMYK profile (or the generic one) is used; a profile entry sets it as the device; both turn Proof Colors on. Monitor RGB turns Proof Colors off, since the plain display path is the monitor RGB view. The View menu items became a function so the profile entries follow the profiles loaded; app start now calls refreshProfiles so the list is ready before the first open.
+
+### src/app.ts · proof preset commands and View menu
+- refers-to: src/app.ts :: commands proof-working-cmyk, proof-monitor-rgb, proof-profile-0..11; View menu
+- kind: warning-context
+- logged: v0.47.0 · 2026-10-16
+
+Twelve fixed proof-profile-N commands exist because commands are registered once; their labels read the Nth installed CMYK profile and the menu only lists as many as there are. More than twelve CMYK profiles show the first twelve here; Customize still lists all.
+
+### src/ui/panels/color.ts, src/ui/rail.ts · pattern swatch paint
+- refers-to: src/ui/panels/color.ts :: constructor; src/ui/rail.ts :: paintCss
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+Both only hook patternThumb (see pattern-thumb.ts): paintCss asks for the pattern thumbnail and the swatch panel queues a sync when one is ready.
+
 ### frontend/HASHOUT_LOG.md · Phase 43 items not done
 - refers-to: Character panel OpenType (item 5); Asset Export per-asset settings and Collect for Export (item 6)
 - kind: todo
 - logged: v0.46.0 · 2026-10-16
 
 Not reached inside the time budget: proving each OpenType toggle changes rendered glyphs (whole object and edit-mode range), and per-asset Asset Export settings with multi-select editing plus Collect for Export in the canvas context menu.
+
+### src/io/trace-core.ts · corners from the raw outline, exact corner points, straight runs
+- refers-to: src/io/trace-core.ts :: findCorners, lineFit, cornerPoint, fitSmooth, fitRun
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+Rectangles traced with rounded corners and wobbly sides because corners were looked for on the relaxed, RDP-simplified outline: relaxing turned each 90 degree corner into two 45 degree turns, neither above the 45 degree default threshold, and the densified samples (edge midpoints) cut every corner by half a pixel. Corners are now found on the unrelaxed densified outline as peaks of the turning angle measured over a 4-sample support (non-maximum suppressed, threshold still set by Corners), each corner anchor is placed at the intersection of least-squares lines fitted to the straight stretches on either side (kept only within 2.2 px of the raw point and when both fits are straight within 0.9 px), and a run between two corners whose raw points all lie within max(0.6, 0.45 x Paths tolerance) of its chord becomes a plain two-anchor straight segment before any curve fit. Curved runs still go through Schneider's fit on the relaxed points. A 200 x 100 rectangle went from 8 anchors, corners 0.75 px off and curved handles, to 4 anchors on the corners exactly with straight segments at the default and the Black and White Logo presets. Sub-pixel staircase edges can still read as a corner at Corners 100 percent, which is the control's intent.
+
+### src/ui/panels/effect-gallery.ts · folders, vector filters and stacked layers
+- refers-to: src/ui/panels/effect-gallery.ts :: EffectGallery (CATEGORIES, inFolder, layers, sync, addLayer, removeLayer); src/styles/formpth.css :: .cv-fxg-cat, .cv-fxg-layer
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+The list already held every Photoshop-family folder but only the Artistic folder's first twelve tiles were visible in the 360 px list, and nothing showed the rest was there. Folders are now collapsible headers with counts, in Illustrator's order (Artistic, Brush Strokes, Distort, Sketch, Stylize, Texture, then Blur, Pixelate, Video kept after them); the folder of the picked filter opens. The vector effects that live as separate Effect menu items (distort.* and stylize.*) are listed in the Distort and Stylize folders with the same live preview. Several filters stack as effect layers (up to eight, pooled rows built once): a tile replaces the active layer's filter, New Effect Layer duplicates it, the preview draws every layer, and OK adds them in one history step named Effect Gallery through `Engine.addEffects`.
+
+### src/engine/index.ts · addEffects
+- refers-to: src/engine/index.ts :: Engine.addEffects
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+Adds an ordered list of effects to the targets (or to one appearance item) as a single history step, and remembers the last one as the last effect. The Effect Gallery uses it so a stack of filters is one undo.
+
+### src/engine/mesh.ts · gradient mesh after reload not reproduced
+- refers-to: recovery restore, src/io/project-io.ts :: serialize, docFromManifest
+- kind: warning-context
+- logged: v0.47.0 · 2026-10-16
+
+Driven with real input: a mesh with a red point (Create Gradient Mesh, Mesh tool click) reloaded after the 20 second recovery copy and reopened red; a serialize, JSON, docFromManifest round trip leaves every mesh point colour and opacity identical. Mesh nodes keep colours inline in the manifest and use no asset registry (registerMesh and setMeshSource belong to imported 3D models), so nothing is lost in serialisation. The white drawing reported before the cardinal-spline change was the faint bilinear blob. Save to library and Download Project then Open from Disk were not driven separately inside the time budget.
+
+### src/io/links.ts · handle files are copied to memory, never kept as stale File objects
+- refers-to: pickLinkedFile, linkFromHandle, readRaw, saveLinkedFile, LinkManager.unreadable
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+A File from FileSystemFileHandle.getFile() points at the file on disk, so once that file changes it fails when read (ERR_UPLOAD_FILE_CHANGED on upload, NotReadableError in the zip) and the save toast blamed the engine. Every LinkFile blob now goes through snap(), which copies the bytes into a Blob at read time, so assets and previews are immutable. LinkManager.unreadable names any linked file whose cached bytes still cannot be read, and Save and Download Project report that name instead of an engine problem. Driven with OPFS handles and a stubbed showOpenFilePicker: before, Save failed with the engine toast and Download threw; after, both work after outside edits, Update, and a PDF page link.
+
+### src/app.ts · save and download check linked bytes; Collect for Export in the canvas menu
+- refers-to: save, projectZip, contextMenu.setItems
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+save and projectZip call links.unreadable first and toast the unreadable link names. The canvas context menu gained a Collect for Export submenu with the existing collect-single and collect-multiple commands.
+
+### src/ui/panels/symbols.ts · Links row shows the placed page and crop
+- refers-to: LinksPanel.fill
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+A PDF or AI link row reads "name (page 2)", with ", crop box" appended when the crop is not the bounding box.
+
+### src/ui/panels/kit.ts · selectCtl.allow greys single options
+- refers-to: selectCtl
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+selectCtl returns allow(ok), which disables individual options. The Character panel uses it so Figures, Position and Sets list only what the current font has, as Illustrator does.
+
+### src/ui/panels/type.ts · OpenType option greying and measured results
+- refers-to: CharacterPanel OpenType controls
+- kind: warning-context
+- logged: v0.47.0 · 2026-10-16
+
+The bundled Inter and JetBrains Mono are web latin subsets whose GSUB holds only calt, frac, numr, dnom, pnum and tnum (Inter) and calt, frac (JetBrains Mono); that is why most controls are disabled for them. No installed font has swsh or titl, so those stay disabled. Measured through the Character panel with TeX Gyre Pagella (liga, dlig, frac, salt, zero, onum, tnum, ss01, smcp) and Inter: every enabled feature changed the glyph sequence from layoutText, and the SVG and PDF exports differed, for the whole object, and a range in edit mode changed only its glyphs. The defect found was that unavailable choices in the Figures, Position and Sets lists stayed selectable.
+
+### src/engine/types.ts · ExportAssetItem per asset
+- refers-to: ExportAsset.items
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+Each export asset carries its own optional scale, suffix and format list; assets without one use the panel defaults (1x PNG, 2x PNG, 1x SVG). It lives in doc.exportAssets and so is saved in .fpth.
+
+### src/engine/index.ts · setExportAssetItems
+- refers-to: Engine.setExportAssetItems
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+One history step sets the item list on every given asset id, which is what multi-select editing in the Asset Export panel calls.
+
+### src/io/raster.ts · exportAssetsZip uses each asset's own items
+- refers-to: exportAssetsZip
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+Each asset exports with its own items, falling back to the list passed in only when it has none.
+
+### src/ui/panels/asset-export.ts · per-asset settings with multi-select editing
+- refers-to: AssetExportPanel
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+The settings rows now show the first picked asset's items and write to every picked asset on change; with nothing picked they are disabled. Driven: edits to one asset left the others at defaults, and a Ctrl-click multi-pick edit changed both picked assets only.

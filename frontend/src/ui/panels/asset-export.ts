@@ -2,7 +2,7 @@ import { selectionBounds } from '../../engine/bounds';
 import { findNode } from '../../engine/doc';
 import { isEmptyRect } from '../../engine/geometry';
 import { renderNode } from '../../engine/render';
-import type { Engine, ExportAsset, VNode } from '../../engine';
+import type { Engine, ExportAsset, ExportAssetItem, VNode } from '../../engine';
 import { parseScale, type AssetItem } from '../../io/raster';
 import { el, patchList, q, setClass, setDisabled, setHidden, setText, setTitle } from '../dom';
 import { enhanceSelect } from '../dropdown';
@@ -12,7 +12,10 @@ import { empty, page, row, section } from './kit';
 
 const FORMATS: ReadonlyArray<readonly [string, string]> = [['png', 'PNG'], ['png8', 'PNG-8'], ['gif', 'GIF'], ['jpg', 'JPG'], ['webp', 'WebP'], ['bmp', 'BMP'], ['psd', 'PSD'], ['tiff', 'TIFF'], ['svg', 'SVG'], ['pdf', 'PDF']];
 
+const DEFAULT_ITEMS: ReadonlyArray<ExportAssetItem> = [{ scale: '1x', format: 'png', suffix: '' }, { scale: '2x', format: 'png', suffix: '@2x' }, { scale: '1x', format: 'svg', suffix: '' }];
+
 export class AssetExportPanel {
+  private readonly addBtn: HTMLButtonElement;
   readonly body = page('cv-assetp');
   private readonly grid = el('<div class="cv-assetp-grid" role="listbox" aria-label="Assets" aria-multiselectable="true"></div>');
   private readonly none = empty('Select art and press Add to collect it here. Each asset exports on its own, cropped to its art.');
@@ -30,7 +33,8 @@ export class AssetExportPanel {
     mk('add', 'Add each selected object as its own asset', () => { const ids = engine.addExportAssets(false); this.pick(ids); });
     mk('delete', 'Remove the picked assets', () => { if (this.picked.size) { engine.removeExportAssets([...this.picked]); this.picked.clear(); } });
     const addRow = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Add Scale</button>');
-    addRow.addEventListener('click', () => this.addRow(2, 'png', '@2x'));
+    this.addBtn = addRow;
+    addRow.addEventListener('click', () => { this.addRow('2x', 'png', '@2x'); this.commit(); });
     this.exportBtn.addEventListener('click', () => void this.exportNow());
     this.grid.addEventListener('click', (ev) => {
       const t = (ev.target as HTMLElement).closest<HTMLElement>('.cv-assetp-tile');
@@ -47,31 +51,41 @@ export class AssetExportPanel {
       if (a) void askForm('Rename Asset', [{ kind: 'text', key: 'name', label: 'Name', value: a.name }], { ok: 'Rename' }).then((v) => { if (v) engine.renameExportAsset(a.id, String(v.name)); });
     });
     this.body.append(this.grid, this.none, section('Export Settings'), this.rows, row(addRow, this.exportBtn), foot);
-    this.addRow(1, 'png', '');
-    this.addRow(2, 'png', '@2x');
-    this.addRow(1, 'svg', '');
+    this.fillRows(DEFAULT_ITEMS);
     for (const k of ['doc', 'active', 'projects', 'busy'] as const) engine.on(k, () => this.queue());
     this.sync();
   }
 
   private pick(ids: string[]): void { if (ids.length) { this.picked = new Set(ids); this.sync(); } }
 
-  private addRow(scale: number, format: string, suffix: string): void {
+  private fillRows(list: ReadonlyArray<ExportAssetItem>): void {
+    this.rows.textContent = '';
+    for (const i of list) this.addRow(i.scale, i.format, i.suffix);
+  }
+
+  private read(): ExportAssetItem[] {
+    return Array.from(this.rows.children).map((r) => ({ scale: q<HTMLInputElement>(r, 'input[aria-label="Scale"]').value, format: q<HTMLSelectElement>(r, 'select[aria-label="Format"]').value, suffix: q<HTMLInputElement>(r, 'input[aria-label="Suffix"]').value }));
+  }
+
+  private commit(): void { if (this.picked.size) this.engine.setExportAssetItems([...this.picked], this.read()); }
+
+  private addRow(scale: string, format: string, suffix: string): void {
     const r = el('<div class="cv-screens-row"></div>');
     const sel = (opts: ReadonlyArray<readonly [string, string]>, v: string, label: string): HTMLSelectElement => { const s = el<HTMLSelectElement>(`<select class="cv-select" aria-label="${label}"></select>`); for (const [id, l] of opts) { const o = document.createElement('option'); o.value = id; o.textContent = l; s.appendChild(o); } s.value = v; return s; };
     const s = el<HTMLInputElement>('<input class="cv-input" type="text" list="cv-screen-scales" aria-label="Scale" placeholder="2x or 300 ppi">'), f = sel(FORMATS, format, 'Format'), x = el<HTMLInputElement>('<input class="cv-input" type="text" aria-label="Suffix" placeholder="suffix">');
-    s.value = `${scale}x`; x.value = suffix;
+    s.value = scale; x.value = suffix;
     x.addEventListener('keydown', (e) => e.stopPropagation());
     s.addEventListener('keydown', (e) => e.stopPropagation());
+    for (const c of [s, x, f]) c.addEventListener('change', () => this.commit());
     const del = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" aria-label="Remove this format">${icon('close', 14)}</button>`);
-    del.addEventListener('click', () => { if (this.rows.children.length > 1) r.remove(); });
+    del.addEventListener('click', () => { if (this.rows.children.length > 1) { r.remove(); this.commit(); } });
     r.append(s, x, f, del);
     this.rows.appendChild(r);
     enhanceSelect(f);
   }
 
   private items(): AssetItem[] {
-    return Array.from(this.rows.children).map((r) => { const s = q<HTMLInputElement>(r, 'input[aria-label="Scale"]'), f = q<HTMLSelectElement>(r, 'select[aria-label="Format"]'), x = q<HTMLInputElement>(r, 'input[aria-label="Suffix"]'); return { scale: parseScale(s.value) ?? 1, format: f.value as AssetItem['format'], suffix: x.value }; });
+    return DEFAULT_ITEMS.map((i) => ({ scale: parseScale(i.scale) ?? 1, format: i.format as AssetItem['format'], suffix: i.suffix }));
   }
 
   private async exportNow(): Promise<void> {
@@ -86,6 +100,12 @@ export class AssetExportPanel {
   private sync(): void {
     const assets = this.engine.exportAssets;
     for (const id of [...this.picked]) if (!assets.some((a) => a.id === id)) this.picked.delete(id);
+    const first = assets.find((a) => this.picked.has(a.id)), want = first?.items?.length ? first.items : DEFAULT_ITEMS;
+    if (JSON.stringify(this.read()) !== JSON.stringify(want)) this.fillRows(want);
+    const none = !this.picked.size;
+    for (const c of Array.from(this.rows.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button'))) setDisabled(c, none);
+    setDisabled(this.addBtn, none);
+    setTitle(this.rows, none ? 'Pick an asset to edit its export settings' : this.picked.size > 1 ? 'Edits apply to every picked asset' : '');
     patchList<ExportAsset>(this.grid, assets, {
       key: (a) => a.id,
       create: (a) => { const b = el('<button class="cv-assetp-tile" type="button" role="option"><canvas width="160" height="160"></canvas><span class="cv-assetp-name"></span></button>'); b.dataset.asset = a.id; this.fill(b, a); return b; },

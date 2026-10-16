@@ -125,10 +125,10 @@ import { Tabs } from './ui/tabs';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
 import { toast } from './ui/toast';
-import { activateDocument, isProofing, onColorChange } from './engine/color-management';
+import { activateDocument, isProofing, onColorChange, profileList, refreshProfiles, type ProfileInfo } from './engine/color-management';
 import { invalidateLayers } from './engine/render';
 import { installColorBackend } from './io/color-ops';
-import { assignProfileDialog, colorSettingsDialog, convertToProfileDialog, proofSetupDialog, toggleProofColors } from './ui/color-settings';
+import { assignProfileDialog, colorSettingsDialog, convertToProfileDialog, proofPreset, proofPresetOn, proofSetupDialog, toggleProofColors } from './ui/color-settings';
 import { slotTool, toolGroups } from './ui/tool-groups';
 import { Viewport } from './engine/viewport';
 import { VERSION } from './version';
@@ -761,6 +761,8 @@ export function startApp(): void {
   async function projectZip(): Promise<Blob | null> {
     const p = engine.current;
     if (!p) return null;
+    const bad = await links.unreadable(p);
+    if (bad.length) { toast(`Could not read the linked ${bad.length === 1 ? 'file' : 'files'} ${bad.join(', ')}. Update, relink or embed ${bad.length === 1 ? 'it' : 'them'} first.`, 'error'); return null; }
     const { manifest, files } = serialize(p);
     return zipFiles([{ name: 'manifest.json', blob: new Blob([JSON.stringify(manifest)], { type: 'application/json' }) }, ...files.map((f) => ({ name: `images/${f.name}`, blob: f.blob }))]);
   }
@@ -782,6 +784,8 @@ export function startApp(): void {
     return engine.task(async () => {
       const revision = p.history.revision;
       try {
+        const bad = await links.unreadable(p);
+        if (bad.length) { toast(`Could not read the linked ${bad.length === 1 ? 'file' : 'files'} ${bad.join(', ')}. Update, relink or embed ${bad.length === 1 ? 'it' : 'them'} first.`, 'error'); return false; }
         const { manifest, files } = serialize(p);
         const res = await api.save(target, manifest, files, target === p.libraryName ? p.libraryVersion ?? '' : '');
         if (p.history.revision === revision) engine.markSaved(p, res.name, res.name);
@@ -1567,6 +1571,9 @@ export function startApp(): void {
     { id: 'assign-profile', label: 'Assign Profile...', enabled: has, run: () => void assignProfileDialog(engine) },
     { id: 'convert-to-profile', label: 'Convert to Profile...', enabled: has, run: () => void convertToProfileDialog(engine) },
     { id: 'proof-setup', label: 'Customize...', enabled: has, run: () => void proofSetupDialog(engine) },
+    { id: 'proof-working-cmyk', label: 'Working CMYK', enabled: has, checked: () => proofPresetOn(engine, 'working'), run: () => void proofPreset(engine, 'working') },
+    { id: 'proof-monitor-rgb', label: 'Monitor RGB', enabled: has, checked: () => proofPresetOn(engine, 'monitor'), run: () => void proofPreset(engine, 'monitor') },
+    ...Array.from({ length: 12 }, (_, i) => { const dev = (): ProfileInfo | undefined => profileList().filter((p) => p.space === 'CMYK')[i]; return { id: `proof-profile-${i}`, label: () => dev()?.name ?? '', enabled: () => has() && !!dev(), checked: () => { const d = dev(); return !!d && proofPresetOn(engine, d); }, run: () => { const d = dev(); if (d) void proofPreset(engine, d); } }; }),
     { id: 'ink-manager', label: 'Ink Manager...', group: 'Window', description: 'Opens the Ink Manager to choose which process and spot inks print, convert spot inks to process, or alias one spot ink to another; the choices drive separations, Separations Preview and PDF export.', enabled: has, run: () => openInkManager() },
     { id: 'proof-colors', label: 'Proof Colors', enabled: has, checked: () => isProofing(), run: () => void toggleProofColors(engine) },
     { id: 'send-nodemode', label: 'Send to NodeMode', enabled: has, run: () => void engine.task(async () => { const p = engine.current; if (!p) return; try { const r = exportRegion(p, p.activeArtboard); const b = await exportRaster(p, { region: r, scale: 2, format: 'png', quality: 1, transparent: true }); const res = await api.sendToNodeMode(loadPrefs().nodemodeUrl, p.name, [{ name: p.name, kind: 'image', width: Math.round(r.w * 2), height: Math.round(r.h * 2) }], [{ name: '0.png', blob: b }]); toast(res.placed ? 'Sent to NodeMode: the artwork is on its canvas.' : res.detail ?? 'Uploaded to NodeMode.'); } catch (err) { toast(message(err), 'error'); } }) },
@@ -1948,7 +1955,7 @@ export function startApp(): void {
     { label: 'Type', items: () => ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', ...(prefs.showGenerative ? ['retype'] : []), '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
-    { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', { label: 'Proof Setup', items: ['proof-setup'] }, 'proof-colors', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
+    { label: 'View', items: () => ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', { label: 'Proof Setup', items: ['proof-setup', '-', 'proof-working-cmyk', ...profileList().filter((p) => p.space === 'CMYK').slice(0, 12).map((_, i) => `proof-profile-${i}`), 'proof-monitor-rgb'] }, 'proof-colors', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
     { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'ink-manager', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype', 'text-to-vector'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
@@ -1964,7 +1971,7 @@ export function startApp(): void {
     for (const ev of ['active', 'doc', 'selection', 'history', 'tool'] as const) engine.on(ev, () => native.refresh());
     engine.on('projects', () => { void native.build().catch(() => undefined); });
   }
-  contextMenu.setItems(['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-in-place', '-', 'group', 'ungroup', 'ungroup-all', 'isolate', '-', { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', 'transform-each', '-', 'reset-bounding-box'] }, { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', 'send-to-layer'] }, { label: 'Select', items: ['select-above', 'select-below'] }, '-', 'make-clip', 'release-clip', 'compound-make', 'create-outlines', 'outline-stroke', 'expand-appearance', '-', 'collect-layer', 'new-symbol']);
+  contextMenu.setItems(['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-in-place', '-', 'group', 'ungroup', 'ungroup-all', 'isolate', '-', { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', 'transform-each', '-', 'reset-bounding-box'] }, { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', 'send-to-layer'] }, { label: 'Select', items: ['select-above', 'select-below'] }, '-', 'make-clip', 'release-clip', 'compound-make', 'create-outlines', 'outline-stroke', 'expand-appearance', '-', 'collect-layer', 'new-symbol', { label: 'Collect for Export', items: ['collect-single', 'collect-multiple'] }]);
   stageEl.addEventListener('contextmenu', (e) => {
     const p = engine.current;
     if (!p || anyDialogOpen()) return;
@@ -2122,6 +2129,7 @@ export function startApp(): void {
 
   onFontsLoaded(() => { fontsChanged(); engine.reflowAll(); engine.emit('options', null); });
   installColorBackend();
+  void refreshProfiles();
   onColorChange(() => { invalidateLayers(); engine.emit('colors', null); engine.emit('render', null); });
   for (const ev of ['doc', 'active', 'projects'] as const) engine.on(ev, () => activateDocument(engine.doc));
   activateDocument(engine.doc);

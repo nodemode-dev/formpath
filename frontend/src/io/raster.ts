@@ -239,7 +239,8 @@ export async function exportRaster(p: Project, o: RasterOpts): Promise<Blob> {
 export interface ScreenItem { artboard: number; scale: number; format: RasterFormat | 'svg' | 'pdf'; suffix: string }
 export interface AssetItem { scale: number; format: RasterFormat | 'svg' | 'pdf'; suffix: string }
 
-export async function exportAssetsZip(p: Project, assets: Array<{ name: string; ids: string[] }>, items: AssetItem[], pdf: (q: Project) => Promise<Blob>): Promise<Blob | null> {
+export async function exportAssetsZip(p: Project, assets: Array<{ name: string; ids: string[]; items?: Array<{ scale: string; format: string; suffix: string }> }>, items: AssetItem[], pdf: (q: Project) => Promise<Blob>): Promise<Blob | null> {
+  const own = (a: { items?: Array<{ scale: string; format: string; suffix: string }> }): AssetItem[] => (a.items?.length ? a.items.map((i) => ({ scale: parseScale(i.scale) ?? 1, format: i.format as AssetItem['format'], suffix: i.suffix })) : items);
   const files: Array<{ name: string; blob: Blob }> = [], used = new Set<string>();
   const safe = (s: string): string => s.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Asset';
   for (const a of assets) {
@@ -250,7 +251,7 @@ export async function exportAssetsZip(p: Project, assets: Array<{ name: string; 
     let stem = safe(a.name), k = 1;
     while (used.has(stem)) stem = `${safe(a.name)}-${++k}`;
     used.add(stem);
-    for (const it of items) {
+    for (const it of own(a)) {
       const name = `${stem}${it.suffix}`;
       if (it.format === 'svg') files.push({ name: `${name}.svg`, blob: new Blob([await exportSvg(p, { artboard: 'art', ids: nodes.map((n) => n.id), outlineText: false, preserve: false, precision: 3 })], { type: 'image/svg+xml' }) });
       else if (it.format === 'pdf') {

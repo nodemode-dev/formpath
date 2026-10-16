@@ -265,7 +265,8 @@ export class LinksPanel {
 
   private fill(r: HTMLElement, n: ImageNode, sel: Set<string>): void {
     const st = this.links.state(n);
-    setText(q(r, '.cv-linkp-name'), n.linked?.name ?? n.name ?? n.link ?? n.src);
+    const l = n.linked, crop = l?.crop && l.crop !== 'bounding' ? `, ${l.crop} box` : '';
+    setText(q(r, '.cv-linkp-name'), `${l?.name ?? n.name ?? n.link ?? n.src}${l?.page ? ` (page ${l.page}${crop})` : ''}`);
     setText(q(r, '.cv-linkp-state'), STATE[st]);
     setHtml(q(r, '.cv-linkp-flag'), FLAG[st] ? icon(FLAG[st], 12) : '', FLAG[st]);
     setTitle(r, `${n.linked?.path ?? n.linked?.name ?? 'Embedded in the document'} · ${n.w} × ${n.h} px${st === 'modified' ? ' · changed on disk' : st === 'missing' ? ' · the file is missing' : ''}`);

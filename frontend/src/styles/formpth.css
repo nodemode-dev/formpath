@@ -605,6 +605,14 @@
 .cv-fxg-list { height: 360px; overflow-y: auto; padding-right: var(--space-1); }
 .cv-fxg-cat { margin: var(--space-2) 0 var(--space-1); color: var(--text-secondary); font-size: var(--fs-12); font-weight: 600; }
 .cv-fxg-cat:first-child { margin-top: 0; }
+.cv-fxg-cat { display: block; width: 100%; padding: var(--space-1) 0; border: 0; border-bottom: 1px solid var(--line-2); background: transparent; text-align: left; cursor: pointer; }
+.cv-fxg-cat:hover { color: var(--text-primary); }
+.cv-fxg-stack { display: grid; gap: 2px; }
+.cv-fxg-layer { display: flex; align-items: center; gap: var(--space-1); border: 1px solid transparent; border-radius: var(--radius-sm); }
+.cv-fxg-layer.is-active { border-color: var(--accent-color); background: var(--accent-color-dim); }
+.cv-fxg-layer-pick { flex: 1; min-width: 0; padding: 4px var(--space-2); border: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-12); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-fxg-layer-del { width: 22px; height: 22px; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.cv-fxg-layer-del:hover { color: var(--text-primary); }
 .cv-fxg-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-1); }
 .cv-fxg-tile { display: grid; grid-template-rows: 56px auto; justify-items: center; gap: 2px; min-width: 0; padding: 4px 2px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-11); cursor: pointer; }
 .cv-fxg-tile:hover { background: var(--bg-hover); color: var(--text-primary); }
