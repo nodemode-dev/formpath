@@ -125,6 +125,37 @@ export function lutRgbToCmyk(l: Lut, r: number, g: number, b: number): Color {
   return { kind: 'cmyk', c: p(c), m: p(m), y: p(y), k: p(k) };
 }
 
+export function rgbToCmykBytes(l: Lut): (r: number, g: number, b: number, out: Uint8Array, at: number) => void {
+  const n = l.n, d = l.data, top = n - 2, sc = (n - 1) / 255, s1 = n * 4, s0 = n * s1;
+  let pr = -1, pg = -1, pb = -1, c = 0, m = 0, y = 0, k = 0;
+  return (r, g, b, out, at) => {
+    if (r !== pr || g !== pg || b !== pb) {
+      pr = r; pg = g; pb = b;
+      const fr = r * sc, fg = g * sc, fb = b * sc;
+      const ir = fr > top ? top : fr | 0, ig = fg > top ? top : fg | 0, ib = fb > top ? top : fb | 0;
+      const tr = fr - ir, tg = fg - ig, tb = fb - ib, wr = 1 - tr, wg = 1 - tg, wb = 1 - tb;
+      const w0 = wr * wg * wb, w1 = wr * wg * tb, w2 = wr * tg * wb, w3 = wr * tg * tb, w4 = tr * wg * wb, w5 = tr * wg * tb, w6 = tr * tg * wb, w7 = tr * tg * tb;
+      const p = ir * s0 + ig * s1 + ib * 4, o1 = p + 4, o2 = p + s1, o3 = p + s1 + 4, o4 = p + s0, o5 = p + s0 + 4, o6 = p + s0 + s1, o7 = p + s0 + s1 + 4;
+      c = Math.round(d[p] * w0 + d[o1] * w1 + d[o2] * w2 + d[o3] * w3 + d[o4] * w4 + d[o5] * w5 + d[o6] * w6 + d[o7] * w7);
+      m = Math.round(d[p + 1] * w0 + d[o1 + 1] * w1 + d[o2 + 1] * w2 + d[o3 + 1] * w3 + d[o4 + 1] * w4 + d[o5 + 1] * w5 + d[o6 + 1] * w6 + d[o7 + 1] * w7);
+      y = Math.round(d[p + 2] * w0 + d[o1 + 2] * w1 + d[o2 + 2] * w2 + d[o3 + 2] * w3 + d[o4 + 2] * w4 + d[o5 + 2] * w5 + d[o6 + 2] * w6 + d[o7 + 2] * w7);
+      k = Math.round(d[p + 3] * w0 + d[o1 + 3] * w1 + d[o2 + 3] * w2 + d[o3 + 3] * w3 + d[o4 + 3] * w4 + d[o5 + 3] * w5 + d[o6 + 3] * w6 + d[o7 + 3] * w7);
+    }
+    out[at] = c; out[at + 1] = m; out[at + 2] = y; out[at + 3] = k;
+  };
+}
+
+export async function printCmykLuts(doc: Doc): Promise<{ profile: ProfileInfo; lut: Lut } | null> {
+  if (!backend) return null;
+  try {
+    if (!profiles.length) await refreshProfiles();
+    const s = resolveSettings(doc.cm), cmyk = s.cmyk ?? genericCmyk();
+    if (!s.rgb || !cmyk) return null;
+    const luts = await cmykLuts(s.rgb, cmyk, s.intent, s.bpc);
+    return { profile: cmyk, lut: luts.r2c };
+  } catch { return null; }
+}
+
 let lastC = -1, lastM = -1, lastY = -1, lastK = -1, lastRgb: RGB = { r: 255, g: 255, b: 255 };
 export function cmToRgb(c: { c: number; m: number; y: number; k: number }): RGB | null {
   if (previewRender && proofOn && preserveLut) return lutCmykToRgb(preserveLut, c.c, c.m, c.y, c.k);

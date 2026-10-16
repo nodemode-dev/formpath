@@ -1,7 +1,7 @@
 import { rgbToCmyk } from '../engine/paint';
 
 export type TiffCompression = 'none' | 'packbits' | 'lzw' | 'deflate';
-export interface TiffOpts { ppi: number; alpha: boolean; cmyk?: boolean; compression?: TiffCompression; title?: string }
+export interface TiffOpts { ppi: number; alpha: boolean; cmyk?: boolean; compression?: TiffCompression; title?: string; icc?: Uint8Array | null; convert?: (r: number, g: number, b: number, out: Uint8Array, at: number) => void }
 
 function packBits(src: Uint8Array): Uint8Array {
   const out: number[] = [];
@@ -65,8 +65,11 @@ export async function encodeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number
     for (let y = y0; y < y0 + rows; y++) for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
       if (cmyk) {
-        const k = rgbToCmyk(rgba[i], rgba[i + 1], rgba[i + 2]);
-        if (k.kind === 'cmyk') { raw[q++] = Math.round(k.c * 2.55); raw[q++] = Math.round(k.m * 2.55); raw[q++] = Math.round(k.y * 2.55); raw[q++] = Math.round(k.k * 2.55); }
+        if (o.convert) { o.convert(rgba[i], rgba[i + 1], rgba[i + 2], raw, q); q += 4; }
+        else {
+          const k = rgbToCmyk(rgba[i], rgba[i + 1], rgba[i + 2]);
+          if (k.kind === 'cmyk') { raw[q++] = Math.round(k.c * 2.55); raw[q++] = Math.round(k.m * 2.55); raw[q++] = Math.round(k.y * 2.55); raw[q++] = Math.round(k.k * 2.55); }
+        }
       } else { raw[q++] = rgba[i]; raw[q++] = rgba[i + 1]; raw[q++] = rgba[i + 2]; }
       if (o.alpha) raw[q++] = rgba[i + 3];
     }
@@ -75,11 +78,12 @@ export async function encodeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number
   const enc = new TextEncoder(), software = enc.encode('formpth\0'), ppi = Math.max(1, Math.round(o.ppi));
   const tags: Array<[number, number, number, number | number[]]> = [];
   const n = strips.length;
-  const entries = 13 + (o.alpha ? 1 : 0) + (cmyk ? 1 : 0);
+  const icc = o.icc && o.icc.length ? o.icc : null;
+  const entries = 13 + (o.alpha ? 1 : 0) + (cmyk ? 1 : 0) + (icc ? 1 : 0);
   const ifdSize = 2 + entries * 12 + 4;
   let extra = 8 + ifdSize;
   const offsetOf = (len: number): number => { const at = extra; extra += len + (len & 1); return at; };
-  const bpsAt = offsetOf(spp * 2), xresAt = offsetOf(8), yresAt = offsetOf(8), swAt = offsetOf(software.length);
+  const bpsAt = offsetOf(spp * 2), xresAt = offsetOf(8), yresAt = offsetOf(8), swAt = offsetOf(software.length), iccAt = icc ? offsetOf(icc.length) : 0;
   const countsAt = n > 1 ? offsetOf(n * 4) : 0, offsetsAt = n > 1 ? offsetOf(n * 4) : 0;
   const dataStart = extra;
   const stripOffsets: number[] = [];
@@ -93,6 +97,7 @@ export async function encodeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number
   tags.push([282, 5, 1, xresAt], [283, 5, 1, yresAt], [296, 3, 1, 2], [305, 2, software.length, swAt]);
   if (cmyk) tags.push([332, 3, 1, 1]);
   if (o.alpha) tags.push([338, 3, 1, 2]);
+  if (icc) tags.push([34675, 7, icc.length, iccAt]);
   tags.sort((a, b) => a[0] - b[0]);
   dv.setUint16(at(8), tags.length, true);
   tags.forEach((t, i) => {
@@ -106,6 +111,7 @@ export async function encodeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number
   dv.setUint32(xresAt, ppi, true); dv.setUint32(xresAt + 4, 1, true);
   dv.setUint32(yresAt, ppi, true); dv.setUint32(yresAt + 4, 1, true);
   buf.set(software, swAt);
+  if (icc) buf.set(icc, iccAt);
   if (n > 1) strips.forEach((s, i) => { dv.setUint32(countsAt + i * 4, s.length, true); dv.setUint32(offsetsAt + i * 4, stripOffsets[i], true); });
   strips.forEach((s, i) => buf.set(s, stripOffsets[i]));
   return new Blob([buf], { type: 'image/tiff' });

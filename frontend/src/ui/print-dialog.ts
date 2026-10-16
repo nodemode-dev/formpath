@@ -1,5 +1,6 @@
 import type { Project } from '../engine';
 import { profileList, refreshProfiles } from '../engine/color-management';
+import { platesOf } from '../engine/inks';
 import { bleedFor, DEFAULT_MARKS, pageGeometry, type PdfMarks } from '../io/pdf-marks';
 import { DEFAULT_PRINT, MAX_SHEETS, PAPERS, scaleFor, sheetFor, tilesFor, type PaperId, type PrintSettings } from '../io/print-layout';
 import { renderRegion } from '../io/raster';
@@ -42,6 +43,7 @@ export class PrintDialog extends Dialog {
   private readonly handling = selectOf([['printer', 'Let the printer determine colors'], ['formpth', 'Let formpth determine colors']]);
   private readonly profile = selectOf([['', 'Choose a profile']]);
   private readonly intent = selectOf([['0', 'Perceptual'], ['1', 'Relative Colorimetric'], ['2', 'Saturation'], ['3', 'Absolute Colorimetric']]);
+  private readonly inkBtn = el<HTMLButtonElement>('<button class="cv-btn cv-btn-ghost" type="button">Ink Manager...</button>');
   private readonly printBtn: HTMLButtonElement;
   private readonly panesList: HTMLElement[] = [];
   private readonly navBtns: HTMLButtonElement[] = [];
@@ -52,7 +54,7 @@ export class PrintDialog extends Dialog {
   private last: PrintSettings = { ...DEFAULT_PRINT, marks: { ...DEFAULT_MARKS }, custom: { ...DEFAULT_PRINT.custom }, range: [0] };
   private resolve: ((s: PrintSettings | null) => void) | null = null;
 
-  constructor() {
+  constructor(private readonly openInks: (after: () => void) => void = () => undefined) {
     super('Print', 780);
     q<HTMLElement>(this.scrim, '.cv-dialog').classList.add('cv-print-dialog');
     this.range.title = 'All, Current, or artboard numbers such as 1-3,5';
@@ -78,9 +80,10 @@ export class PrintDialog extends Dialog {
       pair('Top, Bottom', this.bleedTop, this.bleedBottom), pair('Left, Right', this.bleedLeft, this.bleedRight),
     ]);
     pane('output', [
-      row('Output', this.output), row('Plate resolution', this.plateDpi),
-      el('<p class="cv-note cv-print-note">Composite prints the artwork in colour. Separations print one grayscale page per ink, with blank plates left out.</p>'),
+      row('Output', this.output), row('Plate resolution', this.plateDpi), row('Inks', this.inkBtn),
+      el('<p class="cv-note cv-print-note">Composite prints the artwork in colour. Separations print one page per ink as vector art, with blank plates left out. Raster images and effects are printed as gray pictures on each plate.</p>'),
     ]);
+    this.inkBtn.addEventListener('click', () => this.openInks(() => this.update()));
     pane('color', [
       row('Color handling', this.handling), row('Printer profile', this.profile), row('Rendering intent', this.intent),
       el('<p class="cv-note cv-print-note">With formpth in charge, colours are converted to the profile you choose and the printer driver must not convert them again.</p>'),
@@ -206,7 +209,7 @@ export class PrintDialog extends Dialog {
     if (s) {
       const geo = this.geometry(s);
       if (geo) {
-        const sheet = sheetFor(s, geo.w, geo.h), tiles = tilesFor(s, sheet, geo.w, geo.h).length, boards = s.range.length, plates = sep ? 4 : 1;
+        const sheet = sheetFor(s, geo.w, geo.h), tiles = tilesFor(s, sheet, geo.w, geo.h).length, boards = s.range.length, plates = sep ? Math.max(1, platesOf(p.doc, true).length) : 1;
         const pages = tiles * boards * s.copies * (sep ? plates : 1);
         const paper = s.media === 'custom' ? 'Custom' : (PAPERS.find((x) => x[0] === s.media)?.[1].split(' (')[0] ?? '');
         const pct = Math.round(scaleFor(s, sheet, geo.w, geo.h) * 1000) / 10;

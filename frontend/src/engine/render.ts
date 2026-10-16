@@ -3,6 +3,7 @@ import { childrenOf } from './doc';
 import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, rayTraceImage, strokeOutline, textureArt, textureTile, threeDFaces, TRACE_ID, type RasterFx } from './effects';
 import { emptyRect, inflate, isEmptyRect, pathBounds, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
+import { plateValue } from './inks';
 import { meshQuads } from './mesh';
 import { rayTraced, textureOf } from './threed';
 import { cssColor, freeformPixels, gray, gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from './paint';
@@ -33,14 +34,7 @@ export interface RenderContext {
 function plateGray(rc: RenderContext, raw: Paint, c: Color): Color {
   const s = rc.separation;
   if (!s) return c;
-  const sw = raw.type === 'color' && raw.swatch ? rc.doc.swatches.find((x) => x.id === raw.swatch) : undefined;
-  if (s === 'C' || s === 'M' || s === 'Y' || s === 'K') {
-    if (sw?.spot) return gray(0);
-    const k = toCmyk(c);
-    return k.kind === 'cmyk' ? gray(s === 'C' ? k.c : s === 'M' ? k.m : s === 'Y' ? k.y : k.k) : gray(0);
-  }
-  if (!sw?.spot || sw.name !== s) return gray(0);
-  return gray(raw.type === 'color' ? raw.tint ?? 100 : 100);
+  return gray(plateValue(rc.doc, raw, c, s));
 }
 
 const plateBlend = (rc: RenderContext, it: { overprint?: boolean; blend: BlendMode }): BlendMode => (rc.overprint && it.overprint && it.blend === 'normal' ? 'multiply' : it.blend);
@@ -159,7 +153,7 @@ const patternTiles = new Map<string, { key: string; def: PatternDef; canvas: HTM
 function patternStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, id: string, xf: Mat, alpha: number): Style | null {
   const def = rc.doc.patterns.find((p) => p.id === id);
   if (!def || def.tile.w <= 0 || def.tile.h <= 0) return null;
-  const scale = Math.min(8, Math.max(1, rc.scale * (rc.pixelRatio ?? 1)));
+  const scale = Math.min(8, Math.max(1, rc.scale * (rc.pixelRatio ?? 1) * (Math.sqrt(Math.abs(xf[0] * xf[3] - xf[1] * xf[2])) || 1)));
   const key = `${def.id}:${scale.toFixed(2)}`;
   let tile = patternTiles.get(def.id);
   const stamp = key;

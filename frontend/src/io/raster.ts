@@ -8,6 +8,8 @@ import type { Color, Engine, Project, Rect, VNode } from '../engine';
 import { exportRegion, exportSvg } from './svg';
 import { zipFiles } from './zip';
 import { encodeTiff, type TiffCompression } from './tiff';
+import { outputProfileBytes, printCmykLuts, rgbToCmykBytes, type Lut } from '../engine/color-management';
+import { embedIcc, type IccPayload } from './icc-embed';
 
 export type RasterFormat = 'png' | 'jpg' | 'webp' | 'tiff';
 export interface TiffChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
@@ -20,7 +22,8 @@ export interface DitherOpts {
   palette?: Color[];
   threshold?: number;
 }
-export interface RasterOpts { region: Rect; scale: number; format: RasterFormat; quality: number; transparent: boolean; bg?: Color | null; only?: VNode[]; dither?: DitherOpts; tiff?: Partial<TiffChoice> }
+export interface RasterOpts { region: Rect; scale: number; format: RasterFormat; quality: number; transparent: boolean; bg?: Color | null; only?: VNode[]; dither?: DitherOpts; tiff?: Partial<TiffChoice>; icc?: boolean; separation?: string | null }
+export interface RasterIcc { profile: IccPayload | null; lut: Lut | null }
 
 export const RASTER_MAX_SIDE = 16384;
 const MAX_SIDE = RASTER_MAX_SIDE;
@@ -106,7 +109,7 @@ export async function renderRegion(p: Project, o: Omit<RasterOpts, 'format' | 'q
   if (!g) throw new Error('This browser could not make a drawing surface for the export.');
   if (!o.transparent) { g.fillStyle = o.bg ? hex(o.bg) : '#ffffff'; g.fillRect(0, 0, w, h); }
   g.setTransform(k, 0, 0, k, -o.region.x * k, -o.region.y * k);
-  const rc: RenderContext = { doc: p.doc, scale: k, outline: false, assets: (key) => p.bitmaps.get(key) ?? null, printing: true };
+  const rc: RenderContext = { doc: p.doc, scale: k, outline: false, assets: (key) => p.bitmaps.get(key) ?? null, printing: true, separation: o.separation ?? null };
   for (const n of o.only ?? p.doc.layers) renderNode(g, n, rc);
   if (o.dither) ditherCanvas(c, o.dither);
   return c;
@@ -132,20 +135,34 @@ export async function bakeTraced(engine: Engine, ids?: string[]): Promise<Map<st
   return out;
 }
 
-export async function canvasBlob(c: HTMLCanvasElement, format: RasterFormat, quality: number, tiff?: Partial<TiffChoice>, transparent = false): Promise<Blob> {
+export async function canvasBlob(c: HTMLCanvasElement, format: RasterFormat, quality: number, tiff?: Partial<TiffChoice>, transparent = false, icc?: RasterIcc | null): Promise<Blob> {
   if (format === 'tiff') {
     const g = c.getContext('2d');
     if (!g) throw new Error('This browser could not read the drawing surface for the TIFF export.');
     const px = g.getImageData(0, 0, c.width, c.height);
-    return encodeTiff(px.data, c.width, c.height, { ppi: tiff?.ppi ?? 72, alpha: transparent, cmyk: tiff?.cmyk, compression: tiff?.compression ?? 'lzw' });
+    return encodeTiff(px.data, c.width, c.height, { ppi: tiff?.ppi ?? 72, alpha: transparent, cmyk: tiff?.cmyk, compression: tiff?.compression ?? 'lzw', icc: icc?.profile?.bytes ?? null, convert: tiff?.cmyk && icc?.lut ? rgbToCmykBytes(icc.lut) : undefined });
   }
   const type = format === 'jpg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
-  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error(`This browser cannot write ${format.toUpperCase()} files.`))), type, quality));
+  const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error(`This browser cannot write ${format.toUpperCase()} files.`))), type, quality));
+  return icc?.profile ? embedIcc(blob, format, icc.profile) : blob;
+}
+
+export async function rasterIcc(p: Project, cmyk: boolean): Promise<RasterIcc | null> {
+  if (cmyk) {
+    if (!p.doc.cm?.cmyk) return null;
+    const [lut, out] = await Promise.all([printCmykLuts(p.doc), outputProfileBytes(p.doc, 'CMYK')]);
+    return lut && out ? { profile: out, lut: lut.lut } : null;
+  }
+  const out = await outputProfileBytes(p.doc, 'RGB');
+  return out ? { profile: out, lut: null } : null;
 }
 
 export async function exportRaster(p: Project, o: RasterOpts): Promise<Blob> {
   const c = await renderRegion(p, { ...o, transparent: o.transparent && o.format !== 'jpg' });
-  return canvasBlob(c, o.format, o.quality, o.tiff ? { ...o.tiff, ppi: o.tiff.ppi ?? Math.round(72 * o.scale) } : { ppi: Math.round(72 * o.scale) }, o.transparent);
+  const want = o.icc ?? !!p.doc.cm, cmykTiff = o.format === 'tiff' && !!o.tiff?.cmyk;
+  const found = want || cmykTiff ? await rasterIcc(p, cmykTiff) : null;
+  const icc = found && !want ? { profile: null, lut: found.lut } : found;
+  return canvasBlob(c, o.format, o.quality, o.tiff ? { ...o.tiff, ppi: o.tiff.ppi ?? Math.round(72 * o.scale) } : { ppi: Math.round(72 * o.scale) }, o.transparent, icc);
 }
 
 export interface ScreenItem { artboard: number; scale: number; format: RasterFormat | 'svg' | 'pdf'; suffix: string }

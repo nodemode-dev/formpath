@@ -275,10 +275,12 @@ export interface Doc {
   linkPreviews?: boolean;
   bleed?: { t: number; b: number; l: number; r: number };
   cm?: ColorSettings;
+  inks?: InkSettings;
 }
 
 export interface ProfileRef { id: string; name: string }
 export interface ProofSetup { device?: ProfileRef; preserve?: boolean; paper?: boolean; blackInk?: boolean }
+export interface InkSettings { off?: string[]; process?: string[]; alias?: Record<string, string>; allSpotsToProcess?: boolean }
 export interface ColorSettings { rgb?: ProfileRef; cmyk?: ProfileRef; intent?: 0 | 1 | 2 | 3; bpc?: boolean; proof?: ProofSetup }
 
 export type VariableKind = 'text' | 'image' | 'visibility' | 'graph';
