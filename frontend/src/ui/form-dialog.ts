@@ -118,11 +118,16 @@ export class FormDialog extends Dialog {
         this.field(f.label, t);
         this.readers.push(() => [f.key, t.value]);
       } else {
-        const c = el<HTMLInputElement>('<input class="cv-color" type="color">');
-        c.value = f.value;
-        c.addEventListener('input', () => this.update());
-        this.field(f.label, c);
-        this.readers.push(() => [f.key, c.value]);
+        const box = el('<span class="cv-form-color"><input class="cv-color" type="color" aria-label="Pick a colour"><input class="cv-input" type="text" maxlength="7" spellcheck="false" aria-label="Hex colour"></span>');
+        const c = q<HTMLInputElement>(box, 'input[type="color"]'), t = q<HTMLInputElement>(box, 'input[type="text"]');
+        const norm = (s: string): string | null => { const m = /^#?([0-9a-f]{6})$/i.exec(s.trim()) ?? /^#?([0-9a-f]{3})$/i.exec(s.trim()); if (!m) return null; const h = m[1].length === 3 ? m[1].replace(/./g, '$&$&') : m[1]; return `#${h.toLowerCase()}`; };
+        c.value = norm(f.value) ?? '#000000';
+        t.value = c.value.toUpperCase();
+        c.addEventListener('input', () => { t.value = c.value.toUpperCase(); this.update(); });
+        t.addEventListener('input', () => { const v = norm(t.value); if (v) { c.value = v; this.update(); } });
+        t.addEventListener('blur', () => { t.value = c.value.toUpperCase(); });
+        this.field(f.label, box);
+        this.readers.push(() => [f.key, norm(t.value) ?? c.value]);
       }
     }
     this.okBtn.textContent = opts.ok ?? 'OK';

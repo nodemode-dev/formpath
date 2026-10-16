@@ -122,7 +122,8 @@ export class LayersPanel {
     setHtml(q(n, '.cv-lrow-disc'), r.container ? icon(r.open ? 'chevronDown' : 'chevronRight', 12) : '', `${r.container}:${r.open}`);
     const shaped = node.kind === 'group' && !!node.compoundShape;
     setHtml(q(n, '.cv-lrow-kind'), isLayer ? '' : icon(shaped ? 'pPathfinder' : KIND_ICON[node.kind] ?? 'vPen', 14), isLayer ? 'L' : shaped ? 'shape' : node.kind);
-    setText(q(n, '.cv-lrow-name'), nodeLabel(node));
+    const nameEl = q(n, '.cv-lrow-name');
+    if (!nameEl.firstElementChild) setText(nameEl, nodeLabel(node));
     setClass(n, 'is-layer', isLayer);
     setClass(n, 'is-hidden', !!node.hidden);
     setClass(n, 'is-locked', !!node.locked);
@@ -171,8 +172,8 @@ export class LayersPanel {
     this.rows.addEventListener('dblclick', (ev) => {
       const t = ev.target as HTMLElement, n = this.nodeOf(t);
       if (!n || t.closest('button')) return;
-      if (n.kind === 'layer') void this.layerOptions(n);
-      else this.rename(n, t.closest('.cv-lrow') as HTMLElement);
+      if (t.closest('.cv-lrow-name')) this.rename(n, t.closest('.cv-lrow') as HTMLElement);
+      else if (n.kind === 'layer') void this.layerOptions(n);
     });
     this.rows.addEventListener('contextmenu', (ev) => {
       const n = this.nodeOf(ev.target as HTMLElement);
@@ -188,12 +189,12 @@ export class LayersPanel {
       if (!n) return;
       const ids = n.kind === 'layer' ? (e.layerSelection.includes(n.id) ? e.layerSelection : [n.id]) : e.current?.selection.has(n.id) ? e.targetIds() : [n.id];
       this.drag = { ids, y0: ev.clientY, moving: false, target: null };
-      this.rows.setPointerCapture(ev.pointerId);
     });
     this.rows.addEventListener('pointermove', (ev) => {
       const d = this.drag;
       if (!d) return;
       if (!d.moving && Math.abs(ev.clientY - d.y0) < 5) return;
+      if (!d.moving) { try { this.rows.setPointerCapture(ev.pointerId); } catch { /* pointer already gone */ } }
       d.moving = true;
       const hit = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>('.cv-lrow');
       if (!hit || !hit.dataset.key || d.ids.includes(hit.dataset.key)) { d.target = null; this.line.classList.remove('is-shown'); return; }

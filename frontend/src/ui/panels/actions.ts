@@ -2,7 +2,7 @@ import type { Engine, RecordedOp } from '../../engine';
 import { newId } from '../../engine/doc';
 import { reflow } from '../../engine/flow';
 import { applyDataSetDoc, fileStem } from '../../engine/variables';
-import { api } from '../../io/api';
+import { api, engineStatus } from '../../io/api';
 import { projectBlob, renderAs, resolveImages } from '../../io/data-merge';
 import { zipFiles } from '../../io/zip';
 import type { Command, Commands } from '../commands';
@@ -133,14 +133,20 @@ export class ActionsPanel {
       if (!this.recording || this.playing || this.inflight > 0 || anyDialogOpen()) return;
       this.append({ kind: 'op', op: JSON.parse(JSON.stringify(op)) as RecordedOp, label: opLabel(op), on: true });
     };
+    engineStatus.subscribe((up) => {
+      if (up && this.offline) void this.load();
+      else if (!up && !this.offline) { this.offline = true; this.sync(); }
+    });
     void this.load();
+    void api.capabilities();
   }
 
   private async load(): Promise<void> {
     let fromLib: ActionSet[] = [];
+    this.offline = false;
     try { const r = await api.actionSets(); fromLib = r.sets.map((x) => validSet(x.set)).filter((s): s is ActionSet => !!s); }
-    catch { this.offline = true; }
-    this.sets = fromLib;
+    catch { this.offline = !(await api.capabilities()); if (!this.offline) { try { const r = await api.actionSets(); fromLib = r.sets.map((x) => validSet(x.set)).filter((s): s is ActionSet => !!s); } catch { this.offline = true; } } }
+    this.sets = [...fromLib, ...this.sets.filter((s) => !fromLib.some((x) => x.name === s.name))];
     let legacy: Array<{ name: string; steps: Array<{ id: string; label: string }> }> = [];
     try { const v = JSON.parse(localStorage.getItem('formpth.actions') ?? '[]'); if (Array.isArray(v)) legacy = v; } catch { }
     if (legacy.length && !this.offline) {

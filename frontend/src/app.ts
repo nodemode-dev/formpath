@@ -30,7 +30,7 @@ import { isLegacyAi, readAiLegacy } from './io/ai-legacy';
 import { importModel, MODEL_FILE, MODEL_PART } from './io/model';
 import { docFromManifest, serialize } from './io/project-io';
 import { PSD_NOTES } from './io/psd-layers';
-import { t } from './i18n';
+import { languageHooks, t } from './i18n';
 import { bakeTraced, canvasBlob, exportAssetsZip, exportForScreens, exportRaster, rasterExt, renderRegion, type AssetItem } from './io/raster';
 import { recovery, type RecoveryRecord } from './io/recovery';
 import { exportRegion, exportSvg, importSvg } from './io/svg';
@@ -2157,6 +2157,13 @@ export function startApp(): void {
   const keepSoon = (): void => { if (!keepTimer) keepTimer = window.setTimeout(() => { keepTimer = 0; void keepModified(); }, recoveryDelay); };
   engine.on('history', keepSoon);
   engine.on('projects', keepSoon);
+  languageHooks.beforeSwitch = async () => {
+    for (const p of engine.projects) {
+      try { const { manifest, files } = serialize(p); await recovery.keep({ id: p.id, name: p.name, savedAt: Date.now(), manifest, files, modified: p.modified, libraryName: p.libraryName }); }
+      catch (err) { errorLog.add('Recovery copy', message(err)); }
+    }
+    try { localStorage.setItem(SESSION, JSON.stringify({ order: engine.projects.map((p) => p.id), active: engine.current?.id ?? null })); sessionStorage.setItem('formpth.langswitch', '1'); } catch { }
+  };
   function reopen(r: RecoveryRecord, name: string): boolean {
     try {
       const byName = new Map(r.files.map((f) => [f.name, f.blob]));
@@ -2172,7 +2179,9 @@ export function startApp(): void {
   async function offerRecovery(): Promise<void> {
     const found = await recovery.list();
     if (!found.length) return;
-    if (loadPrefs().restoreSession && !engine.projects.length) {
+    let switched = false;
+    try { switched = sessionStorage.getItem('formpth.langswitch') === '1'; sessionStorage.removeItem('formpth.langswitch'); } catch { }
+    if ((switched || loadPrefs().restoreSession) && !engine.projects.length) {
       let meta: { order?: string[] } = {};
       try { meta = JSON.parse(localStorage.getItem(SESSION) ?? '{}') as typeof meta; } catch { }
       const at = (id: string): number => { const i = meta.order?.indexOf(id) ?? -1; return i < 0 ? 1e9 : i; };

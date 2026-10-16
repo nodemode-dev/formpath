@@ -167,7 +167,7 @@
 .cv-lrow-lock { height: 22px; }
 .cv-lrow-lock:empty:hover::after { content: ''; width: 8px; height: 8px; border: 1px solid var(--text-muted); border-radius: 2px; }
 .cv-lrow-kind { display: inline-grid; place-items: center; color: var(--text-muted); }
-.cv-lrow-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; }
+.cv-lrow-name { justify-self: start; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; }
 .cv-lrow-target::after { content: ''; width: 9px; height: 9px; border: 1.5px solid var(--text-muted); border-radius: 50%; }
 .cv-lrow.has-appearance .cv-lrow-target::after { box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 3px var(--text-muted); background: var(--text-muted); }
 .cv-lrow.is-selected .cv-lrow-target::after { border-color: var(--lc); }
@@ -179,6 +179,7 @@
 .cv-lrow.is-template .cv-lrow-name { font-style: italic; }
 .cv-lrow.is-clip .cv-lrow-name { text-decoration: underline dotted; text-underline-offset: 3px; }
 .cv-lrow .cv-layer-rename { height: 22px; font-size: 12.5px; }
+.cv-lrow-name:has(.cv-layer-rename) { justify-self: stretch; }
 
 .cv-colorp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .cv-colorp-head > .cv-props-field { flex: 0 1 140px; }

@@ -36,8 +36,23 @@ function form(fields: Record<string, string>, files: FilePart[] = [], key = 'fil
 }
 const json = async <T>(r: Response): Promise<T> => (await r.json()) as T;
 
+const engineWatch: { up: boolean | null; subs: Set<(up: boolean) => void>; timer: number } = { up: null, subs: new Set(), timer: 0 };
+function noteEngine(up: boolean): void {
+  if (engineWatch.up === up) return;
+  engineWatch.up = up;
+  for (const f of [...engineWatch.subs]) f(up);
+}
+export const engineStatus = {
+  get up(): boolean | null { return engineWatch.up; },
+  subscribe(f: (up: boolean) => void): () => void {
+    engineWatch.subs.add(f);
+    if (!engineWatch.timer && typeof window !== 'undefined') engineWatch.timer = window.setInterval(() => { if (!document.hidden) void api.capabilities(); }, 5000);
+    return () => { engineWatch.subs.delete(f); };
+  },
+};
+
 export const api = {
-  async capabilities(): Promise<Capabilities | null> { try { return await json<Capabilities>(await request('/capabilities')); } catch { return null; } },
+  async capabilities(): Promise<Capabilities | null> { try { const c = await json<Capabilities>(await request('/capabilities')); noteEngine(true); return c; } catch { noteEngine(false); return null; } },
   async library(): Promise<LibraryItem[]> { return json<LibraryItem[]>(await request('/projects')); },
   async save(name: string, manifest: object, files: FilePart[], base = ''): Promise<{ name: string; path: string; version?: string; conflict?: boolean; kept?: string }> {
     return json(await request('/projects/save', { method: 'POST', body: form({ name, manifest: JSON.stringify(manifest), base }, files) }));

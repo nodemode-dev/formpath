@@ -39,6 +39,7 @@ export class Dialog {
     openCount += 1;
     const preferred = focus ?? this.scrim.querySelector<HTMLElement>('input, select, .cv-btn-primary:not(:disabled)');
     preferred?.focus();
+    if (preferred instanceof HTMLInputElement && ['text', 'number', 'search'].includes(preferred.type)) preferred.select();
     if (!this.scrim.contains(document.activeElement)) q<HTMLElement>(this.scrim, '.cv-dialog').focus();
   }
 

@@ -27,9 +27,13 @@ function stored(): string {
   try { return localStorage.getItem(STORE) || 'en'; } catch { return 'en'; }
 }
 
+export const languageHooks: { beforeSwitch: (() => Promise<void>) | null } = { beforeSwitch: null };
+
 export function setLanguage(next: string): void {
   try { localStorage.setItem(STORE, next); } catch { return; }
-  window.location.reload();
+  const hook = languageHooks.beforeSwitch;
+  if (!hook) { window.location.reload(); return; }
+  void hook().catch(() => undefined).then(() => window.location.reload());
 }
 
 function plural(count: string, forms: string): string {

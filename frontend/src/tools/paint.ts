@@ -5,7 +5,7 @@ import { computeFaces, faceAt, faceContains, liveFaces } from '../engine/livepai
 import { insideFill, nearestOnPath, pathLength } from '../engine/geometry';
 import { area } from '../engine/kernel';
 import { envelopeOutline } from '../engine/live';
-import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, toRgb, withFirstFill } from '../engine/paint';
+import { cssColor, defaultGradient, firstFill, firstStroke, freeformColorAt, solid, toRgb, withFirstFill, withFirstStroke } from '../engine/paint';
 import type { Doc, Engine, FreeformPoint, Gradient, GroupNode, MeshNode, MeshPoint, PathData, Pt, VNode } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
@@ -142,9 +142,9 @@ registerTool({
     for (const id of e.targetIds()) {
       const n = findNode(doc, id);
       if (!n || n.kind === 'text' || n.kind === 'group' || n.kind === 'layer') continue;
-      const f = firstFill(n.ap);
-      const g: Gradient = f && f.paint.type === 'gradient' ? { ...f.paint.gradient, geom } : { ...(e.fillPaint.type === 'gradient' ? e.fillPaint.gradient : defaultGradient()), geom };
-      doc = replaceNode(doc, id, { ...n, ap: withFirstFill(n.ap, { type: 'gradient', gradient: g }) });
+      const onStroke = e.activeSlot === 'stroke', f = onStroke ? firstStroke(n.ap) : firstFill(n.ap), live = onStroke ? e.strokePaint : e.fillPaint;
+      const g: Gradient = f && f.paint.type === 'gradient' ? { ...f.paint.gradient, geom } : { ...(live.type === 'gradient' ? live.gradient : defaultGradient()), geom };
+      doc = replaceNode(doc, id, { ...n, ap: onStroke ? withFirstStroke(n.ap, { paint: { type: 'gradient', gradient: g } }) : withFirstFill(n.ap, { type: 'gradient', gradient: g }) });
     }
     e.dragTo(doc);
   },
@@ -158,6 +158,11 @@ registerTool({
     const pr = e.current;
     if (!pr) return;
     const n = findNode(pr.doc, e.targetIds()[0] ?? '');
+    if (e.activeSlot === 'stroke') {
+      const s = n && n.kind !== 'text' ? firstStroke(n.ap) : null;
+      if (s && s.paint.type !== 'gradient') e.setStroke({ paint: { type: 'gradient', gradient: e.strokePaint.type === 'gradient' ? e.strokePaint.gradient : defaultGradient() } });
+      return;
+    }
     const f = n ? firstFill(n.ap) : null;
     if (e.fillPaint.type === 'gradient' && e.fillPaint.gradient.kind === 'freeform') { e.setFreeform(e.fillPaint.gradient.mode ?? 'points'); FF.sel = -1; return; }
     if (!f || f.paint.type !== 'gradient') e.setFill({ type: 'gradient', gradient: e.fillPaint.type === 'gradient' ? e.fillPaint.gradient : defaultGradient() });

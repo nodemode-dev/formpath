@@ -300,7 +300,13 @@ export class Engine extends Emitter<EngineEvents> {
   fitSelection(): void { const p = this.current; if (!p) return; const b = this.selectionBounds(); if (!b) return; p.viewport.fitRect(b.x, b.y, Math.max(b.w, 1), Math.max(b.h, 1), 80); this.emit('viewport', null); }
   pan(dx: number, dy: number): void { const p = this.current; if (!p) return; p.viewport.panBy(dx, dy); this.emit('viewport', null); }
   setViewRotation(deg: number): void { const p = this.current; if (!p) return; p.viewport.rotation = ((deg % 360) + 360) % 360; this.emit('viewport', null); }
-  setView(patch: Partial<ViewFlags>): void { this.view = { ...this.view, ...patch }; cornerScale.on = this.view.scaleCorners; this.emit('options', null); this.emit('render', null); this.emit('overlay', null); }
+  private overprintBeforeSeparations: boolean | null = null;
+  setView(patch: Partial<ViewFlags>): void {
+    if ('separation' in patch && patch.separation !== this.view.separation) {
+      if (patch.separation && this.overprintBeforeSeparations === null) { this.overprintBeforeSeparations = this.view.overprintPreview; patch = { ...patch, overprintPreview: true }; }
+      else if (!patch.separation && this.overprintBeforeSeparations !== null) { patch = { ...patch, overprintPreview: this.overprintBeforeSeparations }; this.overprintBeforeSeparations = null; }
+    }
+    this.view = { ...this.view, ...patch }; cornerScale.on = this.view.scaleCorners; this.emit('options', null); this.emit('render', null); this.emit('overlay', null); }
   update(patch: Partial<ToolOptions>): void { this.options = { ...this.options, ...patch }; this.emit('options', null); }
   setTool(id: ToolId): void { if (this.tool === id) return; this.tool = id; this.emit('tool', null); this.emit('overlay', null); }
   setOverlay(o: Partial<Engine['overlay']>): void { this.overlay = { ...this.overlay, ...o }; this.emit('overlay', null); }
@@ -847,7 +853,16 @@ export class Engine extends Emitter<EngineEvents> {
     return l.id;
   }
   setLayer(id: string, patch: Partial<{ name: string; hidden: boolean; locked: boolean; printable: boolean; template: boolean; color: string; opacity: number }>): void {
-    this.edit('Layer Options', (d) => updateNodes(d, [id], (n) => (n.kind === 'layer' ? { ...n, ...patch } : { ...n, ...patch }) as VNode));
+    const keep = this.current ? [...this.current.selection] : [];
+    this.edit('Layer Options', (d) => {
+      const out = updateNodes(d, [id], (n) => (n.kind === 'layer' ? { ...n, ...patch } : { ...n, ...patch }) as VNode);
+      const at = patch.locked ? findNode(out, id) : null;
+      if (!at) return out;
+      const inside = new Set<string>();
+      const gather = (n: VNode): void => { for (const c of childrenOf(n) ?? []) { inside.add(c.id); gather(c); } };
+      gather(at);
+      return { doc: out, select: keep.filter((s) => !inside.has(s)) };
+    });
   }
   deleteLayer(id: string): void {
     const p = this.current; if (!p) return;
