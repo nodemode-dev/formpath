@@ -517,6 +517,10 @@ ask it questions.
   layers.
 - Object > Arrange (Ctrl+] and Ctrl+[ with Shift for front and back) and Send to Current Layer; Group (Ctrl+G),
   Ungroup, Lock (Ctrl+2), Unlock All, Hide (Ctrl+3), Show All.
+- The Layers panel menu has Duplicate Layer, Duplicate Selection, Merge Selected (the selected layers join the topmost
+  one), Flatten Artwork (everything into one layer; you choose whether hidden art is discarded), Release to Layers
+  (Sequence puts each object in its own layer; Build adds them cumulatively, for animation frames), Reverse Order,
+  New Sublayer and Layer Options. Each is one undo step.
 
 ## Live objects
 
@@ -633,6 +637,17 @@ ask it questions.
 - Export takes an artboard Range (All, Current, or numbers such as 1-3,5): PDF puts them in one file, SVG, raster and
   EPS export one file per artboard, collected in a zip. TIFF exports in RGB, with transparency, or CMYK, with PackBits,
   LZW or Deflate compression at the resolution you set.
+- Raster export also writes GIF and PNG-8 (choose Perceptual, Selective or Adaptive colour reduction, 2 to 256
+  colours, dither amount, interlacing, transparency and a matte colour for edge pixels), 24-bit BMP, and Photoshop
+  PSD with each top-level layer as a named pixel layer under a flattened composite. Every raster format takes a
+  resolution in ppi and an anti-aliasing choice: Art Optimized, Type Optimized (shapes smooth, plain type sharp) or
+  None.
+- File > Place takes PDF and .ai files (pick the page and Crop To Bounding Box, Art or Media; link it as a picture
+  that redraws when the file changes, or embed it as editable paths, type and images), Photoshop files (flattened, or
+  with layers converted to objects that keep name, opacity and blend mode) and TIFF. PSD and TIFF files also open
+  directly as documents.
+- Vector effects (Effect > Distort & Transform, Warp, Stylize > Round Corners and Scribble) work on groups, layers and
+  type as well as paths; the type stays editable underneath.
 - PDF can add trim marks, registration marks, colour bars and page information outside the trim, with the document's
   bleed (File > Document Setup) or a custom bleed; the PDF records its TrimBox and BleedBox for the printer.
 - File > Package... copies the document, its linked images and the font files it uses into one folder with a report,

@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.40.0 · 2026-10-16
+
+Plan v0.8.0 phases 36 and 37: the four rows the fifth audit found Partial.
+
+### Added
+
+- Vector effects (warp, Free Distort, Pucker and Bloat, Roughen, Transform, Tweak, Twist, Zig Zag, Round Corners, Scribble and the path effects) on groups, layers and live type, on the canvas, in bounds and hit testing, in Expand Appearance and in every exporter; type stays editable.
+- Layers panel menu: Duplicate Layer, Duplicate Selection, Merge Selected, Flatten Artwork, Release to Layers (Sequence and Build), Reverse Order, New Sublayer, Layer Options; MCP `layer_action`.
+- Export GIF and PNG-8 (Perceptual, Selective, Adaptive palettes, dither, interlacing, transparency and matte), 24-bit BMP, and layered Photoshop PSD with an ICC profile. Every raster export takes a resolution in ppi and an anti-aliasing choice (Art Optimized, Type Optimized, None).
+- Place PDF and `.ai` (page picker, Crop To; linked or embedded), PSD (flattened or layers to objects) and TIFF; open PSD and TIFF directly. The MCP `place` and export tools take the new formats.
+- 122 new strings in all 25 languages.
+
+### Changed
+
+- `docs/PARITY.md`: 75.5 of 76 (99.3 percent), self-graded; `.ai` is the one Partial row.
+
 ## 0.39.0 · 2026-10-16
 
 Plan v0.7.0 phase 35: the fifth independent audit, and three known defects.
