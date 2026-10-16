@@ -2,6 +2,27 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.46.0 · 2026-10-16
+
+Plan v0.10.0 phase 43, first part: defects the seventh audit found by driving the interface.
+
+### Fixed
+
+- The Pen and Pencil start on path intersections; intersection snapping outranks path snapping.
+- Snap to Grid snaps both corners of a drawn shape and moved edges.
+- The Smooth tool rounds corners and reduces jaggedness (Fidelity option).
+- Direct Selection on a live shape's corner moves only that anchor.
+- Average with whole paths selected averages all their anchors.
+- Warp, Twirl, Pucker and Bloat add points as they deform (Detail option); Trap handles a lighter shape that contains the darker one.
+- Layers panel: clicking a row selects its object, double-clicking the name renames inline, double-clicking elsewhere opens Layer Options, and locking a layer deselects its objects.
+- Typed values in the Colour panel apply on Enter, Tab and blur.
+- Dialog colour fields take a typed hex value, and dialogs select their first text field, so swatch colours and names can be typed.
+- The Gradient tool works on the active fill or stroke.
+- The Actions panel shows the engine's real status.
+- Separations Preview turns Overprint Preview on while a plate is shown.
+- Switching the interface language keeps open documents.
+- Gradient mesh colours spread smoothly across patches, on the canvas and in every export.
+
 ## 0.45.0 · 2026-10-16
 
 Plan v0.9.0 phase 42: the seventh independent audit, the first to drive every row through the interface.
