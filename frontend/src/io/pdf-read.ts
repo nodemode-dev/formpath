@@ -407,6 +407,37 @@ export async function probePdf(data: ArrayBuffer, password?: string, session?: P
   return pageRecords(pdf).map((p, index) => ({ index, boxes: p.boxes, rotate: p.rotate }));
 }
 
+export interface AiPrivateBlocks { bytes: Uint8Array; blocks: number; pages: PdfPageInfo[] }
+
+/** The Illustrator private data of a PDF compatible .ai: the page's /PieceInfo /Illustrator /Private blocks AIPrivateData1..K joined in numeric order. Null when the file carries none. */
+export async function readAiPrivateBlocks(data: ArrayBuffer, password?: string, session?: PdfSession): Promise<AiPrivateBlocks | null> {
+  const pdf = await openPdf(data, password, session), recs = pageRecords(pdf);
+  const catalog = pdf.dict(pdf.trailer.get('Root')) ?? findCatalog(pdf);
+  const holders = [...recs.map((r) => r.page), catalog];
+  let priv: PDict | null = null;
+  for (const h of holders) {
+    const piece = h ? pdf.dict(h.get('PieceInfo')) : null, ill = piece ? pdf.dict(piece.get('Illustrator')) : null, p = ill ? pdf.dict(ill.get('Private')) : null;
+    if (p) { priv = p; break; }
+  }
+  if (!priv) return null;
+  const keys = [...priv.keys()].map((k) => /^AIPrivateData(\d+)$/.exec(k)).filter((m): m is RegExpExecArray => !!m).map((m) => Number(m[1])).sort((a, b) => a - b);
+  if (!keys.length) return null;
+  const want = pdf.n(priv.get('NumBlock'), keys.length), parts: Uint8Array[] = [];
+  let total = 0;
+  for (let i = 1; i <= Math.max(want, keys[keys.length - 1]); i++) {
+    if (!keys.includes(i)) continue;
+    const s = pdf.get(priv.get(`AIPrivateData${i}`));
+    if (!(s instanceof Stream)) throw new Error(`private data block ${i} is not a stream`);
+    const b = await pdf.decode(s);
+    parts.push(b);
+    total += b.length;
+  }
+  const bytes = new Uint8Array(total);
+  let o = 0;
+  for (const p of parts) { bytes.set(p, o); o += p.length; }
+  return { bytes, blocks: parts.length, pages: recs.map((p, index) => ({ index, boxes: p.boxes, rotate: p.rotate })) };
+}
+
 export async function readPdfVector(data: ArrayBuffer, title: string, password?: string, opts: PdfReadOpts = {}): Promise<PdfImport> {
   const pdf = await openPdf(data, password, opts.session);
   const catalog = pdf.dict(pdf.trailer.get('Root')) ?? findCatalog(pdf);

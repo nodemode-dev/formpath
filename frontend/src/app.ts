@@ -23,7 +23,8 @@ import { exportDwg } from './io/dwg-write';
 import { DwgUnsupportedError, parseDwg } from './io/dwg';
 import { exportEps, readEpsNative } from './io/eps';
 import { readEpsVector } from './io/ps-read';
-import { PdfPasswordError, readPdfVector } from './io/pdf-read';
+import { PdfPasswordError, PdfSession, readPdfVector } from './io/pdf-read';
+import { readAiModern } from './io/ai-modern';
 import { isLegacyAi, readAiLegacy } from './io/ai-legacy';
 import { importModel, MODEL_FILE, MODEL_PART } from './io/model';
 import { docFromManifest, serialize } from './io/project-io';
@@ -499,15 +500,28 @@ export function startApp(): void {
             }
             const native = await readPdfNative(data);
             if (native) { adopt(docFromManifest(native.manifest), title, native.assets); continue; }
+            const session = new PdfSession();
+            let aiNote = '';
+            if (lower.endsWith('.ai')) {
+              const m = await readAiModern(data, title, password, session);
+              if (m.read) {
+                const a = m.read;
+                adopt(a.doc, title, a.assets);
+                toast(`Opened ${f.name}: ${a.doc.layers.length} layer${a.doc.layers.length === 1 ? '' : 's'}, ${a.doc.artboards.length} artboard${a.doc.artboards.length === 1 ? '' : 's'}.${a.kept.length ? ` Brought in ${a.kept.join(', ')}.` : ''}${a.skipped.length ? ` Left out: ${a.skipped.join(', ')}.` : ''}`);
+                continue;
+              }
+              aiNote = m.why;
+            }
             let r: Awaited<ReturnType<typeof readPdfVector>> | null = null, pw = password;
             while (!r) {
-              try { r = await readPdfVector(data, title, pw); } catch (err) {
+              try { r = await readPdfVector(data, title, pw, { session }); } catch (err) {
                 if (!(err instanceof PdfPasswordError) || password !== undefined) throw err;
                 const next = await askPassword(f.name, err.wrong);
                 if (next === null) throw err;
                 pw = next;
               }
             }
+            if (aiNote) toast(`${f.name}: ${aiNote}`);
             const tagged = await assignPdfProfile(r.doc, data);
             adopt(tagged.doc, title, r.assets);
             if (tagged.name) toast(`The PDF colours use the CMYK profile ${tagged.name}; it is now this document's CMYK working space.`);
@@ -767,7 +781,7 @@ export function startApp(): void {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
       return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
     }
-    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : true, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined });
+    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, aiPrivate: c.format === 'ai', ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : true, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined });
     if (c.format === 'eps') {
       const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
       if (scope === 'all' && p.doc.artboards.length > 1) {

@@ -6,12 +6,13 @@ import { transformNode } from '../engine/transform';
 import { fill as fillItem, linearGradient, radialGradient, solid, stop, stroke as strokeItem } from '../engine/paint';
 import { DEFAULT_CHAR, DEFAULT_PARA } from '../engine/text';
 import { zstdDecompress } from './ai-zstd';
+import { parseStyles, resolveStyle, type PaintRead, type StyleHost, type StyleResult } from './ai-styles';
 import type { Anchor, Appearance, BlendMode, BrushDef, Color, CompoundNode, Doc, GradientStop, ImageNode, LayerNode, Mat, Paint, PathData, PathNode, PatternDef, Span, SubPath, SymbolDef, TextNode, Units, VNode } from '../engine';
 
 export interface AiRead { doc: Doc; assets: Map<string, Blob>; skipped: string[]; unknown: string[]; version: string; kept: string[] }
 
 /** A private-data block the reader keeps instead of skipping: its lines with the %_ prefix removed and plain comments dropped. */
-interface Def { kind: 'pattern' | 'symbol' | 'brushart' | 'plugin'; block: string; head: string; lines: string[]; raster: boolean }
+interface Def { kind: 'pattern' | 'symbol' | 'brushart' | 'plugin' | 'styles' | 'stylelist'; block: string; head: string; lines: string[]; raster: boolean }
 
 type Tok = { t: 'n'; v: number } | { t: 's'; v: string } | { t: 'x'; v: string } | { t: 'a'; v: Tok[] } | { t: 'w'; v: string } | { t: 'd'; v: string };
 
@@ -20,7 +21,9 @@ interface Meta {
   version: string; bbox: number[] | null; tile: number[] | null; artboards: number[][]; units: Units; cmyk: boolean;
   customs: Map<string, Color>; gradients: Map<string, GradDef>; skipped: Set<string>; pages: number; defs: Def[];
 }
-interface Ctx { kind: 'layer' | 'group' | 'clip' | 'compound'; nodes: VNode[]; clipper?: VNode; kids: PathNode[]; ap?: Appearance; rule?: 'nonzero' | 'evenodd'; clipped?: boolean; opacity?: number; blend?: BlendMode }
+interface Ctx { kind: 'layer' | 'group' | 'clip' | 'compound'; nodes: VNode[]; clipper?: VNode; kids: PathNode[]; ap?: Appearance; rule?: 'nonzero' | 'evenodd'; clipped?: boolean; opacity?: number; blend?: BlendMode; styled?: string; sub?: { name: string; hidden: boolean; locked: boolean } }
+/** A group the file marked with an art style: Illustrator wrote its expanded look, and the unpainted source art follows. */
+interface Held { node: VNode; style: string; parent: Ctx; src: Array<{ ctx: Ctx; d: PathData }>; srcStyle: string }
 interface LayerOut { name: string; hidden: boolean; locked: boolean; printable: boolean; color: string; nodes: VNode[] }
 interface Gs {
   fill: Paint | null; stroke: Paint | null; lw: number; cap: 'butt' | 'round' | 'square'; join: 'miter' | 'round' | 'bevel'; miter: number; dash: number[]; dashOff: number;
@@ -32,10 +35,10 @@ interface TextRun { name: string; size: number; leading: number | null; tracking
 const BLEND: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'soft_light', 'hard_light', 'color_dodge', 'color_burn', 'darken', 'lighten', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'];
 const UNITS: Units[] = ['in', 'mm', 'pt', 'pc', 'cm', 'pt', 'px'];
 const BLOCKS: Record<string, string> = { Pattern: 'patterns', BrushPattern: 'brushes', Brush: 'brushes', Symbol: 'symbols', SymbolList: '', ArtStyles: 'graphic styles', ArtStyleList: '', SVGFilter: 'SVG filters', PluginObject: 'live effects and plug-in objects', Palette: '', DocumentData: '', TextDocument: '', Mesh: 'gradient meshes' };
-const KEPT: Record<string, Def['kind']> = { Pattern: 'pattern', Symbol: 'symbol', BrushPattern: 'brushart', PluginObject: 'plugin' };
+const KEPT: Record<string, Def['kind']> = { Pattern: 'pattern', Symbol: 'symbol', BrushPattern: 'brushart', PluginObject: 'plugin', ArtStyles: 'styles', ArtStyleList: 'stylelist' };
 const SILENT = new Set(['D', ',', ':', ';', 'Np', 'Ap', 'Ar', 'XW', 'Xw', 'XR', 'Xd', 'Bn', 'Bh', 'Bc', 'A', 'Pc', 'Pb', 'Xt', 'XT', 'Xe', 'XE', 'Xp', 'XP', 'Xi', 'XH', 'Ya', 'Yb', 'TC', 'TW', 'Ti', 'Th', 'Tq', 'TV', 'TA', 'Tt', 'Tk', 'Tw', 'Tl', 'Tr', 'Xo', 'XO', 'Xl', 'XL', 'XN', 'Xn', 'Bd', 'BD', 'Br', 'Bs', 'gsave', 'grestore', 'annotatepage', 'showpage', 'save', 'restore', 'get', 'exec']);
 
-const latin1 = (b: Uint8Array): string => {
+export const latin1 = (b: Uint8Array): string => {
   let s = '';
   for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192) as unknown as number[]);
   return s;
@@ -79,7 +82,7 @@ function ascii85(s: string): Uint8Array {
   return Uint8Array.from(out);
 }
 
-async function inflate(b: Uint8Array): Promise<Uint8Array> {
+export async function inflate(b: Uint8Array): Promise<Uint8Array> {
   const run = async (raw: Uint8Array, kind: 'deflate' | 'deflate-raw'): Promise<Uint8Array> => new Uint8Array(await new Response(new Blob([raw as BlobPart]).stream().pipeThrough(new DecompressionStream(kind))).arrayBuffer());
   try { return await run(b, 'deflate'); } catch { return run(b.subarray(2), 'deflate-raw'); }
 }
@@ -106,7 +109,7 @@ async function privateText(src: string, skipped: Set<string>): Promise<string | 
   return latin1(bytes);
 }
 
-function findZstd(b: Uint8Array): number {
+export function findZstd(b: Uint8Array): number {
   for (let i = 0; i < Math.min(80, b.length - 4); i++) if (b[i] === 0x28 && b[i + 1] === 0xb5 && b[i + 2] === 0x2f && b[i + 3] === 0xfd) return i;
   return -1;
 }
@@ -292,6 +295,12 @@ class Reader {
   trMode = 0;
   curLayerName = '';
   steps = 0;
+  styles = new Map<string, StyleResult>();
+  styleStats = { objects: 0, effects: 0, kept: new Set<string>() };
+  held: Held | null = null;
+  armed = '';
+  lastGrad: Paint | null = null;
+  styleMode = false;
   constructor(readonly meta: Meta, readonly datas: string[], readonly ox: number, readonly oy: number) { this.skipped = meta.skipped; }
 
   P(x: number, y: number): { x: number; y: number } { return { x: x - this.ox, y: this.oy - y }; }
@@ -403,7 +412,35 @@ class Reader {
     return { type: 'pattern', pattern: id, xf };
   }
 
+  flushHeld(): void {
+    const h = this.held;
+    if (!h) return;
+    this.held = null;
+    const st = this.styles.get(h.style);
+    let node = h.node;
+    if (st && h.src.length && !st.missing.length) {
+      const objs: Array<{ ctx: Ctx; d: PathData }> = [];
+      for (const s of h.src) { const o = s.ctx.kind === 'compound' ? objs.find((x) => x.ctx === s.ctx) : undefined; if (o) o.d = [...o.d, ...s.d]; else objs.push({ ctx: s.ctx, d: s.d }); }
+      let ap = st.ap;
+      if (!ap.items.length) { const inner = paintedOf(h.node); if (inner) ap = { items: inner.ap.items, effects: ap.effects }; }
+      const own = h.srcStyle ? this.styles.get(h.srcStyle) : undefined;
+      if (own && own.ap.items.length && !own.missing.length) ap = { items: own.ap.items, effects: [...own.ap.effects, ...ap.effects] };
+      const inner = paintedOf(h.node);
+      let lost = false;
+      // a gradient inside a style is relative to the object it styles, so the placed gradient of the expanded art is borrowed
+      ap = { ...ap, items: ap.items.map((it) => { if (it.paint.type !== 'gradient') return it; const g = inner?.ap.items.find((x) => x.kind === it.kind && x.paint.type === 'gradient'); if (!g) { lost = true; return it; } return { ...it, paint: g.paint }; }) };
+      if (lost) this.styleStats.kept.add('gradients inside styles that are not placed in the expanded art');
+      if (!lost && (ap.items.length || ap.effects.length)) {
+        const made = objs.map((o): VNode => ({ id: newId('p'), kind: 'path', d: o.d, rule: this.gs.rule, opacity: st.opacity, blend: st.blend, ap: { items: ap.items.map((i) => ({ ...i })), effects: ap.effects.map((e) => ({ ...e, params: { ...e.params } })) } }));
+        node = made.length === 1 ? made[0] : group(made);
+        this.styleStats.objects++;
+        this.styleStats.effects += ap.effects.length + ap.items.reduce((s, i) => s + i.effects.length, 0);
+      }
+    } else if (st && st.missing.length) for (const m of st.missing) this.styleStats.kept.add(m);
+    this.addTo(h.parent, node);
+  }
   add(n: VNode): void {
+    this.flushHeld();
     const c = this.top();
     if (c.kind === 'compound') { if (n.kind === 'path') c.kids.push(n); return; }
     if (this.layerSeen) c.nodes.push(n); else if (this.ctx.length === 1) this.pre.push(n); else c.nodes.push(n);
@@ -433,7 +470,7 @@ class Reader {
       if (c.kind === 'compound') { c.kids.push(clip); c.clipped = true; } else c.clipper = clip;
       return;
     }
-    if (!fillIt && !strokeIt) { this.ended = d; return; }
+    if (!fillIt && !strokeIt) { if (this.held) this.held.src.push({ ctx: c, d }); this.ended = d; return; }
     const gp = fillIt ? this.gradientPaint() : null;
     const ap = this.appearance(fillIt, strokeIt, gp);
     if (c.kind === 'compound') {
@@ -445,6 +482,7 @@ class Reader {
   }
 
   closeCtx(kind: Ctx['kind'] | null): void {
+    if (this.held && this.top().kind !== 'compound') this.flushHeld();
     const c = this.ctx.length > 1 ? this.ctx.pop() : undefined;
     if (!c) return;
     void kind;
@@ -465,9 +503,13 @@ class Reader {
     if (!c.nodes.length && !c.clipper) return;
     const clip = c.kind === 'clip' && !!c.clipper;
     const kids = clip ? [...c.nodes, c.clipper as VNode] : c.nodes;
-    this.addTo(parent, { id: newId('g'), kind: 'group', clip, children: kids, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } });
+    const gn: VNode = { id: newId('g'), kind: 'group', clip, children: kids, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+    if (c.sub) { if (c.sub.name) gn.name = c.sub.name; if (c.sub.hidden) gn.hidden = true; if (c.sub.locked) gn.locked = true; }
+    if (c.styled && this.styles.has(c.styled) && !(parent.kind === 'compound')) { this.held = { node: gn, style: c.styled, parent, src: [], srcStyle: '' }; return; }
+    this.addTo(parent, gn);
   }
   addTo(parent: Ctx, n: VNode): void {
+    this.flushHeld();
     if (parent.kind === 'compound') { if (n.kind === 'path') parent.kids.push(n); return; }
     if (!this.layerSeen && this.ctx.length === 1) this.pre.push(n); else parent.nodes.push(n);
   }
@@ -477,6 +519,7 @@ class Reader {
     this.ctx = [{ kind: 'layer', nodes: [], kids: [] }];
   }
   beginLayer(a: number[]): void {
+    this.flushHeld();
     this.flushLayer();
     this.layerSeen = true;
     const hex = (v: number): string => Math.max(0, Math.min(255, Math.round(v ?? 0))).toString(16).padStart(2, '0');
@@ -484,7 +527,7 @@ class Reader {
     this.layers.push({ name: `Layer ${this.layers.length + 1}`, hidden: a[0] === 0, locked: a.length > 2 && a[2] === 0, printable: a[3] !== 0, color: rgb >= 0 ? `#${hex(a[rgb])}${hex(a[rgb + 1])}${hex(a[rgb + 2])}` : '', nodes: [] });
     this.ctx = [{ kind: 'layer', nodes: this.layers[this.layers.length - 1].nodes, kids: [] }];
   }
-  flushLayer(): void { while (this.ctx.length > 1) this.closeCtx(null); }
+  flushLayer(): void { this.flushHeld(); this.armed = ''; while (this.ctx.length > 1) this.closeCtx(null); }
 
   textBegin(type: number): void { this.text = { type, m: [1, 0, 0, 1, 0, 0], runs: [], path: [], capturing: false, align: 0 }; this.path = []; this.run = { ...this.run }; }
   styleNow(): Span['style'] {
@@ -540,7 +583,14 @@ class Reader {
       case 'f': case 'F': case 's': case 'S': case 'b': case 'B': case 'n': case 'N': this.paintOp(w); break;
       case 'W': this.clipFlag = true; break;
       case 'XR': g.rule = n(-1) === 1 ? 'evenodd' : 'nonzero'; break;
-      case 'u': this.ctx.push({ kind: 'group', nodes: [], kids: [] }); break;
+      case 'u': { this.flushHeld(); const gc: Ctx = { kind: 'group', nodes: [], kids: [] }; if (this.armed) { gc.styled = this.armed; this.armed = ''; } this.ctx.push(gc); break; }
+      case 'XW': {
+        const name = this.str(), flag = n(-1);
+        if (this.held && !name) break;
+        if (this.held && flag === 0) { this.held.srcStyle = name; break; }
+        if (name && flag === 1) { this.flushHeld(); this.armed = this.styles.has(name) ? name : ''; }
+        break;
+      }
       case 'U': if (this.top().kind === 'group') this.closeCtx(null); break;
       case 'q': this.ctx.push({ kind: 'clip', nodes: [], kids: [] }); break;
       case 'Q': if (this.top().kind === 'clip') this.closeCtx(null); break;
@@ -574,6 +624,7 @@ class Reader {
       case 'Lb': this.beginLayer(a); break;
       case 'LB': this.flushLayer(); break;
       case 'Ln': { const L = this.layers[this.layers.length - 1]; if (L) L.name = this.str() || L.name; break; }
+      case 'SL': this.top().sub = { name: this.str(), hidden: n(-2) === 0, locked: n(-1) === 0 }; break;
       case 'Bb': this.inBb = true; break;
       case 'Xx': case 'XX': {
         const type = n(-1), tint = n(-2);
@@ -591,6 +642,7 @@ class Reader {
       case 'BB': {
         const flag = n(-1);
         if (flag === 2) this.closeLast();
+        if (this.grad && this.styleMode) this.lastGrad = this.gradientPaint();
         if (this.grad) this.paintWith(true, flag >= 1);
         this.grad = null;
         this.inBb = false;
@@ -655,6 +707,7 @@ class Reader {
       if (t.v === 'XDATA') { this.takeData(); this.stack = []; continue; }
       this.exec(t.v);
     }
+    this.flushHeld();
     while (this.ctx.length > 1) this.closeCtx(null);
   }
 }
@@ -684,13 +737,30 @@ async function rasterPng(w: number, h: number, comps: number, bits: number, hex:
 }
 
 const group = (nodes: VNode[]): VNode => ({ id: newId('g'), kind: 'group', clip: false, children: nodes, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } });
+/** The topmost painted path or compound inside a group, whose fills and strokes an effect-only style borrows. */
+function paintedOf(n: VNode): PathNode | CompoundNode | null {
+  if (n.kind === 'path' || n.kind === 'compound') return n.ap.items.length ? n : null;
+  if (n.kind !== 'group') return null;
+  for (let i = n.children.length - 1; i >= 0; i--) { const r = paintedOf(n.children[i]); if (r) return r; }
+  return null;
+}
 const isIdentity = (m: number[]): boolean => m.length >= 6 && [1, 0, 0, 1, 0, 0].every((v, i) => Math.abs(m[i] - v) < 1e-6);
 const firstString = (line: string): string => { const t = tokenize(line).find((k) => k.t === 's'); return t && t.t === 's' ? t.v : ''; };
+
+/** Runs the operators of one style dictionary entry (FillStyle, StrokeStyle, BlendStyle) and reports the paint state they leave. */
+function paintOf(rd: Reader, lines: string[]): PaintRead {
+  const r = new Reader(rd.meta, [], rd.ox, rd.oy);
+  r.swatches = rd.swatches; r.swatchDefs = rd.swatchDefs; r.unknown = rd.unknown; r.patterns = rd.patterns;
+  r.styleMode = true; r.gs.fill = null;
+  r.go(tokenize(lines.join('\n')));
+  const g = r.gs;
+  return { fill: r.lastGrad ?? g.fill, stroke: g.stroke, lw: g.lw, cap: g.cap, join: g.join, miter: g.miter, dash: g.dash, dashOff: g.dashOff, blend: g.blend, opacity: g.opacity };
+}
 
 /** Runs the lines of a kept block through a reader of its own that shares the main reader's swatches and patterns. */
 function artOf(rd: Reader, lines: string[]): VNode[] {
   const r = new Reader(rd.meta, [], rd.ox, rd.oy);
-  r.swatches = rd.swatches; r.swatchDefs = rd.swatchDefs; r.unknown = rd.unknown; r.patterns = rd.patterns;
+  r.swatches = rd.swatches; r.swatchDefs = rd.swatchDefs; r.unknown = rd.unknown; r.patterns = rd.patterns; r.styles = rd.styles;
   r.go(tokenize(lines.join('\n')));
   return r.pre;
 }
@@ -774,6 +844,27 @@ function buildDefs(rd: Reader, doc: Doc): string[] {
     const side = tiles.get(slots[0]) as VNode, tile = (x: string): VNode | null => (x ? tiles.get(x) ?? null : null);
     brushes.push({ id: newId('br'), name, colorize, brush: art ? { type: 'art', art: side, stretch: true, flip: false, width: 100 } : { type: 'pattern', art: side, spacing: 0, fit: 'stretch', outer: tile(slots[1]), inner: tile(slots[2]), start: tile(slots[3]), end: tile(slots[4]) } });
   }
+  const styleDefs = defs.filter((d) => d.kind === 'styles').flatMap((d) => parseStyles(d.lines));
+  const host: StyleHost = {
+    paint: (ls) => paintOf(rd, ls),
+    brush: (_kind, size, roundness, angle) => {
+      const same = brushes.find((b) => b.brush.type === 'calligraphic' && Math.abs(b.brush.size - size) < 1e-6 && Math.abs(b.brush.roundness - roundness) < 1e-6 && Math.abs(b.brush.angle - angle) < 1e-6);
+      if (same) return same.id;
+      const id = newId('br');
+      brushes.push({ id, name: `Calligraphic ${Math.round(size * 100) / 100} pt`, brush: { type: 'calligraphic', angle, roundness, size }, colorize: 'none' });
+      return id;
+    },
+  };
+  for (const s of styleDefs) if (s.name) rd.styles.set(s.name, resolveStyle(s, host));
+  const listed = defs.filter((d) => d.kind === 'stylelist').flatMap((d) => tokenize(d.lines.join('\n')).filter((t) => t.t === 's').map((t) => (t.t === 's' ? t.v : '')));
+  const gstyles: Doc['styles'] = [];
+  for (const nm of listed) {
+    const st = rd.styles.get(nm);
+    if (!st || nm === '[Default]' || gstyles.some((g) => g.name === nm) || (!st.ap.items.length && !st.ap.effects.length)) continue;
+    if (st.missing.length) sk.add(`graphic style effects with no equivalent (${[...new Set(st.missing)].join(', ')})`);
+    gstyles.push({ id: newId('gs'), name: nm, ap: st.ap, opacity: st.opacity, blend: st.blend });
+  }
+  doc.styles = [...doc.styles, ...gstyles];
   doc.patterns = [...doc.patterns, ...patterns];
   doc.swatches = [...doc.swatches, ...swatches];
   doc.symbols = [...doc.symbols, ...symbols];
@@ -784,7 +875,14 @@ function buildDefs(rd: Reader, doc: Doc): string[] {
   if (patterns.length) kept.push(`${patterns.length} pattern swatch${patterns.length === 1 ? '' : 'es'}`);
   if (symbols.length) kept.push(`${symbols.length} symbol${symbols.length === 1 ? '' : 's'}`);
   if (brushes.length) kept.push(`${brushes.length} brush${brushes.length === 1 ? '' : 'es'}`);
+  if (gstyles.length) kept.push(`${gstyles.length} graphic style${gstyles.length === 1 ? '' : 's'}`);
   return kept;
+}
+
+function styleNotices(rd: Reader, kept: string[]): void {
+  const s = rd.styleStats, sk = rd.meta.skipped;
+  if (s.objects) kept.push(`${s.objects} styled object${s.objects === 1 ? '' : 's'} as editable source art${s.effects ? ` with ${s.effects} live effect${s.effects === 1 ? '' : 's'}` : ''}`);
+  if (s.kept.size) sk.add(`live effects with no formpth equivalent, kept as Illustrator's expanded art (${[...s.kept].join(', ')})`);
 }
 
 export async function readAiLegacy(data: ArrayBuffer, title: string): Promise<AiRead> {
@@ -793,15 +891,23 @@ export async function readAiLegacy(data: ArrayBuffer, title: string): Promise<Ai
   const early = new Set<string>();
   const priv = await privateText(src, early);
   if (priv === null && early.size) throw new Error(`This Illustrator file keeps its art in ${[...early][0]}; open a PDF compatible copy instead.`);
-  const prep = prepare(priv ?? src), meta = prep.meta;
+  return buildAi(priv ?? src, title, early, {});
+}
+
+export interface AiBuildOpts { boxes?: number[][]; names?: string[] }
+
+/** Builds the document from already assembled Illustrator text; the legacy reader and the PDF compatible reader share it. */
+export async function buildAi(text: string, title: string, early: Set<string>, opts: AiBuildOpts): Promise<AiRead> {
+  const prep = prepare(text), meta = prep.meta;
   for (const s of early) meta.skipped.add(s);
-  const boxes: number[][] = meta.artboards.length ? meta.artboards : meta.tile ? [meta.tile] : meta.bbox ? [meta.bbox] : [[0, 0, 612, 792]];
+  const boxes: number[][] = opts.boxes?.length ? opts.boxes : meta.artboards.length ? meta.artboards : meta.tile ? [meta.tile] : meta.bbox ? [meta.bbox] : [[0, 0, 612, 792]];
   const ox = Math.min(...boxes.map((b) => b[0])), oy = Math.max(...boxes.map((b) => b[3]));
   const rd = new Reader(meta, prep.datas, ox, oy);
   const doc = newDoc(Math.max(1, boxes[0][2] - boxes[0][0]), Math.max(1, boxes[0][3] - boxes[0][1]), { title, units: meta.units, colorMode: meta.cmyk ? 'cmyk' : 'rgb' });
   const kept = buildDefs(rd, doc);
   rd.go(tokenize(prep.ops));
-  doc.artboards = boxes.map((b, i) => ({ id: newId('a'), name: `Artboard ${i + 1}`, x: Math.min(b[0], b[2]) - ox, y: oy - Math.max(b[1], b[3]), w: Math.max(1, Math.abs(b[2] - b[0])), h: Math.max(1, Math.abs(b[3] - b[1])), bg: null }));
+  styleNotices(rd, kept);
+  doc.artboards = boxes.map((b, i) => ({ id: newId('a'), name: opts.names?.[i] || `Artboard ${i + 1}`, x: Math.min(b[0], b[2]) - ox, y: oy - Math.max(b[1], b[3]), w: Math.max(1, Math.abs(b[2] - b[0])), h: Math.max(1, Math.abs(b[3] - b[1])), bg: null }));
   let outs = rd.layers;
   if (!outs.length) outs = [{ name: 'Layer 1', hidden: false, locked: false, printable: true, color: '', nodes: rd.pre }];
   else if (rd.pre.length) meta.skipped.add('art outside any layer');
