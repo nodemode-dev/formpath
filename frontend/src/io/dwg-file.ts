@@ -1,4 +1,5 @@
 import { Bits, DwgError, DwgUnsupportedError, headerMask, lz77 } from './dwg-bits';
+import { readContainer } from './dwg-r2007';
 
 const TAGS: Record<string, number> = { AC1015: 15, AC1018: 18, AC1021: 21, AC1024: 24, AC1027: 27, AC1032: 32 };
 const TAG_NAMES: Record<string, string> = { AC1012: 'R13', AC1014: 'R14', AC1015: 'R2000', AC1018: 'R2004', AC1021: 'R2007', AC1024: 'R2010', AC1027: 'R2013', AC1032: 'R2018' };
@@ -94,7 +95,7 @@ function r2004(d: Uint8Array, tag: string, ver: number): Sections {
 export function readSections(d: Uint8Array): Sections {
   const { tag, ver } = versionOf(d);
   if (ver === 15) return r2000(d, tag);
-  if (ver === 21) throw new DwgUnsupportedError('DWG R2007 is not read natively.');
+  if (ver === 21) return { ver, tag, ...readContainer(d), maint: d[0x0b] };
   return r2004(d, tag, ver);
 }
 
