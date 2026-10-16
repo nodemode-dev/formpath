@@ -1,4 +1,4 @@
-import { liveParams, type LivePatch } from '../engine/ops/live-shapes';
+import { CONVERT_KINDS, liveParams, type ConvertKind, type LivePatch } from '../engine/ops/live-shapes';
 import { UNIT_PT, type Engine, type PathNode } from '../engine';
 import { el, q, setHidden, setText } from './dom';
 import { numField, row, selectCtl, type Ctl } from './panels/kit';
@@ -11,6 +11,9 @@ export class ShapeFields {
   private readonly lengths: Array<Ctl<number | null>> = [];
   private readonly f: Record<string, Ctl<number | null>> = {};
   private readonly corner;
+  private readonly cornerP;
+  private readonly cornerS;
+  private readonly convert;
 
   constructor(private readonly engine: Engine) {
     const k = (): number => UNIT_PT[engine.doc?.units ?? 'pt'] ?? 1;
@@ -27,13 +30,18 @@ export class ShapeFields {
     rect.appendChild(grid);
     const ellipse = el('<div class="cv-shapef-group"></div>');
     ellipse.append(row(len('ew', 'W', (v) => ({ w: v }), { min: 0.01 }).el, len('eh', 'H', (v) => ({ h: v }), { min: 0.01 }).el), row(plain('start', 'Pie start', '°', (v) => ({ start: v }), { min: -360, max: 360 }).el, plain('end', 'Pie end', '°', (v) => ({ end: v }), { min: -360, max: 720 }).el));
+    const types = [['round', 'Round'], ['inverted', 'Inverted Round'], ['chamfer', 'Chamfer']] as const;
+    this.cornerP = selectCtl('Corners', types, (v) => send({ corner: v as 'round' }));
+    this.cornerS = selectCtl('Corners', types, (v) => send({ corner: v as 'round' }));
     const polygon = el('<div class="cv-shapef-group"></div>');
-    polygon.append(row(len('pr', 'Radius', (v) => ({ r: v }), { min: 0.01 }).el, plain('sides', 'Sides', '', (v) => ({ sides: v }), { min: 3, max: 1000 }).el), len('pc', 'Corner radius', (v) => ({ radius: v })).el);
+    polygon.append(row(len('pr', 'Radius', (v) => ({ r: v }), { min: 0.01 }).el, plain('sides', 'Sides', '', (v) => ({ sides: v }), { min: 3, max: 1000 }).el), this.cornerP.el, len('pc', 'Corner radius', (v) => ({ radius: v })).el);
     const star = el('<div class="cv-shapef-group"></div>');
-    star.append(plain('points', 'Points', '', (v) => ({ points: v }), { min: 3, max: 1000 }).el, row(len('r1s', 'Radius 1', (v) => ({ r1: v }), { min: 0.01 }).el, len('r2s', 'Radius 2', (v) => ({ r2: v }), { min: 0.01 }).el), len('sc', 'Corner radius', (v) => ({ radius: v })).el);
+    star.append(plain('points', 'Points', '', (v) => ({ points: v }), { min: 3, max: 1000 }).el, row(len('r1s', 'Radius 1', (v) => ({ r1: v }), { min: 0.01 }).el, len('r2s', 'Radius 2', (v) => ({ r2: v }), { min: 0.01 }).el), this.cornerS.el, len('sc', 'Corner radius', (v) => ({ radius: v })).el);
+    this.convert = selectCtl('Convert to', [['', 'Choose a shape'], ...CONVERT_KINDS], (v) => { if (v) { engine.convertLiveShape(v as ConvertKind); this.convert.set(''); } });
     const line = el('<div class="cv-shapef-group"></div>');
     line.append(row(len('length', 'Length', (v) => ({ length: v }), { min: 0.01 }).el, plain('angle', 'Angle', '°', (v) => ({ angle: v }), { min: -360, max: 360 }).el));
     for (const [kind, g] of [['rect', rect], ['ellipse', ellipse], ['polygon', polygon], ['star', star], ['line', line]] as const) { this.groups.set(kind, g); this.el.appendChild(g); }
+    this.el.prepend(this.convert.el);
   }
 
   node(): PathNode | null { const s = this.engine.selected(); const n = s.length === 1 ? s[0] : null; return n?.kind === 'path' && n.live ? n : null; }
@@ -59,6 +67,9 @@ export class ShapeFields {
     };
     for (const [field, key, unit] of map[kind]) this.f[field].set(r(p[key], unit));
     if (kind === 'rect') { const all = [p.r0, p.r1, p.r2, p.r3].map(Number); this.f.all.set(all.every((v) => Math.abs(v - all[0]) < 1e-6) ? r(all[0]) : null); this.corner.set(String(p.corner)); }
+    if (kind === 'polygon') this.cornerP.set(String(p.corner));
+    if (kind === 'star') this.cornerS.set(String(p.corner));
+    this.convert.enable(kind !== 'line');
     for (const c of this.lengths) setText(q(c.el, '.cv-unit'), u);
     return true;
   }

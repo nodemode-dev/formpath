@@ -205,8 +205,8 @@ function cornerWidgets(ctx: ToolContext): Widget[] {
   if (l.kind === 'star') {
     if (l.r1 * zoom < 24) return [];
     const sp = Math.sin(Math.PI / l.points), tip = { x: 0, y: -l.r1 }, ab = { x: l.r2 * sp, y: l.r1 - l.r2 * Math.cos(Math.PI / l.points) }, sinH = Math.max(0.05, Math.abs(ab.x) / Math.hypot(ab.x, ab.y));
-    const d = Math.max(l.radius ?? 0, min) / sinH;
-    return [{ id: n.id, at: apply(l.xf, l.cx, l.cy - l.r1 + d), corner: -1, dir: { x: 0, y: 1 }, origin: { x: l.cx + tip.x, y: l.cy + tip.y }, xf: l.xf, k: 1 / sinH, max: l.r1 }];
+    const k = l.corner === 'chamfer' ? Math.sqrt(1 - sinH * sinH) : 1 / sinH, d = Math.max(l.radius ?? 0, min) * k;
+    return [{ id: n.id, at: apply(l.xf, l.cx, l.cy - l.r1 + d), corner: -1, dir: { x: 0, y: 1 }, origin: { x: l.cx + tip.x, y: l.cy + tip.y }, xf: l.xf, k, max: l.r1 }];
   }
   if (l.kind === 'rect') {
     const cs: Array<[number, number, number, number]> = [[l.x, l.y, 1, 1], [l.x + l.w, l.y, -1, 1], [l.x + l.w, l.y + l.h, -1, -1], [l.x, l.y + l.h, 1, -1]];
@@ -214,8 +214,9 @@ function cornerWidgets(ctx: ToolContext): Widget[] {
     return cs.map(([cx, cy, sx, sy], i) => { const d = Math.max(l.radii[i], min); return { id: n.id, at: apply(l.xf, cx + sx * d, cy + sy * d), corner: i, dir: { x: sx / Math.SQRT2, y: sy / Math.SQRT2 }, origin: { x: cx, y: cy }, xf: l.xf, k: Math.SQRT2, max: Math.min(Math.abs(l.w), Math.abs(l.h)) / 2 }; });
   }
   if (l.r * zoom < 24) return [];
-  const half = Math.PI / l.sides, sinH = Math.cos(half), a = -Math.PI / 2, vx = l.cx + l.r * Math.cos(a), vy = l.cy + l.r * Math.sin(a), dir = { x: -Math.cos(a), y: -Math.sin(a) }, d = Math.max(l.radius, min) / sinH;
-  return [{ id: n.id, at: apply(l.xf, vx + dir.x * d, vy + dir.y * d), corner: -1, dir, origin: { x: vx, y: vy }, xf: l.xf, k: 1 / sinH, max: l.r * Math.cos(half) }];
+  const half = Math.PI / l.sides, sinH = Math.cos(half), a = -Math.PI / 2, vx = l.cx + l.r * Math.cos(a), vy = l.cy + l.r * Math.sin(a), dir = { x: -Math.cos(a), y: -Math.sin(a) };
+  const chamfer = l.corner === 'chamfer', k = chamfer ? Math.sin(half) : 1 / sinH, d = Math.max(l.radius, min) * k;
+  return [{ id: n.id, at: apply(l.xf, vx + dir.x * d, vy + dir.y * d), corner: -1, dir, origin: { x: vx, y: vy }, xf: l.xf, k, max: l.r * (chamfer ? Math.sin(half) : Math.cos(half)) }];
 }
 
 function widgetAt(ctx: ToolContext, p: ToolPointer): Widget | null {

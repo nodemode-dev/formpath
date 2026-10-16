@@ -68,10 +68,9 @@ function liveCorners(n: PathNode, which: Set<number> | null, patch: Partial<Corn
     if (corner === l.corner && radii.every((r, i) => r === l.radii[i])) return n;
     return editLive(n, { radii, corner });
   }
-  if (patch && patch.type && patch.type !== 'round') return null;
-  const cur = l.kind === 'polygon' ? l.radius : (l as Extract<LiveShape, { kind: 'star' }>).radius ?? 0;
-  const radius = patch === null ? 0 : patch.r ?? cur;
-  return radius === cur ? n : editLive(n, { radius });
+  const s = l as Extract<LiveShape, { kind: 'polygon' | 'star' }>, cur = s.radius ?? 0;
+  const radius = patch === null ? 0 : patch.r ?? cur, corner = patch?.type ?? s.corner ?? 'round';
+  return radius === cur && corner === (s.corner ?? 'round') ? n : editLive(n, { radius, corner });
 }
 
 export function setCornersOp(doc: Doc, targets: CornerTargets, patch: Partial<CornerSpec> | null): Doc {
@@ -94,8 +93,8 @@ export function firstCorner(doc: Doc, targets: CornerTargets): CornerSpec | null
     const n = findNode(doc, id);
     if (n?.kind !== 'path') continue;
     if (n.live?.kind === 'rect') { const l = normalizeLive(n.live) as Extract<LiveShape, { kind: 'rect' }>, r = l.radii.find((v) => v >= EPS); if (r !== undefined) return { type: l.corner, r }; }
-    if (n.live?.kind === 'polygon' && n.live.radius >= EPS) return { type: 'round', r: n.live.radius };
-    if (n.live?.kind === 'star' && (n.live.radius ?? 0) >= EPS) return { type: 'round', r: n.live.radius ?? 0 };
+    if (n.live?.kind === 'polygon' && (n.live.radius >= EPS || n.live.corner)) return { type: n.live.corner ?? 'round', r: n.live.radius };
+    if (n.live?.kind === 'star' && ((n.live.radius ?? 0) >= EPS || n.live.corner)) return { type: n.live.corner ?? 'round', r: n.live.radius ?? 0 };
     let k = 0;
     for (const sp of n.d) for (const a of sp.pts) { if (a.corner && (!set || set.has(k))) return a.corner; k++; }
   }
