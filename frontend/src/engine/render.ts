@@ -3,6 +3,7 @@ import { childrenOf } from './doc';
 import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, rayTraceImage, strokeOutline, textureArt, textureTile, threeDFaces, TRACE_ID, type RasterFx } from './effects';
 import { emptyRect, inflate, isEmptyRect, pathBounds, toPath2D, tracePath, transformRect } from './geometry';
 import { liveChildren } from './live';
+import { fxNode } from './groupfx';
 import { plateValue } from './inks';
 import { meshQuads } from './mesh';
 import { rayTraced, textureOf } from './threed';
@@ -602,6 +603,7 @@ function drawKids(ctx: CanvasRenderingContext2D, n: VNode, kids: VNode[], rc: Re
 export function renderNode(ctx: CanvasRenderingContext2D, n: VNode, rc: RenderContext): void {
   if (n.hidden || rc.skip?.has(n.id)) return;
   if (rc.printing && n.kind === 'layer' && (n.printable === false || n.template)) return;
+  if (n.ap.effects.length) n = fxNode(rc.doc, n) ?? n;
   const fx = rc.outline ? [] : drawnFx(n);
   const ch = n.kind === 'compound' ? null : childrenOf(n);
   const multi = !!ch || n.ap.items.filter((i) => i.visible).length > 1 || n.kind === 'text' || n.kind === 'symbol' || n.kind === 'mesh' || has3d(n);

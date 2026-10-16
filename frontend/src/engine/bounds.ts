@@ -6,6 +6,7 @@ import { emptyRect, inflate, isEmptyRect, pathBounds, transformRect, unionRect }
 import { liveChildren } from './live';
 import { liveArt } from './pathfinder';
 import { instanceArt } from './symbolism';
+import { fxNode } from './groupfx';
 import { textBounds } from './text';
 import type { Doc, Effect, PathData, Rect, StrokeItem, VNode } from './types';
 
@@ -85,6 +86,8 @@ export function visualBounds(doc: Doc, n: VNode): Rect {
   let r: Rect;
   const ch = childrenOf(n);
   const faces = n.kind !== 'layer' && has3d(n) ? threeDFaces(doc, n) : null;
+  const fxn = n.ap.effects.length && !faces ? fxNode(doc, n) : null;
+  if (fxn) { r = visualBounds(doc, fxn); visCache.set(n, r); return r; }
   if (faces) r = faces.reduce((acc, f) => unionRect(acc, inflate(visualBounds(doc, f), 1)), emptyRect());
   else if (n.kind === 'group' && n.clip && n.children.length) r = geomBounds(doc, n.children[n.children.length - 1]);
   else if (ch && n.kind !== 'compound') {

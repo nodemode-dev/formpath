@@ -1,5 +1,6 @@
-import { newId } from '../doc';
+import { childrenOf, newId } from '../doc';
 import { arrowGeometry, brushGeometry, effectDef, effectPath, has3d, threeDFaces } from '../effects';
+import { fxNode, hasGeomFx } from '../groupfx';
 import { emptyAppearance, fill } from '../paint';
 import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
 import type { Doc, FillRule, PathData, StrokeItem, VNode } from '../types';
@@ -46,4 +47,16 @@ export function expandAppearance(doc: Doc, n: VNode): VNode[] {
   if (!parts.length) return [];
   if (parts.length === 1 && !rasterFx.length && n.opacity === 1 && n.blend === 'normal') return [{ ...parts[0], name: n.name }];
   return [{ id: newId('g'), kind: 'group', clip: false, children: parts, opacity: n.opacity, blend: n.blend, ap: { items: [], effects: rasterFx }, name: n.name }];
+}
+
+function unfx(n: VNode): VNode {
+  const ch = childrenOf(n), id = n.id.includes('~fx') ? newId(n.kind === 'path' ? 'p' : 'g') : n.id;
+  return ch ? ({ ...n, id, children: ch.map(unfx) } as VNode) : id === n.id ? n : ({ ...n, id } as VNode);
+}
+
+export function expandFx(doc: Doc, n: VNode, each: (c: VNode) => VNode[]): VNode[] | null {
+  if ((n.kind !== 'group' && n.kind !== 'text') || !hasGeomFx(n)) return null;
+  const s = fxNode(doc, n);
+  if (!s || s.kind !== 'group') return null;
+  return [unfx({ ...s, id: n.kind === 'text' ? newId('g') : s.id, children: s.children.flatMap(each) })];
 }

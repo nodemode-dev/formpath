@@ -180,8 +180,8 @@ function polyToSmooth(pts: Pt[], closed: boolean, smooth: boolean): PathData {
   }) }];
 }
 
-function applyOne(d: PathData, e: Effect): PathData {
-  const b = pathBounds(d);
+export function applyOne(d: PathData, e: Effect, frame?: Rect, around?: PathData): PathData {
+  const b = frame ?? pathBounds(d);
   if (!Number.isFinite(b.x)) return d;
   const id = e.id;
   if (VECTOR_3D.has(id)) return outline3d(d, e);
@@ -234,7 +234,7 @@ function applyOne(d: PathData, e: Effect): PathData {
     case 'distort.twist': {
       const c = centerOf(b), deg = P(e, 'angle', 45), ang = (deg * Math.PI) / 180;
       let R = 1e-6;
-      for (const sp of d) for (const p of sp.pts) R = Math.max(R, Math.hypot(p.x - c.x, p.y - c.y));
+      for (const sp of around ?? d) for (const p of sp.pts) R = Math.max(R, Math.hypot(p.x - c.x, p.y - c.y));
       return mapPathNonlinear(d, (p) => { const dx = p.x - c.x, dy = p.y - c.y, k = Math.max(0, 1 - (Math.hypot(dx, dy) / R) ** 2), a = ang * k * k, co = Math.cos(a), si = Math.sin(a); return { x: c.x + dx * co - dy * si, y: c.y + dx * si + dy * co }; }, Math.min(24, Math.max(4, Math.ceil(Math.abs(deg) / 20))));
     }
     case 'distort.transform': {

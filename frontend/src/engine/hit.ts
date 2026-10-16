@@ -1,4 +1,5 @@
-import { geomBounds, nodePath } from './bounds';
+import { geomBounds, nodePath, visualBounds } from './bounds';
+import { fxBase, fxNode, hasGeomFx } from './groupfx';
 import { childrenOf } from './doc';
 import { apply, flatIndex, hasIn, hasOut, inflate, invert, nearestOnPath, pointInPolygon, rectContains, rectsTouch, segments, segBounds, flattenSub } from './geometry';
 import { cornered } from './corners';
@@ -66,7 +67,7 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
     if (n.hidden || (o.skipLocked !== false && n.locked) || o.exclude?.has(n.id)) continue;
     if (n.kind === 'layer' && n.template) continue;
     if (n.kind === 'envelope' && n.editContents) { const h = deepHit(doc, n.children, p, o, [...chain, n.id]); if (h) return h; continue; }
-    const b = geomBounds(doc, n);
+    const b = n.ap.effects.length && hasGeomFx(n) ? visualBounds(doc, n) : geomBounds(doc, n);
     if (Number.isFinite(b.x) && !rectContains(inflate(b, o.tol + 40), p) && n.kind !== 'layer') continue;
     if (n.kind === 'blend' || n.kind === 'envelope' || n.kind === 'repeat') {
       const h = deepHit(doc, liveChildren(doc, n), p, o, [...chain, n.id]);
@@ -95,11 +96,18 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
       }
       const h = deepHit(doc, ch, p, o, [...chain, n.id]);
       if (h) return h;
+      const fxn = n.ap.effects.length && !o.outline ? fxNode(doc, n) : null;
+      if (fxn) {
+        const fh = deepHit(doc, (fxn as { children: VNode[] }).children, p, o, [...chain, n.id]);
+        if (fh) return { id: fxBase(fh.id), chain: fh.chain.map(fxBase), part: fh.part };
+      }
       if (n.kind === 'group' && n.livePaint && !o.outline && liveFaceNodes(n).some((f) => ctx().isPointInPath(cachedPath(f.d), p.x, p.y, 'evenodd'))) return { id: n.id, chain: [...chain, n.id], part: 'fill' };
       continue;
     }
     const part = leafHit(doc, n, p, o);
     if (part) return { id: n.id, chain: [...chain, n.id], part };
+    const fxt = n.kind === 'text' && n.ap.effects.length && !o.outline ? fxNode(doc, n) : null;
+    if (fxt && deepHit(doc, (fxt as { children: VNode[] }).children, p, o, [])) return { id: n.id, chain: [...chain, n.id], part: 'text' };
   }
   return null;
 }
