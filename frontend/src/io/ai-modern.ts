@@ -21,6 +21,27 @@ export async function aiPrivateText(bytes: Uint8Array, skipped: Set<string>): Pr
 }
 
 /**
+ * A binary raster is `%%BeginData: N` then XI, a line end and the pixels; N counts those three and the colour bytes only, so a plane of w*h alpha bytes after them (the XI line says one is there) lies beyond N and the %%EndData is searched from N on. The pixels are cut out before any line work (a line split would corrupt them) and handed over by index.
+ * The same block inside an %_ dictionary (an opacity mask) is dropped.
+ */
+export function liftRasters(raw: string): { text: string; bins: string[]; masks: number } {
+  const re = /(%_)?%%BeginData:[ \t]*(\d+)([^\r\n]*)(\r\n|\r|\n)/g, out: string[] = [], bins: string[] = [];
+  let last = 0, masks = 0, m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    if (/hex/i.test(m[3])) continue;
+    const start = m.index + m[0].length, xi = /^XI(\r\n|\r|\n)/.exec(raw.slice(start, start + 4)), found = raw.indexOf('%%EndData', start + Number(m[2]));
+    if (!xi || found < 0) continue;
+    const end = raw.startsWith('%_', found - 2) ? found - 2 : found;
+    out.push(raw.slice(last, start));
+    if (m[1]) masks++; else { bins.push(raw.slice(start + xi[0].length, end)); out.push(`@BIN ${bins.length - 1}\n`); }
+    last = end;
+    re.lastIndex = end;
+  }
+  out.push(raw.slice(last));
+  return { text: out.join(''), bins, masks };
+}
+
+/**
  * Content versioned for newer Illustrator releases is followed by an alternate for older ones; only the first is kept.
  * The setup holds font encoding vectors that open a [ and close with a TE, TZ or TF operator instead of a ]; they carry nothing and would swallow the art, so they are dropped.
  */
@@ -116,10 +137,11 @@ export async function readAiModern(data: ArrayBuffer, title: string, password?: 
   try {
     const raw = await aiPrivateText(blocks.bytes, early);
     if (raw === null) return fail([...early][0] ?? t('The Illustrator data in this file could not be unpacked'));
-    const text = modernText(raw);
+    const lifted = liftRasters(raw), text = modernText(lifted.text);
     if (!/^\s*%!PS/.test(text)) return fail(t('The Illustrator data in this file is not in a known layout'));
     const boards = aiArtboards(text);
-    const read = await buildAi(text, title, early, { boxes: boards.boxes, names: boards.names });
+    if (lifted.masks) early.add('opacity mask images');
+    const read = await buildAi(text, title, early, { boxes: boards.boxes, names: boards.names, rasters: lifted.bins });
     return { read, why: '' };
   } catch (err) {
     return fail(`${t('The Illustrator data in this file could not be read')} (${err instanceof Error ? err.message : String(err)})`);

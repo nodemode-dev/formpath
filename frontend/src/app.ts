@@ -25,6 +25,7 @@ import { exportEps, readEpsNative } from './io/eps';
 import { readEpsVector } from './io/ps-read';
 import { PdfPasswordError, PdfSession, readPdfVector } from './io/pdf-read';
 import { readAiModern } from './io/ai-modern';
+import { guardAi, guardNotice } from './io/ai-guard';
 import { isLegacyAi, readAiLegacy } from './io/ai-legacy';
 import { importModel, MODEL_FILE, MODEL_PART } from './io/model';
 import { docFromManifest, serialize } from './io/project-io';
@@ -501,18 +502,24 @@ export function startApp(): void {
             const native = await readPdfNative(data);
             if (native) { adopt(docFromManifest(native.manifest), title, native.assets); continue; }
             const session = new PdfSession();
-            let aiNote = '';
+            let aiNote = '', held: Awaited<ReturnType<typeof readPdfVector>> | null = null;
             if (lower.endsWith('.ai')) {
               const m = await readAiModern(data, title, password, session);
               if (m.read) {
-                const a = m.read;
-                adopt(a.doc, title, a.assets);
-                toast(`Opened ${f.name}: ${a.doc.layers.length} layer${a.doc.layers.length === 1 ? '' : 's'}, ${a.doc.artboards.length} artboard${a.doc.artboards.length === 1 ? '' : 's'}.${a.kept.length ? ` Brought in ${a.kept.join(', ')}.` : ''}${a.skipped.length ? ` Left out: ${a.skipped.join(', ')}.` : ''}`);
-                continue;
-              }
-              aiNote = m.why;
+                const prof = await assignPdfProfile(m.read.doc, data);
+                const a = { ...m.read, doc: prof.doc }, g = await guardAi(a, data, title, password, session);
+                console.debug(`ai guard ${f.name}: ${g.skipped ? `skipped (${g.why})` : `diff ${(g.diff * 100).toFixed(1)}% [${g.boards.map((d) => (d * 100).toFixed(1)).join(', ')}] ${g.pdf ? 'PDF page' : 'private data'}`} in ${g.ms} ms`);
+                if (!g.pdf) {
+                  adopt(a.doc, title, a.assets);
+                  if (prof.name) toast(`The PDF colours use the CMYK profile ${prof.name}; it is now this document's CMYK working space.`);
+                  toast(`Opened ${f.name}: ${a.doc.layers.length} layer${a.doc.layers.length === 1 ? '' : 's'}, ${a.doc.artboards.length} artboard${a.doc.artboards.length === 1 ? '' : 's'}.${a.kept.length ? ` Brought in ${a.kept.join(', ')}.` : ''}${a.skipped.length ? ` Left out: ${a.skipped.join(', ')}.` : ''}`);
+                  continue;
+                }
+                held = g.pdf;
+                aiNote = guardNotice();
+              } else aiNote = m.why;
             }
-            let r: Awaited<ReturnType<typeof readPdfVector>> | null = null, pw = password;
+            let r: Awaited<ReturnType<typeof readPdfVector>> | null = held, pw = password;
             while (!r) {
               try { r = await readPdfVector(data, title, pw, { session }); } catch (err) {
                 if (!(err instanceof PdfPasswordError) || password !== undefined) throw err;

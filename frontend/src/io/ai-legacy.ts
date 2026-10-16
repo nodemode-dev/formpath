@@ -1,5 +1,6 @@
 import { makeLayer, newDoc, newId } from '../engine/doc';
 import { geomBounds } from '../engine/bounds';
+import { cmToRgb } from '../engine/color-management';
 import { anchor, mul, translate } from '../engine/geometry';
 import { expandAppearance } from '../engine/ops/expand';
 import { transformNode } from '../engine/transform';
@@ -21,7 +22,7 @@ interface Meta {
   version: string; bbox: number[] | null; tile: number[] | null; artboards: number[][]; units: Units; cmyk: boolean;
   customs: Map<string, Color>; gradients: Map<string, GradDef>; skipped: Set<string>; pages: number; defs: Def[];
 }
-interface Ctx { kind: 'layer' | 'group' | 'clip' | 'compound'; nodes: VNode[]; clipper?: VNode; kids: PathNode[]; ap?: Appearance; rule?: 'nonzero' | 'evenodd'; clipped?: boolean; opacity?: number; blend?: BlendMode; styled?: string; sub?: { name: string; hidden: boolean; locked: boolean } }
+interface Ctx { kind: 'layer' | 'group' | 'clip' | 'compound'; inner?: number; nodes: VNode[]; clipper?: VNode; kids: PathNode[]; ap?: Appearance; rule?: 'nonzero' | 'evenodd'; clipped?: boolean; opacity?: number; blend?: BlendMode; styled?: string; sub?: { name: string; hidden: boolean; locked: boolean } }
 /** A group the file marked with an art style: Illustrator wrote its expanded look, and the unpainted source art follows. */
 interface Held { node: VNode; style: string; parent: Ctx; src: Array<{ ctx: Ctx; d: PathData }>; srcStyle: string }
 interface LayerOut { name: string; hidden: boolean; locked: boolean; printable: boolean; color: string; nodes: VNode[] }
@@ -167,12 +168,12 @@ function tokenize(s: string): Tok[] {
 
 interface Prep { ops: string; datas: string[]; meta: Meta }
 
-function prepare(text: string): Prep {
+function prepare(text: string, bins: string[] = []): Prep {
   const meta: Meta = { version: '', bbox: null, tile: null, artboards: [], units: 'pt', cmyk: true, customs: new Map(), gradients: new Map(), skipped: new Set(), pages: 1, defs: [] };
   const lines = text.split(/\r\n|\r|\n/), keep: string[] = [], datas: string[] = [];
-  let cap: Def | null = null;
-  const num = (s: string): number[] => (s.match(/[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?/g) ?? []).map(Number);
-  let skipEnd: string | null = null, nonPrint = 0, grad: { name: string; lines: string[] } | null = null, inData: string[] | null = null, lastCustom = false;
+  let cap: Def | null = null, layerIn = false;
+  const num =(s: string): number[] => (s.match(/[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?/g) ?? []).map(Number);
+  let skipEnd: string | null = null, nonPrint = 0, grad: { name: string; lines: string[] } | null = null, inData: string[] | null = null, lastCustom = false, binAt = -1;
   const customs = (l: string): void => {
     for (const m of l.matchAll(/([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+\(([^)]*)\)/g)) meta.customs.set(m[5], { kind: 'cmyk', c: Number(m[1]) * 100, m: Number(m[2]) * 100, y: Number(m[3]) * 100, k: Number(m[4]) * 100 });
   };
@@ -196,7 +197,7 @@ function prepare(text: string): Prep {
   for (let li = 0; li < lines.length; li++) {
     let l = lines[li];
     if (inData) {
-      if (/^(%%EndData|%AI5_EndRaster)/.test(l)) { datas.push(inData.join('')); keep.push('XDATA'); inData = null; } else inData.push(l.replace(/^%/, '').replace(/[^0-9A-Fa-f]/g, ''));
+      if (/^(%%EndData|%AI5_EndRaster)/.test(l)) { datas.push(binAt >= 0 ? (bins[binAt] ?? '') : inData.join('')); binAt = -1; keep.push('XDATA'); inData = null; } else if (/^@BIN \d+$/.test(l)) binAt = Number(l.slice(5)); else inData.push(l.replace(/^%/, '').replace(/[^0-9A-Fa-f]/g, ''));
       continue;
     }
     if (grad) {
@@ -218,17 +219,18 @@ function prepare(text: string): Prep {
     if (skipEnd) { if (new RegExp(`^%AI\\d+_End${skipEnd}\\b`).test(l)) skipEnd = null; continue; }
     if (/^%AI5_Begin_NonPrinting/.test(l)) { nonPrint++; continue; }
     if (/^%AI5_End_NonPrinting/.test(l)) { nonPrint = Math.max(0, nonPrint - 1); continue; }
-    if ((m = /^%AI\d+_Begin(\w+)/.exec(l)) && m[1] !== 'Layer' && m[1] !== 'Gradient' && m[1] !== 'Setup' && m[1] !== 'Prolog') {
+    if ((m = /^%AI\d+_Begin(\w+)/.exec(l)) && m[1] !== 'Layer' && m[1] !== 'Raster' && m[1] !== 'Gradient' && m[1] !== 'Setup' && m[1] !== 'Prolog') {
       if (m[1] in KEPT) { cap = { kind: KEPT[m[1]], block: m[1], head: l, lines: [], raster: false }; continue; }
       if (m[1] in BLOCKS) { if (BLOCKS[m[1]]) meta.skipped.add(BLOCKS[m[1]]); skipEnd = m[1]; continue; }
       if (/^(Encoding|Procedure|Resource)/.test(m[1])) continue;
       meta.skipped.add(`${m[1]} blocks`); skipEnd = m[1];
       continue;
     }
-    if (/^%%BeginData/.test(l) || /^%%BeginBinary/.test(l)) { inData = []; continue; }
+    if (/^%%BeginData/.test(l) || /^%%BeginBinary/.test(l)) { if (!/(^|\s)XI\s*$/.test(keep[keep.length - 1] ?? '')) keep.push('XI'); inData = []; continue; }
     if (/^%%Page:/.test(l)) meta.pages++;
-    if (l.startsWith('%_')) l = l.slice(2);
-    else if (l.startsWith('%')) { if (!nonPrint) header(l); continue; }
+    // inside a layer the %_ lines that are not dictionary entries are the editable source of the object above (a compound shape part, a live effect input): the plain lines already drew the result
+    if (l.startsWith('%_')) { if (layerIn && !/^%_(\/|;|:|\s*$|.*\/(Int|Real|Bool|String|Name|Binary|Array)\b)/.test(l)) continue; l = l.slice(2); }
+    else if (l.startsWith('%')) { if (/^%AI5_BeginLayer/.test(l)) layerIn = true; if (!nonPrint) header(l); continue; }
     if (nonPrint) continue;
     keep.push(l);
     if (/(^|\s)XI\s*$/.test(l)) inData = [];
@@ -238,7 +240,7 @@ function prepare(text: string): Prep {
 
 function parseGradient(lines: string[]): GradDef {
   let type = 0;
-  const stops: Array<{ c: Color; mid: number; ramp: number }> = [];
+  const stops: Array<{ c: Color; mid: number; ramp: number; op: number }> = [];
   for (const raw of lines) {
     const l = raw.startsWith('%_') ? raw.slice(2) : raw;
     if (raw.startsWith('%') && !raw.startsWith('%_')) continue;
@@ -250,12 +252,14 @@ function parseGradient(lines: string[]): GradDef {
     if (nums.length < 3) continue;
     const ramp = nums[nums.length - 1], mid = nums[nums.length - 2], head = nums.slice(0, -2);
     let c: Color;
-    if (head.length === 8 && head[7] === 2) c = { kind: 'rgb', r: Math.round(head[4] * 255), g: Math.round(head[5] * 255), b: Math.round(head[6] * 255) };
+    if (head.length >= 8 && head[7] === 2) c = { kind: 'rgb', r: Math.round(head[4] * 255), g: Math.round(head[5] * 255), b: Math.round(head[6] * 255) };
     else if (head.length >= 4) c = { kind: 'cmyk', c: head[0] * 100, m: head[1] * 100, y: head[2] * 100, k: head[3] * 100 };
-    else c = { kind: 'gray', k: (1 - head[0]) * 100 };    stops.push({ c, mid, ramp });
+    else c = { kind: 'gray', k: (1 - head[0]) * 100 };
+    // c m y k r g b 2 opacity 6 mid ramp: the number after the colour type is the stop's opacity
+    stops.push({ c, mid, ramp, op: head.length >= 9 && head[7] === 2 ? Math.max(0, Math.min(1, head[8])) : 1 });
   }
   stops.sort((a, b) => a.ramp - b.ramp);
-  return { type, stops: stops.map((s) => stop(Math.max(0, Math.min(1, s.ramp / 100)), s.c, 1, Math.max(0.1, Math.min(0.9, s.mid / 100)))) };
+  return { type, stops: stops.map((s) => stop(Math.max(0, Math.min(1, s.ramp / 100)), s.c, s.op, Math.max(0.1, Math.min(0.9, s.mid / 100)))) };
 }
 
 const apt = (m: Mat, x: number, y: number): { x: number; y: number } => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
@@ -267,6 +271,13 @@ function fontOf(raw: string): { font: string; style: string } {
   const s = `${sty0} ${/Bold/i.test(fam0) ? 'Bold' : ''}`;
   const style = /Bold/i.test(s) && /Italic|Oblique/i.test(s) ? 'Bold Italic' : /Bold|Black|Heavy/i.test(s) ? 'Bold' : /Italic|Oblique/i.test(s) ? 'Italic' : 'Regular';
   return { font: fam, style };
+}
+
+/** Illustrator writes an object's name as its XMLUID: spaces and other characters become _ or _xHH_, and a repeat gets a trailing _N_. */
+export function xmlName(raw: string): string {
+  if (/^XMLID_\d+_?$/.test(raw)) return '';
+  const s = raw.replace(/_\d+_$/, '').replace(/_x([0-9A-Fa-f]{2,4})_/g, (_m, h: string) => { const c = String.fromCharCode(parseInt(h, 16)); return c === ' ' ? ' ' : c; });
+  return s.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 class Reader {
@@ -287,13 +298,15 @@ class Reader {
   patterns = new Map<string, string>();
   unknown = new Set<string>();
   skipped: Set<string>;
-  images: Array<{ node: ImageNode; w: number; h: number; comps: number; bits: number; data: string }> = [];
+  images: Array<{ node: ImageNode; w: number; h: number; comps: number; bits: number; data: string; binary: boolean }> = [];
   imgPending: { m: Mat; w: number; h: number; comps: number; bits: number; binary: boolean } | null = null;
   dataAt = 0;
   text: { type: number; m: Mat; runs: Span[]; path: SubPath[]; capturing: boolean; align: number } | null = null;
   run: TextRun = { name: '_Helvetica', size: 12, leading: null, tracking: 0, baseline: 0, hs: 100, vs: 100 };
   trMode = 0;
   curLayerName = '';
+  lastNode: VNode | null = null;
+  xmlNext = false;
   steps = 0;
   styles = new Map<string, StyleResult>();
   styleStats = { objects: 0, effects: 0, kept: new Set<string>() };
@@ -442,6 +455,7 @@ class Reader {
   add(n: VNode): void {
     this.flushHeld();
     const c = this.top();
+    this.lastNode = c.kind === 'compound' ? null : n;
     if (c.kind === 'compound') { if (n.kind === 'path') c.kids.push(n); return; }
     if (this.layerSeen) c.nodes.push(n); else if (this.ctx.length === 1) this.pre.push(n); else c.nodes.push(n);
   }
@@ -483,6 +497,7 @@ class Reader {
 
   closeCtx(kind: Ctx['kind'] | null): void {
     if (this.held && this.top().kind !== 'compound') this.flushHeld();
+    this.lastNode = null;
     const c = this.ctx.length > 1 ? this.ctx.pop() : undefined;
     if (!c) return;
     void kind;
@@ -505,11 +520,12 @@ class Reader {
     const kids = clip ? [...c.nodes, c.clipper as VNode] : c.nodes;
     const gn: VNode = { id: newId('g'), kind: 'group', clip, children: kids, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
     if (c.sub) { if (c.sub.name) gn.name = c.sub.name; if (c.sub.hidden) gn.hidden = true; if (c.sub.locked) gn.locked = true; }
-    if (c.styled && this.styles.has(c.styled) && !(parent.kind === 'compound')) { this.held = { node: gn, style: c.styled, parent, src: [], srcStyle: '' }; return; }
+    if (c.styled && this.styles.has(c.styled) && !(parent.kind === 'compound')) { this.held = { node: gn, style: c.styled, parent, src: [], srcStyle: '' }; this.lastNode = gn; return; }
     this.addTo(parent, gn);
   }
   addTo(parent: Ctx, n: VNode): void {
     this.flushHeld();
+    this.lastNode = parent.kind === 'compound' ? null : n;
     if (parent.kind === 'compound') { if (n.kind === 'path') parent.kids.push(n); return; }
     if (!this.layerSeen && this.ctx.length === 1) this.pre.push(n); else parent.nodes.push(n);
   }
@@ -522,6 +538,7 @@ class Reader {
     this.flushHeld();
     this.flushLayer();
     this.layerSeen = true;
+    this.lastNode = null;
     const hex = (v: number): string => Math.max(0, Math.min(255, Math.round(v ?? 0))).toString(16).padStart(2, '0');
     const rgb = a.length >= 11 ? 8 : a.length >= 10 ? 7 : -1;
     this.layers.push({ name: `Layer ${this.layers.length + 1}`, hidden: a[0] === 0, locked: a.length > 2 && a[2] === 0, printable: a[3] !== 0, color: rgb >= 0 ? `#${hex(a[rgb])}${hex(a[rgb + 1])}${hex(a[rgb + 2])}` : '', nodes: [] });
@@ -583,7 +600,7 @@ class Reader {
       case 'f': case 'F': case 's': case 'S': case 'b': case 'B': case 'n': case 'N': this.paintOp(w); break;
       case 'W': this.clipFlag = true; break;
       case 'XR': g.rule = n(-1) === 1 ? 'evenodd' : 'nonzero'; break;
-      case 'u': { this.flushHeld(); const gc: Ctx = { kind: 'group', nodes: [], kids: [] }; if (this.armed) { gc.styled = this.armed; this.armed = ''; } this.ctx.push(gc); break; }
+      case 'u': { if (this.top().kind === 'compound') { const t = this.top(); t.inner = (t.inner ?? 0) + 1; break; } this.flushHeld(); this.lastNode = null; const gc: Ctx = { kind: 'group', nodes: [], kids: [] }; if (this.armed) { gc.styled = this.armed; this.armed = ''; } this.ctx.push(gc); break; }
       case 'XW': {
         const name = this.str(), flag = n(-1);
         if (this.held && !name) break;
@@ -591,7 +608,7 @@ class Reader {
         if (name && flag === 1) { this.flushHeld(); this.armed = this.styles.has(name) ? name : ''; }
         break;
       }
-      case 'U': if (this.top().kind === 'group') this.closeCtx(null); break;
+      case 'U': { const t = this.top(); if (t.kind === 'compound' && t.inner) t.inner--; else if (t.kind === 'group') this.closeCtx(null); break; }
       case 'q': this.ctx.push({ kind: 'clip', nodes: [], kids: [] }); break;
       case 'Q': if (this.top().kind === 'clip') this.closeCtx(null); break;
       case '*u': this.ctx.push({ kind: 'compound', nodes: [], kids: [] }); break;
@@ -624,7 +641,9 @@ class Reader {
       case 'Lb': this.beginLayer(a); break;
       case 'LB': this.flushLayer(); break;
       case 'Ln': { const L = this.layers[this.layers.length - 1]; if (L) L.name = this.str() || L.name; break; }
-      case 'SL': this.top().sub = { name: this.str(), hidden: n(-2) === 0, locked: n(-1) === 0 }; break;
+      case ':': if (this.stack.some((t) => t.t === 'x' && t.v === 'XMLUID')) this.xmlNext = true; break;
+      case ';': if (this.xmlNext) { this.xmlNext = false; const nm = xmlName(this.str()); if (nm && this.lastNode && !this.lastNode.name) this.lastNode.name = nm; } break;
+      case 'SL': this.lastNode = null; this.top().sub ={ name: this.str(), hidden: n(-2) === 0, locked: n(-1) === 0 }; break;
       case 'Bb': this.inBb = true; break;
       case 'Xx': case 'XX': {
         const type = n(-1), tint = n(-2);
@@ -634,11 +653,18 @@ class Reader {
         break;
       }
       case 'Bg': {
-        const k = a.slice(-10);
-        if (k.length === 10) this.grad = { name: this.str(), x: k[0], y: k[1], angle: k[2], len: k[3], m: [k[4], k[5], k[6], k[7], k[8], k[9]], mSet: false };
+        // [flag] (name) x y angle length a b c d tx ty, and in modern files a trailing 1: the numbers after the name, not the last ten
+        const si = this.stack.findIndex((t) => t.t === 's');
+        const k = si >= 0 ? this.stack.slice(si + 1).filter((t): t is { t: 'n'; v: number } => t.t === 'n').map((t) => t.v) : a.slice(-10);
+        if (k.length >= 10) this.grad = { name: this.str(), x: k[0], y: k[1], angle: k[2], len: k[3], m: [k[4], k[5], k[6], k[7], k[8], k[9]], mSet: false };
         break;
       }
-      case 'Xm': case 'Bm': if (this.grad && !this.grad.mSet && a.length >= 6) { this.grad.m = [n(-6), n(-5), n(-4), n(-3), n(-2), n(-1)]; this.grad.mSet = true; } break;
+      case 'Xm': case 'Bm': if (this.grad && !this.grad.mSet && a.length >= 6) {
+        // Xm/Bm map the gradient's unit space (the ramp runs from 0,0 to 1,0) to the page; checked against the PDF page's shading matrix. The origin, angle and length on Bg then describe a frame this matrix replaces
+        this.grad.m = [n(-6), n(-5), n(-4), n(-3), n(-2), n(-1)];
+        this.grad.x = 0; this.grad.y = 0; this.grad.angle = 0; this.grad.len = 1;
+        this.grad.mSet = true;
+      } break;
       case 'BB': {
         const flag = n(-1);
         if (flag === 2) this.closeLast();
@@ -672,7 +698,7 @@ class Reader {
       case 'TX': for (const t of this.stack) if (t.t === 's') this.textShow(t.v); break;
       case 'TO': this.textEnd(); break;
       case 'XI': this.image(a); break;
-      case 'XG': this.skipped.add('linked images'); break;
+      case 'XG': if (this.str()) this.skipped.add('linked images'); break;
       default:
         if (!SILENT.has(w) && !/^Adobe_/.test(w)) this.unknown.add(w);
     }
@@ -693,10 +719,10 @@ class Reader {
     const data = this.datas[this.dataAt++];
     this.imgPending = null;
     if (!p) return;
-    if (p.binary || p.bits !== 8 || p.comps < 1 || p.comps > 4) { this.skipped.add('binary or unusual raster images'); return; }
+    if ((p.bits !== 8 && !(p.bits === 1 && p.comps === 1)) || p.comps < 1 || p.comps > 4) { this.skipped.add('raster images with an unusual bit depth'); return; }
     const key = `img-${newId('').replace(/[^a-z0-9]/gi, '')}.png`;
-    const node: ImageNode = { id: newId('im'), kind: 'image', src: key, w: p.w, h: p.h, xf: mul(this.F, mul(p.m, [1, 0, 0, -1, 0, p.h])), opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
-    this.images.push({ node, w: p.w, h: p.h, comps: p.comps, bits: p.bits, data });
+    const node: ImageNode = { id: newId('im'), kind: 'image', src: key, w: p.w, h: p.h, xf: mul(this.F, mul(p.m, [1, 0, 0, -1, 0, 0])), opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+    this.images.push({ node, w: p.w, h: p.h, comps: p.comps, bits: p.bits, data, binary: p.binary });
     this.add(node);
   }
 
@@ -717,18 +743,23 @@ function tpMatrix(a: number[]): Mat {
   return k.length === 6 ? [k[0], k[1], k[2], k[3], k[4], k[5]] : [1, 0, 0, 1, 0, 0];
 }
 
-async function rasterPng(w: number, h: number, comps: number, bits: number, hex: string): Promise<Blob | null> {
-  const per = Math.max(1, comps) * (bits >> 3);
-  if (hex.length < w * h * per * 2) return null;
-  const px = new Uint8ClampedArray(w * h * 4), val = (i: number): number => parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+async function rasterPng(w: number, h: number, comps: number, bits: number, data: string, binary = false): Promise<Blob | null> {
+  const rowBytes = Math.ceil((w * comps * bits) / 8), total = binary ? data.length : data.length / 2;
+  if (total < rowBytes * h) return null;
+  const val = binary ? (i: number): number => data.charCodeAt(i) & 255 : (i: number): number => parseInt(data.slice(i * 2, i * 2 + 2), 16);
+  const alpha = bits === 8 && total >= rowBytes * h + w * h, per = comps, aAt = rowBytes * h;
+  const px = new Uint8ClampedArray(w * h * 4);
   for (let i = 0; i < w * h; i++) {
     const o = i * per, d = i * 4;
-    if (comps >= 4) {
-      const c = val(o) / 255, m = val(o + 1) / 255, y = val(o + 2) / 255, k = val(o + 3) / 255;
-      px[d] = 255 * (1 - c) * (1 - k); px[d + 1] = 255 * (1 - m) * (1 - k); px[d + 2] = 255 * (1 - y) * (1 - k);
+    if (bits === 1) {
+      const x = i % w, y = (i - x) / w, bit = (val(y * rowBytes + (x >> 3)) >> (7 - (x & 7))) & 1;
+      px[d] = px[d + 1] = px[d + 2] = bit ? 255 : 0;
+    } else if (comps >= 4) {
+      const c = val(o), m = val(o + 1), y = val(o + 2), k = val(o + 3), v = cmToRgb({ c: c / 2.55, m: m / 2.55, y: y / 2.55, k: k / 2.55 });
+      if (v) { px[d] = v.r; px[d + 1] = v.g; px[d + 2] = v.b; } else { px[d] = (255 - c) * (1 - k / 255); px[d + 1] = (255 - m) * (1 - k / 255); px[d + 2] = (255 - y) * (1 - k / 255); }
     } else if (comps === 3) { px[d] = val(o); px[d + 1] = val(o + 1); px[d + 2] = val(o + 2); }
     else { const v = val(o); px[d] = px[d + 1] = px[d + 2] = v; }
-    px[d + 3] = 255;
+    px[d + 3] = alpha ? val(aAt + i) : 255;
   }
   const cv = new OffscreenCanvas(w, h), cx = cv.getContext('2d');
   if (!cx) return null;
@@ -894,11 +925,11 @@ export async function readAiLegacy(data: ArrayBuffer, title: string): Promise<Ai
   return buildAi(priv ?? src, title, early, {});
 }
 
-export interface AiBuildOpts { boxes?: number[][]; names?: string[] }
+export interface AiBuildOpts { boxes?: number[][]; names?: string[]; rasters?: string[] }
 
 /** Builds the document from already assembled Illustrator text; the legacy reader and the PDF compatible reader share it. */
 export async function buildAi(text: string, title: string, early: Set<string>, opts: AiBuildOpts): Promise<AiRead> {
-  const prep = prepare(text), meta = prep.meta;
+  const prep = prepare(text, opts.rasters), meta = prep.meta;
   for (const s of early) meta.skipped.add(s);
   const boxes: number[][] = opts.boxes?.length ? opts.boxes : meta.artboards.length ? meta.artboards : meta.tile ? [meta.tile] : meta.bbox ? [meta.bbox] : [[0, 0, 612, 792]];
   const ox = Math.min(...boxes.map((b) => b[0])), oy = Math.max(...boxes.map((b) => b[3]));
@@ -924,7 +955,7 @@ export async function buildAi(text: string, title: string, early: Set<string>, o
   for (const [name, c] of meta.customs) if (!rd.swatches.has(name)) doc.swatches.push({ id: newId('s'), name, paint: solid(c), global: true, spot: true });
   const assets = new Map<string, Blob>();
   for (const im of rd.images) {
-    const blob = await rasterPng(im.w, im.h, im.comps, im.bits, im.data).catch(() => null);
+    const blob = await rasterPng(im.w, im.h, im.comps, im.bits, im.data, im.binary).catch(() => null);
     if (!blob) { meta.skipped.add('placed images'); im.node.hidden = true; continue; }
     assets.set(im.node.src, blob);
     doc.images[im.node.src] = { mime: 'image/png', w: im.w, h: im.h };

@@ -3580,3 +3580,59 @@ readAiLegacy's body after the text is found became buildAi(text, title, early, o
 - logged: v0.41.0 · 2026-10-16
 
 After the legacy and native checks, a .ai goes through readAiModern with a shared PdfSession; the toast reports layers and artboards, what was brought in and what was left out. A failure falls through to readPdfVector and adds one toast with the reason and "Opened through its PDF page instead." The new strings go through t() inside ai-modern.ts; the i18n extract has not been run for them.
+
+### src/io/ai-guard.ts · Private data result checked against the file's own PDF page
+- refers-to: src/io/ai-guard.ts :: guardAi; src/app.ts :: openFiles (.ai branch)
+- kind: decision
+- logged: v0.41.0 · 2026-10-16
+
+After readAiModern succeeds, guardAi reads the same file's PDF pages with readPdfVector (same PdfSession, so the parse is shared), renders each artboard of both documents offscreen through renderRegion at about 256 px on the long side on white, and counts the share of pixels where any channel differs by more than 40. If any artboard exceeds 12 percent (or the private data has fewer artboards than the PDF has pages) the already read PDF result is adopted with the notice "The Illustrator data did not match the page, so the file opened through its PDF page."; the decision and per board diffs go to console.debug only. The 12 percent line sits in the gap of the 35 file corpus: files that look right measured at most 11.5 percent on any board (and 2 to 10 percent after the colour fixes), files with missing or wrong art measured 15 percent and up. A PDF page that renders blank (under 0.2 percent inked pixels) counts as no evidence, because that is a PDF reader failure more often than a wrong private read. The guard is skipped, with the private data kept, for documents of more than 20,000 objects (none in the corpus; the largest has 9,483), and when the PDF page cannot be read. Added open time: a few ms to about 250 ms for typical files, but about 3.7 s for the 9,483 object, 5 artboard KubeCon file, where the cost is the PDF vector read and the renders. Known weakness: the comparison trusts formpth's own PDF reader; where that reader misses art (babel opens with only one of its two layers) a right private read can fail the guard.
+
+### src/io/ai-private.ts · distinct TileBox, no versioned content block
+- refers-to: src/io/ai-private.ts :: buildAiPrivate (header)
+- kind: decision
+- logged: v0.41.0 · 2026-10-16
+
+%AI3_TileBox is now the printable tile, not a copy of the crop marks: in the real files it is the Letter page minus margins (593.28 by 773.28, or 773.28 by 593.28 for a landscape board) centred on artboard 1, so the writer emits that. The %AI17_Begin_Content_if_version_gt wrapper around %AI9_OpenToView is gone: the content it holds is a plain view record that older readers also accept, so nothing is written in a versioned block. ArtboardArray already carried every exported artboard and reads back whole (two artboards, names and positions checked); nested %AI5_BeginLayer blocks match the real webpack form and read back as a named group inside the parent layer (an unpainted path inside a sublayer is dropped by the reader, which is correct). Still lost on reopen through private data: raster images ("Raster blocks" skipped by the reader), symbol links (placed art only), object names and the type object (outlines).
+
+### src/io/ai-modern.ts · binary rasters lifted before the line work
+- refers-to: src/io/ai-modern.ts :: liftRasters, readAiModern; src/io/ai-legacy.ts :: prepare, Reader.takeData, rasterPng
+- kind: decision
+- logged: v0.41.0 · 2026-10-16
+
+Learned from 20 real files. A modern raster is %AI5_File:, %AI5_BeginRaster, `() 1 XG`, `/DeviceRGB|CMYK|Gray XN`, `[m] w h 0 Xh`, the XI argument line `[m] 0 0 w h w h bits type alpha reserved bin ...` and then `%%BeginData: N` followed by `XI`, a line feed and the pixels, %%EndData, XH, %AI5_EndRaster. XI sits inside the data, not on the argument line, so prepare now pushes an XI after a BeginData. N counts XI, the line feed and the colour bytes only: when the XI line says alpha is present (webpack, python-logo-mods, fastlane) a plane of w*h alpha bytes follows after N, planar and not interleaved, so liftRasters looks for %%EndData from N on instead of trusting N as the end. The pixels are cut out of the text before modernText splits lines (a CR or LF byte would corrupt them) and handed to buildAi as opts.rasters by index (an @BIN n line stands in for them). Row padding is whole bytes (1-bit 456 wide is 57 bytes a row); 8-bit gray, RGB and CMYK are decoded, CMYK through cmToRgb like the other colours. Image space is x right and y up with the image hanging below its origin, so the placement is the XI matrix times a flip about y 0 (the old flip about h placed every image one height too high; checked by overlay against the PDF page on the webpack palette). A raster written inside an %_ dictionary is an opacity mask (Mask, Clipping, Linked): its payload is dropped and "opacity mask images" is reported. Rasters inside brush pattern blocks (requests, vue, ansible, rust) stay with the brush skip. Not done: the PDF image XObject fallback for rasters whose pixels are absent (every file here has them, and no linked `(path) 1 XG` occurs in any sample), and opacity masks are not applied.
+
+### src/io/ai-legacy.ts · object names from XMLUID
+- refers-to: src/io/ai-legacy.ts :: xmlName, Reader.exec (: and ;), Reader.lastNode, prepare (Raster, XI)
+- kind: decision
+- logged: v0.41.0 · 2026-10-16
+
+Illustrator keeps an object's name only as /XMLUID : (id) ; (AI10_ArtUID) in the %_/ArtDictionary written right after the object's closing operator (f, n, U, *U, Q or N), so the reader remembers the last node it placed (lastNode, cleared at a layer, a group open, a sublayer, a compound member and a close with nothing to add) and names it when the ; arrives. Layers and sublayers keep their Ln name, since their XMLUID follows Ln. xmlName reverses the derivation: a trailing _N_ repeat suffix is dropped, _xHH_ escapes are decoded (an A0 becomes a space), underscores become spaces, and the machine ids XMLID_000... are ignored. The result is lossy where a name held a real underscore. A name already set (sublayer) is not overwritten. Sublayer names from Ln still show UTF-8 bytes as latin1 (a non-breaking space reads as a capital A circumflex), not fixed. prepare no longer treats %AI5_BeginRaster as a generic skipped block, and `() 1 XG` (an embedded image) no longer reports linked images.
+
+### src/io/place.ts · placing .ai embedded uses the private data
+- refers-to: src/io/place.ts :: placeSpecial (pdf branch)
+- kind: decision
+- logged: v0.41.0 · 2026-10-16
+
+An .ai placed embedded now goes through readAiModern first and becomes one group named after the file holding one group per layer (hidden layers stay hidden), scaled to the requested width like the legacy placement; when the private data is absent or fails, the notes carry the reason and the PDF page path runs as before. Linked placement is untouched and stays the PDF page picture. The page and crop choices do not apply to the private data path, which places all layers' art at its bounding box.
+
+### src/io/ai-legacy.ts · modern art that rendered wrong against the PDF page
+- refers-to: src/io/ai-legacy.ts :: prepare (layerIn, %_ lines), parseGradient, Reader.exec (Bg, Xm, Bm, u, U)
+- kind: decision
+- logged: v0.41.0 · 2026-10-16
+
+Six causes found by rendering the private data and the PDF page of the same file and reading both. (1) Inside a layer, `%_` lines that are not dictionary entries (not starting with `/`, `;`, `:` and not an /Int, /Real... entry) are the editable source of the object above (a compound shape part or live effect input, drawn black or in a placeholder colour) and are now dropped; the plain lines already drew the result. This was the black webpack palette, the dark badge and the doubled shapes; outside layers `%_` still reads as before, so legacy files, which carry none in their art, are unchanged. (2) A `u` inside a `*u` compound (babel writes the member paths of one compound in several u/U runs) opened a group the paths then went into, leaving only specks in the compound; it is now counted on the compound (Ctx.inner) and the paths stay members. (3) Gradient stop lines read `c m y k r g b 2 opacity 6 mid ramp`: the colour test wanted exactly eight numbers before mid, so these stops were taken as CMYK (the bright Jupyter blue) and the opacity after the type (0.1 in the awesome badge, whose overlay gradient is nearly clear) was ignored; the test is now eight or more and the opacity is read. (4) Bg took its last ten numbers, which in modern files include the trailing 1; it now takes the numbers after the name. (5) When Xm or Bm follows Bg, that matrix maps the ramp's unit space (0,0 to 1,0) to the page, as the PDF shading's cm matrix shows (the Jupyter Python matrix a and b are identical to it), so the origin, angle and length from Bg are replaced by 0 0 0 1 and the matrix is used as is; with neither (legacy files) Bg's own numbers still drive it. (6) The remaining CMYK colour gap is not in the parser: the PDF path gives the document the file's embedded CMYK ICC profile (assignPdfProfile in app.ts) and the private data path does not, so CMYK `k` paint is shown naive; applying it in the harness took the vue badge from 14.0 to 0.9 percent, the outlined badge from 51.1 to 0.0 and the vue logo from 11.8 to 0.0.
+
+### src/io/ai-legacy.ts · what still differs from the PDF page
+- refers-to: src/io/ai-legacy.ts :: paintWith, flushHeld; src/io/ai-modern.ts; src/app.ts :: openFiles
+- kind: todo
+- logged: v0.41.0 · 2026-10-16
+
+Open: the godot jam header (a compound path of text outlines whose gradient fill comes out across the whole board, and an outer rectangle among its members), the godot jam icon, the kubernetes do-not-use ribbon (the blue ribbon and its text are missing and the rope pieces carry a black stroke), and a few percent on the CNC stacked logos, fastlane pilot and requests logo. app.ts and ai-modern.ts need to call assignPdfProfile on the private data document as the PDF branch does, and the guard in ai-guard.ts compares documents without that profile, so it overstates the difference for CMYK files.
+
+### src/io/ai-guard.ts · both sides of the guard carry the file's CMYK profile
+- refers-to: src/app.ts :: openFiles (.ai branch); src/io/ai-guard.ts :: guardAi
+- kind: decision
+- logged: v0.41.0 · 2026-10-16
+
+Done for the todo above: the .ai open path now calls assignPdfProfile on the private data document before the guard, and the guard tags the PDF page document the same way before rendering, so CMYK paint is converted through the file's own profile on both sides. On the 36-file corpus that leaves 33 files on the private data (worst artboard 0 to 7.7 percent) and three on the PDF page (godot jam header 81.9, godot jam icon 15.0, kubernetes do-not-use 16.6). Because the PDF page document comes back already tagged, the PDF branch's own assignPdfProfile finds a profile set and returns no name, so after a guard fallback the "it is now this document's CMYK working space" toast does not show; the profile is still applied.

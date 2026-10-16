@@ -8,6 +8,7 @@ import { Project } from '../engine/project';
 import { BLEND_MODES } from '../engine/types';
 import type { BlendMode, Doc, Engine, GroupNode, ImageAsset, ImageLink, ImageNode, PathNode, PatternDef, Pt, VNode } from '../engine';
 import { isLegacyAi, readAiLegacy } from './ai-legacy';
+import { readAiModern } from './ai-modern';
 import { PdfPasswordError, PdfSession, probePdf, readPdfVector, type PdfBox, type PdfPageInfo } from './pdf-read';
 import { renderRegion } from './raster';
 import { readPsdComposite, readPsdInfo, readPsdLayers, type PsdLayers, type PsdNode } from './psd-read';
@@ -232,6 +233,22 @@ export async function placeSpecial(engine: Engine, src: PlaceSource, at: Pt | nu
       o = c;
     } else o = { mode: 'embed', page: 1, crop: 'bounding' };
     const pageIx = clamp((o.page ?? 1) - 1, 0, list.length - 1), crop = o.crop ?? 'bounding';
+    if (/\.ai$/i.test(name) && !(o.mode === 'link' && canLink)) {
+      const mr = await readAiModern(data, title, pw, session);
+      if (mr.read) {
+        const r = mr.read, kids: VNode[] = r.doc.layers.filter((l) => l.children.length).map((l) => ({ id: newId('g'), kind: 'group', clip: false, children: l.children, opacity: 1, blend: 'normal', ap: { ...BARE }, name: l.name, ...(l.hidden ? { hidden: true } : {}) }) as GroupNode);
+        if (kids.length) {
+          const g: GroupNode = { id: newId('g'), kind: 'group', clip: false, children: kids, opacity: 1, blend: 'normal', ap: { ...BARE }, name: title };
+          const doc: Doc = { ...r.doc, layers: [{ ...r.doc.layers[0], children: [g] }] };
+          const b = visualBounds(doc, g), s = width && b.w > 0 ? width / b.w : 1;
+          const p = ensureProject(b.w * s, b.h * s), pos = centre(p, b.w * s, b.h * s);
+          const moved = transformNodes(doc, [g.id], mul(translate(pos.x, pos.y), [s, 0, 0, s, -b.x * s, -b.y * s])).doc.layers[0].children[0];
+          if (r.skipped.length) notes.push(`Left out: ${r.skipped.slice(0, 4).join(', ')}.`);
+          engine.beginStep();
+          try { stash(p, r.assets, r.doc.images, r.doc.patterns); const id = engine.addNodes('Place', [moved])[0] ?? null; return { id, notes: ['Placed as editable art from the Illustrator data, one group per layer.', ...notes] }; } finally { engine.endStep(); }
+        }
+      } else if (mr.why) notes.push(mr.why);
+    }
     const art = await pdfArt(data, list.length > 1 ? `${title} (page ${pageIx + 1})` : title, pageIx, crop, session, pw);
     if (art.fonts.length) notes.push(`Fonts not installed, set in their nearest match: ${art.fonts.slice(0, 3).map(([a, b]) => `${a} as ${b}`).join(', ')}${art.fonts.length > 3 ? ` and ${art.fonts.length - 3} more` : ''}.`);
     if (art.skipped.length) notes.push(`Left out: ${art.skipped.slice(0, 4).join(', ')}.`);

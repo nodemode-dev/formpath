@@ -542,11 +542,11 @@ export async function buildAiPrivate(inp: AiPrivateInput): Promise<AiPrivate> {
     hdr.push(`%%RGBCustomColor: ${cc.join(`${CR}%%+ `)}`);
   }
   hdr.push(rgbDoc ? '%%RGBProcessColor: 0 0 0 ([Registration])' : '%%CMYKProcessColor: 1 1 1 1 ([Registration])');
-  const cx = a0.w / 2, cy = -a0.h / 2;
+  const cx = a0.w / 2, cy = -a0.h / 2, tw = a0.w > a0.h ? 773.28 : 593.28, th = a0.w > a0.h ? 593.28 : 773.28;
   hdr.push(
     `%AI3_Cropmarks: ${crop.map((v) => nf(v)).join(' ')}`,
     `%AI3_TemplateBox: ${nf(cx - 0.5)} ${nf(cy - 0.5)} ${nf(cx - 0.5)} ${nf(cy - 0.5)}`,
-    `%AI3_TileBox: ${crop.map((v) => nf(v)).join(' ')}`,
+    `%AI3_TileBox: ${[cx - tw / 2, cy - th / 2, cx + tw / 2, cy + th / 2].map((v) => nf(v)).join(' ')}`,
     '%AI3_DocumentPreview: None',
     '%AI5_ArtSize: 14400 14400',
     `%AI5_RulerUnits: ${RULER_UNITS[doc.units] ?? 2}`,
@@ -554,11 +554,7 @@ export async function buildAiPrivate(inp: AiPrivateInput): Promise<AiPrivate> {
     '%AI5_ArtFlags: 0 0 0 1 0 0 1 0 0',
     '%AI5_TargetResolution: 800',
     `%AI5_NumLayers: ${doc.layers.length}`,
-    '%AI17_Begin_Content_if_version_gt:17 1',
     `%AI9_OpenToView: ${nf(cx - 644)} ${nf(-cy + 388)} 1 1288 777 26 0 0 21 78 0 0 0 1 1 0 1 1 0 1`,
-    '%AI17_Alternate_Content',
-    `%AI9_OpenToView: ${nf(cx - 644)} ${nf(-cy + 388)} 1 1288 777 26 0 0 21 78 0 0 0 1 1 0 1 1 0 1`,
-    '%AI17_End_Versioned_Content',
     '%AI5_OpenViewLayers: 7',
     `%%PageOrigin:${nf(-Math.round(a0.w / 2) - 276)} ${nf(Math.round(a0.h / 2) - 330)}`,
     '%AI7_GridSettings: 72 8 72 8 1 0 0.800000011920929 0.800000011920929 0.800000011920929 0.899999976158142 0.899999976158142 0.899999976158142',
