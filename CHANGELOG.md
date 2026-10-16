@@ -2,6 +2,24 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.37.0 · 2026-10-16
+
+Plan v0.7.0 phase 33: files.
+
+### Added
+
+- SVG import: pattern fills and strokes, masks, blur, drop shadow and glow filters as live effects, markers, styled tspans and text on a path; formpth's own SVG round-trips without its native copy.
+- EPS import brings in images (image, colorimage, imagemask) with the common PostScript filters.
+- PNG, JPEG, WebP and TIFF embed the document ICC profile (Embed ICC Profile in Export); CMYK TIFF converts through the document profile.
+- Separations print as vector plates; the Ink Manager turns inks off, converts spots to process and aliases spots.
+- PDF: live text as runs, AES-256 passwords and permissions, PDF/X-1a, PDF/X-3 and PDF/A-2b, compression options, Acrobat layers from top-level layers; PDF import reads layers and ICC-based colours. The Export dialog has General, Marks and Bleeds, Compression and Security tabs. `export_file` takes the same options.
+- 88 new strings in all 25 languages.
+
+### Changed
+
+- PDF gradient fills whose stops have opacity are rasterised, as gradient strokes were, so the fade is kept.
+- `docs/PARITY.md`: 72.5 of 76 (95.4 percent); SVG in and out is Full.
+
 ## 0.36.0 · 2026-10-16
 
 Plan v0.7.0 phase 32: Pathfinder and shapes.
