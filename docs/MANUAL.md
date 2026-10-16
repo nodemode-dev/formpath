@@ -704,7 +704,7 @@ ask it questions.
   profile as the output intent (X-1a and X-3 flatten transparency), PDF/A-2b embeds sRGB. The PDF options sit in four
   tabs: General (standard and Create Acrobat Layers), Marks and Bleeds, Compression (line art, ZIP or JPEG images,
   downsampling) and Security (AES-256 open and permissions passwords, printing, changes, copying, accessibility);
-  the standards cannot be combined with passwords. Illustrator (.ai) writes a PDF-compatible .ai that reopens fully editable in formpth.
+  the standards cannot be combined with passwords. Illustrator (.ai) writes a PDF-compatible .ai that reopens fully editable in formpth, and also carries Illustrator's own data (layers, sublayers, groups, clipping, gradients, spot colours, symbols, artboards and images, with type as outlines) for Illustrator to read.
 - Edit > Color Settings picks the RGB and CMYK working profiles (installed, system or loaded .icc files), the
   rendering intent and black point compensation; Edit > Assign Profile and Convert to Profile change the document's
   profile; View > Proof Setup and Proof Colors preview the art on the chosen press profile.
@@ -718,6 +718,11 @@ ask it questions.
 - Opening files: encrypted PDFs ask for their password; `.ai` files saved without PDF compatibility (Illustrator 3
   to CS6 and later) open with their layers, paths, gradients, spot colours and type; symbols, brushes and live
   effects are named in the message as left out.
+- A PDF-compatible .ai from a modern Illustrator opens through Illustrator's own data: its layers and sublayers,
+  object names, every artboard, images, gradients and graphic styles, with objects that wear a drop shadow, outer
+  glow, feather, round corners, offset path or transform effect kept editable with the effect live. formpth compares
+  the result with the file's PDF page first; when they do not match, the file opens through its PDF page and the
+  message says so. Placing an .ai embedded uses the same data.
 - File > Send to NodeMode sends the active artboard as an image to a NodeMode canvas (Preferences > Plugins sets its
   address).
 

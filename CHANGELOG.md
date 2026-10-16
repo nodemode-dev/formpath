@@ -2,6 +2,21 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.41.0 · 2026-10-16
+
+Plan v0.8.0 phase 38: modern Illustrator files.
+
+### Added
+
+- PDF-compatible `.ai` files open through Illustrator's private data (zlib and Illustrator 24 ZStandard): layers, sublayers, hidden and locked states, object names, every artboard, raster images, gradients with stop opacity, art styles as graphic styles, and styled objects as the editable source with live Drop Shadow, Outer Glow, Feather, Round Corners, Offset Path, Transform or stroke alignment. The file's CMYK profile becomes the document's CMYK working space.
+- A guard renders each artboard against the file's own PDF page and opens through the page when more than 12 percent of pixels differ. On 36 real files from Illustrator 13 to 24, 33 opened through the private data and 3 fell back.
+- Placing an `.ai` embedded uses the private data.
+- Export `.ai` writes Illustrator private data (layers, sublayers, groups, clip groups, compound paths, gradients, spot colours, symbols, artboards, images; type as outlines). Not yet confirmed in Illustrator itself.
+
+### Known gaps
+
+- Placed symbol instances and art, pattern and scatter brushes on strokes come in expanded, as do live effects formpth has no equivalent for; opacity masks are dropped.
+
 ## 0.40.0 · 2026-10-16
 
 Plan v0.8.0 phases 36 and 37: the four rows the fifth audit found Partial.
