@@ -199,7 +199,7 @@ export interface TextNode extends NodeBase {
 }
 
 export interface ImageWarp { rows: number; cols: number; pts: Pt[]; smooth: boolean }
-export interface ImageLink { path?: string; handle?: string; name: string; size?: number; mtime?: number }
+export interface ImageLink { path?: string; handle?: string; name: string; size?: number; mtime?: number; page?: number; crop?: string; layers?: string }
 export interface ImageNode extends NodeBase { kind: 'image'; src: string; w: number; h: number; xf: Mat; link?: string; linked?: ImageLink; trace?: Record<string, number | string | boolean>; warp?: ImageWarp }
 export interface SymbolPart { ap?: Appearance; opacity?: number; blend?: BlendMode }
 export interface SymbolNode extends NodeBase { kind: 'symbol'; symbol: string; xf: Mat; tint?: { color: Color; amount: number }; parts?: Record<string, SymbolPart> }

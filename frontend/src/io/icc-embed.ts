@@ -116,8 +116,26 @@ export function embedWebp(webp: Uint8Array, icc: IccPayload): Uint8Array {
   return join([head, ...body]);
 }
 
-export async function embedIcc(blob: Blob, format: 'png' | 'jpg' | 'webp', icc: IccPayload): Promise<Blob> {
+export function embedPsd(psd: Uint8Array, icc: IccPayload): Uint8Array {
+  if (psd.length < 34 || String.fromCharCode(psd[0], psd[1], psd[2], psd[3]) !== '8BPS') return psd;
+  const dv = new DataView(psd.buffer, psd.byteOffset, psd.length), modeLen = dv.getUint32(26), resAt = 30 + modeLen;
+  if (resAt + 4 > psd.length) return psd;
+  const resLen = dv.getUint32(resAt), start = resAt + 4, end = start + resLen, kept: Uint8Array[] = [];
+  for (let o = start; o + 12 <= end;) {
+    const nameLen = psd[o + 6], nameSpan = (1 + nameLen + 1) & ~1, size = dv.getUint32(o + 6 + nameSpan), id = dv.getUint16(o + 4), total = 6 + nameSpan + 4 + size + (size & 1);
+    if (id !== 1039) kept.push(psd.subarray(o, o + total));
+    o += total;
+  }
+  const head = new Uint8Array(12), hv = new DataView(head.buffer);
+  head.set(Uint8Array.from('8BIM', (ch) => ch.charCodeAt(0)), 0);
+  hv.setUint16(4, 1039); hv.setUint16(6, 0); hv.setUint32(8, icc.bytes.length);
+  const block = join(icc.bytes.length & 1 ? [head, icc.bytes, Uint8Array.of(0)] : [head, icc.bytes]), body = join([...kept, block]), len = new Uint8Array(4);
+  new DataView(len.buffer).setUint32(0, body.length);
+  return join([psd.subarray(0, resAt), len, body, psd.subarray(end)]);
+}
+
+export async function embedIcc(blob: Blob, format: 'png' | 'jpg' | 'webp' | 'psd', icc: IccPayload): Promise<Blob> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  const out = format === 'png' ? await embedPng(bytes, icc) : format === 'jpg' ? embedJpeg(bytes, icc) : embedWebp(bytes, icc);
+  const out = format === 'png' ? await embedPng(bytes, icc) : format === 'jpg' ? embedJpeg(bytes, icc) : format === 'psd' ? embedPsd(bytes, icc) : embedWebp(bytes, icc);
   return out === bytes ? blob : new Blob([out as Uint8Array<ArrayBuffer>], { type: blob.type });
 }

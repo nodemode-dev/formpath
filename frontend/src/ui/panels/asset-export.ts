@@ -3,15 +3,14 @@ import { findNode } from '../../engine/doc';
 import { isEmptyRect } from '../../engine/geometry';
 import { renderNode } from '../../engine/render';
 import type { Engine, ExportAsset, VNode } from '../../engine';
-import type { AssetItem } from '../../io/raster';
+import { parseScale, type AssetItem } from '../../io/raster';
 import { el, patchList, q, setClass, setDisabled, setHidden, setText, setTitle } from '../dom';
 import { enhanceSelect } from '../dropdown';
 import { askForm } from '../form-dialog';
 import { icon } from '../icons';
 import { empty, page, row, section } from './kit';
 
-const SCALES: ReadonlyArray<readonly [string, string]> = [['0.5', '0.5x'], ['1', '1x'], ['1.5', '1.5x'], ['2', '2x'], ['3', '3x'], ['4', '4x']];
-const FORMATS: ReadonlyArray<readonly [string, string]> = [['png', 'PNG'], ['jpg', 'JPG'], ['webp', 'WebP'], ['svg', 'SVG'], ['pdf', 'PDF']];
+const FORMATS: ReadonlyArray<readonly [string, string]> = [['png', 'PNG'], ['png8', 'PNG-8'], ['gif', 'GIF'], ['jpg', 'JPG'], ['webp', 'WebP'], ['bmp', 'BMP'], ['psd', 'PSD'], ['tiff', 'TIFF'], ['svg', 'SVG'], ['pdf', 'PDF']];
 
 export class AssetExportPanel {
   readonly body = page('cv-assetp');
@@ -60,18 +59,19 @@ export class AssetExportPanel {
   private addRow(scale: number, format: string, suffix: string): void {
     const r = el('<div class="cv-screens-row"></div>');
     const sel = (opts: ReadonlyArray<readonly [string, string]>, v: string, label: string): HTMLSelectElement => { const s = el<HTMLSelectElement>(`<select class="cv-select" aria-label="${label}"></select>`); for (const [id, l] of opts) { const o = document.createElement('option'); o.value = id; o.textContent = l; s.appendChild(o); } s.value = v; return s; };
-    const s = sel(SCALES, String(scale), 'Scale'), f = sel(FORMATS, format, 'Format'), x = el<HTMLInputElement>('<input class="cv-input" type="text" aria-label="Suffix" placeholder="suffix">');
-    x.value = suffix;
+    const s = el<HTMLInputElement>('<input class="cv-input" type="text" list="cv-screen-scales" aria-label="Scale" placeholder="2x or 300 ppi">'), f = sel(FORMATS, format, 'Format'), x = el<HTMLInputElement>('<input class="cv-input" type="text" aria-label="Suffix" placeholder="suffix">');
+    s.value = `${scale}x`; x.value = suffix;
     x.addEventListener('keydown', (e) => e.stopPropagation());
+    s.addEventListener('keydown', (e) => e.stopPropagation());
     const del = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" aria-label="Remove this format">${icon('close', 14)}</button>`);
     del.addEventListener('click', () => { if (this.rows.children.length > 1) r.remove(); });
     r.append(s, x, f, del);
     this.rows.appendChild(r);
-    enhanceSelect(s); enhanceSelect(f);
+    enhanceSelect(f);
   }
 
   private items(): AssetItem[] {
-    return Array.from(this.rows.children).map((r) => { const s = q<HTMLSelectElement>(r, 'select[aria-label="Scale"]'), f = q<HTMLSelectElement>(r, 'select[aria-label="Format"]'), x = q<HTMLInputElement>(r, 'input'); return { scale: Number(s.value) || 1, format: f.value as AssetItem['format'], suffix: x.value }; });
+    return Array.from(this.rows.children).map((r) => { const s = q<HTMLInputElement>(r, 'input[aria-label="Scale"]'), f = q<HTMLSelectElement>(r, 'select[aria-label="Format"]'), x = q<HTMLInputElement>(r, 'input[aria-label="Suffix"]'); return { scale: parseScale(s.value) ?? 1, format: f.value as AssetItem['format'], suffix: x.value }; });
   }
 
   private async exportNow(): Promise<void> {

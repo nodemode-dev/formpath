@@ -1,6 +1,7 @@
 import { renderNode, type RenderContext } from '../engine/render';
 import { selectionBounds, visualBounds } from '../engine/bounds';
-import { childrenOf, findNode, makeLayer, newId } from '../engine/doc';
+import { childrenOf, findNode, makeLayer, newId, nodeLabel } from '../engine/doc';
+import type { BlendMode } from '../engine/types';
 import { inflate, isEmptyRect } from '../engine/geometry';
 import { BLACK, hex, toRgb, WHITE } from '../engine/paint';
 import { rayTraced } from '../engine/threed';
@@ -10,8 +11,27 @@ import { zipFiles } from './zip';
 import { encodeTiff, type TiffCompression } from './tiff';
 import { outputProfileBytes, printCmykLuts, rgbToCmykBytes, type Lut } from '../engine/color-management';
 import { embedIcc, type IccPayload } from './icc-embed';
+import { quantize, type PaletteDither, type PaletteMethod } from './palette';
+import { encodeGif } from './gif';
+import { encodePng8 } from './png8';
+import { encodeBmp } from './bmp';
+import { encodePsd, type PsdLayerIn } from './psd-write';
+import { hardEdges, hardScale, reduceHard, sharpenType, typeTree, type AntiAlias } from './raster-aa';
 
-export type RasterFormat = 'png' | 'jpg' | 'webp' | 'tiff';
+export type RasterFormat = 'png' | 'jpg' | 'webp' | 'tiff' | 'gif' | 'png8' | 'bmp' | 'psd';
+export interface RasterExtra { aa: AntiAlias; colors: number; palette: PaletteMethod; dither: PaletteDither; amount: number; matte: string; interlace: boolean; bmpBits: 24 | 32; psdCmyk: boolean; psdLayers: boolean }
+export const RASTER_EXTRA: RasterExtra = { aa: 'art', colors: 256, palette: 'perceptual', dither: 'diffusion', amount: 88, matte: '#ffffff', interlace: false, bmpBits: 24, psdCmyk: false, psdLayers: true };
+export const rasterExt = (f: string): string => (f === 'png8' ? 'png' : f);
+export const isRasterFormat = (f: string): f is RasterFormat => f === 'png' || f === 'jpg' || f === 'webp' || f === 'tiff' || f === 'gif' || f === 'png8' || f === 'bmp' || f === 'psd';
+
+export function parseScale(text: string): number | null {
+  const t = text.trim().toLowerCase().replace(/\s+/g, '');
+  const ppi = /^(\d+(?:\.\d+)?)(?:ppi|dpi)$/.exec(t);
+  if (ppi) { const v = Number(ppi[1]) / 72; return v > 0 && v <= 100 ? v : null; }
+  const x = /^(\d+(?:\.\d+)?)x?$/.exec(t);
+  if (x) { const v = Number(x[1]); return v > 0 && v <= 100 ? v : null; }
+  return null;
+}
 export interface TiffChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface DitherOpts {
   model: 'bitmap' | 'grayscale' | 'palette';
@@ -22,7 +42,7 @@ export interface DitherOpts {
   palette?: Color[];
   threshold?: number;
 }
-export interface RasterOpts { region: Rect; scale: number; format: RasterFormat; quality: number; transparent: boolean; bg?: Color | null; only?: VNode[]; dither?: DitherOpts; tiff?: Partial<TiffChoice>; icc?: boolean; separation?: string | null }
+export interface RasterOpts { region: Rect; scale: number; format: RasterFormat; quality: number; transparent: boolean; bg?: Color | null; only?: VNode[]; dither?: DitherOpts; tiff?: Partial<TiffChoice>; icc?: boolean; separation?: string | null; extra?: Partial<RasterExtra> }
 export interface RasterIcc { profile: IccPayload | null; lut: Lut | null }
 
 export const RASTER_MAX_SIDE = 16384;
@@ -86,7 +106,7 @@ export async function exportRasterTiles(p: Project, o: RasterOpts, tilePx = 8192
   const files: Array<{ name: string; blob: Blob }> = [];
   for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
     const region = { x: o.region.x + q * step, y: o.region.y + r * step, w: Math.min(step, o.region.w - q * step), h: Math.min(step, o.region.h - r * step) };
-    files.push({ name: `tile-r${r + 1}-c${q + 1}.${o.format}`, blob: await exportRaster(p, { ...o, region }) });
+    files.push({ name: `tile-r${r + 1}-c${q + 1}.${rasterExt(o.format)}`, blob: await exportRaster(p, { ...o, region }) });
   }
   return zipFiles(files);
 }
@@ -107,10 +127,21 @@ export async function renderRegion(p: Project, o: Omit<RasterOpts, 'format' | 'q
   c.width = w; c.height = h;
   const g = c.getContext('2d');
   if (!g) throw new Error('This browser could not make a drawing surface for the export.');
+  const ss = o.extra?.aa === 'none' ? hardScale(w, h) : 1;
+  if (ss > 1) {
+    reduceHard(await renderRegion(p, { ...o, scale: k * ss, extra: undefined, dither: undefined }), c, ss);
+    if (o.dither) ditherCanvas(c, o.dither);
+    return c;
+  }
   if (!o.transparent) { g.fillStyle = o.bg ? hex(o.bg) : '#ffffff'; g.fillRect(0, 0, w, h); }
   g.setTransform(k, 0, 0, k, -o.region.x * k, -o.region.y * k);
   const rc: RenderContext = { doc: p.doc, scale: k, outline: false, assets: (key) => p.bitmaps.get(key) ?? null, printing: true, separation: o.separation ?? null };
   for (const n of o.only ?? p.doc.layers) renderNode(g, n, rc);
+  if (o.extra?.aa === 'none') hardEdges(c);
+  else if (o.extra?.aa === 'type') {
+    const text = typeTree(o.only ?? p.doc.layers);
+    if (text.length) sharpenType(c, await renderRegion(p, { ...o, only: text, transparent: true, bg: null, extra: undefined, dither: undefined }));
+  }
   if (o.dither) ditherCanvas(c, o.dither);
   return c;
 }
@@ -144,7 +175,7 @@ export async function canvasBlob(c: HTMLCanvasElement, format: RasterFormat, qua
   }
   const type = format === 'jpg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
   const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error(`This browser cannot write ${format.toUpperCase()} files.`))), type, quality));
-  return icc?.profile ? embedIcc(blob, format, icc.profile) : blob;
+  return icc?.profile ? embedIcc(blob, format === 'jpg' || format === 'webp' ? format : 'png', icc.profile) : blob;
 }
 
 export async function rasterIcc(p: Project, cmyk: boolean): Promise<RasterIcc | null> {
@@ -157,7 +188,44 @@ export async function rasterIcc(p: Project, cmyk: boolean): Promise<RasterIcc | 
   return out ? { profile: out, lut: null } : null;
 }
 
+function hexRgb(s: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(s.trim()), v = m ? parseInt(m[1], 16) : 0xffffff;
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+
+function pixelsOf(c: HTMLCanvasElement): Uint8ClampedArray {
+  const g = c.getContext('2d');
+  if (!g) throw new Error('This browser could not read the drawing surface for the export.');
+  return g.getImageData(0, 0, c.width, c.height).data;
+}
+
+async function exportOther(p: Project, o: RasterOpts): Promise<Blob> {
+  const x: RasterExtra = { ...RASTER_EXTRA, ...o.extra }, k = rasterCap(o.region, o.scale).scale, ppi = Math.round(72 * k);
+  const want = o.icc ?? !!p.doc.cm, matte = hexRgb(x.matte), base = { ...o, extra: { aa: x.aa } };
+  if (o.format === 'gif' || o.format === 'png8') {
+    const bg: Color | null = o.transparent ? null : o.bg ?? { kind: 'rgb', r: matte[0], g: matte[1], b: matte[2] };
+    const c = await renderRegion(p, { ...base, transparent: o.transparent, bg });
+    const img = quantize(pixelsOf(c), c.width, c.height, { colors: x.colors, method: x.palette, dither: x.dither, amount: x.amount, transparent: o.transparent, matte });
+    if (o.format === 'gif') return encodeGif(img, { interlace: x.interlace });
+    const blob = await encodePng8(img, { ppi }), icc = want ? await rasterIcc(p, false) : null;
+    return icc?.profile ? embedIcc(blob, 'png', icc.profile) : blob;
+  }
+  if (o.format === 'bmp') {
+    const c = await renderRegion(p, { ...base, transparent: x.bmpBits === 32 && o.transparent }), icc = want ? await rasterIcc(p, false) : null;
+    return encodeBmp(pixelsOf(c), c.width, c.height, { bits: x.bmpBits, ppi, icc: icc?.profile?.bytes ?? null });
+  }
+  const cmyk = x.psdCmyk, icc = want || cmyk ? await rasterIcc(p, cmyk) : null;
+  const c = await renderRegion(p, { ...base, transparent: o.transparent && !cmyk }), layers: PsdLayerIn[] = [];
+  if (x.psdLayers) {
+    const list = o.only ? [{ name: 'Selection', only: o.only, hidden: false, opacity: 1, blend: 'normal' as BlendMode }] : p.doc.layers.map((l) => ({ name: nodeLabel(l), only: [{ ...l, hidden: false, opacity: 1, blend: 'normal' } as VNode], hidden: !!l.hidden, opacity: l.opacity, blend: l.blend }));
+    for (const l of list) layers.push({ name: l.name, rgba: pixelsOf(await renderRegion(p, { ...base, only: l.only, transparent: true, bg: null })), hidden: l.hidden, opacity: l.opacity, blend: l.blend });
+  }
+  const blob = encodePsd({ width: c.width, height: c.height, ppi, cmyk, composite: pixelsOf(c), alpha: o.transparent && !cmyk, layers, convert: cmyk && icc?.lut ? rgbToCmykBytes(icc.lut) : undefined });
+  return icc?.profile ? embedIcc(blob, 'psd', icc.profile) : blob;
+}
+
 export async function exportRaster(p: Project, o: RasterOpts): Promise<Blob> {
+  if (o.format === 'gif' || o.format === 'png8' || o.format === 'bmp' || o.format === 'psd') return exportOther(p, o);
   const c = await renderRegion(p, { ...o, transparent: o.transparent && o.format !== 'jpg' });
   const want = o.icc ?? !!p.doc.cm, cmykTiff = o.format === 'tiff' && !!o.tiff?.cmyk;
   const found = want || cmykTiff ? await rasterIcc(p, cmykTiff) : null;
@@ -187,7 +255,7 @@ export async function exportAssetsZip(p: Project, assets: Array<{ name: string; 
         const q = Object.create(p) as Project;
         Object.defineProperty(q, 'doc', { value: { ...p.doc, artboards: [{ id: 'asset', name: stem, x: b.x, y: b.y, w: b.w, h: b.h, bg: null }], layers: [layer] } });
         files.push({ name: `${name}.pdf`, blob: await pdf(q) });
-      } else files.push({ name: `${name}.${it.format}`, blob: await exportRaster(p, { region: b, scale: it.scale, format: it.format, quality: 0.92, transparent: true, only: nodes }) });
+      } else files.push({ name: `${name}.${rasterExt(it.format)}`, blob: await exportRaster(p, { region: b, scale: it.scale, format: it.format, quality: 0.92, transparent: true, only: nodes }) });
     }
   }
   return files.length ? zipFiles(files) : null;
@@ -202,7 +270,7 @@ export async function exportForScreens(p: Project, items: ScreenItem[], pdf: (ar
     const base = `${safe(a.name)}${it.suffix}`;
     if (it.format === 'svg') files.push({ name: `${base}.svg`, blob: new Blob([await exportSvg(p, { artboard: it.artboard, outlineText: false, preserve: false, precision: 3 })], { type: 'image/svg+xml' }) });
     else if (it.format === 'pdf') files.push({ name: `${base}.pdf`, blob: await pdf([it.artboard]) });
-    else files.push({ name: `${base}.${it.format}`, blob: await exportRaster(p, { region: exportRegion(p, it.artboard), scale: it.scale, format: it.format, quality: 0.92, transparent: !a.bg, bg: a.bg }) });
+    else files.push({ name: `${base}.${rasterExt(it.format)}`, blob: await exportRaster(p, { region: exportRegion(p, it.artboard), scale: it.scale, format: it.format, quality: 0.92, transparent: !a.bg, bg: a.bg }) });
   }
   return zipFiles(files);
 }

@@ -12,7 +12,8 @@ import { liveChildren } from './live';
 import { buildMesh } from './mesh';
 import { getMesh, MESH_MIME, registerMesh, setMeshSource, type Mesh } from './modelmesh';
 import { align, arrange, duplicateNodes, fillRuleTargets, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setFillRule, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
-import { expandAppearance } from './ops/expand';
+import { expandAppearance, expandFx } from './ops/expand';
+import { duplicateLayers, flattenArtwork, hiddenArt, mergeLayers, releaseToLayers, reverseOrder } from './ops/layers';
 import { allTargets, expandCornersOp, setCornersOp, type CornerTargets } from './ops/corner-ops';
 import type { CornerSpec } from './types';
 import { clampArtboardSide } from './types';
@@ -204,6 +205,7 @@ export class Engine extends Emitter<EngineEvents> {
 
   private pruneSelection(p: Project, keepAnchors = true): void {
     for (const id of [...p.selection]) if (!findNode(p.doc, id)) p.selection.delete(id);
+    for (const id of [...p.layerSel]) if (findNode(p.doc, id)?.kind !== 'layer') p.layerSel.delete(id);
     for (const id of [...p.anchors.keys()]) if (!findNode(p.doc, id) || !keepAnchors) p.anchors.delete(id);
     if (!findNode(p.doc, p.activeLayer) || layerOf(p.doc, p.activeLayer)?.id !== p.activeLayer) p.activeLayer = p.doc.layers[p.doc.layers.length - 1]?.id ?? '';
     if (p.isolation && !findNode(p.doc, p.isolation)) p.isolation = null;
@@ -313,6 +315,7 @@ export class Engine extends Emitter<EngineEvents> {
   select(ids: string[], mode: SelectMode = 'replace'): void {
     const p = this.current; if (!p) return;
     p.layerTarget = null;
+    p.layerSel.clear();
     const valid = ids.filter((id) => { const n = findNode(p.doc, id); return !!n && n.kind !== 'layer' && !isLocked(p.doc, id) && isVisible(p.doc, id); });
     const s = mode === 'replace' ? new Set<string>() : new Set(p.selection);
     for (const id of valid) {
@@ -850,6 +853,54 @@ export class Engine extends Emitter<EngineEvents> {
     if (!t.length) return;
     const l = makeLayer(`Layer ${p.doc.layers.length + 1}`, p.doc.layers.length);
     this.edit('Collect in New Layer', (d) => { const withL = { ...d, layers: [...d.layers, l] }; const r = moveToParent(withL, t, l.id); return { doc: r.doc, select: r.ids }; });
+  }
+  get layerSelection(): string[] { const p = this.current; return p ? [...p.layerSel].filter((id) => findNode(p.doc, id)?.kind === 'layer') : []; }
+  selectLayers(ids: string[], mode: SelectMode = 'replace'): void {
+    const p = this.current; if (!p) return;
+    const valid = ids.filter((id) => findNode(p.doc, id)?.kind === 'layer'), s = mode === 'replace' ? new Set<string>() : new Set(p.layerSel);
+    for (const id of valid) { if (mode === 'subtract') s.delete(id); else if (mode === 'toggle' && s.has(id)) s.delete(id); else s.add(id); }
+    p.layerSel = s;
+    this.landOnLayer(p, valid[valid.length - 1]);
+    this.emit('selection', null);
+  }
+  private landOnLayer(p: Project, id?: string): void { if (id && layerOf(p.doc, id)?.id === id) p.activeLayer = id; }
+  private layerPick(ids?: string[]): string[] { const p = this.current; if (!p) return []; const g = ids && ids.length ? ids : this.layerSelection; return (g.length ? g : [p.activeLayer]).filter((id) => findNode(p.doc, id)?.kind === 'layer'); }
+  duplicateLayers(ids?: string[]): string[] {
+    const p = this.current; if (!p) return [];
+    const pick = this.layerPick(ids);
+    let made: string[] = [];
+    this.edit('Duplicate Layer', (d) => { const r = duplicateLayers(d, pick); made = r.ids; return r.doc; });
+    if (made.length) { p.layerSel = new Set(made); this.landOnLayer(p, made[0]); this.emit('selection', null); }
+    return made;
+  }
+  mergeLayers(ids?: string[]): boolean {
+    const p = this.current; if (!p) return false;
+    const pick = ids && ids.length ? ids : this.layerSelection;
+    let made: string[] = [];
+    const ok = this.edit('Merge Selected', (d) => { const r = mergeLayers(d, pick); made = r.ids; return r.doc; });
+    if (ok && made.length) { p.layerSel = new Set(made); this.landOnLayer(p, made[0]); this.emit('selection', null); }
+    return ok;
+  }
+  get hiddenArtCount(): number { const p = this.current; return p ? hiddenArt(p.doc) : 0; }
+  flattenArtwork(discardHidden = false, target?: string): boolean {
+    const p = this.current; if (!p) return false;
+    let made: string[] = [];
+    const ok = this.edit('Flatten Artwork', (d) => { const r = flattenArtwork(d, target ?? p.activeLayer ?? null, discardHidden); made = r.ids; return r.doc; });
+    if (ok && made.length) { p.layerSel = new Set(made); this.landOnLayer(p, made[0]); this.emit('selection', null); }
+    return ok;
+  }
+  releaseToLayers(mode: 'sequence' | 'build', id?: string): string[] {
+    const p = this.current; if (!p) return [];
+    const host = id ?? this.layerSelection[0] ?? this.targetIds().find((t) => findNode(p.doc, t)?.kind === 'group') ?? p.activeLayer;
+    let made: string[] = [];
+    this.edit(mode === 'build' ? 'Release to Layers (Build)' : 'Release to Layers (Sequence)', (d) => { const r = releaseToLayers(d, host, mode); made = r.ids; return r.doc; });
+    if (made.length) { p.layerSel = new Set(made); this.emit('selection', null); }
+    return made;
+  }
+  reverseOrder(ids?: string[]): boolean {
+    const p = this.current; if (!p) return false;
+    const ls = this.layerSelection, pick = ids && ids.length ? ids : ls.length > 1 ? ls : this.targetIds();
+    return this.edit('Reverse Order', (d) => reverseOrder(d, pick).doc);
   }
   isolate(id: string | null): void {
     const p = this.current; if (!p) return;
@@ -1620,6 +1671,7 @@ export class Engine extends Emitter<EngineEvents> {
     const baked = app ? this.bakes?.get(n.id) : undefined;
     if (baked) return [baked];
     if (app && n.kind !== 'layer' && has3d(n)) return expandAppearance(doc, n);
+    if (app) { const fxd = expandFx(doc, n, (c) => this.expandNode(doc, c, what)); if (fxd) return fxd; }
     if (n.kind === 'group') return [{ ...n, children: n.children.flatMap((c) => this.expandNode(doc, c, what)) }];
     if (app && (n.kind === 'path' || n.kind === 'compound')) return expandAppearance(doc, n);
     return [n];

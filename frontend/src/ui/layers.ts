@@ -52,6 +52,7 @@ export class LayersPanel {
   }
 
   private filter = '';
+  private anchor = '';
 
   restyle(): void { this.queue(); }
 
@@ -78,6 +79,7 @@ export class LayersPanel {
   private sync(): void {
     const p = this.engine.current;
     const sel = new Set(p?.selection ?? []);
+    for (const id of this.engine.layerSelection) sel.add(id);
     const anc = new Set<string>();
     if (p) for (const id of sel) for (const a of ancestors(p.doc, id)) anc.add(a.id);
     const rows = this.flat(), tops = new Array<number>(rows.length + 1);
@@ -155,7 +157,15 @@ export class LayersPanel {
       if (t.closest('.cv-lrow-disc')) { this.toggleOpen(n, ev.altKey); return; }
       if (t.closest('.cv-lrow-target') && n.kind === 'layer' && !(ev.shiftKey || ev.metaKey || ev.ctrlKey)) { e.targetLayer(n.id); return; }
       if (t.closest('.cv-lrow-target') || t.closest('.cv-lrow-sel')) { this.selectNode(n, ev.shiftKey || ev.metaKey || ev.ctrlKey); return; }
-      if (n.kind === 'layer') { e.setActiveLayer(n.id); this.sync(); if (ev.shiftKey || ev.metaKey || ev.ctrlKey) this.selectNode(n, true); return; }
+      if (n.kind === 'layer') {
+        if (ev.shiftKey && this.anchor) {
+          const rows = this.flatRows, a = rows.findIndex((r) => r.node.id === this.anchor), b = rows.findIndex((r) => r.node.id === n.id);
+          if (a >= 0 && b >= 0) { e.selectLayers(rows.slice(Math.min(a, b), Math.max(a, b) + 1).filter((r) => r.node.kind === 'layer').map((r) => r.node.id)); return; }
+        }
+        this.anchor = n.id;
+        e.selectLayers([n.id], ev.metaKey || ev.ctrlKey ? 'toggle' : 'replace');
+        return;
+      }
       this.selectNode(n, ev.shiftKey || ev.metaKey || ev.ctrlKey);
     });
     this.rows.addEventListener('dblclick', (ev) => {
@@ -169,14 +179,14 @@ export class LayersPanel {
       if (!n) return;
       ev.preventDefault();
       if (n.kind !== 'layer' && !e.current?.selection.has(n.id)) e.select([n.id]);
-      if (n.kind === 'layer') e.setActiveLayer(n.id);
+      if (n.kind === 'layer') { if (!e.layerSelection.includes(n.id)) e.selectLayers([n.id]); else e.setActiveLayer(n.id); }
       this.menu.openAt(ev.clientX, ev.clientY);
     });
     this.rows.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0 || (ev.target as HTMLElement).closest('button, input')) return;
       const n = this.nodeOf(ev.target as HTMLElement);
       if (!n) return;
-      const ids = n.kind === 'layer' ? [n.id] : e.current?.selection.has(n.id) ? e.targetIds() : [n.id];
+      const ids = n.kind === 'layer' ? (e.layerSelection.includes(n.id) ? e.layerSelection : [n.id]) : e.current?.selection.has(n.id) ? e.targetIds() : [n.id];
       this.drag = { ids, y0: ev.clientY, moving: false, target: null };
       this.rows.setPointerCapture(ev.pointerId);
     });
@@ -268,7 +278,7 @@ export class LayersPanel {
     this.engine.setLayer(l.id, { name: String(v.name) || l.name, color: v.color === 'custom' ? String(v.custom) : String(v.color), template: !!v.template, hidden: !v.show, locked: !!v.lock, printable: !!v.print, opacity: Number(v.dim) / 100 });
   }
 
-  private locate(): void {
+  locate(): void {
     const e = this.engine, p = e.current;
     if (!p) return;
     for (const id of p.selection) for (const a of ancestors(p.doc, id)) { if (a.kind === 'layer') this.shut.delete(a.id); else this.open.add(a.id); }

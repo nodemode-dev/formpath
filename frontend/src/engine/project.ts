@@ -16,6 +16,7 @@ export class Project {
   activeLayer: string;
   isolation: string | null = null;
   layerTarget: string | null = null;
+  layerSel = new Set<string>();
   patternEdit: PatternSession | null = null;
   symbolEdit: SymbolSession | null = null;
   activeArtboard = 0;
