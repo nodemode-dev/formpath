@@ -221,6 +221,96 @@ function relax(pts: Pt[], closed: boolean, passes: number): Pt[] {
   return cur;
 }
 
+function findCorners(P: Pt[], closed: boolean, minTurn: number): number[] {
+  const N = P.length, k = Math.min(4, Math.floor(N / 4));
+  if (k < 2) return [];
+  const wrap = (i: number): number => (closed ? ((i % N) + N) % N : i);
+  const turn = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    if (!closed && (i - k < 0 || i + k >= N)) continue;
+    const a = P[wrap(i - k)], b = P[i], c = P[wrap(i + k)];
+    const ax = b.x - a.x, ay = b.y - a.y, bx = c.x - b.x, by = c.y - b.y;
+    const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    if (la < 1e-9 || lb < 1e-9) continue;
+    turn[i] = (Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / (la * lb)))) * 180) / Math.PI;
+  }
+  const out: number[] = [];
+  for (let i = 0; i < N; i++) {
+    if (turn[i] < minTurn) continue;
+    let peak = true;
+    for (let j = -k; j <= k && peak; j++) {
+      if (!j) continue;
+      const q = closed ? (i + j + N) % N : i + j;
+      if (q < 0 || q >= N) continue;
+      if (turn[q] > turn[i] || (turn[q] === turn[i] && j < 0)) peak = false;
+    }
+    if (peak) out.push(i);
+  }
+  return out;
+}
+
+interface Fit2 { c: Pt; d: Pt; res: number }
+function lineFit(pts: Pt[]): Fit2 {
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p.x; cy += p.y; }
+  cx /= pts.length; cy /= pts.length;
+  let sxx = 0, sxy = 0, syy = 0;
+  for (const p of pts) { const x = p.x - cx, y = p.y - cy; sxx += x * x; sxy += x * y; syy += y * y; }
+  const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), d = { x: Math.cos(th), y: Math.sin(th) };
+  let res = 0;
+  for (const p of pts) res = Math.max(res, Math.abs(-(p.x - cx) * d.y + (p.y - cy) * d.x));
+  return { c: { x: cx, y: cy }, d, res };
+}
+
+function cornerPoint(P: Pt[], closed: boolean, ci: number, prevC: number, nextC: number): Pt {
+  const N = P.length, at = (i: number): Pt => P[closed ? ((i % N) + N) % N : i];
+  const gapB = closed ? ((ci - prevC + N) % N) || N : ci - prevC, gapF = closed ? ((nextC - ci + N) % N) || N : nextC - ci;
+  const mb = Math.min(14, gapB - 3), mf = Math.min(14, gapF - 3);
+  if (mb < 3 || mf < 3) return P[ci];
+  const left: Pt[] = [], right: Pt[] = [];
+  for (let j = 2; j < 2 + mb; j++) left.push(at(ci - j));
+  for (let j = 2; j < 2 + mf; j++) right.push(at(ci + j));
+  const a = lineFit(left), b = lineFit(right);
+  if (a.res > 0.9 || b.res > 0.9) return P[ci];
+  const cross = a.d.x * b.d.y - a.d.y * b.d.x;
+  if (Math.abs(cross) < 0.34) return P[ci];
+  const t = ((b.c.x - a.c.x) * b.d.y - (b.c.y - a.c.y) * b.d.x) / cross;
+  const hit = { x: a.c.x + a.d.x * t, y: a.c.y + a.d.y * t };
+  return Math.hypot(hit.x - P[ci].x, hit.y - P[ci].y) <= 2.2 ? hit : P[ci];
+}
+
+function fitSmooth(raw: Pt[], q: Pt[], closed: boolean, o: TraceOpts, tol: number): SubPath | null {
+  const N = raw.length, err = Math.max(0.35, tol), flat = Math.max(0.6, tol * 0.45);
+  const found = findCorners(raw, closed, 135 - o.corners * 120);
+  if (closed && !found.length) {
+    const fit = fitCurve([...q, q[0]], err);
+    if (fit.length < 3) return null;
+    const last = fit.pop() as Anchor;
+    fit[0].ix = last.ix; fit[0].iy = last.iy; fit[0].smooth = true;
+    return { closed: true, pts: fit };
+  }
+  const idx = closed ? found : [0, ...found, N - 1], m = idx.length;
+  const pos: Pt[] = idx.map((c, k) => (!closed && (k === 0 || k === m - 1) ? raw[c] : cornerPoint(raw, closed, c, idx[(k - 1 + m) % m], idx[(k + 1) % m])));
+  const out: Anchor[] = [];
+  const runs = closed ? m : m - 1;
+  for (let k = 0; k < runs; k++) {
+    const a = idx[k], b = k + 1 < m ? idx[k + 1] : idx[0] + N;
+    const R: Pt[] = [], Q: Pt[] = [];
+    for (let i = a; i <= b; i++) { R.push(raw[i % N]); Q.push(q[i % N]); }
+    const A = pos[k], B = pos[(k + 1) % m];
+    R[0] = Q[0] = A; R[R.length - 1] = Q[Q.length - 1] = B;
+    const dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy);
+    let straight = L > 1e-6;
+    for (let i = 1; straight && i < R.length - 1; i++) if (Math.abs(dy * (R[i].x - A.x) - dx * (R[i].y - A.y)) / L > flat) straight = false;
+    const fit = straight ? [plain(A), plain(B)] : fitCurve(Q, err);
+    if (!fit.length) continue;
+    if (out.length) { const prev = out[out.length - 1]; prev.ox = fit[0].ox; prev.oy = fit[0].oy; out.push(...fit.slice(1)); }
+    else out.push(...fit);
+  }
+  if (closed && out.length > 1) { const last = out.pop() as Anchor; out[0].ix = last.ix; out[0].iy = last.iy; }
+  return out.length >= 2 ? { closed, pts: out } : null;
+}
+
 function fitRun(raw: Pt[], closed: boolean, o: TraceOpts, tol: number): SubPath | null {
   if (raw.length < (closed ? 3 : 2)) return null;
   const pts = o.smooth ? relax(raw, closed, o.corners > 0.85 ? 1 : 2) : raw;
@@ -232,55 +322,7 @@ function fitRun(raw: Pt[], closed: boolean, o: TraceOpts, tol: number): SubPath 
     if (closed) out.pop();
     return out.length >= (closed ? 3 : 2) ? { closed, pts: out } : null;
   }
-  const ring = closed ? [...pts, pts[0]] : pts, n = ring.length;
-  const keep = new Uint8Array(n);
-  keep[0] = keep[n - 1] = 1;
-  rdpIdx(ring, Math.max(0.6, tol * 0.6), 0, n - 1, keep);
-  const idx: number[] = [];
-  for (let i = 0; i < n; i++) if (keep[i]) idx.push(i);
-  const cornerDeg = 135 - o.corners * 120, lim = Math.cos((cornerDeg * Math.PI) / 180);
-  const corner = new Set<number>();
-  const V = closed ? idx.slice(0, -1) : idx, m = V.length;
-  for (let j = 0; j < m; j++) {
-    if (!closed && (j === 0 || j === m - 1)) { corner.add(V[j]); continue; }
-    const pj = ring[V[j]], pa = ring[V[(j - 1 + m) % m]], pb = ring[V[(j + 1) % m]];
-    const ax = pj.x - pa.x, ay = pj.y - pa.y, bx = pb.x - pj.x, by = pb.y - pj.y, la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
-    if (la < 1e-9 || lb < 1e-9) continue;
-    if ((ax * bx + ay * by) / (la * lb) < lim) corner.add(V[j]);
-  }
-  let cs = [...corner].sort((a, b) => a - b);
-  const err = Math.max(0.35, tol);
-  if (closed) {
-    const base = pts.length;
-    if (!cs.length) {
-      const fit = fitCurve(ring, err);
-      if (fit.length < 3) return null;
-      const last = fit.pop() as Anchor;
-      fit[0].ix = last.ix; fit[0].iy = last.iy; fit[0].smooth = true;
-      return { closed: true, pts: fit };
-    }
-    const out: Anchor[] = [];
-    cs = cs.filter((c) => c < base);
-    for (let k = 0; k < cs.length; k++) {
-      const a = cs[k], b = k + 1 < cs.length ? cs[k + 1] : cs[0] + base;
-      const run: Pt[] = [];
-      for (let i = a; i <= b; i++) run.push(pts[i % base]);
-      const fit = fitCurve(run, err);
-      if (!fit.length) continue;
-      if (out.length) { const prev = out[out.length - 1]; prev.ox = fit[0].ox; prev.oy = fit[0].oy; out.push(...fit.slice(1)); }
-      else out.push(...fit);
-    }
-    if (out.length > 1) { const last = out.pop() as Anchor; out[0].ix = last.ix; out[0].iy = last.iy; }
-    return out.length >= 2 ? { closed: true, pts: out } : null;
-  }
-  const out: Anchor[] = [];
-  for (let k = 0; k + 1 < cs.length; k++) {
-    const fit = fitCurve(pts.slice(cs[k], cs[k + 1] + 1), err);
-    if (!fit.length) continue;
-    if (out.length) { const prev = out[out.length - 1]; prev.ox = fit[0].ox; prev.oy = fit[0].oy; out.push(...fit.slice(1)); }
-    else out.push(...fit);
-  }
-  return out.length >= 2 ? { closed: false, pts: out } : null;
+  return fitSmooth(raw, pts, closed, o, tol);
 }
 
 function fillPaths(mask: Uint8Array, w: number, h: number, o: TraceOpts, tol: number, minArea: number): PathData {

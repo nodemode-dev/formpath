@@ -11,7 +11,9 @@ import { enhanceSelect } from '../dropdown';
 type Params = Effect['params'];
 interface Page { root: HTMLElement; read: () => Params; write: (p: Params) => void }
 
-const CATEGORIES = ['Artistic', 'Blur', 'Brush Strokes', 'Distort', 'Pixelate', 'Sketch', 'Stylize', 'Texture', 'Video'];
+const CATEGORIES = ['Artistic', 'Brush Strokes', 'Distort', 'Sketch', 'Stylize', 'Texture', 'Blur', 'Pixelate', 'Video'];
+const MAX_LAYERS = 8;
+const inFolder = (d: EffectDef, cat: string): boolean => (d.family === 'photoshop' && d.menu === cat) || (cat === 'Distort' && d.id.startsWith('distort.')) || (cat === 'Stylize' && d.id.startsWith('stylize.'));
 const PW = 440, PH = 340, TW = 76, TH = 56;
 const titleCase = (s: string): string => s.split('_').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 
@@ -24,6 +26,13 @@ export class EffectGallery extends Dialog {
   private readonly pages = new Map<string, Page>();
   private current = '';
   private values: Params = {};
+  private layers: Array<{ id: string; values: Params }> = [];
+  private active = 0;
+  private readonly stackEl = el('<div class="cv-fxg-stack" role="listbox" aria-label="Effect layers"></div>');
+  private readonly addBtn = el<HTMLButtonElement>('<button class="cv-btn" type="button">New Effect Layer</button>');
+  private readonly rows: Array<{ root: HTMLElement; pick: HTMLButtonElement; del: HTMLButtonElement }> = [];
+  private readonly wraps = new Map<string, HTMLElement>();
+  private readonly heads = new Map<string, HTMLButtonElement>();
   private nodes: VNode[] = [];
   private frame = 0;
   private dirty = false;
@@ -36,18 +45,30 @@ export class EffectGallery extends Dialog {
     q(this.scrim, '.cv-dialog').classList.add('cv-fxg-dialog');
     const grid = el('<div class="cv-fxg"></div>'), left = el('<div class="cv-fxg-view"></div>');
     left.appendChild(this.preview);
-    this.side.appendChild(this.name);
+    for (let i = 0; i < MAX_LAYERS; i++) {
+      const root = el('<div class="cv-fxg-layer" hidden><button class="cv-fxg-layer-pick" type="button" role="option"></button><button class="cv-fxg-layer-del" type="button" aria-label="Delete effect layer">x</button></div>');
+      const r = { root, pick: q<HTMLButtonElement>(root, '.cv-fxg-layer-pick'), del: q<HTMLButtonElement>(root, '.cv-fxg-layer-del') };
+      r.pick.addEventListener('click', () => this.activate(i));
+      r.del.addEventListener('click', () => this.removeLayer(i));
+      this.rows.push(r);
+      this.stackEl.appendChild(root);
+    }
+    this.addBtn.addEventListener('click', () => this.addLayer());
+    this.side.append(this.stackEl, this.addBtn, this.name);
     grid.append(left, this.list, this.side);
     this.body.appendChild(grid);
     for (const cat of CATEGORIES) {
-      const defs = EFFECTS.filter((d) => d.family === 'photoshop' && d.menu === cat);
+      const defs = EFFECTS.filter((d) => inFolder(d, cat));
       if (!defs.length) continue;
-      const head = el('<div class="cv-fxg-cat"></div>'), wrap = el('<div class="cv-fxg-tiles"></div>');
-      setText(head, cat);
+      const head = el<HTMLButtonElement>('<button class="cv-fxg-cat" type="button" aria-expanded="false"></button>'), wrap = el('<div class="cv-fxg-tiles" hidden></div>');
+      setText(head, `${cat} (${defs.length})`);
+      head.addEventListener('click', () => { const open = wrap.hidden; setHidden(wrap, !open); head.setAttribute('aria-expanded', String(open)); });
+      this.wraps.set(cat, wrap); this.heads.set(cat, head);
       for (const d of defs) {
         const b = el<HTMLButtonElement>(`<button class="cv-fxg-tile" type="button" role="option" aria-selected="false"><canvas width="${TW * 2}" height="${TH * 2}"></canvas><span></span></button>`);
         setText(q(b, 'span'), d.label);
         b.dataset.fx = d.id;
+        b.dataset.cat = cat;
         b.addEventListener('click', () => this.pick(d.id));
         b.addEventListener('dblclick', () => { this.pick(d.id); this.finish(); });
         wrap.appendChild(b);
@@ -72,6 +93,7 @@ export class EffectGallery extends Dialog {
     if (!this.nodes.length) { this.engine.notice('Select an object to open the Effect Gallery.'); return Promise.resolve(false); }
     const last = this.engine.lastEffect, start = id && this.tiles.has(id) ? id : last && this.tiles.has(last.id) ? last.id : 'gallery.colored_pencil';
     this.settled = false;
+    this.layers = []; this.active = 0;
     this.pick(start, last?.id === start ? last.params : undefined);
     this.thumbs = [...this.tiles.keys()];
     return new Promise((res) => { this.resolve = res; this.open(this.tiles.get(start)); this.queue(); });
@@ -90,13 +112,40 @@ export class EffectGallery extends Dialog {
     page.write({ ...effectDefaults(id), ...(params ?? {}) });
     setHidden(page.root, false);
     this.values = page.read();
+    this.layers[this.active] = { id, values: this.values };
+    const cat = this.tiles.get(id)?.dataset.cat ?? '';
+    for (const [k, w] of this.wraps) { const open = k === cat || !w.hidden; setHidden(w, !open); this.heads.get(k)?.setAttribute('aria-expanded', String(open)); }
+    this.sync();
     this.dirty = true;
     this.queue();
   }
 
+  private sync(): void {
+    this.rows.forEach((r, i) => {
+      const L = this.layers[i];
+      setHidden(r.root, !L);
+      if (!L) return;
+      setText(r.pick, `${i + 1}. ${EFFECTS.find((d) => d.id === L.id)?.label ?? L.id}`);
+      setClass(r.root, 'is-active', i === this.active);
+      r.pick.setAttribute('aria-selected', String(i === this.active));
+      setHidden(r.del, this.layers.length < 2);
+    });
+    setHidden(this.addBtn, this.layers.length >= MAX_LAYERS);
+  }
+
+  private activate(i: number): void { const L = this.layers[i]; if (!L || i === this.active) return; this.active = i; this.pick(L.id, L.values); }
+  private addLayer(): void { if (this.layers.length >= MAX_LAYERS) return; const L = this.layers[this.active]; this.layers.push({ id: L.id, values: { ...L.values } }); this.active = this.layers.length - 1; this.sync(); this.dirty = true; this.queue(); }
+  private removeLayer(i: number): void {
+    if (this.layers.length < 2) return;
+    this.layers.splice(i, 1);
+    this.active = Math.min(this.active > i ? this.active - 1 : this.active, this.layers.length - 1);
+    const L = this.layers[this.active];
+    this.pick(L.id, L.values);
+  }
+
   private page(def: EffectDef): Page {
     const root = el('<div class="cv-fxg-page" hidden></div>'), reads: Array<() => [string, number | string | boolean]> = [], writes: Array<(p: Params) => void> = [];
-    const changed = (): void => { this.values = Object.fromEntries(reads.map((r) => r())); this.dirty = true; this.queue(); };
+    const changed = (): void => { this.values = Object.fromEntries(reads.map((r) => r())); const L = this.layers[this.active]; if (L) L.values = this.values; this.dirty = true; this.queue(); };
     if (!def.params.length) { const n = el('<p class="cv-note"></p>'); setText(n, 'This effect has no options.'); root.appendChild(n); }
     for (const prm of def.params) {
       const row = el('<label class="cv-field"><span></span></label>');
@@ -148,16 +197,16 @@ export class EffectGallery extends Dialog {
     if (!p) return;
     let box: Rect = emptyRect();
     for (const n of this.nodes) box = unionRect(box, visualBounds(p.doc, n));
-    if (this.dirty) { this.dirty = false; this.draw(this.preview, effect(this.current, this.values), box); }
+    if (this.dirty) { this.dirty = false; this.draw(this.preview, this.layers.map((l) => effect(l.id, l.values)), box); }
     const t0 = performance.now();
     while (this.thumbs.length && performance.now() - t0 < 10) {
       const id = this.thumbs.shift() as string, b = this.tiles.get(id);
-      if (b) this.draw(q<HTMLCanvasElement>(b, 'canvas'), effect(id, effectDefaults(id)), box);
+      if (b) this.draw(q<HTMLCanvasElement>(b, 'canvas'), [effect(id, effectDefaults(id))], box);
     }
     if (this.thumbs.length || this.dirty) this.queue();
   }
 
-  private draw(c: HTMLCanvasElement, fx: Effect, box: Rect): void {
+  private draw(c: HTMLCanvasElement, fx: Effect[], box: Rect): void {
     const p = this.engine.current, g = c.getContext('2d');
     if (!p || !g) return;
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -167,16 +216,16 @@ export class EffectGallery extends Dialog {
     g.setTransform(s, 0, 0, s, (c.width - box.w * s) / 2 - box.x * s, (c.height - box.h * s) / 2 - box.y * s);
     const rc: RenderContext = { doc: p.doc, scale: s, outline: false, assets: (k) => p.bitmaps.get(k) ?? null };
     const k = this.item;
-    for (const n of this.nodes) { try { renderNode(g, { ...n, ap: k !== undefined && n.ap.items[k] ? { ...n.ap, items: n.ap.items.map((it, i) => (i === k ? { ...it, effects: [...it.effects, fx] } : it)) } : { ...n.ap, effects: [...n.ap.effects, fx] } } as VNode, rc); } catch { continue; } }
+    for (const n of this.nodes) { try { renderNode(g, { ...n, ap: k !== undefined && n.ap.items[k] ? { ...n.ap, items: n.ap.items.map((it, i) => (i === k ? { ...it, effects: [...it.effects, ...fx] } : it)) } : { ...n.ap, effects: [...n.ap.effects, ...fx] } } as VNode, rc); } catch { continue; } }
   }
 
   private finish(): void {
     if (this.settled) return;
     this.settled = true;
-    const ids = this.nodes.map((n) => n.id), id = this.current, params = { ...this.values }, r = this.resolve;
+    const ids = this.nodes.map((n) => n.id), list = this.layers.map((l) => ({ id: l.id, params: { ...l.values } })), r = this.resolve;
     this.resolve = null;
     this.close();
-    const ok = this.engine.addEffect(id, params, ids, this.item);
+    const ok = this.engine.addEffects(list, ids, this.item);
     r?.(ok);
   }
 }
