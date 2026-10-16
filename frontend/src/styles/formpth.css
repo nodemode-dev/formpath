@@ -134,6 +134,8 @@
 .cv-propsp-flags { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
 .cv-xformp, .cv-alignp, .cv-pfp { padding-bottom: var(--space-1); }
 .cv-alignp .cv-kit-row, .cv-pfp .cv-kit-row { gap: 2px; }
+.cv-pfp-head { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
+.cv-pfp-head .cv-icon-btn { width: 28px; height: 28px; }
 .cv-alignp .cv-kit-row > .cv-props-field { flex: 1 1 110px; margin-left: 6px; }
 
 .cv-lp-search { padding: 6px 8px 2px; }

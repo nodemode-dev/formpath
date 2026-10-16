@@ -1,6 +1,7 @@
 import { AgentBridge, regionOf } from './automation/agent-bridge';
 import { CORNER_TYPES } from './engine/corners';
 import { firstCorner, setCornersOp } from './engine/ops/corner-ops';
+import { CONVERT_KINDS } from './engine/ops/live-shapes';
 import { Engine, UNIT_PT, type Color, type CornerSpec, type Doc, type ExportAsset, type ImageNode, type Pt, type Rect, type TraceView, type Units, type VNode } from './engine';
 import { allNodes, findNode, nodeLabel, newId, updateNodes } from './engine/doc';
 import { EFFECTS } from './engine/effects';
@@ -33,6 +34,7 @@ import { PluginHost } from './plugins/host';
 import { registerBuiltinTools } from './tools';
 import { pendingShape, shapeAt } from './tools/draw';
 import { typeDefaults } from './tools/type';
+import { editWidthPoint } from './ui/width-point-dialog';
 import { AboutDialog, ExportDialog, NewDocumentDialog, OpenDialog, ScreensDialog, SettingsDialog, ShortcutsDialog, type ExportChoice } from './ui/app-dialogs';
 import { brandMark } from './ui/brand';
 import { Commands } from './ui/commands';
@@ -1018,6 +1020,21 @@ export function startApp(): void {
     await previewEdit(engine, 'Soft Mix', [{ kind: 'number', key: 'rate', label: 'Mixing rate', value: 50, min: 0, max: 100, unit: '%' }], (origin, v) => { const r = mixPathfinder(origin, ids, 'soft', Number(v.rate)); return { doc: r.doc, select: r.ids }; });
   }
 
+  async function pathfinderOptionsDialog(params?: Record<string, unknown>): Promise<void> {
+    const cur = engine.pathfinderOptions();
+    if (params && Object.keys(params).length) {
+      setPref({ pfPrecision: Number(params.precision ?? cur.precision), pfRemoveRedundant: params.remove_redundant_points === undefined ? cur.removeRedundant : params.remove_redundant_points === true, pfRemoveUnpainted: params.remove_unpainted === undefined ? cur.removeUnpainted : params.remove_unpainted === true });
+      return;
+    }
+    const v = await askForm('Pathfinder Options', [
+      { kind: 'number', key: 'precision', label: 'Precision', value: cur.precision, min: 0.001, max: 100, step: 0.001, unit: 'pt' },
+      { kind: 'check', key: 'redundant', label: 'Remove Redundant Points', value: cur.removeRedundant },
+      { kind: 'check', key: 'unpainted', label: 'Divide and Outline Will Remove Unpainted Artwork', value: cur.removeUnpainted },
+    ], { ok: 'OK' });
+    if (!v) return;
+    setPref({ pfPrecision: Number(v.precision), pfRemoveRedundant: v.redundant === true, pfRemoveUnpainted: v.unpainted === true });
+  }
+
   async function trapDialog(params?: Record<string, unknown>): Promise<void> {
     const p = engine.current;
     if (!p || !sel()) return;
@@ -1468,6 +1485,9 @@ export function startApp(): void {
     { id: 'reflect-dialog', label: 'Reflect...', enabled: sel, run: () => void transformDialog('reflect') },
     { id: 'scale-dialog', label: 'Scale...', enabled: sel, run: () => void transformDialog('scale') },
     { id: 'shear-dialog', label: 'Shear...', enabled: sel, run: () => void transformDialog('shear') },
+    { id: 'width-point-edit', label: 'Width Point Edit...', enabled: () => engine.widthSel.idx.length > 0, run: () => void editWidthPoint(engine) },
+    { id: 'width-flip-along', label: 'Flip Width Profile Along', enabled: sel, run: () => { engine.flipWidthProfile(true, false); } },
+    { id: 'width-flip-across', label: 'Flip Width Profile Across', enabled: sel, run: () => { engine.flipWidthProfile(false, true); } },
     { id: 'transform-each', label: 'Transform Each...', keys: ['Alt+Shift+Mod+D'], group: 'Object', description: 'Transforms each selected object about its own centre; absolute mode takes target sizes in document units, relative mode percentages.', enabled: sel, mutates: true, params: { mode: { type: 'string', enum: ['relative', 'absolute'], description: 'Scale as percent of each object, or to a target size in document units (0 keeps the size)' }, sh: { type: 'number', min: 0, description: 'Scale horizontal: percent, or target width when absolute' }, sv: { type: 'number', min: 0, description: 'Scale vertical: percent, or target height when absolute' }, dx: { type: 'number', description: 'Move horizontal in points' }, dy: { type: 'number', description: 'Move vertical in points' }, angle: { type: 'number', min: -360, max: 360, description: 'Rotate in degrees' }, rx: { type: 'boolean', description: 'Reflect X' }, ry: { type: 'boolean', description: 'Reflect Y' }, random: { type: 'boolean', description: 'Randomise the amounts' } }, run: (params) => void transformEachDialog(params) },
     { id: 'toggle-scale-corners', label: 'Scale Corners', group: 'Object', description: 'Toggles whether scaling a live rectangle or a path with corner radii scales the radii; off keeps them.', enabled: has, mutates: false, checked: () => engine.view.scaleCorners, run: () => setPref({ scaleCorners: !engine.view.scaleCorners }) },
     { id: 'toggle-generative', label: 'Generative Features', group: 'View', description: 'Shows or hides every generative feature: the Generative menu, Generate Patterns, Retype and their panels.', checked: () => prefs.showGenerative, run: () => setPref({ showGenerative: !prefs.showGenerative }) },
@@ -1495,6 +1515,7 @@ export function startApp(): void {
     { id: 'expand-object', label: 'Expand', enabled: sel, run: () => engine.expand('object') },
     { id: 'expand-appearance', label: 'Expand Appearance', enabled: sel, run: () => void engine.task(async () => { engine.expand('appearance', undefined, await bakeTraced(engine)); }) },
     { id: 'expand-shape', label: 'Expand Shape', enabled: sel, run: () => engine.applyToSelection('Expand Shape', (n) => (n.kind === 'path' ? { ...n, live: undefined } : n)) },
+    ...CONVERT_KINDS.map(([kind, label]) => ({ id: `convert-to-${kind.replace('_', '-')}`, label: `Convert to ${label}`, group: 'Object', description: `Turns each selected live shape into a live ${label.toLowerCase()} with the same bounds and paint, as one undo step.`, when: 'Use when a rectangle, ellipse, polygon or star should become another kind of live shape without redrawing it.', enabled: () => engine.selected().some((n) => n.kind === 'path' && n.live && n.live.kind !== 'line'), mutates: true, run: () => engine.convertLiveShape(kind) })),
     { id: 'rasterize', label: 'Rasterize...', enabled: sel, run: () => void rasterizeSel() },
     { id: 'create-mesh', label: 'Create Gradient Mesh...', enabled: sel, run: () => void askForm('Create Gradient Mesh', [{ kind: 'number', key: 'rows', label: 'Rows', value: 4, min: 1, max: 50 }, { kind: 'number', key: 'cols', label: 'Columns', value: 4, min: 1, max: 50 }, { kind: 'select', key: 'hl', label: 'Appearance', value: 'flat', choices: [['flat', 'Flat'], ['center', 'To Center'], ['edge', 'To Edge']] }]).then((v) => { if (v) engine.createMesh(Math.round(Number(v.rows)), Math.round(Number(v.cols)), v.hl as 'flat'); }) },
     { id: 'join', label: 'Join', keys: ['Mod+J'], enabled: sel, run: () => engine.pathOp('join') },
@@ -1735,6 +1756,12 @@ export function startApp(): void {
     { id: 'pf-soft-mix', label: 'Soft Mix...', group: 'Object', description: 'Divides overlaps and colours each overlap with a blend of the overlapping fills at the mixing rate.', enabled: sel, mutates: true, params: { rate: { type: 'number', min: 0, max: 100, description: 'Mixing rate in percent' } }, run: (params) => void softMixDialog(params) },
     { id: 'pf-trap', label: 'Trap...', group: 'Object', description: 'Adds thin multiply-blended trap shapes where differently coloured objects abut or overlap.', enabled: sel, mutates: true, params: { thickness: { type: 'number', min: 0.01, description: 'Trap thickness in document units' }, height_width: { type: 'number', min: 5, max: 400, description: 'Height to width ratio in percent' }, tint_reduction: { type: 'number', min: 0, max: 100, description: 'Tint reduction in percent' }, process_color: { type: 'boolean', description: 'Trap with process colour' }, reverse: { type: 'boolean', description: 'Spread the darker colour into the lighter' } }, run: (params) => void trapDialog(params) },
     ...pfs.filter((x) => x !== 'unite').map((x) => ({ id: `pf-${x}`, label: PF_LABEL[x], enabled: sel, run: () => engine.pathfinder(x) })),
+    { id: 'compound-shape-make', label: 'Make Compound Shape', group: 'Object', enabled: () => engine.selected().length > 1, mutates: true, run: () => engine.makeCompoundShape() },
+    ...(['unite', 'minus_front', 'intersect', 'exclude'] as const).map((x) => ({ id: `compound-shape-${x}`, label: `${PF_LABEL[x]} as Compound Shape`, group: 'Object', enabled: () => engine.selected().length > 1, mutates: true, run: () => engine.pathfinder(x, undefined, true) })),
+    { id: 'compound-shape-expand', label: 'Expand Compound Shape', group: 'Object', enabled: () => engine.compoundShapeTargets().length > 0, mutates: true, run: () => engine.expandCompoundShape() },
+    { id: 'compound-shape-release', label: 'Release Compound Shape', group: 'Object', enabled: () => engine.compoundShapeTargets().length > 0, mutates: true, run: () => engine.releaseCompoundShape() },
+    ...([['add', 'Add'], ['subtract', 'Subtract'], ['intersect', 'Intersect'], ['exclude', 'Exclude']] as const).map(([m, l]) => ({ id: `shape-mode-${m}`, label: `Shape Mode: ${l}`, group: 'Object', enabled: () => engine.canShapeMode(), mutates: true, run: () => engine.shapeMode(m) })),
+    { id: 'pf-options', label: 'Pathfinder Options...', group: 'Object', params: { precision: { type: 'number', min: 0.001, max: 100, description: 'Pathfinder precision in points' }, remove_redundant_points: { type: 'boolean', description: 'Remove redundant points from Pathfinder results' }, remove_unpainted: { type: 'boolean', description: 'Divide and Outline remove unpainted artwork' } }, run: (params) => void pathfinderOptionsDialog(params) },
     { id: 'play-action', label: 'Play Action', run: () => actionsP.play() },
     { id: 'action-batch', label: 'Batch...', run: () => { showPanel('actions'); actionsP.openBatch(); } },
     { id: 'history-new-document', label: 'New Document from History State', enabled: has, run: () => { engine.newDocumentFromState(); } },
@@ -1769,12 +1796,12 @@ export function startApp(): void {
     { label: 'Object', items: () => [
       { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', '-', 'transform-each', '-', 'toggle-scale-corners', 'reset-bounding-box'] },
       { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', '-', 'send-to-layer'] },
-      { label: 'Pathfinder', items: ['pf-unite', 'pf-minus_front', 'pf-intersect', 'pf-exclude', '-', 'pf-divide', 'pf-trim', 'pf-merge', 'pf-crop', 'pf-outline', 'pf-minus_back', '-', 'pf-hard-mix', 'pf-soft-mix', 'pf-trap'] },
+      { label: 'Pathfinder', items: ['pf-unite', 'pf-minus_front', 'pf-intersect', 'pf-exclude', '-', 'pf-divide', 'pf-trim', 'pf-merge', 'pf-crop', 'pf-outline', 'pf-minus_back', '-', 'pf-hard-mix', 'pf-soft-mix', 'pf-trap', '-', 'pf-options'] },
       { label: 'Object on Path', items: ['object-on-path-attach', 'object-on-path-arrange', 'object-on-path-release'] },
       { label: 'Align', items: ALIGN.map(([a]) => `align-${a}`) }, '-',
       'group', 'ungroup', 'ungroup-all', 'isolate', '-', 'lock', 'unlock-all', 'hide', 'show-all', '-', 'expand-object', 'expand-appearance', 'rasterize', 'create-mesh', '-',
       { label: 'Path', items: ['join', 'average', '-', 'outline-stroke', 'offset-path', 'reverse-path', '-', 'simplify', 'smooth-path', 'corners-dialog', 'expand-corners', 'add-anchors', 'remove-anchors', 'close-path', '-', 'divide-below', 'split-grid', 'clean-up'] },
-      { label: 'Shape', items: ['expand-shape', 'shaper-expand'] },
+      { label: 'Shape', items: ['convert-to-rectangle', 'convert-to-rounded-rectangle', 'convert-to-ellipse', 'convert-to-polygon', 'convert-to-star', '-', 'expand-shape', 'shaper-expand'] },
       { label: 'Pattern', items: prefs.showGenerative ? ['make-pattern', 'edit-pattern', '-', 'generate-patterns'] : ['make-pattern', 'edit-pattern'] },
       ...(prefs.showGenerative ? [{ label: 'Generative', items: ['text-to-vector', 'generative-shape-fill'] }] : []),
       { label: 'Repeat', items: ['repeat-radial', 'repeat-grid', 'repeat-mirror', '-', 'release-live', 'repeat-options'] },
@@ -1789,6 +1816,7 @@ export function startApp(): void {
       { label: 'Text Wrap', items: ['wrap-make', 'wrap-release', '-', 'wrap-options'] },
       { label: 'Clipping Mask', items: ['make-clip', 'release-clip'] },
       { label: 'Compound Path', items: ['compound-make', 'compound-release'] },
+      { label: 'Compound Shape', items: ['compound-shape-make', 'compound-shape-expand', 'compound-shape-release', '-', 'compound-shape-unite', 'compound-shape-minus_front', 'compound-shape-intersect', 'compound-shape-exclude', '-', 'shape-mode-add', 'shape-mode-subtract', 'shape-mode-intersect', 'shape-mode-exclude'] },
       { label: 'Opacity Mask', items: ['opacity-mask', 'release-opacity-mask', 'disable-opacity-mask', 'unlink-opacity-mask', '-', 'new-mask-clip', 'new-mask-invert'] },
       { label: 'Symbol', items: ['new-symbol', 'symbol-edit', 'symbol-exit', '-', 'symbol-redefine', 'symbol-duplicate', 'symbol-replace', 'symbol-reset', '-', 'break-symbol', 'symbol-options'] },
       { label: 'Artboards', items: ['artboards-from-selection', 'artboards-rearrange', 'artboard-fit-art', 'artboard-fit-selection', '-', 'artboard-options'] }] },

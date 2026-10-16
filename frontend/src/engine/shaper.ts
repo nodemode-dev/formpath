@@ -5,6 +5,7 @@ import { inArea, intertwineOverlays } from './intertwine';
 import { liveShapePath } from './ops/live-shapes';
 import { arrangement, geometryOf } from './ops/paths';
 import { withFirstFill } from './paint';
+import { liveArt } from './pathfinder';
 import type { FillRule, GroupNode, LiveShape, Mat, Paint, PathData, PathNode, Pt, ShaperSpec, VNode } from './types';
 
 export const emptyShaper = (): ShaperSpec => ({ cuts: [], merges: [], fills: [] });
@@ -312,6 +313,8 @@ function affineFrom(src: Pt[], dst: Pt[]): Mat | null {
 }
 
 export function derivedArt(n: GroupNode, outline = false): VNode[] | null {
+  const live = liveArt(n, outline);
+  if (live) return live;
   if (n.shaper) return outline ? n.children : shaperRegions(n).map((r) => r.node);
   if (n.intertwine) return outline ? n.children : [...n.children, ...intertwineOverlays(n)];
   return null;

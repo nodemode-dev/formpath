@@ -88,7 +88,8 @@ export class LayersPanel {
     setHtml(q(n, '.cv-lrow-eye'), icon(node.hidden ? 'eyeOff' : 'eye', 14), node.hidden ? 'off' : 'on');
     setHtml(q(n, '.cv-lrow-lock'), node.locked ? icon('lock', 12) : '', node.locked ? 'l' : 'u');
     setHtml(q(n, '.cv-lrow-disc'), r.container ? icon(r.open ? 'chevronDown' : 'chevronRight', 12) : '', `${r.container}:${r.open}`);
-    setHtml(q(n, '.cv-lrow-kind'), isLayer ? '' : icon(KIND_ICON[node.kind] ?? 'vPen', 14), isLayer ? 'L' : node.kind);
+    const shaped = node.kind === 'group' && !!node.compoundShape;
+    setHtml(q(n, '.cv-lrow-kind'), isLayer ? '' : icon(shaped ? 'pPathfinder' : KIND_ICON[node.kind] ?? 'vPen', 14), isLayer ? 'L' : shaped ? 'shape' : node.kind);
     setText(q(n, '.cv-lrow-name'), nodeLabel(node));
     setClass(n, 'is-layer', isLayer);
     setClass(n, 'is-hidden', !!node.hidden);

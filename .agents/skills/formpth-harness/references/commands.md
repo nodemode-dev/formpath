@@ -106,6 +106,19 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `fx-gallery.watercolor` (Effect > Artistic > Watercolor): Watercolor, as in Effect > Artistic > Watercolor.
 - `fx-path.offset` (Effect > Path > Offset Path): Offsets the path outline as a live effect. Use when keeping an adjustable offset.
 - `fx-path.outline_stroke` (Effect > Path > Outline Stroke): Outline Stroke, as in Effect > Path > Outline Stroke.
+- `fx-pathfinder.add` (Effect > Pathfinder > Add): Unites the objects of a group as a live effect; the originals stay editable. Use when a group should show one merged silhouette without expanding it.
+- `fx-pathfinder.crop` (Effect > Pathfinder > Crop): Crops a group to its topmost object as a live effect. Use when a group should show only what lies inside its top shape.
+- `fx-pathfinder.divide` (Effect > Pathfinder > Divide): Splits the objects of a group into their overlap pieces as a live effect. Use when each overlap of a group needs its own look.
+- `fx-pathfinder.exclude` (Effect > Pathfinder > Exclude): Keeps the non-overlapping areas of a group as a live effect. Use when a group should show an exclusion while staying editable.
+- `fx-pathfinder.hard_mix` (Effect > Pathfinder > Hard Mix): Colours each overlap of a group with the per-channel maximum of its fills as a live effect. Use when overlaps should mix hard.
+- `fx-pathfinder.intersect` (Effect > Pathfinder > Intersect): Keeps only the shared area of a group as a live effect. Use when a group should show its overlap while staying editable.
+- `fx-pathfinder.merge` (Effect > Pathfinder > Merge): Trims the objects of a group and joins touching pieces of the same fill as a live effect. Use when same-coloured overlaps should read as one shape.
+- `fx-pathfinder.minus_back` (Effect > Pathfinder > Minus Back): Cuts the back objects out of the front one in a group as a live effect. Use when the front object should keep what the back ones do not cover.
+- `fx-pathfinder.outline` (Effect > Pathfinder > Outline): Shows the objects of a group as outlines as a live effect. Use when a group should display only its edges.
+- `fx-pathfinder.soft_mix` (Effect > Pathfinder > Soft Mix): Colours each overlap of a group with a blend of its fills at a mixing rate as a live effect. Use when overlaps should mix softly.
+- `fx-pathfinder.subtract` (Effect > Pathfinder > Subtract): Cuts the front objects out of the back one in a group as a live effect. Use when a group should show a cut-out while staying editable.
+- `fx-pathfinder.trap` (Effect > Pathfinder > Trap): Adds trap shapes where differently coloured objects of a group abut or overlap as a live effect. Use when a group goes to print and needs trapping.
+- `fx-pathfinder.trim` (Effect > Pathfinder > Trim): Removes the hidden parts of the objects in a group as a live effect. Use when overlaps should disappear without merging.
 - `fx-rasterize.raster` (Effect > Rasterize > Rasterize): Rasterize, as in Effect > Rasterize > Rasterize.
 - `fx-stylize.drop_shadow` (Effect > Stylize > Drop Shadow): Adds a soft drop shadow behind the selection. Use when giving art depth.
 - `fx-stylize.feather` (Effect > Stylize > Feather): Fades the edges of the selection. Use when art should blend softly into the background.
@@ -199,6 +212,18 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `close-path` (Object > Path > Close Path): Closes the selected open paths. Use when a shape needs a fill.
 - `compound-make` (Object > Compound Path > Make Compound Path): Combines paths into one compound path with holes. Use when cutting a shape out of another.
 - `compound-release` (Object > Compound Path > Release Compound Path): Splits a compound path back into separate paths. Use when the holes should become shapes again.
+- `compound-shape-exclude` (Object > Compound Shape > Exclude as Compound Shape): Makes a live compound shape that keeps the areas covered by an odd number of parts. Use when an exclusion must stay editable.
+- `compound-shape-expand` (Object > Compound Shape > Expand Compound Shape): Turns a live compound shape into a plain path with the result of its parts. Use when the parts no longer need to be edited.
+- `compound-shape-intersect` (Object > Compound Shape > Intersect as Compound Shape): Makes a live compound shape that keeps only the area shared by all parts. Use when an overlap region must stay editable.
+- `compound-shape-make` (Object > Compound Shape > Make Compound Shape): Groups the selected shapes into a live compound shape that stays editable and shows the union of its parts. Use when shapes should combine without losing the originals.
+- `compound-shape-minus_front` (Object > Compound Shape > Minus Front as Compound Shape): Makes a live compound shape where the front parts are cut out of the back one. Use when a cut-out must stay editable.
+- `compound-shape-release` (Object > Compound Shape > Release Compound Shape): Releases a live compound shape back into its separate parts. Use when the original shapes are needed again.
+- `compound-shape-unite` (Object > Compound Shape > Unite as Compound Shape): Makes a live compound shape whose parts are added together. Use when a united silhouette must stay editable.
+- `convert-to-ellipse` (Object > Shape > Convert to Ellipse): Turns each selected live shape into a live ellipse with the same bounds and paint, as one undo step. Use when a rectangle, ellipse, polygon or star should become another kind of live shape without redrawing it.
+- `convert-to-polygon` (Object > Shape > Convert to Polygon): Turns each selected live shape into a live polygon with the same bounds and paint, as one undo step. Use when a rectangle, ellipse, polygon or star should become another kind of live shape without redrawing it.
+- `convert-to-rectangle` (Object > Shape > Convert to Rectangle): Turns each selected live shape into a live rectangle with the same bounds and paint, as one undo step. Use when a rectangle, ellipse, polygon or star should become another kind of live shape without redrawing it.
+- `convert-to-rounded-rectangle` (Object > Shape > Convert to Rounded Rectangle): Turns each selected live shape into a live rounded rectangle with the same bounds and paint, as one undo step. Use when a rectangle, ellipse, polygon or star should become another kind of live shape without redrawing it.
+- `convert-to-star` (Object > Shape > Convert to Star): Turns each selected live shape into a live star with the same bounds and paint, as one undo step. Use when a rectangle, ellipse, polygon or star should become another kind of live shape without redrawing it.
 - `corners-dialog` (Object > Path > Corners): Corners, as in Object > Path > Corners.
 - `create-mesh` (Object > Create Gradient Mesh): Create Gradient Mesh, as in Object > Create Gradient Mesh.
 - `disable-opacity-mask` (Object > Opacity Mask > Disable Opacity Mask): Disable Opacity Mask, as in Object > Opacity Mask > Disable Opacity Mask.
@@ -268,10 +293,11 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `pf-exclude` (Object > Pathfinder > Exclude): Keeps the areas where shapes do not overlap. Use when removing the overlap.
 - `pf-hard-mix` (Object > Pathfinder > Hard Mix): Divides overlaps and colours each overlap with the per-channel maximum of the overlapping fills.
 - `pf-intersect` (Object > Pathfinder > Intersect): Keeps only the area where shapes overlap. Use when you need the shared region.
-- `pf-merge` (Object > Pathfinder > Merge): Merge, as in Object > Pathfinder > Merge.
-- `pf-minus_back` (Object > Pathfinder > Minus Back): Minus Back, as in Object > Pathfinder > Minus Back.
+- `pf-merge` (Object > Pathfinder > Merge): Divides the shapes, removes hidden parts and joins touching pieces of the same fill. Use when overlapping art with the same colour should become one shape.
+- `pf-minus_back` (Object > Pathfinder > Minus Back): Cuts the back shapes out of the front one. Use when the front shape should keep only what the shapes behind do not cover.
 - `pf-minus_front` (Object > Pathfinder > Minus Front): Cuts the front shapes out of the back one. Use when punching a hole with a shape.
-- `pf-outline` (Object > Pathfinder > Outline): Outline, as in Object > Pathfinder > Outline.
+- `pf-options` (Object > Pathfinder > Pathfinder Options): Sets the Pathfinder precision in points, whether results drop redundant points, and whether Divide and Outline remove unpainted artwork. Every Pathfinder operation, live compound shape and Pathfinder effect uses them. Use when Pathfinder results are too jagged, carry too many anchors or leave unpainted pieces.
+- `pf-outline` (Object > Pathfinder > Outline): Turns every shape into open outlines coloured with its fill. Use when preparing overlapping shapes for trapping or cutting.
 - `pf-soft-mix` (Object > Pathfinder > Soft Mix): Divides overlaps and colours each overlap with a blend of the overlapping fills at the mixing rate.
 - `pf-trap` (Object > Pathfinder > Trap): Adds thin multiply-blended trap shapes where differently coloured objects abut or overlap.
 - `pf-trim` (Object > Pathfinder > Trim): Removes hidden parts of the shapes behind. Use when overlaps should disappear without merging.
@@ -293,6 +319,10 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `send-backward` (Object > Arrange > Send Backward): Moves the selection one step down in stacking order. Use when a small stacking change is needed.
 - `send-to-back` (Object > Arrange > Send to Back): Moves the selection below everything in its layer. Use when art should become a backdrop.
 - `send-to-layer` (Object > Arrange > Send to Current Layer): Moves the selection to another layer. Use when organising art across layers.
+- `shape-mode-add` (Object > Compound Shape > Shape Mode: Add): Sets the selected compound shape part to add to the shapes behind it. Use when a part should join the result.
+- `shape-mode-exclude` (Object > Compound Shape > Shape Mode: Exclude): Sets the selected compound shape part to exclude the area it shares with the shapes behind it. Use when a part should flip the overlap.
+- `shape-mode-intersect` (Object > Compound Shape > Shape Mode: Intersect): Sets the selected compound shape part to keep only the area it shares with the shapes behind it. Use when a part should trim the result.
+- `shape-mode-subtract` (Object > Compound Shape > Shape Mode: Subtract): Sets the selected compound shape part to cut out of the shapes behind it. Use when a part should punch a hole.
 - `shaper-expand` (Object > Shape > Expand Shaper Group): Expand Shaper Group, as in Object > Shape > Expand Shaper Group.
 - `shear-dialog` (Object > Transform > Shear): Slants the selection by an angle. Use when skewing a shape.
 - `show-all` (Object > Show All): Shows every hidden object. Use when something was hidden and is needed again.
@@ -429,6 +459,9 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `tool-width` (Width Tool): Width Tool, from a panel menu or shortcut.
 - `tool-wrinkle` (Wrinkle Tool): Wrinkle Tool, from a panel menu or shortcut.
 - `tool-zoom` (Zoom Tool): Zoom Tool, from a panel menu or shortcut.
+- `width-flip-across` (Flip Width Profile Across): Swaps the two sides of the selected strokes' width profile. Use when an asymmetric profile should bulge on the other side of the path.
+- `width-flip-along` (Flip Width Profile Along): Mirrors the selected strokes' width profile from end to end. Use when a taper should run the other way along the path.
+- `width-point-edit` (Width Point Edit): Opens Width Point Edit for the selected width point: Side 1, Side 2, Total Width, adjust adjoining points, or delete it. Use when a width point needs exact, possibly asymmetric widths.
 
 ## Plugins
 

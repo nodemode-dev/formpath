@@ -1,6 +1,7 @@
 import { geomBounds, selectionBounds, visualBounds } from '../engine/bounds';
 import { findNode, inDocOrder, nodeLabel, updateNodes } from '../engine/doc';
-import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES } from '../engine/effects';
+import { EFFECTS, effectDef, isItemEffect, WIDTH_PROFILES, widthProfileNamed } from '../engine/effects';
+import { customProfileNames, saveWidthProfile } from '../io/width-profiles';
 import { STYLE_LIBRARIES, styleLibrary } from '../engine/style-libraries';
 import { LIGHT_LIMIT, LIGHTING_PRESETS, lightsToParam, ROTATION_PRESETS } from '../engine/threed';
 import { textureAverage, textureName } from '../engine/texture';
@@ -15,7 +16,7 @@ import { charStyleAt, DEFAULT_CHAR, layoutText, plainText, styleSpans } from '..
 import { DEFAULT_HYPH, DEFAULT_JUST } from '../engine/hyphen';
 import { variationOf } from '../io/fonts';
 import { harmonyColors, variations, type HarmonyRule, type Variation } from '../engine/harmony';
-import { liveParams, type LivePatch } from '../engine/ops/live-shapes';
+import { CONVERT_KINDS, liveParams, type ConvertKind, type LivePatch } from '../engine/ops/live-shapes';
 import { transformNode } from '../engine/transform';
 import { interiorOf, liveFaceNodes, liveFaces } from '../engine/livepaint';
 import { addMeshLine, meshPointAt, removeMeshLines } from '../engine/mesh';
@@ -828,6 +829,18 @@ export class AgentBridge {
           if (has('arrow_scale')) patch.arrowScale = [num('arrow_scale', 100), num('arrow_scale', 100)];
           if (Object.keys(patch).length) e.setStroke(patch, ids);
           if (has('profile')) { if (!WIDTH_PROFILES[str('profile')]) return fail(`profile must be one of ${Object.keys(WIDTH_PROFILES).join(', ')}.`); e.setWidthProfile(str('profile'), ids); }
+          if (has('custom_profile')) { if (!widthProfileNamed(str('custom_profile'))) return fail(`custom_profile "${str('custom_profile')}" is not a saved profile. Saved profiles: ${customProfileNames().join(', ') || 'none'}.`); e.setWidthProfile(str('custom_profile'), ids); }
+          if (Array.isArray(a.width_points)) {
+            const pts = a.width_points.map((raw: unknown) => { const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>; return { t: Number(o.offset), l: Number(o.left), r: Number(o.right ?? o.left) }; });
+            if (!pts.length || pts.some((q) => !(q.t >= 0 && q.t <= 1 && q.l >= 0 && q.r >= 0 && Number.isFinite(q.l) && Number.isFinite(q.r)))) return fail('width_points are {offset, left, right}: offset from 0 (start) to 1 (end), left and right 0 or more as multiples of half the stroke weight.');
+            e.setWidthPoints(pts, ids);
+          }
+          if (a.flip_along === true || a.flip_across === true) e.flipWidthProfile(a.flip_along === true, a.flip_across === true, ids);
+          if (has('save_profile_as')) {
+            const t0 = e.targetIds(ids)[0], nd = t0 && e.doc ? findNode(e.doc, t0) : null, sv = nd && nd.kind !== 'text' ? (nd.ap.items.find((i) => i.kind === 'stroke') as StrokeItem | undefined)?.profile : null;
+            if (!sv?.length) return fail('save_profile_as needs an object whose stroke has width points: set profile or width_points first.');
+            if (!saveWidthProfile(str('save_profile_as'), sv)) return fail('save_profile_as needs a name that is not one of the built-in profiles.');
+          }
           if (has('gradient_mode')) {
             const m = str('gradient_mode');
             if (m !== 'within' && m !== 'along' && m !== 'across') return fail('gradient_mode is within, along or across.');
@@ -1083,7 +1096,24 @@ export class AgentBridge {
           const g = this.node(id);
           return text(`Added ${type === 'angular' ? 'an' : 'a'} ${type} dimension (id ${id}) reading ${g.kind === 'group' && g.dim ? dimLabel(g.dim, p.doc.units) : ''}.`, { id, label: g.kind === 'group' && g.dim ? dimLabel(g.dim, p.doc.units) : '' });
         }
-        case 'pathfinder': { const ok = e.pathfinder(str('operation') as 'unite', this.ids(a)); return ok ? text(`Pathfinder ${str('operation')} done.`, { selection: e.selectedIds() }) : fail('Nothing changed: Pathfinder needs two or more overlapping shapes (crop, divide and outline can take one).'); }
+        case 'pathfinder': {
+          const opts: Record<string, unknown> = {};
+          if (has('precision')) opts.precision = Math.max(0.001, Math.min(100, num('precision', 0.028)));
+          if (has('remove_redundant_points')) opts.remove_redundant_points = a.remove_redundant_points === true;
+          if (has('remove_unpainted')) opts.remove_unpainted = a.remove_unpainted === true;
+          if (Object.keys(opts).length) {
+            if (this.catalogue) this.catalogue.run('pf-options', opts, true);
+            else e.setPathfinderOptions({ ...(has('precision') ? { precision: opts.precision as number } : {}), ...(has('remove_redundant_points') ? { removeRedundant: opts.remove_redundant_points as boolean } : {}), ...(has('remove_unpainted') ? { removeUnpainted: opts.remove_unpainted as boolean } : {}) });
+          }
+          const compound = str('compound'), mode = str('shape_mode'), op = str('operation');
+          if (compound === 'expand' || compound === 'release') { const ok = compound === 'expand' ? e.expandCompoundShape(this.ids(a)) : e.releaseCompoundShape(this.ids(a)); return ok ? text(`Compound shape ${compound === 'expand' ? 'expanded into a path' : 'released into its parts'}.`, { selection: e.selectedIds() }) : fail('Nothing changed: pass the id of a live compound shape (pathfinder with live true makes one).'); }
+          if (mode) { const ok = e.shapeMode(mode as 'add', this.ids(a)); return ok ? text(`Shape mode ${mode} set.`, { selection: e.selectedIds() }) : fail('Nothing changed: select a part of a live compound shape, or the compound shape itself.'); }
+          if (!op) return Object.keys(opts).length ? text('Pathfinder options set.') : fail('Pass operation, compound or shape_mode.');
+          const live = a.live === true;
+          if (live && !['unite', 'minus_front', 'intersect', 'exclude'].includes(op)) return fail('live works with unite, minus_front, intersect and exclude only.');
+          const ok = e.pathfinder(op as 'unite', this.ids(a), live);
+          return ok ? text(live ? `Made a live compound shape (${op}).` : `Pathfinder ${op} done.`, { selection: e.selectedIds() }) : fail('Nothing changed: Pathfinder needs two or more overlapping shapes (crop, divide and outline can take one).');
+        }
         case 'path_operation': {
           const op = str('operation') as Parameters<Engine['pathOp']>[0];
           const ok = e.pathOp(op, { offset: has('offset') ? num('offset', 10) : undefined, joins: has('joins') ? (str('joins') as 'miter') : undefined, miterLimit: has('miter_limit') ? num('miter_limit', 4) : undefined, precision: has('precision') ? num('precision', 50) : undefined, axis: has('axis') ? (str('axis') as 'both') : undefined, rows: has('rows') ? Math.round(num('rows', 2)) : undefined, columns: has('columns') ? Math.round(num('columns', 2)) : undefined, gutter: has('gutter') ? num('gutter', 10) : undefined }, this.ids(a));
@@ -1553,8 +1583,14 @@ export class AgentBridge {
             ...(has('sides') ? { sides: num('sides', 6) } : {}), ...(has('points') ? { points: num('points', 5) } : {}), ...(has('outer_radius') ? { r1: num('outer_radius', 50) } : {}), ...(has('inner_radius') ? { r2: num('inner_radius', 25) } : {}),
             ...(has('length') ? { length: num('length', 100) } : {}), ...(has('angle') ? { angle: num('angle', 0) } : {}),
           };
-          if (has('radius')) { for (const n of live) e.editLiveShape(n.live?.kind === 'polygon' ? { ...patch, r: num('radius', 50) } : patch, [n.id]); }
-          else e.editLiveShape(patch, live.map((n) => n.id));
+          const convertTo = has('convert_to') ? str('convert_to') : '';
+          if (convertTo && !CONVERT_KINDS.some(([k]) => k === convertTo)) return fail(`convert_to must be one of ${CONVERT_KINDS.map(([k]) => k).join(', ')}.`);
+          e.beginStep();
+          try {
+            if (convertTo) e.convertLiveShape(convertTo as ConvertKind, live.map((n) => n.id));
+            if (has('radius')) { for (const n of live) { const cur = this.node(n.id); e.editLiveShape(cur.kind === 'path' && cur.live?.kind === 'polygon' ? { ...patch, r: num('radius', 50) } : patch, [n.id]); } }
+            else e.editLiveShape(patch, live.map((n) => n.id));
+          } finally { e.endStep(); }
           return text(`Changed ${live.length} shape(s).`, { shapes: live.map((n) => { const x = this.node(n.id); return x.kind === 'path' && x.live ? { id: x.id, kind: x.live.kind, ...liveParams(x.live) } : { id: x.id }; }) });
         }
         case 'color_harmony': {

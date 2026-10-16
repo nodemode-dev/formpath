@@ -110,7 +110,7 @@ export function check(label: string, change: (v: boolean) => void): Ctl<boolean>
   return { el: n, set: (v) => setChecked(c, v), enable: (on) => setDisabled(c, !on) };
 }
 
-export function iconButton(name: string, label: string, run: () => void, size = 16): HTMLButtonElement {
+export function iconButton(name: string, label: string, run: (ev: MouseEvent) => void, size = 16): HTMLButtonElement {
   const b = el<HTMLButtonElement>(`<button class="cv-icon-btn cv-kit-btn" type="button" title="${label}" aria-label="${label}">${icon(name, size)}</button>`);
   b.addEventListener('click', run);
   return b;

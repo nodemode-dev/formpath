@@ -4,6 +4,7 @@ import { anchor, apply, arcSegmentPath, ellipsePath, flattenSeg, fitCurve, matAn
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { derivedArt } from '../engine/shaper';
+import { isLive } from '../engine/pathfinder';
 import { instanceArt } from '../engine/symbolism';
 import { fill as fillItem, gradientAt, linearGradient, resolvePaint, stop, stroke as strokeItem, toRgb } from '../engine/paint';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText } from '../engine/text';
@@ -510,7 +511,7 @@ export async function exportDxf(p: Project, o: DxfExportOptions, outline: (n: Te
     if (faces) { for (const c of faces) await visit(c, layer, on); return; }
     switch (n.kind) {
       case 'group': {
-        const list = n.livePaint ? [...liveFaceNodes(n), ...n.children] : (n.shaper || n.intertwine) ? derivedArt(n) ?? [] : n.children;
+        const list = n.livePaint ? [...liveFaceNodes(n), ...n.children] : (n.shaper || n.intertwine || isLive(n)) ? derivedArt(n) ?? [] : n.children;
         for (const c of list) await visit(c, layer, on);
         return;
       }

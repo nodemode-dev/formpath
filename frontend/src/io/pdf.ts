@@ -6,6 +6,7 @@ import { inflate, isEmptyRect, isLineSeg, pathBounds, segments, unionRect } from
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { derivedArt } from '../engine/shaper';
+import { isLive } from '../engine/pathfinder';
 import { latticeCopies, patternLattice } from '../engine/pattern';
 import { freeformShading, meshHasAlpha, meshShading } from './pdf-shading';
 import { instanceArt } from '../engine/symbolism';
@@ -428,7 +429,7 @@ class Painter {
           return `q\n${geo ? `${this.path(geo.d)}\n${geo.rule === 'evenodd' ? 'W*' : 'W'} n\n` : ''}${inner}\nQ\n${strokes}`;
         }
         if (n.kind === 'group' && n.livePaint) return this.children([...liveFaceNodes(n), ...n.children], page);
-        if (n.kind === 'group' && (n.shaper || n.intertwine)) return this.children(derivedArt(n) ?? [], page);
+        if (n.kind === 'group' && (n.shaper || n.intertwine || isLive(n))) return this.children(derivedArt(n) ?? [], page);
         const inner = await this.kids(n.children, page);
         if (!n.ap.items.length) return inner;
         const geo: PathData = [], collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); };

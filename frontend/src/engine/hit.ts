@@ -6,10 +6,11 @@ import { liveChildren } from './live';
 import { liveFaceNodes } from './livepaint';
 import { intertwineHit } from './intertwine';
 import { shaperRegionAt } from './shaper';
+import { isLive, liveArt } from './pathfinder';
 import { cachedPath, clipGeometry } from './render';
 import { glyphCenter, layoutText, lineRect } from './text';
 import { instanceArt } from './symbolism';
-import type { Doc, PathData, Pt, Rect, SymbolNode, VNode } from './types';
+import type { Doc, GroupNode, PathData, Pt, Rect, SymbolNode, VNode } from './types';
 
 let hctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
 function ctx(): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D {
@@ -72,6 +73,7 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
       if (h) return { id: n.id, chain: [...chain, n.id], part: h.part };
       continue;
     }
+    if (n.kind === 'group' && !o.outline && isLive(n)) { const h = liveHit(doc, n, p, o, chain); if (h) return h; continue; }
     const ch = n.kind === 'compound' ? null : childrenOf(n);
     if (ch) {
       if ((n.kind === 'group' || n.kind === 'layer') && n.clip && ch.length > 1) {
@@ -100,6 +102,18 @@ function deepHit(doc: Doc, nodes: VNode[], p: Pt, o: HitOpts, chain: string[]): 
     if (part) return { id: n.id, chain: [...chain, n.id], part };
   }
   return null;
+}
+
+function liveHit(doc: Doc, n: GroupNode, p: Pt, o: HitOpts, chain: string[]): Hit | null {
+  const c = ctx(), kids = n.children.filter((k) => !k.hidden && !k.locked).reverse();
+  c.lineWidth = o.tol * 2;
+  c.lineJoin = 'round';
+  for (const k of kids) { const d = nodePath(k); if (d && c.isPointInStroke(cachedPath(d), p.x, p.y)) return { id: k.id, chain: [...chain, n.id, k.id], part: 'edge' }; }
+  const art = liveArt(n) ?? [];
+  const onArt = art.length ? deepHit(doc, art, p, o, []) : null;
+  if (!onArt) return null;
+  for (const k of kids) { const d = nodePath(k); if (d && c.isPointInPath(cachedPath(d), p.x, p.y, k.kind === 'path' || k.kind === 'compound' ? k.rule : 'nonzero')) return { id: k.id, chain: [...chain, n.id, k.id], part: 'fill' }; }
+  return { id: n.id, chain: [...chain, n.id], part: onArt.part };
 }
 
 export function hitTest(doc: Doc, p: Pt, o: HitOpts): Hit | null { return deepHit(doc, doc.layers, p, o, []); }

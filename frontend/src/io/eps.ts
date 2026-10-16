@@ -5,6 +5,7 @@ import { inflate, isEmptyRect, isLineSeg, segments } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { derivedArt } from '../engine/shaper';
+import { isLive } from '../engine/pathfinder';
 import { instanceArt } from '../engine/symbolism';
 import { gradientAt, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { clipGeometry, gradientGeom } from '../engine/render';
@@ -226,7 +227,7 @@ class PsPainter {
           return `gsave\n${geo ? `${this.path(geo.d)}\n${geo.rule === 'evenodd' ? 'eoclip' : 'clip'} newpath\n` : ''}${inner}\ngrestore\n${strokes}`;
         }
         if (n.kind === 'group' && n.livePaint) return this.children([...liveFaceNodes(n), ...n.children]);
-        if (n.kind === 'group' && (n.shaper || n.intertwine)) return this.children(derivedArt(n) ?? []);
+        if (n.kind === 'group' && (n.shaper || n.intertwine || isLive(n))) return this.children(derivedArt(n) ?? []);
         const inner = await this.children(n.children);
         if (!n.ap.items.length) return inner;
         const geo: PathData = [], collect = (x: VNode): void => { if (x.kind === 'path') geo.push(...x.d); else if (x.kind === 'compound') x.children.forEach((c) => geo.push(...c.d)); else childrenOf(x)?.forEach(collect); };

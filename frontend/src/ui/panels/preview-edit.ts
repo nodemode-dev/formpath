@@ -39,6 +39,8 @@ export async function effectDialog(engine: Engine, id: string, slot?: EffectSlot
   if (slot?.item !== undefined && at?.item === undefined) engine.notice(`${def.label} applies to the whole object, not to one fill or stroke.`);
   const ids = at ? [at.node] : engine.targetIds();
   if (!ids.length) { engine.notice(`Select an object to apply ${def.label}.`); return false; }
+  if (id.startsWith('pathfinder.') && !ids.every((i) => engine.nodeById(i)?.kind === 'group')) { engine.notice('Pathfinder effects apply to groups. Group the objects first.'); return false; }
+  if (id.startsWith('pathfinder.') && !def.params.length && !(at && at.index >= 0)) return engine.addEffect(id, {}, ids);
   const node = at ? engine.nodeById(at.node) : null, list = node ? (at?.item !== undefined ? node.ap.items[at.item]?.effects : node.ap.effects) : undefined;
   if (at && !list) return false;
   const editing = !!at && at.index >= 0;

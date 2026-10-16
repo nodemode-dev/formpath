@@ -213,7 +213,7 @@ Draws a live shape: x and y are the top-left of its bounds (for line and arc the
 
 ## edit_shape
 
-Changes a live shape after drawing, keeping its kind: a rectangle's width, height, corner radius (all, or radii top-left, top-right, bottom-right, bottom-left) and corner type; an ellipse's width, height and pie angles (degrees counter-clockwise from three o'clock); a polygon's radius, sides and corner radius; a star's points, outer and inner radius and corner radius; a line's length and angle. get_object shows a shape's current values.
+Changes a live shape after drawing, keeping its kind: a rectangle's width, height, corner radius (all, or radii top-left, top-right, bottom-right, bottom-left) and corner type; an ellipse's width, height and pie angles (degrees counter-clockwise from three o'clock); a polygon's radius, sides, corner radius and corner type; a star's points, outer and inner radius, corner radius and corner type (one radius and type for every corner, kept live); a line's length and angle. convert_to turns a live shape into another live kind (rectangle, rounded_rectangle, ellipse, polygon with 6 sides, star with 5 points) keeping its bounds and paint, in one undo step, and other fields in the same call apply after the conversion. get_object shows a shape's current values.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `width`: number
@@ -230,6 +230,7 @@ Changes a live shape after drawing, keeping its kind: a rectangle's width, heigh
 - `inner_radius`: number
 - `length`: number
 - `angle`: number
+- `convert_to`: string (rectangle | rounded_rectangle | ellipse | polygon | star)
 
 ## add_text
 
@@ -279,7 +280,7 @@ Sets the fill and or stroke of the objects (their first fill and first stroke): 
 
 ## set_stroke
 
-Sets stroke attributes of the objects' first stroke: weight, caps, joins, miter limit, alignment, dashes, arrowheads, width profile and how a gradient runs on it.
+Sets stroke attributes of the objects' first stroke: weight, caps, joins, miter limit, alignment, dashes, arrowheads, width profile (a preset, a saved custom_profile, or explicit width_points with separate left and right widths; flip_along and flip_across mirror it; save_profile_as keeps it) and how a gradient runs on it.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `width`: number
@@ -294,6 +295,11 @@ Sets stroke attributes of the objects' first stroke: weight, caps, joins, miter 
 - `end_arrow`: string
 - `arrow_scale`: number
 - `profile`: string (uniform | lens | taper_start | taper_end | taper_both | pinch | teardrop | wave)
+- `custom_profile`: string; The name of a width profile saved with save_profile_as or Add to Profiles in the Stroke panel.
+- `width_points`: array; Explicit width points replacing the profile, like the Width tool makes: unequal left and right give an asymmetric width, and two points at the same offset make a discontinuous width point (a step).
+- `flip_along`: boolean; Mirror the width profile from end to end (Flip Along); applied after profile or width_points.
+- `flip_across`: boolean; Swap the two sides of the width profile (Flip Across).
+- `save_profile_as`: string; Save the stroke's width points as a custom profile with this name (kept in the app's preferences); apply it later with custom_profile.
 - `gradient_mode`: string (within | along | across); For a linear or radial gradient stroke (set it with set_paint first): within paints the gradient over the object's box, along runs it from the path's start to its end following every curve and corner, across runs it from one edge of the stroke to the other.
 
 ## set_appearance
@@ -545,10 +551,16 @@ Adds a dimension annotation that stays live: linear (two points; horizontal, ver
 
 ## pathfinder
 
-Combines the selected shapes into new curved paths, as Illustrator's Pathfinder: unite, minus_front, intersect, exclude, divide, trim, merge, crop, outline or minus_back.
+Combines the selected shapes into new curved paths, as Illustrator's Pathfinder: unite, minus_front, intersect, exclude, divide, trim, merge, crop, outline or minus_back. With live true, unite, minus_front, intersect and exclude instead make a live compound shape (Alt-click in the panel): a group whose parts stay editable and whose look is the boolean of the parts, each with its own shape mode, painted like the top part. compound expand turns a live compound shape into a path and compound release returns its parts. shape_mode sets the mode of the selected part (or of all parts of a selected compound shape). precision (points, default 0.028), remove_redundant_points and remove_unpainted (Divide and Outline drop unpainted pieces) set the Pathfinder Options used by every operation, live compound shape and Pathfinder effect (apply_effect pathfinder.add and the other pathfinder.* ids on a group).
 
 - `ids`: array; Object ids from get_document; the selection when left out.
-- `operation`: string (unite | minus_front | intersect | exclude | divide | trim | merge | crop | outline | minus_back); required
+- `operation`: string (unite | minus_front | intersect | exclude | divide | trim | merge | crop | outline | minus_back)
+- `live`: boolean; default false; Make a live compound shape instead of a destructive result (unite, minus_front, intersect, exclude only).
+- `compound`: string (expand | release); Act on live compound shapes in ids or the selection instead of combining.
+- `shape_mode`: string (add | subtract | intersect | exclude); Set the shape mode of the selected compound shape part.
+- `precision`: number; Pathfinder Options precision in points.
+- `remove_redundant_points`: boolean
+- `remove_unpainted`: boolean
 
 ## path_operation
 
@@ -575,7 +587,7 @@ Shape Builder: merges the regions of the selected shapes under the given points 
 
 ## apply_effect
 
-Adds a live effect to the objects (it stays editable in the Appearance panel), or lists the effects and their parameters with list true. Ids include warp.arc, warp.flag, warp.bulge (15 warps), distort.roughen, distort.zig_zag, distort.pucker_bloat, distort.twist, distort.transform, distort.tweak, stylize.drop_shadow, stylize.outer_glow, stylize.inner_glow, stylize.feather, stylize.round_corners, stylize.scribble, path.offset, path.outline_stroke, convert.rectangle, convert.rounded_rectangle, convert.ellipse, rasterize.raster (resolution, background, around), and the Effect Gallery's raster effects: blur.gaussian, blur.radial, blur.smart and gallery.* (Artistic: gallery.watercolor, gallery.cutout, gallery.colored_pencil; Brush Strokes: gallery.crosshatch, gallery.spatter; Distort: gallery.glass, gallery.ocean_ripple; Pixelate: gallery.crystallize, gallery.color_halftone, gallery.pointillize; Sketch: gallery.charcoal, gallery.stamp, gallery.halftone_pattern; Stylize: gallery.glowing_edges; Texture: gallery.stained_glass, gallery.mosaic_tiles, gallery.texturizer; Video: gallery.ntsc_colors; 56 with Gaussian Blur). Raster effects export to SVG as images at the document's raster resolution.
+Adds a live effect to the objects (it stays editable in the Appearance panel), or lists the effects and their parameters with list true. Ids include warp.arc, warp.flag, warp.bulge (15 warps), distort.roughen, distort.zig_zag, distort.pucker_bloat, distort.twist, distort.transform, distort.tweak, stylize.drop_shadow, stylize.outer_glow, stylize.inner_glow, stylize.feather, stylize.round_corners, stylize.scribble, path.offset, path.outline_stroke, pathfinder.add, pathfinder.intersect, pathfinder.exclude, pathfinder.subtract, pathfinder.minus_back, pathfinder.divide, pathfinder.trim, pathfinder.merge, pathfinder.crop, pathfinder.outline, pathfinder.hard_mix, pathfinder.soft_mix, pathfinder.trap (these act on groups), convert.rectangle, convert.rounded_rectangle, convert.ellipse, rasterize.raster (resolution, background, around), and the Effect Gallery's raster effects: blur.gaussian, blur.radial, blur.smart and gallery.* (Artistic: gallery.watercolor, gallery.cutout, gallery.colored_pencil; Brush Strokes: gallery.crosshatch, gallery.spatter; Distort: gallery.glass, gallery.ocean_ripple; Pixelate: gallery.crystallize, gallery.color_halftone, gallery.pointillize; Sketch: gallery.charcoal, gallery.stamp, gallery.halftone_pattern; Stylize: gallery.glowing_edges; Texture: gallery.stained_glass, gallery.mosaic_tiles, gallery.texturizer; Video: gallery.ntsc_colors; 56 with Gaussian Blur). Raster effects export to SVG as images at the document's raster resolution.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `effect`: string

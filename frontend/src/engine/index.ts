@@ -1,7 +1,7 @@
 import { geomBounds, invalidateBounds, nodePath, selectionBounds, visualBounds } from './bounds';
 import { artGuides, bristleKind, defaultBrushes, TILE_KEYS } from './brushes';
 import { allNodes, ancestors, childrenOf, cloneNode, findNode, inDocOrder, insertInto, isContainer, isLocked, isVisible, layerOf, makeLayer, newDoc, newId, nodeAt, nodeLabel, pathOf, removeNodes, topObjects, topSelectable, updateNodes, walk, type IndexPath } from './doc';
-import { EFFECT_IDS, effectDef, effectDefaults, has3d, onTraceReady, setTraceDraft, WIDTH_PROFILES } from './effects';
+import { EFFECT_IDS, effectDef, effectDefaults, has3d, onTraceReady, setTraceDraft, flipProfile, normalizeWidthPoints, widthProfileNamed } from './effects';
 import { invalidateLayers } from './render';
 import { Emitter } from './events';
 import { detachFrames, reflow, threadChains } from './flow';
@@ -15,10 +15,11 @@ import { expandAppearance } from './ops/expand';
 import { allTargets, expandCornersOp, setCornersOp, type CornerTargets } from './ops/corner-ops';
 import type { CornerSpec } from './types';
 import { clampArtboardSide } from './types';
-import { editLive, type LivePatch } from './ops/live-shapes';
+import { convertLive, editLive, type ConvertKind, type LivePatch } from './ops/live-shapes';
 import { addTextStyle, applyCharStyle, applyParaStyle, deleteTextStyle, fontsUsed, redefineTextStyle, renameTextStyle, replaceFont, type FontUse, type TextStyleKind } from './ops/text-styles';
 import { anchorCount, mixPathfinder, objectOnPath, trapShapes, ungroupAll, type OnPathArgs, type TrapArgs } from './ops/illustrator';
-import { geometryOf, pathOperation, pathfinder, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
+import { expandCompoundShape, geometryOf, pathOperation, pathfinder, releaseCompoundShape, setShapeMode, shapeBuild, type PathOp, type PathOpArgs, type PathfinderOp } from './ops/paths';
+import { isLive, liveExpanded, pathfinderOptions, setPathfinderOptions, type PathfinderOptions } from './pathfinder';
 import { basicAppearance, BLACK, effect, emptyAppearance, fill, firstFill, firstStroke, freeformGradient, hex, NONE, resolvePaint, sameColor, solid, stroke, toRgb, WHITE, withFirstFill, withFirstStroke } from './paint';
 import { intersections, splitAtOffsets } from './kernel';
 import { edgePaths, faceContains, interiorOf, liveFaceNodes, liveFaces, type LiveFace } from './livepaint';
@@ -27,7 +28,7 @@ import { Project } from './project';
 import { applySymbolism, bakedInstance, partArt, withPartEdit, type SymbolismArgs, type SymbolismMethod, type SymbolismOp } from './symbolism';
 import { defaultSlice, findPart, isDynamic, registrationPoint, sessionArt, sessionStart, type SymbolRegistration, type SymbolSession } from './symbols';
 import { symbolPartHit } from './hit';
-import type { ImageLink, ImageNode, SymbolDef } from './types';
+import type { ImageLink, ImageNode, ShapeMode, SymbolDef } from './types';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText, plainText, styleSpans, touchSpans } from './text';
 import { transformNode } from './transform';
 import type { Appearance, Artboard, ExportAsset, BlendMode, BrushDef, BrushKind, CharStyle, CharTouch,Color, Doc, EngineEvents, FillRule, GraphicStyle, Mat, Notice, Paint, ParaStyle, PathData, PathNode, PatternDef, Pt, Rect, StrokeItem, SubPath, TextNode, TextWrap, ToolId, TraceView, Units, VNode, GroupNode } from './types';
@@ -554,6 +555,11 @@ export class Engine extends Emitter<EngineEvents> {
   editLiveShape(patch: LivePatch, ids?: string[], name = 'Shape'): boolean {
     return this.applyToSelection(name, (n) => (n.kind === 'path' && n.live ? editLive(n, patch) : n), ids);
   }
+  convertLiveShape(kind: ConvertKind, ids?: string[]): boolean {
+    const p = this.current;
+    if (!p || !this.targetIds(ids).some((id) => { const n = findNode(p.doc, id); return n?.kind === 'path' && !!n.live && convertLive(n, kind) !== n; })) return false;
+    return this.applyToSelection('Convert to Shape', (n) => (n.kind === 'path' && n.live ? convertLive(n, kind) : n), ids);
+  }
   setFreeform(mode: 'points' | 'lines' = 'points', ids?: string[], colors?: Color[]): boolean {
     const p = this.current; if (!p) return false;
     const fp = this.fillPaint, base = colors ?? (fp.type === 'gradient' ? (fp.gradient.points?.length ? fp.gradient.points.map((x) => x.color) : fp.gradient.stops.map((s) => s.color)) : fp.type === 'color' && !isNeutral(fp.color) ? ((h) => [h[2], h[3], h[1], h[4]])(harmonyColors(fp.color, 'analogous')) : []);
@@ -636,6 +642,7 @@ export class Engine extends Emitter<EngineEvents> {
 
   addEffect(id: string, params?: Record<string, number | string | boolean>, ids?: string[], item?: number): boolean {
     if (!EFFECT_IDS.has(id)) { this.notice(`There is no effect called ${id}.`, 'error'); return false; }
+    if (id.startsWith('pathfinder.') && !this.targetIds(ids).every((t) => this.nodeById(t)?.kind === 'group')) { this.notice('Pathfinder effects apply to groups. Group the objects first.'); return false; }
     const prm = { ...effectDefaults(id), ...(params ?? {}) };
     this.lastEffect = { id, params: prm };
     if (item !== undefined) return this.applyToSelection('Effect', (n) => (n.ap.items[item] ? { ...n, ap: { ...n.ap, items: n.ap.items.map((it, i) => (i === item ? { ...it, effects: [...it.effects, effect(id, prm)] } : it)) } } : n), ids);
@@ -738,7 +745,24 @@ export class Engine extends Emitter<EngineEvents> {
   }
   makeClip(ids?: string[]): boolean { return this.run('Make Clipping Mask', makeClip, ids); }
   releaseClip(ids?: string[]): boolean { return this.run('Release Clipping Mask', releaseClip, ids); }
-  pathfinder(op: PathfinderOp, ids?: string[]): boolean { return this.run(`Pathfinder ${op.replace(/_/g, ' ')}`, (d, t) => pathfinder(d, t, op), ids); }
+  pathfinder(op: PathfinderOp, ids?: string[], live = false): boolean { return this.run(live ? 'Make Compound Shape' : `Pathfinder ${op.replace(/_/g, ' ')}`, (d, t) => pathfinder(d, t, op, live), ids); }
+  makeCompoundShape(ids?: string[]): boolean { return this.run('Make Compound Shape', (d, t) => pathfinder(d, t, 'unite', true), ids); }
+  shapeMode(mode: ShapeMode, ids?: string[]): boolean {
+    const p = this.current, t = this.targetIds(ids);
+    if (!p || !setShapeMode(p.doc, t, mode)) return false;
+    return this.edit('Shape Mode', (d) => setShapeMode(d, t, mode)?.doc ?? d);
+  }
+  canShapeMode(ids?: string[]): boolean { const p = this.current; return !!p && setShapeMode(p.doc, this.targetIds(ids), 'add') !== null; }
+  compoundShapeTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return n?.kind === 'group' && isLive(n); }) : []; }
+  expandCompoundShape(ids?: string[]): boolean { return this.compoundShapeTargets(ids).length > 0 && this.run('Expand Compound Shape', expandCompoundShape, this.compoundShapeTargets(ids)); }
+  releaseCompoundShape(ids?: string[]): boolean { return this.compoundShapeTargets(ids).length > 0 && this.run('Release Compound Shape', releaseCompoundShape, this.compoundShapeTargets(ids)); }
+  pathfinderOptions(): PathfinderOptions { return { ...pathfinderOptions() }; }
+  setPathfinderOptions(patch: Partial<PathfinderOptions>): boolean {
+    if (!setPathfinderOptions(patch)) return false;
+    invalidateBounds();
+    this.emit('render', null);
+    return true;
+  }
   pathOp(op: PathOp, args: PathOpArgs = {}, ids?: string[]): boolean {
     const p = this.current; if (!p) return false;
     const label: Record<PathOp, string> = { offset: 'Offset Path', outline_stroke: 'Outline Stroke', simplify: 'Simplify', smooth: 'Smooth', join: 'Join', average: 'Average', reverse: 'Reverse Path Direction', add_anchors: 'Add Anchor Points', remove_anchors: 'Remove Anchor Points', divide_objects_below: 'Divide Objects Below', split_into_grid: 'Split Into Grid', clean_up: 'Clean Up', close: 'Close Path', open: 'Open Path' };
@@ -1589,6 +1613,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (obj && n.kind === 'group' && n.graph) return this.expandNode(doc, { ...n, graph: undefined, graphKey: undefined }, what);
     if (obj && n.kind === 'group' && n.intertwine) return this.expandNode(doc, expandedIntertwine(n), what);
     if (obj && n.kind === 'group' && n.shaper) return this.expandNode(doc, expandedShaper(n), what);
+    if (obj && n.kind === 'group' && isLive(n)) return liveExpanded(n).flatMap((c) => this.expandNode(doc, c, what));
     if (obj && n.kind === 'path' && n.live) return this.expandNode(doc, { ...n, live: undefined }, what);
     const baked = app ? this.bakes?.get(n.id) : undefined;
     if (baked) return [baked];
@@ -2245,7 +2270,15 @@ export class Engine extends Emitter<EngineEvents> {
     this.currentBrush = def?.id ?? null;
     return this.applyToSelection('Apply Brush', (n) => ({ ...n, ap: withFirstStroke(n.ap, { brush: def?.id ?? null, ...(def?.brush.type === 'calligraphic' ? {} : {}) }) }), ids);
   }
-  setWidthProfile(name: string | null, ids?: string[]): boolean { const prof = name && name !== 'uniform' ? WIDTH_PROFILES[name] ?? null : null; return this.applyToSelection('Width Profile', (n) => ({ ...n, ap: withFirstStroke(n.ap, { profile: prof }) }), ids); }
+  setWidthProfile(name: string | null, ids?: string[]): boolean { const prof = name && name !== 'uniform' ? widthProfileNamed(name) : null; return this.applyToSelection('Width Profile', (n) => ({ ...n, ap: withFirstStroke(n.ap, { profile: prof ? prof.map((q) => ({ ...q })) : null }) }), ids); }
+  widthSel: { id: string; idx: number[] } = { id: '', idx: [] };
+  setWidthPoints(pts: ReadonlyArray<{ t?: number; l?: number; r?: number }> | null, ids?: string[], label = 'Width Points'): boolean {
+    const prof = pts && pts.length ? normalizeWidthPoints(pts) : null;
+    return this.applyToSelection(label, (n) => ({ ...n, ap: withFirstStroke(n.ap, { profile: prof ? prof.map((q) => ({ ...q })) : null }) }), ids);
+  }
+  flipWidthProfile(along: boolean, across: boolean, ids?: string[]): boolean {
+    return this.applyToSelection('Flip Width Profile', (n) => { const s = n.kind === 'text' ? null : firstStroke(n.ap); return s?.profile?.length ? { ...n, ap: withFirstStroke(n.ap, { profile: flipProfile(s.profile, along, across) }) } : n; }, ids);
+  }
 
   cut(): void { this.copy(); this.deleteSelection(); }
   copy(): void {
@@ -2355,6 +2388,8 @@ export class Engine extends Emitter<EngineEvents> {
       if (n.kind === 'group' && n.clip) out.clipping = true;
       if (n.kind === 'group' && n.livePaint) out.live_paint = { faces: liveFaces(n).length, painted: liveFaceNodes(n).length, gap: n.livePaint.gap };
       if (n.kind === 'group' && n.intertwine) out.intertwine = { zones: n.intertwine.zones.map((z) => ({ top: z.top, bounds: (({ x, y, w, h }) => [r(x), r(y), r(w), r(h)])(pathBounds(z.d)) })) };
+      if (n.kind === 'group' && n.compoundShape) out.compound_shape = { parts: n.children.map((c) => ({ id: c.id, mode: c.smode ?? 'add' })) };
+      if (n.kind === 'group' && n.ap.effects.some((e) => e.id.startsWith('pathfinder.'))) out.pathfinder_effects = n.ap.effects.filter((e) => e.id.startsWith('pathfinder.')).map((e) => e.id);
       if (n.kind === 'group' && n.shaper) out.shaper = { faces: shaperRegions(n).length, removed: n.shaper.cuts.length, merges: n.shaper.merges.length };
       if (n.kind === 'group' && n.trace) out.tracing = { view: n.trace.view, mode: n.trace.opts.mode, colors: n.trace.opts.colors, threshold: n.trace.opts.threshold };
       if (n.kind === 'symbol' && n.tint) out.tint = { color: hex(n.tint.color), amount: r(n.tint.amount) };

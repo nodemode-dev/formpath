@@ -82,8 +82,8 @@ export interface WrapShape { pts: Pt[]; offset: number; invert: boolean }
 export type LiveShape =
   | { kind: 'rect'; x: number; y: number; w: number; h: number; radii: [number, number, number, number]; corner: 'round' | 'inverted' | 'chamfer'; xf: Mat }
   | { kind: 'ellipse'; x: number; y: number; w: number; h: number; start: number; end: number; xf: Mat }
-  | { kind: 'polygon'; cx: number; cy: number; r: number; sides: number; radius: number; xf: Mat }
-  | { kind: 'star'; cx: number; cy: number; r1: number; r2: number; points: number; radius?: number; xf: Mat }
+  | { kind: 'polygon'; cx: number; cy: number; r: number; sides: number; radius: number; corner?: 'round' | 'inverted' | 'chamfer'; xf: Mat }
+  | { kind: 'star'; cx: number; cy: number; r1: number; r2: number; points: number; radius?: number; corner?: 'round' | 'inverted' | 'chamfer'; xf: Mat }
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number };
 
 export interface NodeBase {
@@ -104,8 +104,10 @@ export interface NodeBase {
   bbox?: number;
   part?: string;
   persp?: PerspAttach;
+  smode?: ShapeMode;
 }
 
+export type ShapeMode = 'add' | 'subtract' | 'intersect' | 'exclude';
 export type PerspPlane = 'left' | 'right' | 'floor';
 export interface PerspAttach { plane: PerspPlane; off: number; m: Mat; src?: PathData[]; sig?: number }
 export interface PerspGrid {
@@ -147,7 +149,7 @@ export interface GraphSpec {
   seriesTypes?: Record<string, GraphSeriesType>; columns?: Record<string, GraphColumnDesign>; markers?: Record<string, string>;
 }
 export interface GraphDesign { id: string; name: string; art: VNode }
-export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint; dim?: DimensionSpec; intertwine?: IntertwineSpec; shaper?: ShaperSpec; graph?: GraphSpec; graphKey?: string }
+export interface GroupNode extends NodeBase { kind: 'group'; children: VNode[]; clip: boolean; trace?: TraceInfo; livePaint?: LivePaint; dim?: DimensionSpec; intertwine?: IntertwineSpec; shaper?: ShaperSpec; graph?: GraphSpec; graphKey?: string; compoundShape?: boolean }
 export interface PathNode extends NodeBase { kind: 'path'; d: PathData; rule: FillRule; live?: LiveShape; guide?: boolean }
 export interface CompoundNode extends NodeBase { kind: 'compound'; children: PathNode[]; rule: FillRule }
 

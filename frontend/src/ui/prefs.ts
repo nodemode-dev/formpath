@@ -36,6 +36,9 @@ export interface Prefs {
   taskBar: boolean;
   pasteOnArtboards: boolean;
   autoSpell: boolean;
+  pfPrecision: number;
+  pfRemoveRedundant: boolean;
+  pfRemoveUnpainted: boolean;
 }
 
 export type AnchorSize = 'small' | 'medium' | 'large' | 'xlarge';
@@ -57,6 +60,7 @@ export const DEFAULT_PREFS: Prefs = {
   zoomWheel: false, keyIncrement: 1, snapTolerance: 4, units: 'pt', scaleStrokes: true, previewBounds: false, gridInBack: true, gridSpacing: 72, gridSubdivisions: 8,
   guideColor: '', gridColor: '', checkerSize: 'medium', checkerColors: 'light', narrowCollapse: true, newMaskClip: true, newMaskInvert: false,
   showGenerative: true, anchorSize: 'small', snapAngleSet: 'a45', scaleCorners: true, helpBar: false, taskBar: true, pasteOnArtboards: false, autoSpell: false,
+  pfPrecision: 0.028, pfRemoveRedundant: false, pfRemoveUnpainted: false,
 };
 
 const KEY = 'formpth.prefs';
@@ -99,6 +103,9 @@ export function loadPrefs(): Prefs {
       taskBar: bool(r.taskBar, true),
       pasteOnArtboards: bool(r.pasteOnArtboards, false),
       autoSpell: bool(r.autoSpell, false),
+      pfPrecision: num(r.pfPrecision, 0.001, 100, DEFAULT_PREFS.pfPrecision),
+      pfRemoveRedundant: bool(r.pfRemoveRedundant, false),
+      pfRemoveUnpainted: bool(r.pfRemoveUnpainted, false),
     };
   } catch { return { ...DEFAULT_PREFS }; }
 }
@@ -109,6 +116,7 @@ export function applyPrefs(engine: Engine, p: Prefs): void {
   if (History.limit !== p.historyStates) engine.setHistoryLimit(p.historyStates);
   engine.setView({ scaleStrokes: p.scaleStrokes, previewBounds: p.previewBounds, scaleCorners: p.scaleCorners });
   engine.maskDefaults = { clip: p.newMaskClip, invert: p.newMaskInvert };
+  engine.setPathfinderOptions({ precision: p.pfPrecision, removeRedundant: p.pfRemoveRedundant, removeUnpainted: p.pfRemoveUnpainted });
   engine.emit('options', null);
   engine.emit('overlay', null);
 }

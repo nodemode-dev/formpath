@@ -1,6 +1,7 @@
 import { nodeLabel } from '../engine/doc';
 import { firstFill, firstStroke } from '../engine/paint';
-import type { Engine, Rect, Units } from '../engine';
+import type { Engine, Rect, ShapeMode, Units } from '../engine';
+import { PanelGroup } from './panel-group';
 import type { AlignAction } from '../engine/ops/objects';
 import type { PathfinderOp } from '../engine/ops/paths';
 import { el, q, setClass, setDisabled, setHidden, setHtml, setStyleVar, setText } from './dom';
@@ -155,6 +156,7 @@ export class PropertiesPanel {
     if (!n) return [];
     const out: Array<[string, string]> = [];
     if (s.length > 1) out.push(['Group', 'group'], ['Make Clipping Mask', 'make-clip'], ['Unite', 'pf-unite'], ['Minus Front', 'pf-minus_front'], ['Intersect', 'pf-intersect'], ['Exclude', 'pf-exclude'], ['Make Blend', 'blend-make'], ['Make Compound Path', 'compound-make']);
+    else if (n.kind === 'group' && n.compoundShape) out.push(['Expand', 'compound-shape-expand'], ['Release', 'compound-shape-release'], ['Isolate Group', 'isolate']);
     else if (n.kind === 'group' && n.livePaint) out.push(['Gap Options', 'live-paint-gap'], ['Expand', 'live-paint-expand'], ['Release', 'live-paint-release']);
     else if (n.kind === 'group' && n.intertwine) out.push(['Edit Intertwine', 'intertwine-edit'], ['Expand', 'expand-object'], ['Release', 'intertwine-release']);
     else if (n.kind === 'group' && n.shaper) out.push(['Edit Faces', 'tool-shaper'], ['Expand', 'shaper-expand'], ['Ungroup', 'ungroup']);
@@ -255,13 +257,27 @@ export class AlignPanel {
 
 export class PathfinderPanel {
   readonly body = el('<div class="cv-kit-page cv-pfp"></div>');
+  private frame = 0;
   constructor(engine: Engine) {
     const b = (name: string, label: string, op: PathfinderOp): HTMLButtonElement => iconButton(name, label, () => engine.pathfinder(op), 20);
-    const modes = row(b('pfUnite', 'Unite', 'unite'), b('pfMinusFront', 'Minus Front', 'minus_front'), b('pfIntersect', 'Intersect', 'intersect'), b('pfExclude', 'Exclude', 'exclude'));
-    const expand = el<HTMLButtonElement>('<button class="cv-btn" type="button">Make Compound Shape</button>');
-    expand.addEventListener('click', () => engine.makeCompound());
+    const m = (name: string, label: string, op: PathfinderOp, sm: ShapeMode): HTMLButtonElement => {
+      const btn = iconButton(name, label, (ev) => { if (!engine.shapeMode(sm)) engine.pathfinder(op, undefined, ev.altKey); }, 20);
+      btn.title = `${label} (Alt-click makes a compound shape)`;
+      return btn;
+    };
+    const modes = row(m('pfUnite', 'Unite', 'unite', 'add'), m('pfMinusFront', 'Minus Front', 'minus_front', 'subtract'), m('pfIntersect', 'Intersect', 'intersect', 'intersect'), m('pfExclude', 'Exclude', 'exclude', 'exclude'));
+    const expand = el<HTMLButtonElement>('<button class="cv-btn" type="button">Expand</button>');
+    expand.addEventListener('click', () => engine.expandCompoundShape());
     modes.appendChild(expand);
     const finders = row(b('pfDivide', 'Divide', 'divide'), b('pfTrim', 'Trim', 'trim'), b('pfMerge', 'Merge', 'merge'), b('pfCrop', 'Crop', 'crop'), b('pfOutline', 'Outline', 'outline'), b('pfMinusBack', 'Minus Back', 'minus_back'));
-    this.body.append(section('Shape Modes'), modes, section('Pathfinders'), finders);
+    const more = iconButton('dots', 'Pathfinder panel menu', () => PanelGroup.menuHost?.(more, ['compound-shape-make', 'compound-shape-release', 'compound-shape-expand', '-', 'pf-options']), 16);
+    const head = el('<div class="cv-kit-section cv-pfp-head"></div>');
+    const title = el('<span></span>');
+    setText(title, 'Shape Modes');
+    head.append(title, more);
+    this.body.append(head, modes, section('Pathfinders'), finders);
+    const sync = (): void => { this.frame = 0; setDisabled(expand, engine.compoundShapeTargets().length === 0); };
+    for (const k of ['selection', 'doc', 'active'] as const) engine.on(k, () => { if (!this.frame) this.frame = requestAnimationFrame(sync); });
+    sync();
   }
 }

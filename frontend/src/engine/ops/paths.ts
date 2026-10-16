@@ -1,42 +1,16 @@
 import { geomBounds } from '../bounds';
-import { childrenOf, findNode, newId, pathOf, removeNodes, topObjects, updateAt, updateNodes, type IndexPath } from '../doc';
+import { childrenOf, findNode, newId, parentOf, pathOf, removeNodes, topObjects, updateAt, updateNodes, type IndexPath } from '../doc';
 import { anchor, bezSplit, dist, flatIndex, hasIn, hasOut, isLineSeg, pathBounds, rectPath, rectsTouch, reversePath, segOf, segments, splitSegmentAt, unflatIndex } from '../geometry';
 import { boolean, cleanup, contains, area, offsetPath, polyKnife, simplifyPath, simplifyWith, smoothPath, toPaper, fromPaper, type BoolOp } from '../kernel';
 import { emptyAppearance, fill, NONE, solid, BLACK } from '../paint';
 import { gradientStrokeArt, gradientStrokeNodes, strokeRegion } from '../stroke-gradient';
 import { brushGeometry } from '../effects';
-import type { Anchor, CompoundNode, Doc, FillItem, FillRule, GroupNode, Join, Paint, PathData, PathNode, Pt, StrokeItem, SubPath, VNode } from '../types';
-import type { OpResult } from './objects';
+import type { Anchor, Doc, FillRule, GroupNode, Join, Paint, PathData, PathNode, Pt, ShapeMode, StrokeItem, SubPath, VNode } from '../types';
+import { ungroupNodes, type OpResult } from './objects';
+import { arrangement, geometryOf, isLive, liveExpanded, pathfinderNodes, shapeNode, splitContours, type PfOp, type TrapArgs } from '../pathfinder';
 
 export type PathfinderOp = 'unite' | 'minus_front' | 'intersect' | 'exclude' | 'divide' | 'trim' | 'merge' | 'crop' | 'outline' | 'minus_back';
-
-export function geometryOf(n: VNode): { d: PathData; rule: FillRule } | null {
-  if (n.kind === 'path') return n.guide ? null : { d: n.d, rule: n.rule };
-  if (n.kind === 'compound') return { d: n.children.flatMap((c) => c.d), rule: n.rule };
-  const ch = childrenOf(n);
-  if (ch && n.kind !== 'layer') {
-    const parts = ch.map(geometryOf).filter((g): g is { d: PathData; rule: FillRule } => !!g && g.d.length > 0);
-    if (!parts.length) return null;
-    if (parts.length === 1) return parts[0];
-    let acc = parts[0].d;
-    for (const p of parts.slice(1)) acc = boolean(acc, p.d, 'unite', 'nonzero', p.rule);
-    return { d: acc, rule: 'nonzero' };
-  }
-  return null;
-}
-
-export function shapeNode(d: PathData, like: VNode, ap?: VNode['ap']): VNode {
-  const base = { opacity: like.opacity, blend: like.blend, ap: ap ?? like.ap };
-  if (d.length > 1) {
-    const c: CompoundNode = { id: newId('c'), kind: 'compound', rule: 'nonzero', children: d.map((sp) => ({ id: newId(), kind: 'path', d: [sp], rule: 'nonzero', opacity: 1, blend: 'normal', ap: emptyAppearance() })), ...base };
-    return c;
-  }
-  const p: PathNode = { id: newId('p'), kind: 'path', d, rule: 'nonzero', ...base };
-  return p;
-}
-
-function fillPaint(n: VNode): Paint { const f = n.ap.items.find((i) => i.kind === 'fill' && i.visible) as FillItem | undefined; return f ? f.paint : NONE; }
-function paintKeyOf(p: Paint): string { return JSON.stringify(p); }
+export { arrangement, geometryOf, shapeNode };
 
 export function replaceSelection(doc: Doc, tops: string[], made: VNode[]): OpResult {
   if (!made.length) return { doc: removeNodes(doc, tops), ids: [] };
@@ -47,93 +21,59 @@ export function replaceSelection(doc: Doc, tops: string[], made: VNode[]): OpRes
   return { doc: out, ids: [replacement.id] };
 }
 
-interface Face { d: PathData; top: number }
-export function arrangement(shapes: Array<{ d: PathData; rule: FillRule }>): Face[] {
-  let faces: Face[] = [];
-  shapes.forEach((s, i) => {
-    const next: Face[] = [];
-    let rest: PathData = cleanup(s.d);
-    for (const f of faces) {
-      const inside = boolean(f.d, rest, 'intersect', 'nonzero', s.rule);
-      const outside = boolean(f.d, rest, 'subtract', 'nonzero', s.rule);
-      if (outside.length && area(outside) > 1e-4) next.push({ d: outside, top: f.top });
-      if (inside.length && area(inside) > 1e-4) next.push({ d: inside, top: i });
-    }
-    for (const f of faces) rest = boolean(rest, f.d, 'subtract', s.rule, 'nonzero');
-    if (rest.length && area(rest) > 1e-4) next.push({ d: rest, top: i });
-    faces = next;
-  });
-  return faces.flatMap((f) => splitContours(f.d).map((d) => ({ d, top: f.top })));
-}
-
-function splitContours(d: PathData): PathData[] {
-  if (d.length <= 1) return [d];
-  const item = toPaper(d, 'nonzero') as paper.PathItem & { children?: paper.Path[] };
-  const kids = (item.children ?? []) as paper.Path[];
-  if (!kids.length) return [d];
-  const outer = kids.filter((k) => k.clockwise === kids[0].clockwise);
-  if (outer.length <= 1) return [d];
-  return outer.map((o) => [...fromPaper(o), ...kids.filter((h) => h.clockwise !== o.clockwise && o.contains(h.interiorPoint)).flatMap((h) => fromPaper(h))]);
-}
-
-export function pathfinder(doc: Doc, ids: string[], op: PathfinderOp): OpResult {
+export function pathfinder(doc: Doc, ids: string[], op: PathfinderOp | PfOp, live = false, trap?: TrapArgs, rate?: number): OpResult {
   const all = topObjects(doc, ids);
   const nodes = all.map((id) => findNode(doc, id) as VNode).filter(Boolean);
-  const shapes = nodes.map((n) => ({ n, g: geometryOf(n) })).filter((x): x is { n: VNode; g: { d: PathData; rule: FillRule } } => !!x.g && x.g.d.length > 0);
-  if (shapes.length < (op === 'divide' || op === 'outline' || op === 'trim' || op === 'merge' ? 1 : 2)) return { doc, ids: all };
-  const tops = shapes.map((s) => s.n.id);
-  const top = shapes[shapes.length - 1], bottom = shapes[0];
-  const bin = (a: PathData, ar: FillRule, b: PathData, br: FillRule, o: BoolOp): PathData => boolean(a, b, o, ar, br);
-  if (op === 'unite' || op === 'intersect' || op === 'exclude') {
-    let acc = shapes[0].g.d, rule = shapes[0].g.rule;
-    for (const s of shapes.slice(1)) { acc = bin(acc, rule, s.g.d, s.g.rule, op); rule = 'nonzero'; }
-    return replaceSelection(doc, tops, acc.length ? [shapeNode(acc, top.n)] : []);
+  if (live && (op === 'unite' || op === 'minus_front' || op === 'intersect' || op === 'exclude')) return makeCompoundShape(doc, all, op);
+  const r = pathfinderNodes(nodes, op, { trap, rate });
+  if (!r) return { doc, ids: all };
+  if (r.add) {
+    const last = nodes[nodes.length - 1].id;
+    return { doc: updateAt(doc, pathOf(doc, last) as IndexPath, (x) => [x, ...r.made]), ids: r.made.map((m) => m.id) };
   }
-  if (op === 'minus_front') {
-    let acc = bottom.g.d, rule = bottom.g.rule;
-    for (const s of shapes.slice(1)) { acc = bin(acc, rule, s.g.d, s.g.rule, 'subtract'); rule = 'nonzero'; }
-    return replaceSelection(doc, tops, acc.length ? [shapeNode(acc, bottom.n)] : []);
+  return replaceSelection(doc, r.used, r.made);
+}
+
+const SHAPE_MODES: Record<string, (i: number) => ShapeMode> = { unite: () => 'add', intersect: () => 'intersect', exclude: () => 'exclude', minus_front: (i) => (i === 0 ? 'add' : 'subtract') };
+
+export function makeCompoundShape(doc: Doc, ids: string[], op: 'unite' | 'minus_front' | 'intersect' | 'exclude'): OpResult {
+  const tops = topObjects(doc, ids).filter((id) => (pathOf(doc, id)?.length ?? 0) > 1);
+  const nodes = tops.map((id) => findNode(doc, id) as VNode).filter((n) => !!n && !!geometryOf(n));
+  if (nodes.length < 2) return { doc, ids: tops };
+  const kids = nodes.map((n, i) => ({ ...n, smode: SHAPE_MODES[op](i) }) as VNode);
+  const group: GroupNode = { id: newId('g'), kind: 'group', clip: false, compoundShape: true, name: 'Compound Shape', children: kids, opacity: 1, blend: 'normal', ap: emptyAppearance() };
+  return replaceSelection(doc, nodes.map((n) => n.id), [group]);
+}
+
+export function setShapeMode(doc: Doc, ids: string[], mode: ShapeMode): OpResult | null {
+  const want = new Map<string, ShapeMode>();
+  for (const id of ids) {
+    const n = findNode(doc, id), par = parentOf(doc, id);
+    if (n?.kind === 'group' && n.compoundShape) n.children.forEach((c, i) => want.set(c.id, i === 0 ? 'add' : mode));
+    else if (n && par?.kind === 'group' && par.compoundShape) want.set(id, mode);
   }
-  if (op === 'minus_back') {
-    let acc = top.g.d, rule = top.g.rule;
-    for (const s of shapes.slice(0, -1)) { acc = bin(acc, rule, s.g.d, s.g.rule, 'subtract'); rule = 'nonzero'; }
-    return replaceSelection(doc, tops, acc.length ? [shapeNode(acc, top.n)] : []);
+  if (!want.size) return null;
+  return { doc: updateNodes(doc, [...want.keys()], (n) => ({ ...n, smode: want.get(n.id) })), ids };
+}
+
+export function releaseCompoundShape(doc: Doc, ids: string[]): OpResult {
+  const groups = topObjects(doc, ids).filter((id) => { const n = findNode(doc, id); return n?.kind === 'group' && !!n.compoundShape; });
+  if (!groups.length) return { doc, ids };
+  const kids = groups.flatMap((id) => (findNode(doc, id) as GroupNode).children.map((c) => c.id));
+  const r = ungroupNodes(doc, groups);
+  return { doc: updateNodes(r.doc, kids, (n) => { const { smode: _s, ...rest } = n; return rest as VNode; }), ids: r.ids };
+}
+
+export function expandCompoundShape(doc: Doc, ids: string[]): OpResult {
+  const groups = topObjects(doc, ids).filter((id) => { const n = findNode(doc, id); return n?.kind === 'group' && isLive(n); });
+  let out = doc;
+  const res: string[] = [];
+  for (const id of groups) {
+    const g = findNode(out, id) as GroupNode, art = liveExpanded(g);
+    out = updateAt(out, pathOf(out, id) as IndexPath, () => (art.length ? art : null));
+    res.push(...art.map((a) => a.id));
   }
-  const faces = arrangement(shapes.map((s) => s.g));
-  const strokeless = (n: VNode): VNode['ap'] => ({ items: n.ap.items.filter((i) => i.kind === 'fill'), effects: [] });
-  if (op === 'divide') return replaceSelection(doc, tops, faces.map((f) => shapeNode(f.d, shapes[f.top].n)));
-  if (op === 'trim' || op === 'merge') {
-    const made = faces.map((f) => ({ f, n: shapes[f.top].n }));
-    if (op === 'merge') {
-      const groups = new Map<string, { d: PathData; n: VNode }>();
-      for (const m of made) {
-        const k = paintKeyOf(fillPaint(m.n));
-        const g = groups.get(k);
-        groups.set(k, g ? { d: boolean(g.d, m.f.d, 'unite'), n: g.n } : { d: m.f.d, n: m.n });
-      }
-      return replaceSelection(doc, tops, [...groups.values()].flatMap((g) => splitContours(g.d).map((d) => shapeNode(d, g.n, strokeless(g.n)))));
-    }
-    const byTop = new Map<number, PathData>();
-    for (const m of made) byTop.set(m.f.top, [...(byTop.get(m.f.top) ?? []), ...m.f.d]);
-    return replaceSelection(doc, tops, [...byTop.entries()].sort((a, b) => a[0] - b[0]).map(([i, d]) => shapeNode(cleanup(d), shapes[i].n, strokeless(shapes[i].n))));
-  }
-  if (op === 'crop') {
-    const cropper = top.g, under = shapes.slice(0, -1);
-    const kept: Array<{ d: PathData; n: VNode }> = [];
-    under.forEach((s, i) => {
-      let vis = s.g.d, rule = s.g.rule;
-      for (const above of under.slice(i + 1)) { vis = boolean(vis, above.g.d, 'subtract', rule, above.g.rule); rule = 'nonzero'; }
-      const d = boolean(vis, cropper.d, 'intersect', rule, cropper.rule);
-      if (d.length) kept.push({ d, n: s.n });
-    });
-    return replaceSelection(doc, tops, kept.map((k) => shapeNode(k.d, k.n, strokeless(k.n))));
-  }
-  const lines: VNode[] = [];
-  for (const s of shapes) {
-    const p = fillPaint(s.n);
-    for (const sp of s.g.d) lines.push({ id: newId('p'), kind: 'path', d: [{ ...sp, closed: sp.closed }], rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items: [{ kind: 'stroke', paint: p.type === 'none' ? solid(BLACK) : p, width: 1, cap: 'butt', join: 'miter', miter: 10, align: 'center', dash: [], dashOffset: 0, dashCorners: false, startArrow: 'none', endArrow: 'none', arrowScale: [100, 100], arrowAlign: 'extend', profile: null, brush: null, opacity: 1, blend: 'normal', visible: true, effects: [] }], effects: [] } });
-  }
-  return replaceSelection(doc, tops, lines);
+  return { doc: out, ids: res };
 }
 
 export function shapeBuild(doc: Doc, ids: string[], points: Pt[], erase: boolean, paintOverride?: Paint | null): OpResult {

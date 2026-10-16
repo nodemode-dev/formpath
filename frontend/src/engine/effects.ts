@@ -48,6 +48,13 @@ const THREE_D: EffectDef[] = [
   { id: '3d.rotate', label: 'Rotate', menu: '3D and Materials', params: [...turn(-18, -26, 8), ...light([...MATERIALS, 'flat'], 'flat'), ...tracing(), ...graphic(false), ...mapArt(), ...shadows()] },
 ];
 
+const pf = (id: string, label: string, params: EffectParam[] = []): EffectDef => ({ id: `pathfinder.${id}`, label, menu: 'Pathfinder', params });
+const PATHFINDER_FX: EffectDef[] = [
+  pf('add', 'Add'), pf('intersect', 'Intersect'), pf('exclude', 'Exclude'), pf('subtract', 'Subtract'), pf('minus_back', 'Minus Back'), pf('divide', 'Divide'), pf('trim', 'Trim'), pf('merge', 'Merge'), pf('crop', 'Crop'), pf('outline', 'Outline'), pf('hard_mix', 'Hard Mix'),
+  pf('soft_mix', 'Soft Mix', [num('rate', 'Mixing Rate', 50, 0, 100, '%')]),
+  pf('trap', 'Trap', [num('thickness', 'Thickness', 0.25, 0.01, 100, 'pt', 0.01), num('height_width', 'Height/Width', 100, 5, 1000, '%'), num('tint_reduction', 'Tint Reduction', 40, 0, 100, '%'), bool('process', 'Traps with Process Color', false), bool('reverse', 'Reverse Traps', false)]),
+];
+
 const GALLERY: EffectDef[] = [
   ps('Artistic', 'gallery.colored_pencil', 'Colored Pencil', [num('width', 'Pencil Width', 4, 1, 24), num('pressure', 'Stroke Pressure', 8, 0, 15), num('paper', 'Paper Brightness', 25, 0, 50)]),
   ps('Artistic', 'gallery.cutout', 'Cutout', [num('levels', 'Number of Levels', 4, 2, 8), num('simplicity', 'Edge Simplicity', 4, 0, 10), num('fidelity', 'Edge Fidelity', 2, 1, 3)]),
@@ -118,6 +125,7 @@ export const EFFECTS: EffectDef[] = [
   { id: 'path.offset', label: 'Offset Path', menu: 'Path', params: [num('offset', 'Offset', 10, -1000, 1000, 'pt'), sel('joins', 'Joins', 'miter', ['miter', 'round', 'bevel']), num('miter', 'Miter limit', 4, 1, 500)] },
   { id: 'path.outline_stroke', label: 'Outline Stroke', menu: 'Path', params: [num('width', 'Width', 4, 0.01, 1000, 'pt')] },
   { id: 'stylize.round_corners', label: 'Round Corners', menu: 'Stylize', params: [num('radius', 'Radius', 10, 0, 1000, 'pt')] },
+  ...PATHFINDER_FX,
   { id: 'stylize.scribble', label: 'Scribble', menu: 'Stylize', params: [num('angle', 'Angle', 30, -180, 180, 'deg'), num('spacing', 'Spacing', 5, 0.1, 100, 'pt'), num('width', 'Stroke Width', 3, 0.1, 100, 'pt'), num('variation', 'Variation', 1, 0, 50, 'pt'), num('seed', 'Seed', 1, 0, 9999)] },
   { id: 'stylize.drop_shadow', label: 'Drop Shadow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'multiply', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('x', 'X Offset', 7, -1000, 1000, 'pt'), num('y', 'Y Offset', 7, -1000, 1000, 'pt'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#000000')] },
   { id: 'stylize.inner_glow', label: 'Inner Glow', menu: 'Stylize', raster: true, params: [sel('mode', 'Mode', 'screen', BLENDS), num('opacity', 'Opacity', 75, 0, 100, '%'), num('blur', 'Blur', 5, 0, 144, 'pt'), col('color', 'Color', '#ffffff')] },
@@ -540,7 +548,7 @@ function mapped(doc: Doc, art: VNode, scene: Scene, scale: number, dx: number, d
 export const TRACE_ID = '3d.raytrace';
 export interface RasterFx { kind: 'drop_shadow' | 'outer_glow' | 'inner_glow' | 'feather' | 'blur' | 'filter'; dx: number; dy: number; blur: number; color: string; opacity: number; blend: BlendMode; reach: number; filter?: { id: string; params: Effect['params'] } }
 export function rasterEffects(n: VNode): RasterFx[] { return rasterEffectsOf(n.ap.effects); }
-export const isItemEffect = (id: string): boolean => EFFECT_IDS.has(id) && !id.startsWith('3d.');
+export const isItemEffect = (id: string): boolean => EFFECT_IDS.has(id) && !id.startsWith('3d.') && !id.startsWith('pathfinder.');
 export function rasterEffectsOf(effects: Effect[]): RasterFx[] {
   const out: RasterFx[] = [];
   for (const e of effects) {
@@ -578,6 +586,71 @@ export function profileAt(prof: WidthPoint[], t: number): { l: number; r: number
   return { l: last.l, r: last.r };
 }
 
+export const CUSTOM_WIDTH_PROFILES: Record<string, WidthPoint[]> = {};
+export const widthProfileNamed = (name: string): WidthPoint[] | null => WIDTH_PROFILES[name] ?? CUSTOM_WIDTH_PROFILES[name] ?? null;
+
+export function normalizeWidthPoints(pts: ReadonlyArray<Partial<WidthPoint>>): WidthPoint[] {
+  const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  return pts.map((p) => ({ t: Math.min(1, Math.max(0, num(p.t, 0))), l: Math.max(0, num(p.l, 1)), r: Math.max(0, num(p.r, num(p.l, 1))) })).sort((a, b) => a.t - b.t);
+}
+
+export function flipProfile(prof: WidthPoint[], along: boolean, across: boolean): WidthPoint[] {
+  let out = normalizeWidthPoints(prof);
+  if (along) out = out.map((p) => ({ t: Math.round((1 - p.t) * 1e6) / 1e6, l: p.l, r: p.r })).reverse();
+  if (across) out = out.map((p) => ({ t: p.t, l: p.r, r: p.l }));
+  return out;
+}
+
+interface WidthAxis { pts: Pt[]; lens: number[]; total: number }
+function widthAxis(sp: PathData[number]): WidthAxis | null {
+  const pts = flattenSub(sp, 0.2);
+  if (pts.length < 2) return null;
+  if (sp.closed) pts.push({ ...pts[0] });
+  const lens = [0];
+  for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + dist(pts[i], pts[i - 1]));
+  return { pts, lens, total: lens[lens.length - 1] || 1 };
+}
+
+export interface WidthFrame { p: Pt; n: Pt; u: Pt }
+export function widthFrames(sp: PathData[number], ts: number[]): WidthFrame[] {
+  const ax = widthAxis(sp);
+  if (!ax) return [];
+  return ts.map((t) => {
+    const s = Math.min(1, Math.max(0, t)) * ax.total;
+    let i = 1;
+    while (i < ax.lens.length - 1 && ax.lens[i] < s) i++;
+    const a = ax.pts[i - 1], b = ax.pts[i], seg = ax.lens[i] - ax.lens[i - 1] || 1, k = (s - ax.lens[i - 1]) / seg;
+    const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
+    return { p: { x: a.x + dx * k, y: a.y + dy * k }, u: { x: dx / l, y: dy / l }, n: { x: -dy / l, y: dx / l } };
+  });
+}
+
+export function widthAxisNearest(sp: PathData[number], q: Pt): { t: number; pt: Pt; d: number } | null {
+  const ax = widthAxis(sp);
+  if (!ax) return null;
+  let best: { t: number; pt: Pt; d: number } | null = null;
+  for (let i = 1; i < ax.pts.length; i++) {
+    const a = ax.pts[i - 1], b = ax.pts[i], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+    const k = l2 ? Math.min(1, Math.max(0, ((q.x - a.x) * dx + (q.y - a.y) * dy) / l2)) : 0, pt = { x: a.x + dx * k, y: a.y + dy * k }, dd = dist(pt, q);
+    if (!best || dd < best.d) best = { t: (ax.lens[i - 1] + k * (ax.lens[i] - ax.lens[i - 1])) / ax.total, pt, d: dd };
+  }
+  return best;
+}
+
+function addProfileSamples(pts: Pt[], lens: number[], total: number, prof: WidthPoint[]): void {
+  const eps = 1e-4, at: number[] = [], count = new Map<number, number>();
+  for (const w of prof) count.set(w.t, (count.get(w.t) ?? 0) + 1);
+  for (const [t, c] of count) { if (t <= 0 || t >= 1) continue; if (c > 1) at.push(Math.max(0, t - eps), Math.min(1, t + eps)); else at.push(t); }
+  at.sort((a, b) => a - b);
+  for (const t of at) {
+    const s = t * total, i = lens.findIndex((x) => x >= s);
+    if (i <= 0 || Math.abs(lens[i] - s) < 1e-9 || Math.abs(lens[i - 1] - s) < 1e-9) continue;
+    const k = (s - lens[i - 1]) / (lens[i] - lens[i - 1]);
+    pts.splice(i, 0, { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * k, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * k });
+    lens.splice(i, 0, s);
+  }
+}
+
 const outlineCache = new WeakMap<PathData, WeakMap<StrokeItem, PathData>>();
 export function strokeOutline(d: PathData, s: StrokeItem): PathData {
   let m = outlineCache.get(d);
@@ -586,12 +659,10 @@ export function strokeOutline(d: PathData, s: StrokeItem): PathData {
   if (hit) return hit;
   const prof = s.profile ?? WIDTH_PROFILES.uniform, hw = s.width / 2, out: PathData = [];
   for (const sp of d) {
-    const pts = flattenSub(sp, 0.2);
-    if (pts.length < 2) continue;
-    if (sp.closed) pts.push({ ...pts[0] });
-    const lens = [0];
-    for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + dist(pts[i], pts[i - 1]));
-    const total = lens[lens.length - 1] || 1;
+    const ax = widthAxis(sp);
+    if (!ax) continue;
+    const { pts, lens, total } = ax;
+    if (s.profile && s.profile.length) addProfileSamples(pts, lens, total, s.profile);
     const left: Pt[] = [], right: Pt[] = [];
     pts.forEach((p, i) => {
       const nrm = normalAt(pts, i, false), w = profileAt(prof, lens[i] / total);

@@ -4,6 +4,7 @@ import { filterReach } from './filters';
 import { cornered } from './corners';
 import { emptyRect, inflate, isEmptyRect, pathBounds, transformRect, unionRect } from './geometry';
 import { liveChildren } from './live';
+import { liveArt } from './pathfinder';
 import { instanceArt } from './symbolism';
 import { textBounds } from './text';
 import type { Doc, Effect, PathData, Rect, StrokeItem, VNode } from './types';
@@ -41,7 +42,8 @@ function computeGeom(doc: Doc, n: VNode): Rect {
     case 'mesh': return n.points.reduce((r, p) => unionRect(r, { x: p.x, y: p.y, w: 0, h: 0 }), emptyRect());
     case 'group': {
       if (n.clip && n.children.length) return geomBounds(doc, n.children[n.children.length - 1]);
-      return n.children.reduce((r, c) => (c.hidden ? r : unionRect(r, geomBounds(doc, c))), emptyRect());
+      const art = liveArt(n);
+      return (art?.length ? art : n.children).reduce((r, c) => (c.hidden ? r : unionRect(r, geomBounds(doc, c))), emptyRect());
     }
     case 'layer': return n.children.reduce((r, c) => (c.hidden ? r : unionRect(r, geomBounds(doc, c))), emptyRect());
     case 'blend': case 'envelope': case 'repeat':
@@ -86,7 +88,7 @@ export function visualBounds(doc: Doc, n: VNode): Rect {
   if (faces) r = faces.reduce((acc, f) => unionRect(acc, inflate(visualBounds(doc, f), 1)), emptyRect());
   else if (n.kind === 'group' && n.clip && n.children.length) r = geomBounds(doc, n.children[n.children.length - 1]);
   else if (ch && n.kind !== 'compound') {
-    r = ch.reduce((acc, c) => (c.hidden ? acc : unionRect(acc, visualBounds(doc, c))), emptyRect());
+    r = (n.kind === 'group' ? (liveArt(n)?.length ? liveArt(n) as VNode[] : ch) : ch).reduce((acc, c) => (c.hidden ? acc : unionRect(acc, visualBounds(doc, c))), emptyRect());
     if (n.ap.items.length && !isEmptyRect(r)) r = inflate(r, itemsReach(n));
   } else {
     r = geomBounds(doc, n);
