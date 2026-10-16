@@ -1,5 +1,5 @@
 import { bezPoint, flattenSub, pathBounds } from './geometry';
-import { mixColor } from './paint';
+import { mixColor, toRgb } from './paint';
 import type { Color, MeshNode, MeshPoint, PathData, Pt } from './types';
 
 export interface MeshQuad { pts: [Pt, Pt, Pt, Pt]; color: Color; opacity: number }
@@ -17,10 +17,25 @@ export function patchEval(m: MeshNode, r: number, c: number): (u: number, v: num
     const t = bezPoint(top, u), b = bezPoint(bottom, u), l = bezPoint(left, v), rr = bezPoint(right, v);
     const x = (1 - v) * t.x + v * b.x + (1 - u) * l.x + u * rr.x - ((1 - u) * (1 - v) * p00.x + u * (1 - v) * p10.x + (1 - u) * v * p01.x + u * v * p11.x);
     const y = (1 - v) * t.y + v * b.y + (1 - u) * l.y + u * rr.y - ((1 - u) * (1 - v) * p00.y + u * (1 - v) * p10.y + (1 - u) * v * p01.y + u * v * p11.y);
-    const cTop = mixColor(p00.color, p10.color, u), cBot = mixColor(p01.color, p11.color, u);
-    const oTop = p00.opacity + (p10.opacity - p00.opacity) * u, oBot = p01.opacity + (p11.opacity - p01.opacity) * u;
-    return { p: { x, y }, color: mixColor(cTop, cBot, v), opacity: oTop + (oBot - oTop) * v };
+    const k = patchColor(m, r, c, u, v);
+    return { p: { x, y }, color: { kind: 'rgb', r: k[0], g: k[1], b: k[2] }, opacity: Math.max(0, Math.min(1, k[3])) };
   };
+}
+
+const cardinal = (t: number, a: number, b: number, c: number, d: number): number => {
+  const x = 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - 3 * c + d - a) * t * t * t);
+  return Math.max(Math.min(b, c), Math.min(Math.max(b, c), x));
+};
+
+export function patchColor(m: MeshNode, r: number, c: number, u: number, v: number): number[] {
+  const w = m.cols + 1;
+  const at = (j: number, i: number): number[] => { const q = m.points[Math.max(0, Math.min(m.rows, j)) * w + Math.max(0, Math.min(m.cols, i))], k = toRgb(q.color); return [k.r, k.g, k.b, q.opacity]; };
+  const rows: number[][] = [];
+  for (let j = -1; j <= 2; j++) {
+    const a = at(r + j, c - 1), b = at(r + j, c), cc = at(r + j, c + 1), d = at(r + j, c + 2);
+    rows.push([0, 1, 2, 3].map((k) => cardinal(u, a[k], b[k], cc[k], d[k])));
+  }
+  return [0, 1, 2, 3].map((k) => { const x = cardinal(v, rows[0][k], rows[1][k], rows[2][k], rows[3][k]); return k < 3 ? Math.max(0, Math.min(255, x)) : x; });
 }
 
 export function meshQuads(m: MeshNode, level: number): MeshQuad[] {

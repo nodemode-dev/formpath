@@ -3839,3 +3839,108 @@ PSD export has three choices: Write layers with Maximum editability (default), W
 - logged: v0.45.0 · 2026-10-16
 
 The seventh audit found the floating contextual task bar drawn over open menus: it covered the left half of Select > Same and swallowed clicks there, and a rectangle drag started under it. --z-taskbar was 900, above --z-menu (200), --z-temp (500) and --z-companion (800). It is now 120: above the canvas chrome (100) so it floats over the stage and docked chrome as before, and below the opening screen (150), menus, popovers, dialogs and toasts, as Illustrator's Contextual Task Bar sits under its menus. Checked in Chromium: with the bar under the Select menu, the left edge of Same now hits the menu label, and the bar computes z-index 120. The note on psd_edit above was resolved in v0.44.0 (the export_file schema declares it).
+
+### src/engine/mesh.ts · bicubic point colours across patches
+- refers-to: src/engine/mesh.ts :: patchEval, patchColor, cardinal; src/io/pdf-shading.ts :: meshShading
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+A red point added with the Mesh tool drew as a small faint blob because each patch blended its four corner colours bilinearly, so the colour died out linearly inside the four patches touching the point. Patch colour is now a tensor-product cardinal spline over the 4 by 4 neighbourhood of points (C1 across patch edges, edge points repeated), clamped between the two nearest point values so a white neighbourhood never rings; the point reads as a full colour patch that spreads into the neighbouring patches. Canvas, PNG and SVG all go through meshQuads and so agree. The PDF writer used the four corner colours of a Coons patch, so each patch is now cut into 4 by 4 type 6 sub-patches whose corner colours come from patchColor and whose edges come from the patch surface, keeping PDF in step. Reload restore of a mesh drawing white was not reproduced: the recovery copy was never written in the headless run, so that part is still open.
+
+### src/engine/snap.ts · grid wins, intersect radius, grid-aware box snap
+- refers-to: src/engine/snap.ts :: snapPoint, snapRect; src/ui/stage.ts :: snapRaw, snapBoxRaw
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Snap to Grid snapped only the first corner of a shape: the drag end then went through snapLine (45 degree construction angles from the start point), which pulled (396,396) to (397.5,397.5), and snapRect ignored the grid whenever Smart Guides were on, so moves did not snap either. With the grid on, snapPoint now returns an anchor spot if one is in reach and otherwise the grid point, and snapRaw skips the angle guides for a grid hit; snapRect snaps the nearer of the left and right (and top and bottom) edges to the grid. Intersections are searched in 1.5 times the path tolerance so intersect beats path as it does in Illustrator, and a Selection drag takes an intersection before the alignment guides (never with the grid on).
+
+### src/tools/pen.ts · intersect before add-anchor, pencil start snaps
+- refers-to: src/tools/pen.ts :: down; src/tools/freehand.ts :: pencil down
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+A Pen click on a crossing of two selected paths added an anchor to one of them (the segment-under test ran before any snap), so no path started at the crossing and no label showed. The click now snaps first and only adds an anchor when the snap is empty or a plain path hit; at an intersect, anchor or centre snap a new path starts on the snapped point. The Pencil took its first point raw; it now snaps the start (Smart Guides or Snap to Grid). A rectangle started 3 px from a crossing already snapped to the intersection in every setup I could drive (lines made with the Line or Pen tools), so that half of the report was not reproduced; the guard is that the label shows as intersect.
+
+### src/engine/ops/paths.ts · Smooth tool refit, Average on whole paths
+- refers-to: src/engine/ops/paths.ts :: smoothRegion, pathOperation average; src/tools/freehand.ts :: smooth tool
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Smooth simplified and re-smoothed only the anchors inside the brush and needed three of them, so a thin brush moved points about 2.5 pt and left corners. smoothRegion now samples the run (the brushed anchors plus one fixed neighbour each side), relaxes the samples with a short binomial filter and refits cubic curves with fitCurve, so each pass lowers the zigzag, corners become smooth anchors and the anchor count can fall; the tolerance follows a Fidelity option (shared with the Pencil) and the brush is 16 px. Average took only selected anchors, so whole selected paths did nothing; with no real anchor selection it now averages every anchor of the selected paths, as Illustrator does.
+
+### src/tools/select.ts · Direct Selection on a live shape anchor
+- refers-to: src/tools/select.ts :: directDown
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Clicking a live shape's fill with the Direct Selection tool marks the whole object selected (-1), and pressing on one of its anchors then dragged every anchor. For a live rectangle, ellipse, polygon or star a press on an anchor now selects just that anchor, so the drag moves it alone and the shape becomes a plain path (the live flag is dropped by withPath), as in Illustrator 30.
+
+### src/tools/transform.ts · Liquify tools add points
+- refers-to: src/tools/transform.ts :: liquifyTool; src/tools/liquify-detail.ts :: refine
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Warp, Twirl, Pucker and Bloat moved existing anchors only, so a drag along a four-anchor rectangle edge did nothing. They now subdivide segments inside the brush (the refine used by Scallop, exported) before deforming, with a Detail option that sets the target spacing; a drag along a 200 pt edge turns the 4 anchors into 69 to 90 and bends the edge. There is no Simplify setting yet, so long drags keep their points.
+
+### src/engine/pathfinder.ts · Trap fallback for contained shapes
+- refers-to: src/engine/pathfinder.ts :: trapNodes
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Driven with two overlapping filled rectangles the trap was already a thin L along the lighter shape's edge, exactly Thickness wide (0.25 pt gave 350..400.25, 6 pt gave 350..406), so the reported whole-overlap shape was not reproduced. What did fail was a lighter shape that fully contains the darker one: the strip came out empty and no trap was made. trapNodes now falls back to the rim of the target shape (its edge band, Thickness wide) clipped to the spreading shape. Intertwine was driven and needed no change: Make leaves the Intertwine tool active with the group selected, and a click on a crossing flips the over path there (crossing pixel blue, red, blue over three clicks).
+
+### frontend/src/ui/layers.ts · Layers panel pointer capture, rename and Layer Options
+- refers-to: src/ui/layers.ts :: bind, fill; src/styles/formpth.css :: .cv-lrow-name; src/engine/index.ts :: setLayer
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Row clicks never selected and double-click never renamed because pointerdown captured the pointer on the rows container at once, which retargets the click to the container; capture now starts only when a drag passes 5 px. A second cause hid the rename field: fill() re-set the name text on every sync and wiped the input, so it now skips a name cell that holds an input. The name cell is shrink-to-fit so a double-click on the text renames and a double-click on blank row space opens Layer Options. setLayer deselects the objects of a layer being locked. Driven with real mouse and keyboard: click, Shift and Ctrl select on the canvas, typed letters stay in the field, Enter commits, Escape cancels.
+
+### frontend/src/ui/panels/kit.ts · Slider typed values commit
+- refers-to: src/ui/panels/kit.ts :: slider; src/ui/panels/color.ts :: fromSliders
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+The Colour panel rebuilds a colour from the range inputs, and the typed field never wrote into its range, so a typed value was lost. The text field now sets the range, clamps and reformats before calling change, once, on Enter, Tab or blur (the Enter key blurs). Driven in CMYK, RGB, HSB and Gray; one undo step per entry.
+
+### frontend/src/ui/form-dialog.ts · Colour field with a hex box, name field selected on open
+- refers-to: src/ui/form-dialog.ts :: color field; src/ui/dialogs.ts :: open
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+The native colour input cannot be typed or dragged in a driven browser, so Swatch Options could not commit a colour. The field is now the native chip plus a hex text box kept in step. Dialogs select the text of a first text field on open, so typing replaces the hex default of New Swatch instead of appending to it. Driven: editing a global swatch to 00AA55 recoloured both objects using it, and a spot swatch exported a /Separation in the PDF (qpdf check clean).
+
+### frontend/src/tools/paint.ts · Gradient tool follows the active slot
+- refers-to: src/tools/paint.ts :: gradient tool move, up
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+A Gradient tool drag always wrote the first fill. It now reads engine.activeSlot and writes the first stroke (drag and click) when Stroke is active. Driven with X then G on a 12 pt stroked rectangle: the stroke became a gradient and the fill stayed a colour.
+
+### frontend/src/io/api.ts · Shared engine status
+- refers-to: src/io/api.ts :: engineStatus; src/ui/panels/actions.ts :: load
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Every capabilities() call now publishes up or down, and a 5 s poll while a subscriber exists keeps it current. The Actions panel subscribes: it marks itself offline when the engine goes, reloads the sets and keeps session-only ones when it returns, and re-checks capabilities before declaring itself offline after a failed list. Driven by aborting then restoring /api: the offline note appeared and cleared within one poll.
+
+### frontend/src/engine/index.ts · Separations Preview turns Overprint Preview on
+- refers-to: src/engine/index.ts :: setView
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+Choosing a plate switches Overprint Preview on and remembers the earlier state; returning to All or closing the dialog restores it. Driven through Window, Separations Preview, plate rows and Done.
+
+### frontend/src/i18n/index.ts · Language switch keeps open documents
+- refers-to: src/i18n/index.ts :: setLanguage; src/app.ts :: languageHooks.beforeSwitch, offerRecovery
+- kind: decision
+- logged: v0.46.0 · 2026-10-16
+
+The switch still reloads, but first writes every open document to the recovery store and sets a session flag; the next start reopens them silently (modified state kept) whether or not restore-session is on. Undo history is not carried over. Driven: two rectangles drawn, language changed to Spanish in Preferences, the unsaved document came back with both.
+
+### frontend/HASHOUT_LOG.md · Phase 43 items not done
+- refers-to: Character panel OpenType (item 5); Asset Export per-asset settings and Collect for Export (item 6)
+- kind: todo
+- logged: v0.46.0 · 2026-10-16
+
+Not reached inside the time budget: proving each OpenType toggle changes rendered glyphs (whole object and edit-mode range), and per-asset Asset Export settings with multi-select editing plus Collect for Export in the canvas context menu.

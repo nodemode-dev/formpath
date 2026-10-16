@@ -1,3 +1,4 @@
+import { patchColor, patchEval } from '../engine/mesh';
 import { freeformSampler, toCmyk, toRgb } from '../engine/paint';
 import type { Color, Gradient, MeshNode, Pt, Rect } from '../engine';
 import type { PlatePaint } from './pdf-plate-map';
@@ -25,15 +26,24 @@ function components(c: Color, cmyk: boolean, plate?: PlatePaint | null): number[
 function decode(b: Rect, n: number): string { return `[${n3(b.x)} ${n3(b.x + b.w)} ${n3(b.y)} ${n3(b.y + b.h)}${' 0 1'.repeat(n)}]`; }
 
 export function meshShading(m: MeshNode, cmyk: boolean, alpha: boolean, plate?: PlatePaint | null): ShadingData {
-  const w = m.cols + 1, ncomp = alpha || plate ? 1 : cmyk ? 4 : 3, patches: Array<{ p: Pt[]; c: number[][] }> = [];
+  const ncomp = alpha || plate ? 1 : cmyk ? 4 : 3, patches: Array<{ p: Pt[]; c: number[][] }> = [];
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const add = (q: Pt): Pt => { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); return q; };
+  const S = 4, eps = 1e-3;
   for (let r = 0; r < m.rows; r++) for (let c = 0; c < m.cols; c++) {
-    const a = m.points[r * w + c], b = m.points[r * w + c + 1], d = m.points[(r + 1) * w + c], e = m.points[(r + 1) * w + c + 1];
-    const o = (p: typeof a, h: Pt): Pt => add({ x: p.x + h.x, y: p.y + h.y });
-    const p = [add(a), o(a, a.h[0]), o(b, b.h[1]), add(b), o(b, b.h[2]), o(e, e.h[3]), add(e), o(e, e.h[1]), o(d, d.h[0]), add(d), o(d, d.h[3]), o(a, a.h[2])];
-    const col = (q: typeof a): number[] => (alpha ? [clamp(q.opacity)] : components(q.color, cmyk, plate));
-    patches.push({ p, c: [col(a), col(b), col(e), col(d)] });
+    const f = patchEval(m, r, c);
+    const at = (u: number, v: number): Pt => add(f(u, v).p);
+    const du = (u: number, v: number): Pt => { const a = f(Math.max(0, u - eps), v).p, b = f(Math.min(1, u + eps), v).p, k = (Math.min(1, u + eps) - Math.max(0, u - eps)) || 1; return { x: (b.x - a.x) / k, y: (b.y - a.y) / k }; };
+    const dv = (u: number, v: number): Pt => { const a = f(u, Math.max(0, v - eps)).p, b = f(u, Math.min(1, v + eps)).p, k = (Math.min(1, v + eps) - Math.max(0, v - eps)) || 1; return { x: (b.x - a.x) / k, y: (b.y - a.y) / k }; };
+    const col = (u: number, v: number): number[] => { const k = patchColor(m, r, c, u, v); return alpha ? [clamp(k[3])] : components({ kind: 'rgb', r: k[0], g: k[1], b: k[2] }, cmyk, plate); };
+    const s = 1 / S;
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const u0 = i * s, u1 = (i + 1) * s, v0 = j * s, v1 = (j + 1) * s;
+      const a = at(u0, v0), b = at(u1, v0), e = at(u1, v1), d = at(u0, v1);
+      const o = (p: Pt, g: Pt, k: number): Pt => add({ x: p.x + (g.x * s * k) / 3, y: p.y + (g.y * s * k) / 3 });
+      const p = [a, o(a, du(u0, v0), 1), o(b, du(u1, v0), -1), b, o(b, dv(u1, v0), 1), o(e, dv(u1, v1), -1), e, o(e, du(u1, v1), -1), o(d, du(u0, v1), 1), d, o(d, dv(u0, v1), -1), o(a, dv(u0, v0), 1)];
+      patches.push({ p, c: [col(u0, v0), col(u1, v0), col(u1, v1), col(u0, v1)] });
+    }
   }
   if (!patches.length) { x0 = y0 = 0; x1 = y1 = 1; }
   const pad = 1e-3 * Math.max(1, x1 - x0, y1 - y0), box: Rect = { x: x0 - pad, y: y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad };
