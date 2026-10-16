@@ -1,6 +1,7 @@
 import { newDoc, newId } from '../engine/doc';
 import { anchor, arcSegmentPath, mul, transformPath } from '../engine/geometry';
-import { fill as fillItem, linearGradient, radialGradient, stop, stroke as strokeItem } from '../engine/paint';
+import { fill as fillItem, linearGradient, radialGradient, stop, stroke as strokeItem, toRgb } from '../engine/paint';
+import { bytesStream, filterStream, subStream, toRgba, type PsStream, type Samples } from './ps-filters';
 import { DEFAULT_CHAR, DEFAULT_PARA } from '../engine/text';
 import type { Anchor, Color, Doc, Mat, Paint, PathData, SubPath, VNode } from '../engine';
 
@@ -10,7 +11,10 @@ type PsArr = { t: 'arr'; v: PsObj[] };
 type PsDict = { t: 'dict'; v: Map<string, PsObj> };
 type PsOp = { t: 'op'; v: string; f: (ps: Interp) => void };
 type PsFont = { t: 'font'; name: string; size: number; m: Mat };
-type PsObj = number | boolean | string | null | PsName | PsProc | PsArr | PsDict | PsOp | PsFont | { t: 'mark' } | { t: 'file' } | { t: 'save'; depth: number };
+type PsObj = number | boolean | string | null | PsName | PsProc | PsArr | PsDict | PsOp | PsFont | { t: 'mark' } | PsFile | { t: 'save'; depth: number };
+type PsFile = { t: 'file'; st: PsStream };
+interface PendingImage { key: string; w: number; h: number; rgba?: Uint8ClampedArray; jpeg?: Uint8Array }
+interface ImgSpace { n: number; palette?: Uint8Array }
 
 class ExitSignal extends Error {}
 class StopSignal extends Error {}
@@ -78,6 +82,9 @@ class Interp {
   gstack: GState[] = [];
   out: VNode[] = [];
   skipped = new Set<string>();
+  images: PendingImage[] = [];
+  imgSpace: ImgSpace = { n: 1 };
+  stamp = Date.now().toString(36);
   steps = 0;
   clipKey = 0;
   constructor(readonly lex: Lexer, readonly flip: Mat) {
@@ -206,6 +213,110 @@ class Interp {
     return { kind: 'gray', k: (1 - (v[0] ?? 0)) * 100 };
   }
   mat(o: PsObj): Mat | null { if (!isArr(o) || o.v.length !== 6) return null; return o.v.map((x) => (typeof x === 'number' ? x : 0)) as Mat; }
+  rawFile(): PsFile { const lex = this.lex; return { t: 'file', st: { raw: true, get: () => (lex.i < lex.s.length ? lex.s.charCodeAt(lex.i++) & 255 : -1) } }; }
+}
+
+const isFile = (o: PsObj | undefined): o is PsFile => typeof o === 'object' && o !== null && (o as { t?: string }).t === 'file';
+const bytesOf = (s: string): Uint8Array => { const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i) & 255; return b; };
+const mentions = (o: PsObj | undefined, name: string, depth = 0): boolean => (isProc(o) || isArr(o) ? depth < 6 && o.v.some((x) => mentions(x, name, depth + 1)) : isName(o) && !o.lit && o.v === name);
+
+// Reads the bytes of one image data source: a string, a file or filter chain, or a procedure that yields strings.
+class Puller {
+  private buf: Uint8Array = new Uint8Array(0);
+  private at = 0;
+  private dead = false;
+  constructor(private readonly ps: Interp, private readonly src: PsObj) {}
+  take(n: number): Uint8Array {
+    const out = new Uint8Array(n);
+    let have = 0;
+    while (have < n) {
+      if (this.at < this.buf.length) { const k = Math.min(n - have, this.buf.length - this.at); out.set(this.buf.subarray(this.at, this.at + k), have); this.at += k; have += k; continue; }
+      if (this.dead) break;
+      const s = this.src;
+      if (typeof s === 'string') { this.buf = bytesOf(s); this.at = 0; this.dead = true; }
+      else if (isFile(s)) {
+        const b = new Uint8Array(n - have);
+        let k = 0;
+        while (k < b.length) { const c = s.st.get(); if (c < 0) { this.dead = true; break; } b[k++] = c; }
+        out.set(b.subarray(0, k), have); have += k;
+      } else if (isProc(s)) {
+        const depth = this.ps.stack.length;
+        this.ps.runProc(s);
+        const r = this.ps.stack.length > depth ? this.ps.pop() : null;
+        this.ps.stack.length = Math.min(this.ps.stack.length, depth);
+        if (typeof r !== 'string' || !r.length) this.dead = true;
+        else { this.buf = bytesOf(r); this.at = 0; }
+      } else this.dead = true;
+    }
+    return out;
+  }
+  finish(): void { const s = this.src; if (isFile(s) && !s.st.raw) for (let c = s.st.get(), k = 0; c >= 0 && k < 1 << 22; c = s.st.get(), k++); }
+}
+
+// image, colorimage and imagemask. Returns false when it could not make sense of the operands.
+function paintImage(ps: Interp, kind: 'image' | 'colorimage' | 'imagemask'): boolean {
+  let w = 0, h = 0, bits = 8, matrix: Mat | null = null, decode: number[] | null = null, polarity = false, comps = 1, sources: PsObj[] = [];
+  const num = (o: PsObj | undefined, d: number): number => (typeof o === 'number' ? o : d);
+  if (kind === 'colorimage') {
+    comps = ps.num();
+    const multi = ps.pop();
+    sources = [];
+    for (let i = 0; i < (multi === true ? comps : 1); i++) sources.unshift(ps.pop());
+    matrix = ps.mat(ps.pop()); bits = ps.num(); h = ps.num(); w = ps.num();
+  } else {
+    const top = ps.pop();
+    if (isDict(top)) {
+      const g = (k: string): PsObj | undefined => top.v.get(k);
+      w = num(g('Width'), 0); h = num(g('Height'), 0); bits = num(g('BitsPerComponent'), kind === 'imagemask' ? 1 : 8);
+      matrix = ps.mat(g('ImageMatrix') ?? null);
+      const d = g('Decode');
+      if (isArr(d)) decode = d.v.map((x) => num(x, 0));
+      const ds = g('DataSource');
+      if (isArr(ds)) sources = ds.v; else if (ds !== undefined) sources = [ds];
+      if (kind === 'imagemask') polarity = !!decode && decode[0] === 1;
+      const it = g('ImageType');
+      if (typeof it === 'number' && it !== 1) { ps.skipped.add('masked images'); return false; }
+    } else {
+      sources = [top];
+      matrix = ps.mat(ps.pop());
+      const third = ps.pop();
+      if (kind === 'imagemask') polarity = third === true; else bits = typeof third === 'number' ? third : 8;
+      h = ps.num(); w = ps.num();
+    }
+    if (kind === 'image') comps = ps.imgSpace.n;
+  }
+  if (!(w > 0 && h > 0) || w * h > 1e8 || !matrix || !sources.length) return false;
+  w = Math.round(w); h = Math.round(h);
+  const m = matrix;
+  if (Math.abs(m[0] * m[3] - m[1] * m[2]) < 1e-12) return false;
+  if (kind === 'imagemask') bits = 1;
+  if (![1, 2, 4, 8, 12, 16].includes(bits)) { ps.skipped.add('image sample depth'); return false; }
+  const direct = sources.some((s) => (isFile(s) && (s.st.raw === true || s.st.live === true)) || mentions(s, 'currentfile'));
+  if (direct) { const lex = ps.lex, c = lex.s[lex.i]; if (c === '\r' && lex.s[lex.i + 1] === '\n') lex.i += 2; else if (c === '\n' || c === '\r' || c === ' ' || c === '\t') lex.i++; }
+  const key = `eps-img-${ps.stamp}-${ps.images.length}`;
+  const fillColor = toRgb(ps.gs.color);
+  const first = sources[0];
+  let pending: PendingImage;
+  if (kind !== 'imagemask' && isFile(first) && first.st.jpeg) {
+    const jpeg = first.st.jpeg();
+    if (jpeg.length < 4) return false;
+    pending = { key: `${key}.jpg`, w, h, jpeg };
+  } else {
+    const planar = sources.length > 1, nsrc = planar ? comps : 1;
+    if (planar && sources.length < comps) return false;
+    const rowBytes = Math.ceil((w * bits * (planar ? 1 : comps)) / 8);
+    const pulls = sources.slice(0, nsrc).map((s) => new Puller(ps, s));
+    const rows: Uint8Array[][] = [];
+    for (let y = 0; y < h; y++) rows.push(pulls.map((p) => p.take(rowBytes)));
+    for (const p of pulls) p.finish();
+    const dec = decode && decode.length >= comps * 2 ? decode : ps.imgSpace.palette && kind === 'image' ? [0, (1 << bits) - 1] : Array.from({ length: comps }, () => [0, 1]).flat();
+    const s: Samples = { w, h, bits, comps: kind === 'imagemask' ? 1 : comps, rows, decode: dec, ...(kind === 'image' && ps.imgSpace.palette ? { palette: ps.imgSpace.palette } : {}), ...(kind === 'imagemask' ? { mask: { paintOne: polarity, r: fillColor.r, g: fillColor.g, b: fillColor.b } } : {}) };
+    pending = { key: `${key}.png`, w, h, rgba: toRgba(s) };
+  }
+  ps.images.push(pending);
+  const xf = mul(ps.flip, mul(ps.gs.ctm, inv(m)));
+  ps.emit({ id: newId('im'), kind: 'image', src: pending.key, w, h, xf, opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, ...(kind === 'imagemask' ? { name: 'Image mask' } : {}) });
+  return true;
 }
 
 const ARGN = (ps: Interp, n: number): number[] => { const out: number[] = []; for (let i = 0; i < n; i++) out.unshift(ps.num()); return out; };
@@ -237,6 +348,35 @@ function shadingPaint(ps: Interp, sh: PsDict): Paint | null {
   if (type === 2) { const a = u(c[0], c[1]), b = u(c[2], c[3]); return { type: 'gradient', gradient: { ...linearGradient(stops), geom: { x1: a.x, y1: a.y, x2: b.x, y2: b.y } } }; }
   const a = u(c[3], c[4]), e = u(c[3] + c[5], c[4]), fo = u(c[0], c[1]);
   return { type: 'gradient', gradient: { ...radialGradient(stops), geom: { x1: a.x, y1: a.y, x2: e.x, y2: e.y, fx: fo.x, fy: fo.y } } };
+}
+
+// The colour space an image takes its samples in: component count, and the lookup table of an Indexed space.
+function imageSpace(o: PsObj, name: string): ImgSpace {
+  if (isArr(o) && name === 'Indexed') {
+    const base = o.v[1], bn = isArr(base) ? keyOf(base.v[0] ?? null) : keyOf(base ?? null), k = /CMYK/.test(bn) ? 4 : /RGB/.test(bn) ? 3 : 1, lookup = o.v[3];
+    const hival = typeof o.v[2] === 'number' ? o.v[2] : 255;
+    if (typeof lookup === 'string') {
+      const pal = new Uint8Array((hival + 1) * 3), b = bytesOf(lookup);
+      for (let i = 0; i <= hival; i++) {
+        const q = (j: number): number => (b[i * k + j] ?? 0) / 255;
+        if (k === 1) pal.fill(b[i] ?? 0, i * 3, i * 3 + 3);
+        else if (k === 3) { pal[i * 3] = b[i * 3] ?? 0; pal[i * 3 + 1] = b[i * 3 + 1] ?? 0; pal[i * 3 + 2] = b[i * 3 + 2] ?? 0; }
+        else { pal[i * 3] = 255 * (1 - q(0)) * (1 - q(3)); pal[i * 3 + 1] = 255 * (1 - q(1)) * (1 - q(3)); pal[i * 3 + 2] = 255 * (1 - q(2)) * (1 - q(3)); }
+      }
+      return { n: 1, palette: pal };
+    }
+    return { n: 1 };
+  }
+  return { n: /CMYK/.test(name) ? 4 : /RGB|CalRGB|Lab/.test(name) ? 3 : 1 };
+}
+
+function imageOp(ps: Interp, kind: 'image' | 'colorimage' | 'imagemask'): void {
+  const at = ps.lex.i;
+  let ok = false;
+  try { ok = paintImage(ps, kind); } catch (e) { if (e instanceof Error && /too long|stackunderflow/.test(e.message)) throw e; }
+  if (ok) return;
+  ps.skipped.add(kind === 'imagemask' ? 'image masks' : 'images');
+  if (ps.lex.i === at) skipImageData(ps);
 }
 
 function skipImageData(ps: Interp): void {
@@ -294,8 +434,53 @@ const OPS: Record<string, (ps: Interp) => void> = {
   cvs: (ps) => { ps.pop(); const o = ps.pop(); ps.push(keyOf(o)); }, type: (ps) => { const o = ps.pop(); ps.push({ t: 'name', v: typeof o === 'number' ? (Number.isInteger(o) ? 'integertype' : 'realtype') : typeof o === 'boolean' ? 'booleantype' : typeof o === 'string' ? 'stringtype' : o === null ? 'nulltype' : isDict(o) ? 'dicttype' : isArr(o) || isProc(o) ? 'arraytype' : isName(o) ? 'nametype' : 'operatortype', lit: false }); },
   readonly: () => undefined, executeonly: () => undefined, noaccess: () => undefined, rcheck: (ps) => { ps.pop(); ps.push(true); }, wcheck: (ps) => { ps.pop(); ps.push(true); },
   languagelevel: (ps) => ps.push(3), version: (ps) => ps.push('3010'), product: (ps) => ps.push('formpth'), revision: (ps) => ps.push(1), vmstatus: (ps) => ps.push(0, 0, 1e7),
-  currentfile: (ps) => ps.push({ t: 'file' }), filter: (ps) => { ps.pop(); for (;;) { const o = ps.stack[ps.stack.length - 1]; if (isDict(o) || typeof o === 'number') { ps.pop(); continue; } break; } ps.pop(); ps.push({ t: 'file' }); },
-  readhexstring: (ps) => { ps.pop(); ps.pop(); ps.push('', false); }, readstring: (ps) => { ps.pop(); ps.pop(); ps.push('', false); }, readline: (ps) => { ps.pop(); ps.pop(); ps.push('', false); }, closefile: (ps) => { ps.pop(); }, flushfile: (ps) => { ps.pop(); },
+  currentfile: (ps) => ps.push(ps.rawFile()),
+  filter: (ps) => {
+    const name = keyOf(ps.pop());
+    let count = 0, eod = '';
+    if (name === 'SubFileDecode') {
+      let top = ps.stack[ps.stack.length - 1];
+      if (isDict(top)) { ps.pop(); count = typeof top.v.get('EODCount') === 'number' ? (top.v.get('EODCount') as number) : 0; const s = top.v.get('EODString'); eod = typeof s === 'string' ? s : ''; }
+      else {
+        if (typeof top === 'string') { eod = top; ps.pop(); top = ps.stack[ps.stack.length - 1]; }
+        if (typeof top === 'number') { count = top; ps.pop(); }
+      }
+    } else while (typeof ps.stack[ps.stack.length - 1] === 'number' || isDict(ps.stack[ps.stack.length - 1])) ps.pop();
+    const src = ps.pop();
+    const base: PsStream | null = isFile(src) ? src.st : typeof src === 'string' ? bytesStream(bytesOf(src)) : null;
+    const out = base ? (name === 'SubFileDecode' ? subStream(base, count, eod) : filterStream(name, base)) : null;
+    if (!base || !out) { ps.skipped.add(`images with the ${name} filter`); ps.push(ps.rawFile()); return; }
+    if (base.raw || base.live) out.live = true;
+    ps.push({ t: 'file', st: out });
+  },
+  readhexstring: (ps) => {
+    const s = ps.pop(), f = ps.pop(), n = typeof s === 'string' ? s.length : 0;
+    let out = '', hi = -1, ok = false;
+    if (isFile(f)) {
+      for (;;) {
+        if (out.length >= n) { ok = true; break; }
+        const c = f.st.get();
+        if (c < 0 || c === 62) break;
+        const v = c >= 48 && c <= 57 ? c - 48 : c >= 65 && c <= 70 ? c - 55 : c >= 97 && c <= 102 ? c - 87 : -1;
+        if (v < 0) continue;
+        if (hi < 0) hi = v; else { out += String.fromCharCode((hi << 4) | v); hi = -1; }
+      }
+    }
+    ps.push(out, ok);
+  },
+  readstring: (ps) => {
+    const s = ps.pop(), f = ps.pop(), n = typeof s === 'string' ? s.length : 0;
+    let out = '';
+    if (isFile(f)) while (out.length < n) { const c = f.st.get(); if (c < 0) break; out += String.fromCharCode(c); }
+    ps.push(out, out.length === n);
+  },
+  readline: (ps) => {
+    const s = ps.pop(), f = ps.pop(), n = typeof s === 'string' ? s.length : 0;
+    let out = '', ok = false;
+    if (isFile(f)) for (;;) { const c = f.st.get(); if (c < 0) break; if (c === 10 || c === 13) { ok = true; break; } if (out.length < n) out += String.fromCharCode(c); }
+    ps.push(out, ok);
+  },
+  closefile: (ps) => { ps.pop(); }, flushfile: (ps) => { ps.pop(); },
   print: (ps) => { ps.pop(); }, '=': (ps) => { ps.pop(); }, '==': (ps) => { ps.pop(); }, flush: () => undefined, pstack: () => undefined,
   save: (ps) => { ps.gstack.push(ps.cloneGs()); ps.push({ t: 'save', depth: ps.gstack.length }); },
   restore: (ps) => { const s = ps.pop() as { depth?: number }; const d = s?.depth ?? ps.gstack.length; while (ps.gstack.length > d) ps.gstack.pop(); const g = ps.gstack.pop(); if (g) ps.gs = g; },
@@ -337,13 +522,11 @@ const OPS: Record<string, (ps: Interp) => void> = {
   setgray: (ps) => { ps.gs.space = 1; ps.setColor([ps.num()]); }, setrgbcolor: (ps) => { const c = ARGN(ps, 3); ps.gs.space = 3; ps.setColor(c); }, setcmykcolor: (ps) => { const c = ARGN(ps, 4); ps.gs.space = 4; ps.setColor(c); },
   sethsbcolor: (ps) => { const [h, s, v] = ARGN(ps, 3), i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s); const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][((i % 6) + 6) % 6]; ps.gs.space = 3; ps.setColor([r, g, b]); },
   currentgray: (ps) => ps.push(ps.gs.color.kind === 'gray' ? 1 - ps.gs.color.k / 100 : 0), currentrgbcolor: (ps) => { const c = ps.gs.color; if (c.kind === 'rgb') ps.push(c.r / 255, c.g / 255, c.b / 255); else ps.push(0, 0, 0); },
-  setcolorspace: (ps) => { const o = ps.pop(); const name = isArr(o) ? keyOf(o.v[0] ?? null) : keyOf(o); ps.gs.space = /CMYK/.test(name) ? 4 : /RGB|CalRGB|Lab/.test(name) ? 3 : /Separation|Indexed|DeviceN/.test(name) ? (isArr(o) && /Separation/.test(name) && /CMYK/.test(keyOf(o.v[2] ?? null)) ? -4 : 1) : 1; ps.setColor(ps.gs.space === 4 ? [0, 0, 0, 1] : ps.gs.space === 3 ? [0, 0, 0] : [0]); },
+  setcolorspace: (ps) => { const o = ps.pop(); const name = isArr(o) ? keyOf(o.v[0] ?? null) : keyOf(o); ps.imgSpace = imageSpace(o, name); ps.gs.space = /CMYK/.test(name) ? 4 : /RGB|CalRGB|Lab/.test(name) ? 3 : /Separation|Indexed|DeviceN/.test(name) ? (isArr(o) && /Separation/.test(name) && /CMYK/.test(keyOf(o.v[2] ?? null)) ? -4 : 1) : 1; ps.setColor(ps.gs.space === 4 ? [0, 0, 0, 1] : ps.gs.space === 3 ? [0, 0, 0] : [0]); },
   setcolor: (ps) => { const n = ps.gs.space; if (n === -4) { const t = ps.num(); ps.gs.color = { kind: 'cmyk', c: 0, m: 0, y: 0, k: t * 100 }; return; } const comps: number[] = []; for (let i = 0; i < Math.max(1, n); i++) { const v = ps.stack[ps.stack.length - 1]; if (typeof v !== 'number') break; comps.unshift(ps.num()); } ps.setColor(comps); },
   setpattern: (ps) => { ps.pop(); }, makepattern: (ps) => { ps.pop(); ps.pop(); ps.push({ t: 'dict', v: new Map() }); },
   shfill: (ps) => { const sh = ps.pop(); if (!isDict(sh)) return; const paint = shadingPaint(ps, sh); const c = ps.gs.clip; if (!paint || !c) { ps.skipped.add('shfill'); return; } const g = ps.gs.clip; ps.gs.clip = null; ps.emit({ id: newId('p'), kind: 'path', d: ps.toDoc(c.d), rule: c.even ? 'evenodd' : 'nonzero', opacity: 1, blend: 'normal', ap: { items: [fillItem(paint)], effects: [] } }); ps.gs.clip = g; },
-  image: (ps) => { const top = ps.pop(); if (!isDict(top)) { ps.pop(); ps.pop(); ps.pop(); ps.pop(); } ps.skipped.add('images'); skipImageData(ps); },
-  colorimage: (ps) => { const n = ps.num(), multi = ps.pop(); for (let i = 0; i < (multi === true ? n : 1); i++) ps.pop(); ps.pop(); ps.pop(); ps.pop(); ps.pop(); ps.skipped.add('images'); skipImageData(ps); },
-  imagemask: (ps) => { const top = ps.pop(); if (!isDict(top)) { ps.pop(); ps.pop(); ps.pop(); ps.pop(); } ps.skipped.add('image masks'); skipImageData(ps); },
+  image: (ps) => imageOp(ps, 'image'), colorimage: (ps) => imageOp(ps, 'colorimage'), imagemask: (ps) => imageOp(ps, 'imagemask'),
   findfont: (ps) => { const k = keyOf(ps.pop()); ps.push({ t: 'font', name: k, size: 1, m: [1, 0, 0, 1, 0, 0] }); }, definefont: (ps) => { const f = ps.pop(); ps.pop(); ps.push(f); }, undefinefont: (ps) => { ps.pop(); },
   scalefont: (ps) => { const s = ps.num(), f = ps.pop() as PsFont; ps.push({ t: 'font', name: f?.name ?? 'Helvetica', size: (f?.size ?? 1) * s, m: f?.m ?? [1, 0, 0, 1, 0, 0] }); },
   makefont: (ps) => { const m = ps.mat(ps.pop()) ?? [1, 0, 0, 1, 0, 0], f = ps.pop() as PsFont; ps.push({ t: 'font', name: f?.name ?? 'Helvetica', size: (f?.size ?? 1) * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])), m }); },
@@ -368,18 +551,38 @@ function showText(ps: Interp, s: PsObj): void {
   ps.gs.cp = ps.user(u.x + adv, u.y);
 }
 
-export interface EpsRead { doc: Doc; skipped: string[] }
+export interface EpsRead { doc: Doc; skipped: string[]; assets: Map<string, Blob> }
+
+// One char per byte. TextDecoder's latin1 is really windows-1252, which would corrupt binary image data.
+function latin1(b: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < b.length; i += 8192) out += String.fromCharCode.apply(null, b.subarray(i, i + 8192) as unknown as number[]);
+  return out;
+}
 
 export function epsSource(data: ArrayBuffer): string {
   const b = new Uint8Array(data);
   if (b[0] === 0xc5 && b[1] === 0xd0 && b[2] === 0xd3 && b[3] === 0xc6) {
     const dv = new DataView(data), off = dv.getUint32(4, true), len = dv.getUint32(8, true);
-    return new TextDecoder('latin1').decode(b.subarray(off, off + len));
+    return latin1(b.subarray(off, off + len));
   }
-  return new TextDecoder('latin1').decode(b);
+  return latin1(b);
 }
 
-export function readEpsVector(data: ArrayBuffer, title: string): EpsRead {
+async function pngBlob(rgba: Uint8ClampedArray, w: number, h: number): Promise<Blob> {
+  const img = new ImageData(new Uint8ClampedArray(rgba), w, h);
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const c = new OffscreenCanvas(w, h);
+    c.getContext('2d')?.putImageData(img, 0, 0);
+    return c.convertToBlob({ type: 'image/png' });
+  }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d')?.putImageData(img, 0, 0);
+  return new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode an image.'))), 'image/png'));
+}
+
+export async function readEpsVector(data: ArrayBuffer, title: string): Promise<EpsRead> {
   const src = epsSource(data);
   if (!/^%!PS/.test(src.trimStart())) throw new Error('This file is not PostScript or EPS.');
   const hi = /%%HiResBoundingBox:\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/.exec(src), lo = /%%BoundingBox:\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/.exec(src);
@@ -389,6 +592,14 @@ export function readEpsVector(data: ArrayBuffer, title: string): EpsRead {
   ps.run();
   const doc = newDoc(W, H, { title });
   doc.layers = [{ ...doc.layers[0], children: ps.out }];
+  const assets = new Map<string, Blob>();
+  for (const im of ps.images) {
+    try {
+      const blob = im.jpeg ? new Blob([im.jpeg as BlobPart], { type: 'image/jpeg' }) : await pngBlob(im.rgba as Uint8ClampedArray, im.w, im.h);
+      assets.set(im.key, blob);
+      doc.images[im.key] = { mime: blob.type, w: im.w, h: im.h };
+    } catch { ps.skipped.add('images'); }
+  }
   const skipped = [...ps.skipped].filter((k) => !/^(error|AI|Adobe)/.test(k)).slice(0, 12);
-  return { doc, skipped: [...new Set([...skipped.filter((k) => /image|shfill|charpath/.test(k)), ...(skipped.some((k) => !/image|shfill|charpath/.test(k)) ? ['operators it does not know'] : [])])] };
+  return { doc, assets, skipped: [...new Set([...skipped.filter((k) => /image|shfill|charpath/.test(k)), ...(skipped.some((k) => !/image|shfill|charpath/.test(k)) ? ['operators it does not know'] : [])])] };
 }

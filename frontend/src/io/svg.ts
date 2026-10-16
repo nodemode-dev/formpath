@@ -1,7 +1,7 @@
 import { selectionBounds, visualBounds } from '../engine/bounds';
 import { childrenOf, findNode, newDoc, newId } from '../engine/doc';
-import { arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, textureImageKeys, threeDFaces, type RasterFx } from '../engine/effects';
-import { apply, emptyRect, inflate as inflateRect, isEmptyRect, mul, parseSvgD, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
+import { ARROWHEADS, arrowGeometry, brushGeometry, effectPath, has3d, rasterEffects, rasterEffectsOf, strokeOutline, textureImageKeys, threeDFaces, type RasterFx } from '../engine/effects';
+import { apply, bezTangent, emptyRect, inflate as inflateRect, invert as invertMat, isEmptyRect, mul, parseSvgD, pathBounds, segments, toSvgD, transformPath, unionRect, ellipsePath, rectPath, linePath, polyToPath } from '../engine/geometry';
 import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { derivedArt } from '../engine/shaper';
@@ -12,9 +12,12 @@ import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, perceptualStops,
 import { clipGeometry, docArtBounds, gradientGeom, knockoutShape, knocksOut, renderNode } from '../engine/render';
 import { gradientStrokeArt, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import { glyphBox, glyphMat, glyphOutline, glyphShape, layoutText, weightOf, DEFAULT_CHAR } from '../engine/text';
-import { BLEND_MODES, type AppearanceItem, type Doc, type Gradient, type LayerNode, type Mat, type Paint, type PathData, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
+import { BLEND_MODES, type AppearanceItem, type Doc, type Effect, type Gradient, type GroupNode, type ImageNode, type LayerNode, type Mat, type OpacityMask, type Paint, type PathData, type PathNode, type PatternDef, type Project, type Rect, type StrokeItem, type TextNode, type VNode } from '../engine';
 import { outlineText } from './fonts';
 import { docFromManifest, serialize } from './project-io';
+import { cssFilterEffects, filterChain, filterEffects, filterPrimitives, type FilterScale } from './svg-filter';
+import { clipOf, fitViewBox, markers, maskOf, patternPaint, refId, userBox, type MarkerOut, type RefCtx } from './svg-refs';
+import { importText, textFromHint, type TextEnv } from './svg-text';
 
 export interface SvgOptions { artboard: number | 'all' | 'art'; outlineText: boolean; preserve: boolean; precision: number; ids?: string[] }
 const BLEND_CSS = new Map(BLEND_MODES.map((b) => [b.id, b.css === 'source-over' ? 'normal' : b.css]));
@@ -32,6 +35,8 @@ class Writer {
   private n = 0;
   private gradients = new Map<string, string>();
   private symbolArts = new Map<VNode, string>();
+  private patIds = new Map<string, string>();
+  private patArts = new Map<string, string>();
   private ko = false;
   constructor(private readonly p: Project, private readonly o: SvgOptions, private readonly images: Map<string, string>, private readonly outlines: Map<string, PathData>) {}
   get doc(): Doc { return this.p.doc; }
@@ -46,10 +51,15 @@ class Writer {
     if (p.type === 'gradient') return { v: `url(#${this.gradient(p.gradient, b)})`, op: 1 };
     const def = this.doc.patterns.find((x) => x.id === p.pattern);
     if (!def) return { v: 'none', op: 1 };
-    const id = this.id('pat'), art = this.id('patart'), l = patternLattice(def);
-    this.defs.push(`<g id="${art}">${this.node(def.art)}</g>`);
+    const pkey = `${def.id}|${(p.xf ?? []).join(',')}`, hadPat = this.patIds.get(pkey);
+    if (hadPat) return { v: `url(#${hadPat})`, op: 1 };
+    const id = this.id('pat'), l = patternLattice(def);
+    let art = this.patArts.get(def.id);
+    if (!art) { art = this.id('patart'); this.patArts.set(def.id, art); this.defs.push(`<g id="${art}">${this.node(def.art)}</g>`); }
     const copies = latticeCopies(def, 1).map((o) => `<use href="#${art}" transform="translate(${num(o.x - def.tile.x)} ${num(o.y - def.tile.y)})"/>`).join('');
-    this.defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" x="${num(def.tile.x)}" y="${num(def.tile.y)}" width="${num(l.w)}" height="${num(l.h)}"${p.xf ? ` patternTransform="${mat(p.xf, this.o.precision)}"` : ''}>${copies}</pattern>`);
+    const meta = ` data-name="${esc(def.name)}" data-formpth-art="${art}" data-formpth-pattern="${def.type} ${num(def.tile.x)} ${num(def.tile.y)} ${num(def.tile.w)} ${num(def.tile.h)} ${num(def.hs)} ${num(def.vs)} ${num(def.brick ?? 0.5)} ${(def.overlap ?? ['left', 'top']).join(' ')}"`;
+    this.defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" x="${num(def.tile.x)}" y="${num(def.tile.y)}" width="${num(l.w)}" height="${num(l.h)}"${p.xf ? ` patternTransform="${mat(p.xf, this.o.precision)}"` : ''}${meta}>${copies}</pattern>`);
+    this.patIds.set(pkey, id);
     return { v: `url(#${id})`, op: 1 };
   }
 
@@ -172,7 +182,7 @@ class Writer {
       }
     } else out.push(`<path d="${this.d(id)}" ${this.strokeAttrs(it, b)}${blend}/>`);
     const arrows = arrowGeometry(id, it);
-    if (arrows) out.push(`<path d="${this.d(arrows)}" fill="${pt.v}"/>`);
+    if (arrows) out.push(`<path d="${this.d(arrows)}" fill="${pt.v}" data-arrows="${it.startArrow || 'none'} ${it.endArrow || 'none'} ${num(it.arrowScale[0])} ${num(it.arrowScale[1])} ${it.arrowAlign}"/>`);
   }
 
   kids(n: VNode, list: VNode[]): string {
@@ -282,7 +292,9 @@ class Writer {
         parts.push(one(g));
       }
       const xf = n.mode === 'path' || (n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5]) ? '' : ` transform="${mat(n.xf, pr)}"`;
-      return `<g${xf} style="font-kerning:none">${parts.join('')}</g>`;
+      const runs = n.spans.map((s) => { const fv = this.paint(s.style.fill, b).v; return { t: s.text, ft: s.style.font, fs: s.style.style, z: s.style.size, c: fv.startsWith('#') ? fv : '#000000', k: s.style.tracking, b: s.style.baseline }; });
+      const tp = n.mode === 'path' && n.path ? ` data-formpth-textpath="${esc(JSON.stringify({ d: this.d(n.path), s: n.pathStart ?? 0, e: n.pathEnd ?? 1, f: n.pathFlip ? 1 : 0, fx: n.pathEffect ?? 'rainbow', al: n.pathAlign ?? 'baseline', sp: n.pathSpacing ?? 0, pa: n.para.align, r: runs }))}"` : '';
+      return `<g${xf}${tp} style="font-kerning:none">${parts.join('')}</g>`;
     }
     for (const l of lay.lines) if (l.glyphs.length) runs.push(glyphRuns(l.glyphs));
     const xf = n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5] ? '' : ` transform="${mat(n.xf, this.o.precision)}"`;
@@ -385,7 +397,8 @@ export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
 }
 
 type Style = Record<string, string>;
-const INHERITED = new Set(['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'fill-rule', 'fill-opacity', 'stroke-opacity', 'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor', 'visibility', 'clip-rule', 'letter-spacing']);
+const INHERITED = new Set(['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'fill-rule', 'fill-opacity', 'stroke-opacity', 'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor', 'visibility', 'clip-rule', 'letter-spacing', 'word-spacing', 'font-variant', 'text-transform', 'marker-start', 'marker-mid', 'marker-end']);
+const OWN_ONLY = new Set(['opacity', 'display', 'mix-blend-mode', 'clip-path', 'mask', 'filter', 'baseline-shift', 'text-decoration', 'text-decoration-line', 'marker']);
 
 function parseTransform(s: string | null): Mat {
   let m: Mat = [1, 0, 0, 1, 0, 0];
@@ -410,7 +423,16 @@ function parseTransform(s: string | null): Mat {
 
 const len = (v: string | undefined, d = 0): number => { if (!v) return d; const n = parseFloat(v); if (!Number.isFinite(n)) return d; if (/mm$/.test(v)) return (n * 72) / 25.4; if (/cm$/.test(v)) return (n * 72) / 2.54; if (/in$/.test(v)) return n * 72; if (/pt$/.test(v)) return n; if (/pc$/.test(v)) return n * 12; return n; };
 
-export interface SvgImport { doc: Doc; assets: Map<string, Blob>; native: boolean; title: string }
+function alphaOf(v: string | undefined): number {
+  if (!v) return 1;
+  const s = v.trim().toLowerCase();
+  let a = NaN, m = /^#([0-9a-f]{4}|[0-9a-f]{8})$/.exec(s);
+  if (m) a = (m[1].length === 4 ? parseInt(m[1][3] + m[1][3], 16) : parseInt(m[1].slice(6), 16)) / 255;
+  else { m = /^(?:rgb|hsl)a?\([^)]*?(?:,|\/)\s*([\d.]+)(%?)\s*\)$/.exec(s); if (m) a = parseFloat(m[1]) / (m[2] ? 100 : 1); }
+  return Number.isFinite(a) ? Math.max(0, Math.min(1, a)) : 1;
+}
+
+export interface SvgImport { doc: Doc; assets: Map<string, Blob>; native: boolean; title: string; leftOut: string[] }
 
 function dataUrlToBlob(u: string): Blob | null {
   const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(u);
@@ -432,7 +454,7 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
       const bin = atob(meta.textContent.trim()), bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const manifest = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-      return { doc: docFromManifest(manifest), assets: imgAssets, native: true, title: name };
+      return { doc: docFromManifest(manifest), assets: imgAssets, native: true, title: name, leftOut: [] };
     } catch { }
   }
   const vb = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
@@ -452,11 +474,21 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
   function styleOf(s: string): Style { const o: Style = {}; for (const part of s.split(';')) { const i = part.indexOf(':'); if (i > 0) o[part.slice(0, i).trim()] = part.slice(i + 1).trim(); } return o; }
   const own = (e: Element): Style => {
     const s: Style = {};
-    for (const a of Array.from(e.attributes)) if (INHERITED.has(a.name) || a.name === 'opacity' || a.name === 'display' || a.name === 'mix-blend-mode') s[a.name] = a.value;
+    for (const a of Array.from(e.attributes)) if (INHERITED.has(a.name) || OWN_ONLY.has(a.name)) s[a.name] = a.value;
     for (const c of (e.getAttribute('class') ?? '').split(/\s+/)) if (c && cssRules.has(c)) Object.assign(s, cssRules.get(c));
     Object.assign(s, styleOf(e.getAttribute('style') ?? ''));
+    if (s.marker) { for (const k of ['marker-start', 'marker-mid', 'marker-end']) if (s[k] === undefined) s[k] = s.marker; }
     return s;
   };
+  const styleAt = (e: Element): Style => {
+    const chain: Element[] = [];
+    for (let x: Element | null = e; x; x = x.parentElement) chain.unshift(x);
+    let st: Style = {};
+    for (const c of chain) st = { ...Object.fromEntries(Object.entries(st).filter(([k]) => INHERITED.has(k))), ...own(c) };
+    return st;
+  };
+  const leftOut = new Set<string>(), patterns = new Map<string, PatternDef>(), patStack: Element[] = [];
+  let paintCtx: { fill?: string; stroke?: string } = {};
   const gradPaint = (ref: string, bboxOf: () => Rect, m: Mat): Paint | null => {
     const first = ids.get(ref);
     if (!first) return null;
@@ -465,7 +497,7 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     while (true) { const h: string = (el0.getAttribute('href') ?? el0.getAttribute('xlink:href') ?? '').replace(/^#/, ''); const nx: Element | null = h ? ids.get(h) ?? null : null; if (!nx || chain.includes(nx)) break; chain.push(nx); el0 = nx; }
     const attr = (k: string): string | null => { for (const c of chain) { const v = c.getAttribute(k); if (v !== null) return v; } return null; };
     const stopsEl = chain.map((c) => Array.from(c.querySelectorAll('stop'))).find((s) => s.length) ?? [];
-    const stops = stopsEl.map((s) => { const st = { ...styleOf(s.getAttribute('style') ?? '') }; const off = s.getAttribute('offset') ?? '0'; const c = parseColor(st['stop-color'] ?? s.getAttribute('stop-color') ?? '#000') ?? { kind: 'rgb' as const, r: 0, g: 0, b: 0 }; return stop(off.endsWith('%') ? parseFloat(off) / 100 : parseFloat(off) || 0, c, parseFloat(st['stop-opacity'] ?? s.getAttribute('stop-opacity') ?? '1')); });
+    const stops = stopsEl.map((s) => { const st = { ...styleOf(s.getAttribute('style') ?? '') }; const off = s.getAttribute('offset') ?? '0'; const c = parseColor(st['stop-color'] ?? s.getAttribute('stop-color') ?? '#000') ?? { kind: 'rgb' as const, r: 0, g: 0, b: 0 }; return stop(off.endsWith('%') ? parseFloat(off) / 100 : parseFloat(off) || 0, c, parseFloat(st['stop-opacity'] ?? s.getAttribute('stop-opacity') ?? '1') * alphaOf(st['stop-color'] ?? s.getAttribute('stop-color') ?? undefined)); });
     if (stops.length < 2) return stops[0] ? solid(stops[0].color) : null;
     const user = attr('gradientUnits') === 'userSpaceOnUse', gt = parseTransform(attr('gradientTransform'));
     const b = bboxOf();
@@ -484,11 +516,22 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     const g = linearGradient(stops);
     return { type: 'gradient', gradient: { ...g, geom: { x1: a.x, y1: a.y, x2: z.x, y2: z.y } } };
   };
-  const paintOf = (v: string | undefined, m: Mat, bbox: () => Rect): Paint | null => {
+  const paintOf = (v0: string | undefined, m: Mat, bbox: () => Rect, ubox?: () => Rect | null): Paint | null => {
+    let v = v0;
+    if (v === 'context-fill') v = paintCtx.fill;
+    else if (v === 'context-stroke') v = paintCtx.stroke;
     if (v === undefined) return null;
     if (v === 'none' || v === 'transparent') return NONE;
     const u = /url\(\s*['"]?#([^'")]+)['"]?\s*\)/.exec(v);
-    if (u) return gradPaint(u[1], bbox, m) ?? NONE;
+    if (u) {
+      const pe = ids.get(u[1]);
+      if (pe && pe.nodeName.toLowerCase() === 'pattern') return patternPaint(refCtx, pe, m, ubox ? ubox() : null, 0) ?? NONE;
+      const g = gradPaint(u[1], bbox, m);
+      if (g) return g;
+      const fb = v.replace(u[0], '').trim();
+      const fc = fb && fb !== 'none' ? parseColor(fb === 'currentColor' ? '#000' : fb) : null;
+      return fc ? solid(fc) : NONE;
+    }
     const c = parseColor(v === 'currentColor' ? '#000' : v);
     return c ? solid(c) : NONE;
   };
@@ -505,7 +548,7 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     return null;
   };
   let imgN = 0;
-  const walk = (e: Element, inherited: Style, m0: Mat, out: VNode[], depth: number): void => {
+  const walkNode = (e: Element, inherited: Style, m0: Mat, out: VNode[], depth: number): void => {
     if (depth > 64) return;
     const tag = e.nodeName.toLowerCase();
     if (['defs', 'style', 'metadata', 'title', 'desc', 'clippath', 'mask', 'lineargradient', 'radialgradient', 'pattern', 'symbol', 'marker', 'filter', 'script'].includes(tag)) return;
@@ -516,17 +559,12 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     const blend = (BLEND_MODES.find((b) => b.css === st['mix-blend-mode'])?.id ?? 'normal');
     const label = e.getAttribute('data-name') ?? e.getAttribute('inkscape:label') ?? e.getAttribute('id') ?? undefined;
     if (tag === 'g' || tag === 'svg' || tag === 'a' || tag === 'switch') {
+      const hint = e.getAttribute('data-formpth-textpath');
+      if (hint) { const tn = textFromHint(hint, m, opacity, blend, label); if (tn) { out.push(tn); return; } }
       const kids: VNode[] = [];
-      for (const c of Array.from(e.children)) walk(c, st, tag === 'svg' && e !== svg ? mul(m, [1, 0, 0, 1, len(e.getAttribute('x') ?? undefined), len(e.getAttribute('y') ?? undefined)]) : m, kids, depth + 1);
+      for (const c of Array.from(e.children)) walk(c, st, tag === 'svg' && e !== svg ? vbMat(e, e.getAttribute('width'), e.getAttribute('height'), mul(m, [1, 0, 0, 1, len(e.getAttribute('x') ?? undefined), len(e.getAttribute('y') ?? undefined)])) : m, kids, depth + 1);
       if (!kids.length) return;
-      const clipRef = /url\(\s*#([^)]+)\)/.exec(e.getAttribute('clip-path') ?? '');
-      let clipNode: VNode | null = null;
-      if (clipRef) {
-        const ce = ids.get(clipRef[1]), cd: PathData = [];
-        for (const c of Array.from(ce?.children ?? [])) { const d = shapeD(c); if (d) cd.push(...transformPath(d, mul(m, parseTransform(c.getAttribute('transform'))))); }
-        if (cd.length) clipNode = { id: newId('p'), kind: 'path', d: cd, rule: 'nonzero', opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
-      }
-      out.push({ id: newId('g'), kind: 'group', clip: !!clipNode, children: clipNode ? [...kids, clipNode] : kids, opacity, blend, ap: { items: [], effects: [] }, ...(label ? { name: label } : {}) });
+      out.push({ id: newId('g'), kind: 'group', clip: false, children: kids, opacity, blend, ap: { items: [], effects: [] }, ...(label ? { name: label } : {}) });
       return;
     }
     if (tag === 'use') {
@@ -534,9 +572,10 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
       if (!ref) return;
       const um = mul(m, [1, 0, 0, 1, len(e.getAttribute('x') ?? undefined), len(e.getAttribute('y') ?? undefined)]);
       const kids: VNode[] = [];
-      if (ref.nodeName.toLowerCase() === 'symbol') for (const c of Array.from(ref.children)) walk(c, st, um, kids, depth + 1);
+      if (ref.nodeName.toLowerCase() === 'symbol') { const sm = vbMat(ref, e.getAttribute('width') ?? ref.getAttribute('width'), e.getAttribute('height') ?? ref.getAttribute('height'), um); for (const c of Array.from(ref.children)) walk(c, st, sm, kids, depth + 1); }
       else walk(ref, st, um, kids, depth + 1);
-      out.push(...kids);
+      if (kids.length && (opacity < 1 || blend !== 'normal')) out.push({ id: newId('g'), kind: 'group', clip: false, children: kids, opacity, blend, ap: { items: [], effects: [] } });
+      else out.push(...kids);
       return;
     }
     if (tag === 'image') {
@@ -550,43 +589,126 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
       return;
     }
     if (tag === 'text') {
-      const t = (e.textContent ?? '').replace(/\s+/g, ' ').trim();
-      if (!t) return;
-      const firstSpan = e.querySelector('tspan');
-      const x = len(e.getAttribute('x') ?? firstSpan?.getAttribute('x')?.split(/[\s,]+/)[0] ?? undefined), y = len(e.getAttribute('y') ?? firstSpan?.getAttribute('y')?.split(/[\s,]+/)[0] ?? undefined);
-      const spanSt = firstSpan ? { ...st, ...own(firstSpan) } : st;
-      const size = len(spanSt['font-size'], 16), weight = spanSt['font-weight'] ?? '400', italic = spanSt['font-style'] === 'italic';
-      const fam = (spanSt['font-family'] ?? 'Inter').split(',')[0].replace(/["']/g, '').trim();
-      const w = Number(weight === 'bold' ? 700 : weight === 'normal' ? 400 : weight) || 400;
-      const style = `${w >= 700 ? 'Bold' : w >= 600 ? 'Semibold' : w >= 500 ? 'Medium' : w <= 300 ? 'Light' : 'Regular'}${italic ? ' Italic' : ''}`.replace('Regular Italic', 'Italic');
-      const f = paintOf(spanSt.fill ?? '#000', m, () => ({ x, y, w: 1, h: 1 })) ?? solid({ kind: 'rgb', r: 0, g: 0, b: 0 });
-      const anchor = spanSt['text-anchor'];
-      const node: TextNode = { id: newId('t'), kind: 'text', mode: 'point', spans: [{ text: t, style: { ...DEFAULT_CHAR, font: fam, style, size, fill: f } }], para: { align: anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left', indentLeft: 0, indentRight: 0, indentFirst: 0, spaceBefore: 0, spaceAfter: 0, hyphenate: false }, xf: mul(m, [1, 0, 0, 1, x, y]), opacity, blend, ap: { items: [], effects: [] } };
-      out.push(node);
+      const env: TextEnv = { own, inherited: INHERITED, paint: (v, bb) => paintOf(v, m, bb), len };
+      const nm = label && !/^(text|tspan)\d*$/i.test(label) ? label : undefined;
+      const tps = Array.from(e.children).filter((c) => c.nodeName.toLowerCase().replace(/^.*:/, '') === 'textpath');
+      if (!tps.length) { out.push(...importText(e, st, m, env, opacity, blend, nm)); return; }
+      for (const tp of tps) {
+        const target = ids.get((tp.getAttribute('href') ?? tp.getAttribute('xlink:href') ?? '').replace(/^#/, ''));
+        const pd = target ? shapeD(target) : null;
+        if (!target || !pd) { leftOut.add('Text on a path whose path could not be found was left out.'); continue; }
+        const so = (target.getAttribute('transform') ? parseTransform(target.getAttribute('transform')) : [1, 0, 0, 1, 0, 0]) as Mat;
+        const so2 = own(tp), tst = { ...Object.fromEntries(Object.entries(st).filter(([k]) => INHERITED.has(k))), ...so2 };
+        const so3 = tp.getAttribute('startOffset') ?? '0';
+        out.push(...importText(tp, tst, m, env, opacity, blend, nm, { d: transformPath(pd, mul(m, so)), offset: so3.trim().endsWith('%') ? parseFloat(so3) / 100 : len(so3), pct: so3.trim().endsWith('%') }));
+        if (tp.getAttribute('side') === 'right') leftOut.add('Text on the right side of a path is drawn on the left side.');
+      }
       return;
+    }
+    const da = e.getAttribute('data-arrows');
+    if (da && tag === 'path') {
+      const a = da.trim().split(/\s+/), prev = out[out.length - 1];
+      if (prev && prev.kind === 'path' && ARROWHEADS.includes(a[0]) && ARROWHEADS.includes(a[1]) && prev.ap.items.some((i) => i.kind === 'stroke')) {
+        const at = prev.ap.items.map((i) => (i.kind === 'stroke' ? { ...i, startArrow: a[0], endArrow: a[1], arrowScale: [Number(a[2]) || 100, Number(a[3]) || 100] as [number, number], arrowAlign: a[4] === 'tip' ? 'tip' as const : 'extend' as const } : i));
+        out[out.length - 1] = { ...prev, ap: { ...prev.ap, items: at } };
+        return;
+      }
     }
     const d0 = shapeD(e);
     if (!d0 || !d0.length) return;
     const d = transformPath(d0, m);
     const bbox = (): Rect => { let r = emptyRect(); for (const sp of d) for (const a of sp.pts) r = unionRect(r, { x: a.x, y: a.y, w: 0, h: 0 }); return r; };
-    const fillP = paintOf(st.fill ?? '#000', m, bbox) ?? solid({ kind: 'rgb', r: 0, g: 0, b: 0 });
-    const strokeP = paintOf(st.stroke ?? 'none', m, bbox) ?? NONE;
+    const ubox = (): Rect | null => { const r = pathBounds(d0); return isEmptyRect(r) ? null : r; };
+    const fillP = paintOf(st.fill ?? '#000', m, bbox, ubox) ?? solid({ kind: 'rgb', r: 0, g: 0, b: 0 });
+    const strokeP = paintOf(st.stroke ?? 'none', m, bbox, ubox) ?? NONE;
     const scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1;
     const items: VNode['ap']['items'] = [];
-    if (fillP.type !== 'none' && !(tag === 'line' || tag === 'polyline' && st.fill === undefined)) items.push(fill(fillP, st['fill-opacity'] ? parseFloat(st['fill-opacity']) : 1));
+    if (fillP.type !== 'none' && !(tag === 'line' || tag === 'polyline' && st.fill === undefined)) items.push(fill(fillP, (st['fill-opacity'] ? parseFloat(st['fill-opacity']) : 1) * alphaOf(st.fill)));
     if (strokeP.type !== 'none') {
       const dash = st['stroke-dasharray'] && st['stroke-dasharray'] !== 'none' ? st['stroke-dasharray'].split(/[\s,]+/).map((v) => len(v) * scale).filter((v) => Number.isFinite(v)) : [];
-      items.push(stroke(strokeP, len(st['stroke-width'], 1) * scale, { cap: st['stroke-linecap'] === 'round' ? 'round' : st['stroke-linecap'] === 'square' ? 'square' : 'butt', join: st['stroke-linejoin'] === 'round' ? 'round' : st['stroke-linejoin'] === 'bevel' ? 'bevel' : 'miter', miter: parseFloat(st['stroke-miterlimit'] ?? '4') || 4, dash, opacity: st['stroke-opacity'] ? parseFloat(st['stroke-opacity']) : 1 }));
+      items.push(stroke(strokeP, len(st['stroke-width'], 1) * scale, { cap: st['stroke-linecap'] === 'round' ? 'round' : st['stroke-linecap'] === 'square' ? 'square' : 'butt', join: st['stroke-linejoin'] === 'round' ? 'round' : st['stroke-linejoin'] === 'bevel' ? 'bevel' : 'miter', miter: parseFloat(st['stroke-miterlimit'] ?? '4') || 4, dash, opacity: (st['stroke-opacity'] ? parseFloat(st['stroke-opacity']) : 1) * alphaOf(st.stroke) }));
     }
-    out.push({ id: newId('p'), kind: 'path', d, rule: st['fill-rule'] === 'evenodd' ? 'evenodd' : 'nonzero', opacity, blend, ap: { items, effects: [] }, ...(label && !/^(path|rect|circle)\d*$/i.test(label) ? { name: label } : {}) });
+    let mk: MarkerOut | null = null;
+    if ((st['marker-start'] || st['marker-mid'] || st['marker-end']) && ['path', 'line', 'polyline', 'polygon'].includes(tag)) {
+      mk = markers(refCtx, { tag, d: d0, st, m, strokeWidth: len(st['stroke-width'], 1), fillValue: st.fill, strokeValue: st.stroke, strokeHex: strokeP.type === 'color' ? hex(strokeP.color) : null, hasStroke: strokeP.type !== 'none' }, depth);
+      if (mk.start || mk.end) {
+        const si = items.findIndex((i) => i.kind === 'stroke'), it = items[si];
+        if (it && it.kind === 'stroke') items[si] = { ...it, startArrow: mk.start?.kind ?? it.startArrow, endArrow: mk.end?.kind ?? it.endArrow, arrowScale: [mk.start?.pct ?? it.arrowScale[0], mk.end?.pct ?? it.arrowScale[1]], arrowAlign: 'tip' };
+      }
+    }
+    const nm = label && !/^(path|rect|circle)\d*$/i.test(label) ? label : undefined;
+    const node: PathNode = { id: newId('p'), kind: 'path', d, rule: st['fill-rule'] === 'evenodd' ? 'evenodd' : 'nonzero', opacity, blend, ap: { items, effects: [] }, ...(nm ? { name: nm } : {}) };
+    const key = tag === 'path' && e.getAttribute('d') ? `${e.getAttribute('d')}|${m.join(',')}` : '';
+    const prev = out[out.length - 1];
+    const plain = (n: VNode): boolean => n.opacity === 1 && n.blend === 'normal' && !n.mask && !n.name && !n.ap.effects.length && n.ap.items.every((i) => !i.effects.length);
+    if (key && !mk?.art.length && prev && prev.kind === 'path' && rawD.get(prev) === key && prev.rule === node.rule && plain(prev) && plain(node) && prev.ap.items.every((a) => items.every((b) => a.kind !== b.kind))) {
+      const merged: PathNode = { ...prev, ap: { ...prev.ap, items: [...prev.ap.items, ...items] } };
+      rawD.set(merged, key);
+      out[out.length - 1] = merged;
+      return;
+    }
+    if (key) rawD.set(node, key);
+    out.push(node);
+    if (mk?.art.length) out.push(...mk.art);
+  };
+  const rawD = new WeakMap<VNode, string>();
+  const vbMat = (el: Element, w: string | null, h: string | null, m: Mat): Mat => {
+    const v = (el.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/).map(Number);
+    if (v.length !== 4 || !v.every(Number.isFinite) || !(v[2] > 0 && v[3] > 0)) return m;
+    const L = (s: string | null, d: number): number => (s && !s.trim().endsWith('%') ? len(s, d) : d);
+    return mul(m, fitViewBox(v, L(w, v[2]), L(h, v[3]), el.getAttribute('preserveAspectRatio')));
+  };
+  const refCtx: RefCtx = {
+    doc, ids, own, styleAt, shapeD, parseTransform, len, patterns, stack: patStack,
+    walk: (el, inh, m0, o, dp) => walk(el, inh, m0, o, dp),
+    note: (s) => { leftOut.add(s); },
+    setContext: (f, s) => { paintCtx = { fill: f, stroke: s }; },
+  };
+  const walk = (e: Element, inherited: Style, m0: Mat, out: VNode[], depth: number): void => {
+    const so = own(e), cref = refId(so['clip-path']), mref = refId(so.mask), fl = so.filter && so.filter !== 'none' ? so.filter : null;
+    if (!cref && !mref && !fl) { walkNode(e, inherited, m0, out, depth); return; }
+    const m = mul(m0, parseTransform(e.getAttribute('transform'))), tmp: VNode[] = [];
+    walkNode(e, inherited, m0, tmp, depth);
+    if (!tmp.length) return;
+    const box = (): Rect | null => userBox(refCtx, tmp, m);
+    const clipNode = cref ? clipOf(refCtx, cref, m, box) : null;
+    const mask = mref ? maskOf(refCtx, mref, m, tmp, depth) : null;
+    let fx: Effect[] | null = null;
+    if (fl) {
+      const sc: FilterScale = { k: Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1, lin: [m[0], m[1], m[2], m[3]] };
+      const fid = refId(fl);
+      if (fid) {
+        const chain = filterChain(ids.get(fid), ids);
+        fx = chain.length ? filterEffects(chain, sc) : null;
+        if (!fx) leftOut.add(chain.length ? `Filter "${fid}" uses ${filterPrimitives(chain).filter((n) => !/^fe(GaussianBlur|Offset|Flood|Composite|Merge|MergeNode|DropShadow)$/.test(n)).join(', ') || 'a combination of effects'} that formpth cannot match, so it was left out.` : `Filter "${fid}" was not found and was left out.`);
+      } else {
+        fx = cssFilterEffects(fl, sc);
+        if (!fx) leftOut.add(`The CSS filter "${fl}" was left out.`);
+      }
+    }
+    if (!clipNode && !mask && !fx) { out.push(...tmp); return; }
+    if (cref && !clipNode) leftOut.add(`Clip path "${cref}" could not be read and was left out.`);
+    const one = tmp.length === 1 ? tmp[0] : null;
+    if (clipNode) {
+      const g: GroupNode = one && one.kind === 'group' && !one.clip && !one.mask && !one.ap.effects.length && (e.nodeName.toLowerCase() === 'g') ? { ...one, clip: true, children: [...one.children, clipNode] } : { id: newId('g'), kind: 'group', clip: true, children: [...tmp, clipNode], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+      out.push({ ...g, ...(mask ? { mask } : {}), ap: { ...g.ap, effects: fx ?? g.ap.effects } });
+      return;
+    }
+    let solo: VNode | null = null;
+    if (one && one.kind === 'group' && !one.clip && !one.mask && !one.ap.effects.length && one.blend === 'normal' && one.children.length === 1 && e.parentElement !== svg) {
+      const ch = one.children[0];
+      if ((ch.kind === 'path' || ch.kind === 'text' || ch.kind === 'image') && ch.blend === 'normal' && !ch.mask) solo = { ...ch, opacity: ch.opacity * one.opacity, ...(one.name && !ch.name ? { name: one.name } : {}) } as VNode;
+    } else if (one && one.kind !== 'group' && one.kind !== 'layer') solo = one;
+    if (solo && !(mask && solo.mask) && !(fx && solo.ap.effects.length)) { out.push({ ...solo, ...(mask ? { mask } : {}), ap: { ...solo.ap, effects: fx ?? solo.ap.effects } } as VNode); return; }
+    out.push({ id: newId('g'), kind: 'group', clip: false, children: tmp, opacity: 1, blend: 'normal', ap: { items: [], effects: fx ?? [] }, ...(mask ? { mask } : {}) });
   };
   const top: VNode[] = [];
   for (const c of Array.from(svg.children)) walk(c, {}, root, top, 0);
   const groups = top.filter((n) => n.kind === 'group');
   const layers: LayerNode[] = [];
-  if (groups.length > 1 && groups.length === top.length && groups.every((g) => g.name)) {
+  if (groups.length >= 1 && groups.length === top.length && groups.every((g) => g.name && (groups.length > 1 || (g.kind === 'group' && !g.clip && g.opacity === 1 && g.blend === 'normal' && !g.mask && !g.ap.effects.length)))) {
     groups.forEach((g, i) => { const l = { ...doc.layers[0], id: newId('l'), name: g.name ?? `Layer ${i + 1}`, children: g.kind === 'group' ? g.children : [g], color: ['#4f80ff', '#ff4f4f', '#4fbf4f', '#4f4fff', '#ffd400'][i % 5] }; layers.push(l); });
   } else layers.push({ ...doc.layers[0], name: 'Layer 1', children: top });
   doc.layers = layers;
-  return { doc, assets, native: false, title: name };
+  return { doc, assets, native: false, title: name, leftOut: [...leftOut] };
 }

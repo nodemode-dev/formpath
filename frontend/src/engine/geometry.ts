@@ -281,6 +281,7 @@ export function parseSvgD(src: string): PathData {
   let i = 0, cmd = '', cx = 0, cy = 0, sx = 0, sy = 0, lastC: Pt | null = null, lastQ: Pt | null = null;
   let cur: SubPath | null = null;
   const num = (): number => Number(toks[i++]);
+  const flag = (): boolean => { const t = toks[i] ?? '0', on = t[0] !== '0'; if (t.length > 1) toks[i] = t.slice(1); else i++; return on; };
   const isNum = (): boolean => i < toks.length && !/^[a-zA-Z]$/.test(toks[i]);
   const start = (x: number, y: number): void => { cur = { pts: [anchor(x, y)], closed: false }; out.push(cur); sx = x; sy = y; };
   const ensure = (): SubPath => { if (!cur) start(cx, cy); return cur as SubPath; };
@@ -295,7 +296,7 @@ export function parseSvgD(src: string): PathData {
     if (/^[a-zA-Z]$/.test(toks[i])) cmd = toks[i++];
     else if (!cmd) { i++; continue; }
     const rel = cmd === cmd.toLowerCase(), C = cmd.toUpperCase();
-    const ox = rel ? cx : 0, oy = rel ? cy : 0;
+    let ox = rel ? cx : 0, oy = rel ? cy : 0;
     if (C === 'Z') {
       if (cur) {
         const sp = cur as SubPath, first = sp.pts[0], last = sp.pts[sp.pts.length - 1];
@@ -307,6 +308,7 @@ export function parseSvgD(src: string): PathData {
     }
     if (!isNum()) { continue; }
     do {
+      ox = rel ? cx : 0; oy = rel ? cy : 0;
       if (C === 'M') { const x = num() + ox, y = num() + oy; start(x, y); cx = x; cy = y; cmd = rel ? 'l' : 'L'; lastC = lastQ = null; break; }
       if (C === 'L') { lineTo(num() + ox, num() + oy); lastC = lastQ = null; }
       else if (C === 'H') { lineTo(num() + ox, cy); lastC = lastQ = null; }
@@ -316,7 +318,7 @@ export function parseSvgD(src: string): PathData {
       else if (C === 'Q') { const qx = num() + ox, qy = num() + oy, x = num() + ox, y = num() + oy; cubicTo(cx + (2 / 3) * (qx - cx), cy + (2 / 3) * (qy - cy), x + (2 / 3) * (qx - x), y + (2 / 3) * (qy - y), x, y); lastQ = { x: qx, y: qy }; lastC = null; }
       else if (C === 'T') { const q: Pt = lastQ ? { x: 2 * cx - lastQ.x, y: 2 * cy - lastQ.y } : { x: cx, y: cy }; const x = num() + ox, y = num() + oy; cubicTo(cx + (2 / 3) * (q.x - cx), cy + (2 / 3) * (q.y - cy), x + (2 / 3) * (q.x - x), y + (2 / 3) * (q.y - y), x, y); lastQ = q; lastC = null; }
       else if (C === 'A') {
-        const rx = num(), ry = num(), rot = num(), large = num() !== 0, sweep = num() !== 0, x = num() + ox, y = num() + oy;
+        const rx = num(), ry = num(), rot = num(), large = flag(), sweep = flag(), x = num() + ox, y = num() + oy;
         for (const c of arcToCubics(cx, cy, rx, ry, (rot * Math.PI) / 180, large, sweep, x, y)) cubicTo(c[0], c[1], c[2], c[3], c[4], c[5]);
         lastC = lastQ = null;
       } else { i++; }
