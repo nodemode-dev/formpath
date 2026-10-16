@@ -38,6 +38,7 @@ import { attachPlace, gridOf, leafPlaneBounds, planeLocalRect, presetGrid, vanis
 import type { BrushDef, Doc, PerspPlane } from '../engine/types';
 import { DXF_UNITS, type DxfImportOptions, type DxfUnit } from '../io/dxf';
 import type { CadChoice } from '../ui/app-dialogs';
+import { compressionFrom, pdfRefusal, securityFrom, standardFrom, type PdfCompression, type PdfSecurity, type PdfStandard } from '../io/pdf-std';
 import { generativePalettes, modelState, PATTERN_PRESETS, patternVariations, placeVector, recolorWithPalette, shapeFillVariations, textToVectorVariations } from '../io/generative';
 import { loadPrefs } from '../ui/prefs';
 import { colorManaged, colorSettled, INTENTS, isProofing, proofDevice, refOf, refreshDisplayProfile, refreshProfiles, resolveSettings, setProofing, type ProfileInfo } from '../engine/color-management';
@@ -54,7 +55,7 @@ export interface AgentDeps {
   placeLinked?(path: string, at: Pt | null, width: number | null): Promise<string | null>;
   links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
   projectBlob(): Promise<Blob | null>;
-  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: 'none' | 'x4'; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
+  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'jpeg' | 'webp' | 'eps' | 'dxf', o: { scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
   image(scope: string, artboard: number | undefined, maxSize: number, outline: boolean): Promise<Blob | null>;
   svg(scope: string, artboard: number | undefined, ids: string[] | undefined): Promise<string>;
   outlines(ids?: string[]): Promise<boolean>;
@@ -713,7 +714,9 @@ export class AgentBridge {
           const units = str('units', 'mm') as DxfUnit;
           if (fmt === 'dxf' && !DXF_UNITS.some(([u]) => u === units)) return fail(`units must be one of ${DXF_UNITS.map(([u]) => u).join(', ')}.`);
           const cad: CadChoice = { version: str('dxf_version', '2000') === 'R12' ? 'R12' : '2000', units, scale: Math.max(1e-4, num('drawing_scale', 1)), text: a.outline_text === true ? 'outlines' : 'text', lineweights: a.scale_lineweights === true };
-          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, scale: Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard: a.pdf_standard === 'x4' ? 'x4' : 'none', cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
+          const pdfOnly = fmt === 'pdf', standard = pdfOnly ? standardFrom(a.pdf_standard) : 'none', security = pdfOnly ? securityFrom(a) : undefined, layers = pdfOnly && a.pdf_layers === true;
+          if (pdfOnly) { const refusal = pdfRefusal({ standard, security, layers }); if (refusal) return fail(refusal); }
+          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, scale: Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
           return blob ? text(`Exported ${fmt.toUpperCase()}.`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {

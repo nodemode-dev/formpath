@@ -95,7 +95,7 @@ export class LiveFonts {
       if (!face) { face = new Face(s.key, s.font, s.style); this.faces.set(s.key, face); }
       face.gids.add(s.gid);
       if (s.gid !== 0 && !face.uni.has(s.gid)) face.uni.set(s.gid, s.ch);
-      if (!face.adv.has(s.gid)) face.adv.set(s.gid, Math.round(glyphAdvance(s.font, s.gid, s.style) * 1000));
+      if (!face.adv.has(s.gid)) face.adv.set(s.gid, Math.round(glyphAdvance(s.font, s.gid, s.style) * 1e4) / 10);
       used.add(face);
       glyphs.push({ face, gid: s.gid, tm: s.tm, style: s.style });
     }
@@ -104,11 +104,11 @@ export class LiveFonts {
 
   ok(plan: LiveText): boolean { return [...plan.faces].every((f) => !f.failed); }
 
-  async build(pdf: PdfSink, deflate: (d: Uint8Array) => Promise<Uint8Array>): Promise<void> {
+  async build(pdf: PdfSink, deflate: (d: Uint8Array) => Promise<Uint8Array>, openType = true): Promise<void> {
     await Promise.all([...this.faces.values()].map(async (face) => {
       const src = fontSource(face.font);
       const res = src ? await api.subsetFont(src, [...face.gids], hasAxes(face.style) ? { ...face.style.axes } : {}) : null;
-      if (!res) { face.failed = true; return; }
+      if (!res || (res.cff && !openType)) { face.failed = true; return; }
       const font = face.font, upm = font.unitsPerEm || 1000, k = 1000 / upm;
       const head = font.tables.head as { xMin: number; yMin: number; xMax: number; yMax: number } | undefined;
       const os2 = font.tables.os2 as { usWeightClass?: number; sCapHeight?: number } | undefined;
@@ -132,22 +132,56 @@ export class LiveFonts {
   }
 }
 
+export interface Run { face: Face; ink: Ink; tm: Mat; parts: string[]; hex: string; pos: number; end: number; glyphs: number }
+
+const sameLinear = (a: Mat, b: Mat): boolean => { const tol = 1e-5 * (Math.abs(a[0]) + Math.abs(a[1]) + Math.abs(a[2]) + Math.abs(a[3])) + 1e-9; return Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol && Math.abs(a[3] - b[3]) <= tol; };
+
+/** Groups consecutive glyphs of one face, ink and matrix whose origins lie on one baseline into runs. Each run is one Tm and one TJ array whose numbers (thousandths of text space) reproduce the layout positions exactly. Type on a path, vertical type and per-glyph rotation or baseline shift break the run, so those glyphs keep a Tm of their own. */
+export function liveRuns(plan: LiveText, inkOf: (st: CharStyle) => Ink): Run[] {
+  const runs: Run[] = [];
+  let cur: Run | null = null, last: LiveGlyph | null = null;
+  const flush = (): void => { if (cur) { if (cur.hex) cur.parts.push(`<${cur.hex}>`); cur.hex = ''; runs.push(cur); } cur = null; last = null; };
+  for (const g of plan.glyphs) {
+    const ink = inkOf(g.style);
+    if (!ink.fill && !ink.stroke) { flush(); continue; }
+    const adv = g.face.adv.get(g.gid) ?? 0;
+    if (cur && last && cur.face === g.face && cur.ink.fill === ink.fill && cur.ink.stroke === ink.stroke && cur.ink.width === ink.width && sameLinear(cur.tm, g.tm)) {
+      const a = cur.tm[0], b = cur.tm[1], den = a * a + b * b, dx = g.tm[4] - cur.tm[4], dy = g.tm[5] - cur.tm[5];
+      const perp = den > 0 ? Math.abs(dx * b - dy * a) / Math.sqrt(den) : Infinity;
+      if (den > 0 && perp <= 0.01) {
+        const want = ((dx * a + dy * b) / den) * 1000, off = cur.end - want, n = Math.abs(off) >= 0.25 ? Math.round(off * 100) / 100 : 0;
+        if (n) { if (cur.hex) cur.parts.push(`<${cur.hex}>`); cur.hex = ''; cur.parts.push(num(n)); }
+        cur.hex += hex4(g.gid);
+        cur.pos = cur.end - n;
+        cur.end = cur.pos + adv;
+        cur.glyphs++;
+        last = g;
+        continue;
+      }
+    }
+    flush();
+    cur = { face: g.face, ink, tm: g.tm, parts: [], hex: hex4(g.gid), pos: 0, end: adv, glyphs: 1 };
+    last = g;
+  }
+  flush();
+  return runs;
+}
+
 export function liveStream(plan: LiveText, inkOf: (st: CharStyle) => Ink): string {
   const out: string[] = [];
   let face: Face | null = null, fill = '', stroke = '', mode = -1, width = '';
-  for (const g of plan.glyphs) {
-    const ink = inkOf(g.style);
-    if (!ink.fill && !ink.stroke) continue;
-    const m = ink.fill && ink.stroke ? 2 : ink.stroke ? 1 : 0;
+  for (const r of liveRuns(plan, inkOf)) {
+    const ink = r.ink, m = ink.fill && ink.stroke ? 2 : ink.stroke ? 1 : 0;
     if (ink.fill && ink.fill !== fill) { out.push(ink.fill); fill = ink.fill; }
     if (ink.stroke) {
       const w = `${num(ink.width)} w 1 j`;
       if (ink.stroke !== stroke) { out.push(ink.stroke); stroke = ink.stroke; }
       if (w !== width) { out.push(w); width = w; }
     }
+    out.push('BT');
     if (m !== mode) { out.push(`${m} Tr`); mode = m; }
-    if (g.face !== face) { out.push(`/${g.face.resource} 1 Tf`); face = g.face; }
-    out.push(`${g.tm.map(num).join(' ')} Tm <${hex4(g.gid)}> Tj`);
+    if (r.face !== face) { out.push(`/${r.face.resource} 1 Tf`); face = r.face; }
+    out.push(`${r.tm.map(num).join(' ')} Tm`, r.parts.length === 1 && r.parts[0].startsWith('<') ? `${r.parts[0]} Tj` : `[${r.parts.join(' ')}] TJ`, 'ET');
   }
-  return out.length ? `q\nBT\n${out.join('\n')}\nET\nQ` : '';
+  return out.length ? `q\n${out.join('\n')}\nQ` : '';
 }

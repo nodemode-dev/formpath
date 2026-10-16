@@ -2,7 +2,7 @@ import { makeLayer, newDoc, newId } from '../engine/doc';
 import { apply, IDENTITY, mul } from '../engine/geometry';
 import { cmyk, fill, gray, rgb, solid, stroke as strokeItem, NONE, stop } from '../engine/paint';
 import { cssFont, DEFAULT_CHAR, DEFAULT_PARA, layoutText } from '../engine/text';
-import type { Anchor, BlendMode, Cap, CharStyle, Color, Doc, Gradient, GroupNode, ImageAsset, ImageNode, Join, Mat, MeshNode, Paint, PathData, PathNode, PatternDef, Pt, Span, SubPath, TextNode, VNode } from '../engine';
+import type { Anchor, BlendMode, Cap, CharStyle, Color, Doc, Gradient, GroupNode, ImageAsset, ImageNode, Join, LayerNode, Mat, MeshNode, Paint, PathData, PathNode, PatternDef, Pt, Span, SubPath, TextNode, VNode } from '../engine';
 import { families, systemFonts } from './fonts';
 import type { FontInfo as InstalledFont } from './api';
 import { openCrypt, type CryptMethod, type CryptParams, type PdfCrypt } from './pdf-crypt';
@@ -381,6 +381,19 @@ export async function readPdfVector(data: ArrayBuffer, title: string, password?:
   const doc = newDoc(612, 792, { title });
   doc.artboards = [];
   const layer = makeLayer('Layer 1', 0), assets = new Map<string, Blob>(), images: Record<string, ImageAsset> = {}, skipped = new Set<string>(), patterns: PatternDef[] = [];
+  const ocgs = readOcgs(pdf, catalog), ordered: LayerNode[] = [], oneLayer = new Map<PDict, LayerNode>();
+  const layerOf = (key: PDict | null): LayerNode => {
+    let l = key ? oneLayer.get(key) : layer;
+    if (!l && key) {
+      const o = ocgs.get(key) as OcgInfo;
+      l = makeLayer(o.name, ordered.length);
+      if (o.hidden) l.hidden = true;
+      if (!o.printable) l.printable = false;
+      oneLayer.set(key, l);
+    }
+    if (l && !ordered.includes(l)) ordered.push(l);
+    return l as LayerNode;
+  };
   const installed = await systemFonts().catch((): InstalledFont[] => []);
   const names = new FontNames(families(), installed);
   if (pages.length > 200) skipped.add(`pages 201 to ${pages.length}`);
@@ -394,14 +407,24 @@ export async function readPdfVector(data: ArrayBuffer, title: string, password?:
     doc.artboards.push({ id: newId('a'), name: `Page ${pi + 1}`, x: x0, y: 0, w: aw, h: ah, bg: null });
     const group: GroupNode = { id: newId('g'), kind: 'group', clip: false, children: [], opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, name: `Page ${pi + 1}` };
     const painter = new Painter(pdf, assets, images, skipped, names);
+    painter.ocgs = ocgs;
     try { await painter.run(await contentsOf(pdf, pg.page), pg.res, P, group.children, 0); } catch (err) { skipped.add(err instanceof Error ? err.message : String(err)); }
     painter.finish();
     patterns.push(...painter.patterns);
-    group.children = prune(group.children);
-    if (group.children.length) layer.children.push(group);
+    if (painter.ocGroups.size) {
+      const byLayer = new Map<LayerNode, VNode[]>();
+      for (const part of splitLayers(group.children, painter.ocGroups)) {
+        const l = layerOf(part.key);
+        byLayer.set(l, [...(byLayer.get(l) ?? []), part.node]);
+      }
+      for (const [l, nodes] of byLayer) { const kids = prune(nodes); if (kids.length) l.children.push({ ...group, id: newId('g'), children: kids }); }
+    } else {
+      group.children = prune(group.children);
+      if (group.children.length) { layerOf(null); layer.children.push(group); }
+    }
     x0 += aw + 40;
   }
-  doc.layers = [layer];
+  doc.layers = ordered.length ? ordered : [layer];
   doc.images = images;
   doc.patterns = patterns;
   return { doc, assets, pages: pages.length, skipped: [...skipped], fonts: [...names.substituted] };
@@ -414,6 +437,46 @@ function prune(list: VNode[]): VNode[] {
     const kids = prune(n.children);
     if (!kids.length || (n.clip && kids.length < 2)) continue;
     out.push({ ...n, children: kids });
+  }
+  return out;
+}
+
+interface OcgInfo { name: string; hidden: boolean; printable: boolean }
+
+const pdfText = (s: Uint8Array): string => {
+  if (s.length >= 2 && s[0] === 0xfe && s[1] === 0xff) return new TextDecoder('utf-16be').decode(s.subarray(2));
+  if (s.length >= 3 && s[0] === 0xef && s[1] === 0xbb && s[2] === 0xbf) return new TextDecoder().decode(s.subarray(3));
+  return new TextDecoder('latin1').decode(s);
+};
+
+/** The optional content groups of the catalog with their names, whether the default configuration turns them off (BaseState, ON and OFF lists) and whether their Print usage is off. */
+function readOcgs(pdf: PdfFile, catalog: PDict): Map<PDict, OcgInfo> {
+  const out = new Map<PDict, OcgInfo>(), props = pdf.dict(catalog.get('OCProperties'));
+  if (!props) return out;
+  const d = pdf.dict(props.get('D')), baseOff = nameOf(pdf.get(d?.get('BaseState'))) === 'OFF';
+  const list = (v: Val | undefined): Set<PDict> => new Set(pdf.arr(v).map((x) => pdf.dict(x)).filter((x): x is PDict => !!x));
+  const on = list(d?.get('ON')), off = list(d?.get('OFF'));
+  for (const ref of pdf.arr(props.get('OCGs'))) {
+    const g = pdf.dict(ref);
+    if (!g) continue;
+    const nm = pdf.get(g.get('Name')), usage = pdf.dict(g.get('Usage')), print = pdf.dict(usage?.get('Print'));
+    const hidden = off.has(g) || (baseOff && !on.has(g));
+    out.set(g, { name: nm instanceof Str ? pdfText(nm.b) || 'Layer' : 'Layer', hidden, printable: hidden || nameOf(pdf.get(print?.get('PrintState'))) !== 'OFF' });
+  }
+  return out;
+}
+
+const hasTag = (n: VNode, tags: Map<VNode, PDict>): boolean => n.kind === 'group' && (tags.has(n) || (n.clip && n.children.slice(0, -1).some((c) => hasTag(c, tags))));
+
+/** Cuts the page's top-level content into runs by optional content group, in painting order. Content inside a clip group (the bleed clip of printer's marks) keeps its clip around each piece. */
+function splitLayers(list: VNode[], tags: Map<VNode, PDict>, chain: GroupNode[] = []): Array<{ key: PDict | null; node: VNode }> {
+  const wrap = (n: VNode): VNode => chain.reduceRight<VNode>((inner, a) => ({ ...a, id: newId('g'), children: [inner, freshIds(a.children[a.children.length - 1])] }), n);
+  const out: Array<{ key: PDict | null; node: VNode }> = [];
+  for (const n of list) {
+    const key = tags.get(n) ?? null;
+    if (key && n.kind === 'group') { for (const c of n.children) out.push({ key, node: wrap(c) }); continue; }
+    if (n.kind === 'group' && n.clip && hasTag(n, tags)) { out.push(...splitLayers(n.children.slice(0, -1), tags, [...chain, n])); continue; }
+    out.push({ key: null, node: wrap(n) });
   }
   return out;
 }
@@ -448,6 +511,8 @@ async function contentsOf(pdf: PdfFile, page: PDict): Promise<Uint8Array> {
 
 class Painter {
   private readonly clips: Array<{ g: GroupNode; clip: PathNode }> = [];
+  ocgs = new Map<PDict, OcgInfo>();
+  readonly ocGroups = new Map<VNode, PDict>();
   private readonly fonts = new Map<PDict, FontInfo>();
   readonly patterns: PatternDef[] = [];
   private readonly meshOf = new WeakMap<Paint, VNode[]>();
@@ -489,7 +554,7 @@ class Painter {
     const pdf = this.pdf, lx = new Lexer(content, 0, false);
     await this.prepareFonts(res);
     let gs: GS = { ctm: base, fill: solid(gray(100)), stroke: solid(gray(100)), fa: 1, sa: 1, lw: 1, cap: 'butt', join: 'miter', miter: 10, dash: [], phase: 0, blend: 'normal', fcs: [new Name('DeviceGray')], scs: [new Name('DeviceGray')], sm: null, font: null, size: 12, tc: 0, tw: 0, th: 1, tl: 0, rise: 0, tr: 0, ...inherit, target };
-    const stack: GS[] = [];
+    const stack: GS[] = [], marks: Array<VNode[] | null> = [];
     let path: SubPath[] = [], cur: Anchor[] | null = null, clip: 'nonzero' | 'evenodd' | null = null, tm: Mat = IDENTITY, tlm: Mat = IDENTITY;
     const ops: Val[] = [];
     const P = (x: number, y: number): { x: number; y: number } => apply(gs.ctm, x, y);
@@ -606,6 +671,18 @@ class Painter {
           break;
         }
         case 'BI': { let k = lx.i; while (k < content.length - 1 && !(content[k] === 69 && content[k + 1] === 73 && WS.has(content[k - 1]) && (k + 2 >= content.length || WS.has(content[k + 2])))) k++; lx.i = k + 2; this.skipped.add('inline images'); break; }
+        case 'BDC': case 'BMC': {
+          const od = op === 'BDC' && nameOf(a[0]) === 'OC' && a[1] instanceof Name ? pdf.dict(pdf.dict(res?.get('Properties'))?.get(a[1].v)) : null;
+          if (od && this.ocgs.has(od)) {
+            const g: GroupNode = { id: newId('g'), kind: 'group', clip: false, children: [], opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, name: this.ocgs.get(od)?.name };
+            this.ocGroups.set(g, od);
+            gs.target.push(g);
+            marks.push(gs.target);
+            gs.target = g.children;
+          } else marks.push(null);
+          break;
+        }
+        case 'EMC': { const back = marks.pop(); if (back) gs.target = back; break; }
         case 'BT': tm = IDENTITY; tlm = IDENTITY; break;
         case 'Tf': gs.font = this.font(pdf.dict(res?.get('Font'))?.get(nameOf(a[0])), res); gs.size = n(1); break;
         case 'Tc': gs.tc = n(0); break;
@@ -673,9 +750,35 @@ class Painter {
       from = at + 1;
     }
     if (from < body.length) spans.push({ text: body.slice(from), style: base });
-    const node: TextNode = { id: newId('t'), kind: 'text', mode: 'point', xf, opacity: gs.fa, blend: gs.blend, ap: { items: [], effects: [] }, para: { ...DEFAULT_PARA }, spans };
-    gs.target.push(fitRun(node, ink / gs.th, body.length));
+    const k = Math.hypot(xf[2], xf[3]), unit = k > 1e-6 && Math.abs(k - 1) > 1e-6;
+    const node: TextNode = { id: newId('t'), kind: 'text', mode: 'point', xf: unit ? [xf[0] / k, xf[1] / k, xf[2] / k, xf[3] / k, xf[4], xf[5]] : xf, opacity: gs.fa, blend: gs.blend, ap: { items: [], effects: [] }, para: { ...DEFAULT_PARA }, spans: unit ? spans.map((s) => ({ ...s, style: { ...s.style, size: s.style.size * k } })) : spans };
+    this.place(gs.target, fitRun(node, (ink / gs.th) * (unit ? k : 1), body.length));
     return next;
+  }
+
+  private readonly leads = new WeakMap<TextNode, { step: number; rows: number }>();
+
+  /** Puts a line of type on the target; a line that sits directly under the previous one (same matrix, same left edge, same style, an even step) joins it as one text object with several lines, so a PDF written one line per Tj reopens as paragraphs rather than a node per line. */
+  private place(target: VNode[], node: TextNode): void {
+    const prev = target[target.length - 1];
+    if (prev && prev.kind === 'text' && prev.mode === 'point' && prev.opacity === node.opacity && prev.blend === node.blend) {
+      const a = prev.xf, b = node.xf, tol = 1e-4 * (Math.abs(a[0]) + Math.abs(a[1]) + Math.abs(a[2]) + Math.abs(a[3]) + 1);
+      const s0 = prev.spans[0]?.style, s1 = node.spans[0]?.style;
+      if (s0 && s1 && Math.abs(a[0] - b[0]) < tol && Math.abs(a[1] - b[1]) < tol && Math.abs(a[2] - b[2]) < tol && Math.abs(a[3] - b[3]) < tol && s0.font === s1.font && s0.style === s1.style && s0.size === s1.size && s0.strokeWidth === s1.strokeWidth && JSON.stringify(s0.fill) === JSON.stringify(s1.fill) && JSON.stringify(s0.stroke) === JSON.stringify(s1.stroke)) {
+        const det = a[0] * a[3] - a[1] * a[2], dxp = b[4] - a[4], dyp = b[5] - a[5];
+        if (Math.abs(det) > 1e-9) {
+          const x = (dxp * a[3] - dyp * a[2]) / det, y = (dyp * a[0] - dxp * a[1]) / det, run = this.leads.get(prev), rows = run?.rows ?? 1, down = y - (run ? run.step * (rows - 1) : 0);
+          if (Math.abs(x) <= Math.max(0.3, s0.size * 0.02) && down > s0.size * 0.5 && down < s0.size * 4 && (!run || Math.abs(down - run.step) <= run.step * 0.03)) {
+            const step = run?.step ?? down, lined = (s: Span): Span => ({ ...s, style: { ...s.style, leading: step } });
+            const merged: TextNode = { ...prev, spans: [...prev.spans.map(lined), lined({ text: '\n', style: prev.spans[prev.spans.length - 1].style }), ...node.spans.map(lined)] };
+            this.leads.set(merged, { step, rows: rows + 1 });
+            target[target.length - 1] = merged;
+            return;
+          }
+        }
+      }
+    }
+    target.push(node);
   }
 
   private font(ref: Val | undefined, res: PDict | null): FontInfo | null {
@@ -744,7 +847,12 @@ class Painter {
     if (k === 'DeviceRGB' || k === 'RGB' || k === 'CalRGB') return rgb(Math.round(cl(v[0] ?? 0) * 255), Math.round(cl(v[1] ?? 0) * 255), Math.round(cl(v[2] ?? 0) * 255));
     if (k === 'DeviceCMYK' || k === 'CMYK') return cmyk(Math.round(cl(v[0] ?? 0) * 1000) / 10, Math.round(cl(v[1] ?? 0) * 1000) / 10, Math.round(cl(v[2] ?? 0) * 1000) / 10, Math.round(cl(v[3] ?? 1) * 1000) / 10);
     if (k === 'Lab') { const L = v[0] ?? 50, a = v[1] ?? 0, b = v[2] ?? 0, fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200, f = (t: number): number => (t > 6 / 29 ? t ** 3 : 3 * (6 / 29) ** 2 * (t - 4 / 29)), X = 0.9505 * f(fx), Y = f(fy), Z = 1.089 * f(fz), g = (c: number): number => Math.round(255 * cl(c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055)); return rgb(g(3.2406 * X - 1.5372 * Y - 0.4986 * Z), g(-0.9689 * X + 1.8758 * Y + 0.0415 * Z), g(0.0557 * X - 0.204 * Y + 1.057 * Z)); }
-    if (k === 'ICCBased') { const s = pdf.get(cs[1]), nc = s instanceof Stream ? pdf.n(s.dict.get('N'), v.length) : v.length; return this.toColor([new Name(nc === 1 ? 'DeviceGray' : nc === 4 ? 'DeviceCMYK' : 'DeviceRGB')], v); }
+    if (k === 'ICCBased') {
+      const s = pdf.get(cs[1]), nc = s instanceof Stream ? pdf.n(s.dict.get('N'), v.length) : v.length;
+      const alt = s instanceof Stream ? pdf.get(s.dict.get('Alternate')) : null, altCs = Array.isArray(alt) ? alt.map((x) => pdf.get(x)) : alt ? [alt] : null, ak = altCs ? nameOf(altCs[0]) : '';
+      if (altCs && (nc === 1 ? ['DeviceGray', 'CalGray'] : nc === 3 ? ['DeviceRGB', 'CalRGB', 'Lab'] : ['DeviceCMYK']).includes(ak ?? '')) return this.toColor(altCs, v);
+      return this.toColor([new Name(nc === 1 ? 'DeviceGray' : nc === 4 ? 'DeviceCMYK' : 'DeviceRGB')], v);
+    }
     if (k === 'Indexed') {
       const base = pdf.get(cs[1]), baseCs = Array.isArray(base) ? base.map((x) => pdf.get(x)) : [base], hival = pdf.n(cs[2]), lut = pdf.get(cs[3]);
       const bytes = lut instanceof Str ? lut.b : lut instanceof Stream ? lut.raw : new Uint8Array();

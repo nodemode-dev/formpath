@@ -683,8 +683,11 @@ ask it questions.
   (set FORMPTH_ODA_CONVERTER to the converter's path if it is somewhere unusual). Without one, formpth says where to
   get it. formpth does not write DWG; export DXF instead.
 - PDF export writes type as live, searchable text with the fonts embedded (Preserve text as live text); type with
-  gradients, effects or a font formpth cannot read is outlined. Standard: PDF/X-4 embeds the document's CMYK profile
-  as the output intent. Illustrator (.ai) writes a PDF-compatible .ai that reopens fully editable in formpth.
+  gradients, effects or a font formpth cannot read is outlined. Standard: PDF/X-1a, X-3 and X-4 embed the document's CMYK
+  profile as the output intent (X-1a and X-3 flatten transparency), PDF/A-2b embeds sRGB. The PDF options sit in four
+  tabs: General (standard and Create Acrobat Layers), Marks and Bleeds, Compression (line art, ZIP or JPEG images,
+  downsampling) and Security (AES-256 open and permissions passwords, printing, changes, copying, accessibility);
+  the standards cannot be combined with passwords. Illustrator (.ai) writes a PDF-compatible .ai that reopens fully editable in formpth.
 - Edit > Color Settings picks the RGB and CMYK working profiles (installed, system or loaded .icc files), the
   rendering intent and black point compensation; Edit > Assign Profile and Convert to Profile change the document's
   profile; View > Proof Setup and Proof Colors preview the art on the chosen press profile.

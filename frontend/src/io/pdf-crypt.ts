@@ -182,3 +182,71 @@ export async function openCrypt(p: CryptParams, password: string): Promise<PdfCr
   if (userOk(p, key)) return new PdfCrypt(key, p.stm, p.str, p.encryptMetadata);
   return null;
 }
+
+const rand = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n));
+const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+
+export interface Sealer {
+  /** The Encrypt dictionary text (strings are hex, so it needs no further sealing). */
+  dict: string;
+  /** AES-256-CBC with a random IV and PKCS#7 padding: 16 byte IV, then the ciphertext. */
+  seal(data: Uint8Array): Promise<Uint8Array>;
+}
+
+/** The writing side of the Standard security handler, revision 6 (V5, AESV3, AES-256), ISO 32000-2 algorithms 8 to 10: random file key, U and UE from the user password, O and OE from the owner password and U, Perms from the permission flags. Passwords are UTF-8, cut at 127 bytes; SASLprep is not applied. */
+export async function makeSealer(userPassword: string, ownerPassword: string, perms: number): Promise<Sealer> {
+  const fileKey = rand(32), enc = new TextEncoder();
+  const upw = enc.encode(userPassword).subarray(0, 127), opw = enc.encode(ownerPassword).subarray(0, 127), zero = new Uint8Array(16);
+  const uvs = rand(8), uks = rand(8), ovs = rand(8), oks = rand(8);
+  const u = cat(await hash2B(upw, uvs, new Uint8Array()), uvs, uks);
+  const ue = await cbcEncryptRaw(await hash2B(upw, uks, new Uint8Array()), zero, fileKey);
+  const o = cat(await hash2B(opw, ovs, u), ovs, oks);
+  const oe = await cbcEncryptRaw(await hash2B(opw, oks, u), zero, fileKey);
+  const block = new Uint8Array(16);
+  new DataView(block.buffer).setInt32(0, perms | 0, true);
+  block.set([255, 255, 255, 255, 0x54, 0x61, 0x64, 0x62], 4);
+  block.set(rand(4), 12);
+  const permsEnc = await cbcEncryptRaw(fileKey, zero, block);
+  const key = await crypto.subtle.importKey('raw', buf(fileKey), 'AES-CBC', false, ['encrypt']);
+  return {
+    dict: `<< /Filter /Standard /V 5 /R 6 /Length 256 /P ${perms | 0} /EncryptMetadata true /CF << /StdCF << /CFM /AESV3 /AuthEvent /DocOpen /Length 32 >> >> /StmF /StdCF /StrF /StdCF /O <${hex(o)}> /U <${hex(u)}> /OE <${hex(oe)}> /UE <${hex(ue)}> /Perms <${hex(permsEnc)}> >>`,
+    seal: async (data) => { const iv = rand(16); return cat(iv, new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv: buf(iv) }, key, buf(data)))); },
+  };
+}
+
+/** Replaces every literal and hex string in a dictionary text with the hex of its sealed bytes. Names are skipped and the dictionary delimiters kept. */
+export async function sealStrings(dict: string, seal: (d: Uint8Array) => Promise<Uint8Array>): Promise<string> {
+  let out = '', i = 0;
+  const n = dict.length;
+  while (i < n) {
+    const ch = dict[i];
+    if (ch === '/') { let j = i + 1; while (j < n && !'()<>[]{}/% \t\r\n'.includes(dict[j])) j++; out += dict.slice(i, j); i = j; continue; }
+    if (ch === '<' && dict[i + 1] === '<') { out += '<<'; i += 2; continue; }
+    if (ch === '<') {
+      const j = dict.indexOf('>', i), h = dict.slice(i + 1, j).replace(/\s+/g, '');
+      const bytes = new Uint8Array(Math.ceil(h.length / 2));
+      for (let k = 0; k < bytes.length; k++) bytes[k] = parseInt(h.slice(k * 2, k * 2 + 2).padEnd(2, '0'), 16) || 0;
+      out += `<${hex(await seal(bytes))}>`; i = j + 1; continue;
+    }
+    if (ch === '(') {
+      const bytes: number[] = [];
+      let depth = 1, j = i + 1;
+      while (j < n && depth > 0) {
+        const c = dict[j];
+        if (c === '\\') {
+          const e = dict[j + 1];
+          if (e >= '0' && e <= '7') { let k = j + 1, v = 0; while (k < j + 4 && dict[k] >= '0' && dict[k] <= '7') v = v * 8 + Number(dict[k++]); bytes.push(v & 255); j = k; continue; }
+          const map: Record<string, number> = { n: 10, r: 13, t: 9, b: 8, f: 12 };
+          if (e === '\n') { j += 2; continue; }
+          bytes.push(map[e] ?? e.charCodeAt(0) & 255); j += 2; continue;
+        }
+        if (c === '(') depth++;
+        else if (c === ')') { depth--; if (!depth) break; }
+        bytes.push(c.charCodeAt(0) & 255); j++;
+      }
+      out += `<${hex(await seal(Uint8Array.from(bytes)))}>`; i = j + 1; continue;
+    }
+    out += ch; i++;
+  }
+  return out;
+}

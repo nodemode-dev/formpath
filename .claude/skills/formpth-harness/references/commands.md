@@ -598,6 +598,7 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `gs-lib-scribbles` (Window > Graphic Style Libraries > Scribbles): Scribbles, as in Window > Graphic Style Libraries > Scribbles.
 - `gs-lib-shadows` (Window > Graphic Style Libraries > Shadows and Glows): Shadows and Glows, as in Window > Graphic Style Libraries > Shadows and Glows.
 - `gs-lib-textures` (Window > Graphic Style Libraries > Textures): Textures, as in Window > Graphic Style Libraries > Textures.
+- `ink-manager` (Window > Ink Manager): Opens the Ink Manager to choose which process and spot inks print, convert spot inks to process, or alias one spot ink to another; the choices drive separations, Separations Preview and PDF export. Use before printing separations or exporting a PDF when spot inks should print as process colours or on another ink.
 - `panel-actions` (Window > Actions): Actions, as in Window > Actions.
 - `panel-align` (Window > Align): Align, as in Window > Align.
 - `panel-appearance` (Window > Appearance): Appearance, as in Window > Appearance.

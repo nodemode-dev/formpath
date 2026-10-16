@@ -14,6 +14,8 @@ import { ARTBOARD_PRESETS } from '../tools/view';
 import { DXF_UNITS, type DxfUnit } from '../io/dxf';
 import type { TiffCompression } from '../io/tiff';
 import { DEFAULT_MARKS, type PdfMarks } from '../io/pdf-marks';
+import { seg } from './panels/kit';
+import { DEFAULT_COMPRESSION, DEFAULT_PERMISSIONS, pdfRefusal, securityActive, standardFrom, standardRules, STANDARD_LABELS, STANDARD_NOTES, type PdfChanges, type PdfCompression, type PdfPrinting, type PdfSecurity, type PdfStandard } from '../io/pdf-std';
 
 const UNIT_K: Record<Units, number> = { pt: 1, px: 1, mm: 72 / 25.4, cm: 72 / 2.54, in: 72, pc: 12 };
 
@@ -380,7 +382,7 @@ export class AboutDialog extends Dialog {
 export type ExportFormat = 'svg' | 'pdf' | 'ai' | 'png' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf';
 export interface TiffExportChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface CadChoice { version: 'R12' | '2000'; units: DxfUnit; scale: number; text: 'text' | 'outlines'; lineweights: boolean }
-export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: 'none' | 'x4'; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks }
+export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks; icc?: boolean }
 
 export function parseArtboardRange(text: string, count: number, current: number): number[] | null {
   const t = text.trim().toLowerCase();
@@ -397,10 +399,13 @@ export function parseArtboardRange(text: string, count: number, current: number)
   return out.size ? [...out].sort((x, y) => x - y) : null;
 }
 
+const PDF_TABS: ReadonlyArray<readonly [string, string]> = [['general', 'General'], ['marks', 'Marks and Bleeds'], ['compression', 'Compression'], ['security', 'Security']];
+
 export class ExportDialog extends Dialog {
   private readonly format = selectOf([['svg', 'SVG (.svg)'], ['pdf', 'PDF (.pdf)'], ['ai', 'Illustrator (.ai)'], ['eps', 'EPS (.eps)'], ['dxf', 'AutoCAD Interchange (.dxf)'], ['png', 'PNG (.png)'], ['jpg', 'JPEG (.jpg)'], ['webp', 'WebP (.webp)'], ['tiff', 'TIFF (.tiff)']]);
   private readonly tiffCompression = selectOf([['none', 'None'], ['packbits', 'PackBits'], ['lzw', 'LZW'], ['deflate', 'Deflate']]);
   private readonly tiffColor = selectOf([['rgb', 'RGB'], ['cmyk', 'CMYK']]);
+  private readonly embedIcc = el<HTMLInputElement>('<input type="checkbox" checked>');
   private readonly markTrim = el<HTMLInputElement>('<input type="checkbox">');
   private readonly markReg = el<HTMLInputElement>('<input type="checkbox">');
   private readonly markBars = el<HTMLInputElement>('<input type="checkbox">');
@@ -427,18 +432,38 @@ export class ExportDialog extends Dialog {
   private readonly outline = el<HTMLInputElement>('<input type="checkbox">');
   private readonly preserve = el<HTMLInputElement>('<input type="checkbox" checked>');
   private readonly liveText = el<HTMLInputElement>('<input type="checkbox" checked>');
-  private readonly standard = selectOf([['none', 'None'], ['x4', 'PDF/X-4:2010']]);
+  private readonly standard = selectOf(STANDARD_LABELS);
+  private readonly layers = el<HTMLInputElement>('<input type="checkbox">');
+  private readonly flate = el<HTMLInputElement>('<input type="checkbox" checked>');
+  private readonly imageMode = selectOf([['auto', 'Automatic (keep JPEG, ZIP the rest)'], ['zip', 'ZIP (lossless)'], ['jpeg', 'JPEG']]);
+  private readonly jpegQuality = numberInput(5, 100);
+  private readonly downsample = numberInput(0, 2400);
+  private readonly downsampleAbove = numberInput(0, 4800);
+  private readonly openPw = el<HTMLInputElement>('<input class="cv-input" type="password" autocomplete="new-password" spellcheck="false">');
+  private readonly ownerPw = el<HTMLInputElement>('<input class="cv-input" type="password" autocomplete="new-password" spellcheck="false">');
+  private readonly showPw = el<HTMLInputElement>('<input type="checkbox">');
+  private readonly printing = selectOf([['high', 'High Resolution'], ['low', 'Low Resolution (150 ppi)'], ['none', 'Not Allowed']]);
+  private readonly changes = selectOf([['any', 'Any except extracting pages'], ['comment', 'Commenting, filling in form fields, signing'], ['fill', 'Filling in form fields, signing'], ['insert', 'Inserting, deleting, rotating pages'], ['none', 'None']]);
+  private readonly allowCopy = el<HTMLInputElement>('<input type="checkbox" checked>');
+  private readonly allowAccess = el<HTMLInputElement>('<input type="checkbox" checked>');
+  private go: HTMLButtonElement | null = null;
+  private readonly note = el('<p class="cv-note cv-export-note"></p>');
+  private tab = 'general';
+  private readonly tabs = seg(PDF_TABS.map(([id, label]) => ({ id, label })), (id) => { this.tab = id; this.tabs.set(id); this.sync(); }, 'cv-seg-small');
   private readonly rows: Record<string, HTMLElement> = {};
   private resolve: ((c: ExportChoice | null) => void) | null = null;
   private artboard = 0;
 
   constructor() {
-    super('Export', 440);
+    super('Export', 520);
     q<HTMLElement>(this.scrim, '.cv-dialog').classList.add('cv-export');
     this.rows.format = row('Format', this.format);
     this.rows.scope = row('Export', this.scope);
     this.rows.range = row('Range', this.range);
     this.range.title = 'All, Current, or artboard numbers such as 1-3,5';
+    this.rows.pdfTabs = el('<div></div>');
+    this.rows.pdfTabs.appendChild(this.tabs.el);
+    this.tabs.set(this.tab);
     this.rows.scale = row('Resolution', this.scale);
     this.rows.quality = row('Quality (%)', this.quality);
     this.rows.transparent = row('Transparent background', this.transparent);
@@ -447,7 +472,9 @@ export class ExportDialog extends Dialog {
     this.rows.liveText = row('Preserve text as live text', this.liveText);
     this.liveText.title = 'Writes selectable, searchable text with the fonts embedded. Type with gradients, effects or an unavailable font is outlined instead.';
     this.rows.standard = row('Standard', this.standard);
-    this.standard.title = 'PDF/X-4 embeds the document CMYK profile as the output intent (Edit > Color Settings) and leaves out formpth editing data.';
+    this.standard.title = 'PDF/X and PDF/A files embed an output intent and leave out formpth editing data. X-1a writes CMYK and spot colours only and flattens transparency; X-3 allows tagged RGB and flattens; X-4 keeps live transparency; A-2b embeds sRGB and every font. None of them can be encrypted.';
+    this.rows.layers = row('Create Acrobat Layers from Top-Level Layers', this.layers);
+    this.layers.title = 'Each top-level layer becomes an optional content group that Acrobat lists in its Layers panel; hidden layers start switched off. Not available in PDF/X-1a and PDF/X-3.';
     this.rows.epsColor = row('Color', this.epsColor);
     this.rows.cadVersion = row('Version', this.cadVersion);
     this.rows.cadUnits = row('Units', this.cadUnits);
@@ -459,6 +486,8 @@ export class ExportDialog extends Dialog {
     this.cadScale.value = '1';
     this.rows.tiffCompression = row('Compression', this.tiffCompression);
     this.rows.tiffColor = row('Color', this.tiffColor);
+    this.rows.embedIcc = row('Embed ICC Profile', this.embedIcc);
+    this.embedIcc.title = 'Writes the document RGB profile into the file (the CMYK profile for a CMYK TIFF) so other programs read the colours as intended. Set the profiles in Edit > Color Settings.';
     this.tiffCompression.value = 'lzw';
     this.rows.markTrim = row('Trim Marks', this.markTrim);
     this.rows.markReg = row('Registration Marks', this.markReg);
@@ -476,18 +505,42 @@ export class ExportDialog extends Dialog {
     this.rows.bleedLR = row('Left, Right', el('<span class="cv-pair"></span>'));
     this.rows.bleedLR.lastElementChild?.append(this.bleedLeft, this.bleedRight);
     this.bleedMode.addEventListener('change', () => this.sync());
+    this.rows.flate = row('Compress Text and Line Art', this.flate);
+    this.rows.imageMode = row('Images', this.imageMode);
+    this.rows.jpegQuality = row('JPEG Quality (%)', this.jpegQuality);
+    this.rows.downsample = row('Downsample to (ppi)', this.downsample);
+    this.downsample.title = '0 keeps every image at its own resolution';
+    this.rows.downsampleAbove = row('For images above (ppi)', this.downsampleAbove);
+    this.downsampleAbove.title = '0 means 1.5 times the target resolution';
+    this.jpegQuality.value = String(Math.round(DEFAULT_COMPRESSION.jpegQuality * 100));
+    this.downsample.value = '0';
+    this.downsampleAbove.value = '0';
+    this.rows.openPw = row('Open Password', this.openPw);
+    this.openPw.title = 'Asked for when the file is opened. Leave empty to open without a password.';
+    this.rows.ownerPw = row('Permissions Password', this.ownerPw);
+    this.ownerPw.title = 'Needed to change the permissions or the passwords. The permissions below apply once it is set.';
+    this.rows.showPw = row('Show Passwords', this.showPw);
+    this.rows.printing = row('Printing', this.printing);
+    this.rows.changes = row('Changes', this.changes);
+    this.rows.allowCopy = row('Enable copying of text, images and other content', this.allowCopy);
+    this.rows.allowAccess = row('Enable text access for screen readers', this.allowAccess);
+    this.foot.prepend(this.note);
+    for (const c of [this.standard, this.layers, this.imageMode, this.downsample, this.openPw, this.ownerPw, this.printing, this.changes, this.allowCopy, this.allowAccess]) c.addEventListener('change', () => this.sync());
+    for (const c of [this.openPw, this.ownerPw, this.downsample]) c.addEventListener('input', () => this.sync());
+    this.showPw.addEventListener('change', () => { this.openPw.type = this.ownerPw.type = this.showPw.checked ? 'text' : 'password'; });
     this.body.append(...Object.values(this.rows));
     this.format.addEventListener('change', () => this.sync());
     this.scope.addEventListener('change', () => this.sync());
     this.range.addEventListener('input', () => setClass(this.range, 'is-invalid', !parseArtboardRange(this.range.value, this.count, this.artboard)));
     this.button('Cancel', 'ghost', () => this.close());
-    this.button('Export', 'primary', () => { if (!parseArtboardRange(this.range.value, this.count, this.artboard)) { this.range.focus(); return; } const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
+    this.go = this.button('Export', 'primary', () => { if (!parseArtboardRange(this.range.value, this.count, this.artboard)) { this.range.focus(); return; } const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
     this.onClose = () => { const r = this.resolve; this.resolve = null; r?.(null); };
     this.quality.value = '92';
   }
 
-  ask(format: ExportFormat, artboard: number, hasSelection: boolean, cmyk = false, count = 1): Promise<ExportChoice | null> {
+  ask(format: ExportFormat, artboard: number, hasSelection: boolean, cmyk = false, count = 1, managed = true): Promise<ExportChoice | null> {
     this.format.value = format;
+    this.embedIcc.checked = managed;
     this.count = Math.max(1, count);
     this.range.value = 'Current';
     setClass(this.range, 'is-invalid', false);
@@ -499,12 +552,16 @@ export class ExportDialog extends Dialog {
   }
 
   private reserve(): void {
-    const keep = this.format.selectedIndex, keepBleed = this.bleedMode.value;
+    const keep = this.format.selectedIndex, keepBleed = this.bleedMode.value, keepTab = this.tab;
     this.body.style.minHeight = '';
     this.bleedMode.value = 'custom';
     let h = 0;
-    for (let i = 0; i < this.format.options.length; i++) { this.format.selectedIndex = i; this.sync(); h = Math.max(h, this.body.offsetHeight); }
+    for (let i = 0; i < this.format.options.length; i++) {
+      this.format.selectedIndex = i;
+      for (const [t] of this.format.value === 'pdf' ? PDF_TABS : [[keepTab]]) { this.tab = t; this.sync(); h = Math.max(h, this.body.offsetHeight); }
+    }
     this.bleedMode.value = keepBleed;
+    this.tab = keepTab;
     this.format.selectedIndex = keep;
     this.sync();
     this.body.style.minHeight = `${h}px`;
@@ -517,14 +574,37 @@ export class ExportDialog extends Dialog {
     setHidden(this.rows.quality, !(f === 'jpg' || f === 'webp'));
     setHidden(this.rows.transparent, !(f === 'png' || f === 'webp' || f === 'tiff'));
     for (const k of ['tiffCompression', 'tiffColor']) setHidden(this.rows[k], f !== 'tiff');
-    for (const k of ['markTrim', 'markReg', 'markBars', 'markInfo', 'markOffset', 'markWeight', 'bleedMode']) setHidden(this.rows[k], f !== 'pdf');
-    for (const k of ['bleedTB', 'bleedLR']) setHidden(this.rows[k], f !== 'pdf' || this.bleedMode.value !== 'custom');
+    setHidden(this.rows.embedIcc, !raster);
+    const onTab = (t: string): boolean => f === 'pdf' && this.tab === t;
+    setHidden(this.rows.pdfTabs, f !== 'pdf');
+    setClass(this.note, 'is-off', f !== 'pdf');
+    for (const k of ['markTrim', 'markReg', 'markBars', 'markInfo', 'markOffset', 'markWeight', 'bleedMode']) setHidden(this.rows[k], !onTab('marks'));
+    for (const k of ['bleedTB', 'bleedLR']) setHidden(this.rows[k], !onTab('marks') || this.bleedMode.value !== 'custom');
     setHidden(this.rows.outline, f !== 'svg');
-    setHidden(this.rows.liveText, f !== 'pdf' && f !== 'ai');
-    setHidden(this.rows.standard, f !== 'pdf');
-    setHidden(this.rows.preserve, !(f === 'svg' || f === 'pdf' || f === 'eps'));
+    setHidden(this.rows.liveText, !(onTab('general') || f === 'ai'));
+    for (const k of ['standard', 'layers']) setHidden(this.rows[k], !onTab('general'));
+    for (const k of ['flate', 'imageMode', 'jpegQuality', 'downsample', 'downsampleAbove']) setHidden(this.rows[k], !onTab('compression'));
+    for (const k of ['openPw', 'ownerPw', 'showPw', 'printing', 'changes', 'allowCopy', 'allowAccess']) setHidden(this.rows[k], !onTab('security'));
+    const std = standardFrom(this.standard.value), sec = this.pdfSecurity(), fixed = std !== 'none', refusal = f === 'pdf' ? pdfRefusal({ standard: std, security: sec, layers: this.layers.checked && standardRules(std).layers }) : null;
+    setDisabled(this.layers, !standardRules(std).layers);
+    setDisabled(this.jpegQuality, this.imageMode.value !== 'jpeg');
+    setDisabled(this.downsampleAbove, !(Number(this.downsample.value) > 0));
+    for (const c of [this.openPw, this.ownerPw, this.showPw]) setDisabled(c, fixed);
+    for (const c of [this.printing, this.changes, this.allowCopy, this.allowAccess]) setDisabled(c, fixed || !this.ownerPw.value);
+    setDisabled(this.preserve, fixed || !!sec);
+    if (this.go) setDisabled(this.go, !!refusal);
+    setText(this.note, refusal ?? STANDARD_NOTES[std]);
+    setClass(this.note, 'is-warn', !!refusal);
+    setHidden(this.rows.preserve, !(f === 'svg' || onTab('general') || f === 'eps'));
     setHidden(this.rows.epsColor, f !== 'eps');
     for (const k of ['cadVersion', 'cadUnits', 'cadScale', 'cadText', 'cadWeights']) setHidden(this.rows[k], f !== 'dxf');
+  }
+
+  private pdfSecurity(): PdfSecurity | undefined {
+    if (standardFrom(this.standard.value) !== 'none') return undefined;
+    const permissions = this.ownerPw.value ? { printing: this.printing.value as PdfPrinting, changes: this.changes.value as PdfChanges, copy: this.allowCopy.checked, access: this.allowAccess.checked } : DEFAULT_PERMISSIONS;
+    const s: PdfSecurity = { openPassword: this.openPw.value, permissionsPassword: this.ownerPw.value, permissions };
+    return securityActive(s) ? s : undefined;
   }
 
   private value(): ExportChoice {
@@ -535,7 +615,7 @@ export class ExportDialog extends Dialog {
     const scale = Number(this.scale.value) || 1;
     const tiff: TiffExportChoice = { compression: this.tiffCompression.value as TiffCompression, cmyk: this.tiffColor.value === 'cmyk', ppi: Math.round(72 * scale) };
     const marks: PdfMarks = { trim: this.markTrim.checked, registration: this.markReg.checked, colorBars: this.markBars.checked, pageInfo: this.markInfo.checked, offset: num(this.markOffset), weight: Math.max(0.1, Number(this.markWeight.value) || DEFAULT_MARKS.weight), bleed: this.bleedMode.value as PdfMarks['bleed'], custom: { t: num(this.bleedTop), b: num(this.bleedBottom), l: num(this.bleedLeft), r: num(this.bleedRight) } };
-    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, liveText: this.liveText.checked, standard: this.standard.value === 'x4' ? 'x4' : 'none', cmyk: this.epsColor.value === 'cmyk', cad };
+    return { tiff, marks, format: f, scope: this.scope.value as ExportChoice['scope'], artboard: list && list.length === 1 ? list[0] : this.artboard, artboards: list && list.length > 1 ? list : undefined, scale: Number(this.scale.value) || 1, quality: Math.max(0.01, Math.min(1, (Number(this.quality.value) || 92) / 100)), transparent: this.transparent.checked, outlineText: this.outline.checked, preserve: this.preserve.checked, liveText: this.liveText.checked, standard: standardFrom(this.standard.value), layers: this.layers.checked && standardRules(standardFrom(this.standard.value)).layers, compression: { images: this.imageMode.value as PdfCompression['images'], jpegQuality: Math.max(0.05, Math.min(1, (Number(this.jpegQuality.value) || 80) / 100)), downsamplePpi: num(this.downsample), downsampleAbove: num(this.downsampleAbove), flate: this.flate.checked }, security: this.pdfSecurity(), cmyk: this.epsColor.value === 'cmyk', cad, icc: this.embedIcc.checked };
   }
 }
 

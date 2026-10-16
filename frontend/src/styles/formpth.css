@@ -490,6 +490,9 @@
 .cv-dialog-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; }
 .cv-dialog-row > .cv-input, .cv-dialog-row > select { width: 100%; }
 .cv-export .cv-dialog-body { align-content: start; }
+.cv-export .cv-export-note { flex: 1 1 0; align-self: center; min-width: 0; min-height: 2.6em; margin: 0 auto 0 0; line-height: 1.3; }
+.cv-export .cv-export-note.is-off { visibility: hidden; }
+.cv-export .cv-export-note.is-warn { color: var(--danger-text); }
 .cv-input-num { font-family: var(--font-mono); }
 .cv-export .cv-dialog-row:has(> input[type="checkbox"]) { grid-template-columns: minmax(0, 1fr) auto; }
 .cv-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
@@ -511,7 +514,19 @@
 .cv-print-caption.is-bad { color: var(--accent-ink); }
 .cv-print-dialog .cv-dialog-body { align-content: start; }
 .cv-docinfo { box-sizing: border-box; height: 360px; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line-1); border-radius: 6px; background: var(--surface-2); color: var(--text-secondary); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; white-space: pre; user-select: text; }
-.cv-sep-list { min-height: 150px; }
+.cv-sep-list { height: 232px; min-height: 150px; }
+.cv-ink-dialog .cv-dialog-body { display: flex; flex-direction: column; gap: 6px; }
+.cv-ink-all { padding: 0 2px; }
+.cv-ink-head, .cv-ffd-list .cv-ink-row { grid-template-columns: 40px minmax(0, 1fr) 80px 70px 150px; gap: 8px; }
+.cv-ink-head { display: grid; align-items: center; padding: 0 12px 0 12px; color: var(--text-muted); font-size: 11px; }
+.cv-ink-row input[type="checkbox"] { justify-self: center; width: 14px; height: 14px; margin: 0; }
+.cv-ink-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cv-ink-chip { flex: none; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line-2); background: var(--cv-ink, var(--surface-2)); }
+.cv-ink-type { text-align: left; }
+.cv-ink-row .is-void { visibility: hidden; }
+.cv-ink-alias { width: 100%; height: var(--ctl-sm, 24px); }
+.cv-ink-list { overflow-y: auto; }
+.cv-ink-note { margin: 0; min-height: 48px; }
 .cv-pkg-note { min-height: 36px; }
 .cv-dialog .cv-num { height: var(--ctl-md); }
 .cv-dialog .cv-num input { width: 100%; }

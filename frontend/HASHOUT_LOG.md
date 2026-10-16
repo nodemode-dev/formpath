@@ -95,6 +95,9 @@ frontend/
     │   ├── data-merge.ts       data set images, variation projects and the variations export
     │   ├── project-io.ts       .fpth manifest in and out
     │   ├── svg.ts              SVG export and import
+    │   ├── svg-refs.ts         SVG import: patterns, masks, clip paths and markers
+    │   ├── svg-filter.ts       SVG import: filter chains to live effects
+    │   ├── svg-text.ts         SVG import: text, tspans and text on a path to live type
     │   ├── pdf.ts              PDF writer and native reader
     │   ├── raster.ts           region rendering, PNG, JPEG, WebP, screens zip
     │   ├── trace.ts            image trace: options, presets, worker run, nodes
@@ -104,6 +107,7 @@ frontend/
     │   ├── dxf.ts              DXF reader (R12 to 2018) and writer (R12, 2000), ACI colours
     │   ├── eps.ts              EPS writer (Level 3 PostScript) and the embedded formpth document
     │   ├── ps-read.ts          a small PostScript interpreter that reads foreign EPS into nodes
+    │   ├── ps-filters.ts       PostScript data filters (ASCIIHex, ASCII85, RunLength, Flate, DCT) and image sample unpacking
     │   ├── generative.ts       Generative Shape Fill and Text to Pattern on the Assistant's model, SVG sanitising
     │   ├── retype.ts           Retype: letter masks, font ranking by shape overlap, live text in place
     │   ├── fonts.ts            bundled and installed fonts, outlines
@@ -186,6 +190,9 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/data-merge.ts
 - src/io/project-io.ts
 - src/io/svg.ts
+- src/io/svg-refs.ts
+- src/io/svg-filter.ts
+- src/io/svg-text.ts
 - src/io/pdf.ts
 - src/io/pdf-read.ts
 - src/io/pdf-crypt.ts
@@ -198,6 +205,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/dxf.ts
 - src/io/eps.ts
 - src/io/ps-read.ts
+- src/io/ps-filters.ts
 - src/io/generative.ts
 - src/io/retype.ts
 - src/plugins/host.ts
@@ -1542,6 +1550,41 @@ A key used only by linked images is written as its cached preview (at most 1024 
 
 ## src/io/svg.ts
 
+### src/io/svg-refs.ts · patterns, masks, clip paths and markers on import
+- refers-to: src/io/svg-refs.ts :: patternPaint, maskOf, clipOf, markers, fitViewBox, userBox; src/io/svg.ts :: importSvg paintOf
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+Before this the importer dropped pattern fills, masks and markers. A pattern becomes a PatternDef plus a swatch: the href chain is followed for tile attributes and children, patternUnits and patternContentUnits resolve against the user bounding box of the painted element, a viewBox is fitted with preserveAspectRatio, and the paint's xf is the content matrix times patternTransform, which is what the renderer expects (art coordinates straight to document coordinates). The tile is a clip group only when the art's visual bounds (strokes included) spill outside it. A mask becomes the node's OpacityMask: maskUnits clips the region, maskContentUnits sets the content box, and mask-type alpha whitens every paint so the luminance path of the renderer sees only alpha. clipPath resolves clipPathUnits, the clipPath's own transform, use children and clip-rule evenodd; text inside a clipPath is reported, not clipped. A marker is expanded per vertex (start, mid, end; orient auto bisects the corner angle, auto-start-reverse flips the start; markerUnits strokeWidth scales; viewBox, refX and refY, overflow clip). When the marker art is a recognised arrowhead (its anchors and handles match an ARROWHEADS shape within 7 percent, tip at the reference point, start match only with auto-start-reverse, end match only with auto) the stroke gets startArrow and endArrow with arrowAlign tip, which round-trips the exporter's own markers; anything else stays as a group named Marker so the picture is right even when it is not an arrowhead.
+
+### src/io/svg.ts · one wrapper for clip, mask and filter, native hints, layer rule
+- refers-to: src/io/svg.ts :: importSvg walk, Writer.text, leftOut; src/io/svg-filter.ts :: filterChain, filterEffects, filterPrimitives, cssFilterEffects; src/io/svg-text.ts :: importText, textFromHint
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+The old walk is now walkNode and a thin walk around it applies clip-path, mask and filter to whatever the element produced, collapsing a single child so that a clipped path does not gain a group. Filters become live effects where they map (blur.gaussian with radius equal to stdDeviation, stylize.drop_shadow, outer glow for a zero offset shadow, offset plus blur plus merge, the CSS drop-shadow and blur functions); the rest (feColorMatrix, feBlend, feMorphology, feTurbulence and so on) is named in SvgImport.leftOut, which the open toast prints, so nothing is dropped silently. Three unconditional data attributes carry what the SVG vocabulary cannot: data-formpth-pattern (tile type, offsets, spacing and brick, with data-formpth-art for the art) so a pattern swatch survives the strip of the native copy, data-arrows (start, end, scale, align) so an arrowhead is not read back as marker art, and data-formpth-textpath (a JSON of the path, offsets, flip, alignment, spacing and the styled runs) because text on a path is exported as per-glyph outlines and could not be recovered otherwise. A single named top-level group with no clip, opacity, blend, mask or effects is unwrapped into a layer, which is how Inkscape and Illustrator layers arrive; groups with any of those stay groups. Known gaps: gradient fills on text on a path fall back to a solid colour in the hint, side=right on textPath is noted, and pattern tiles used at several scales are re-rendered per scale.
+
+### src/engine/geometry.ts · parseSvgD, implicit repeats and compact arc flags
+- refers-to: src/engine/geometry.ts :: parseSvgD
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+Two real bugs found by importing 267 npm icons and comparing renders: repeated relative commands (m, l, c with more than one set of numbers) reused the first offset instead of the running current point, and arc flags written without separators ("a1 1 0 011 1") were read as one number. The icon sets went from a mean difference of about 17 and 11 to 0.02 and 0.08.
+
+### src/engine/paint.ts · all CSS colour names and alpha in colour strings
+- refers-to: src/engine/paint.ts :: parseColor; src/io/svg.ts :: alphaOf
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+parseColor knows the whole CSS named list, 3, 4, 6 and 8 digit hex, and hsl and hsla with comma or space separators. The importer reads the alpha of #rgba, #rrggbbaa, rgba() and hsla() on fill, stroke and gradient stops into the item's opacity, because the engine colour has no alpha.
+
+### src/engine/render.ts · pattern tile scale includes the paint's own scale
+- refers-to: src/engine/render.ts :: patternStyle
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+A pattern paint whose xf scales the art (every imported SVG pattern with patternContentUnits or a viewBox) was rendered into a tile canvas at the unscaled size and then stretched, which blurred it. The tile scale now multiplies in the square root of the determinant of xf.
+
 ### src/io/svg.ts · symbols as symbol and use
 - refers-to: src/io/svg.ts :: Writer.node case symbol, symbolArts
 - kind: rationale
@@ -1873,6 +1916,13 @@ AutoCAD 2000 output carries the structure AutoCAD expects of an AC1015 file: han
 Follows the EPSF 3.0 conventions (one page, `%%BoundingBox` in whole points with `%%HiResBoundingBox`, `%%LanguageLevel: 3`, no preview, save and restore around the page) and the PLRM for operators. The page flips once (`[1 0 0 -1 ...] concat`) so paths are written in document points. Gradients are Level 3 `shfill` with type 2 or 3 shadings and the same stitching functions as the PDF writer, painted inside a clip of the path; gradient strokes use `strokepath clip`. PostScript has no transparency, so any object with opacity, a blend mode, a mask, a pattern, a freeform gradient, a transparent gradient stop or a raster effect is flattened the way a print flattener does it: `trimAfter` builds the document up to and including that object, it is rendered opaque over the artboard, and drawn as an ImageType 3 image whose mask (InterleaveType 1, one byte per sample, 0 paints) is the object's own coverage, so the result matches the screen over whatever lies below. Placed images use the same masked image when they have alpha. Image data is Flate inside ASCII85 (`currentfile /ASCII85Decode filter /FlateDecode filter`), which keeps the file 7-bit clean. The editable document rides at the end as `%FPTH:` comment lines between `%FormpthDocument-Begin` and `-End`, which interpreters skip; `readEpsNative` finds them. All artboards export as a ZIP of one EPS per artboard, since an EPS holds one page.
 
 ## src/io/ps-read.ts
+
+### src/io/ps-read.ts · images, image masks and file filters in EPS
+- refers-to: src/io/ps-read.ts :: paintImage, Puller, imageOp, imageSpace, readEpsVector, epsSource; src/io/ps-filters.ts :: filterStream, inflate, readJpeg, toRgba; src/app.ts :: readForeign
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+image, colorimage and imagemask used to pop their operands and skip the data. They now build image nodes. Operands come in both forms (w h bps matrix source, and the Level 2 dictionary with DataSource, Decode, ImageMatrix, BitsPerComponent), and colorimage takes one source or one per component (read row by row, so procedures that share currentfile interleave correctly). A data source is a string, a procedure called until the bytes are in (the Pillow and Photoshop pattern, currentfile buf readhexstring pop), or a file: currentfile plus a chain of filters. The file objects are real now: currentfile reads the program text at the interpreter's position, readhexstring, readstring and readline consume it (they were stubs that returned empty), and filter builds ASCIIHexDecode, ASCII85Decode, RunLengthDecode, FlateDecode, DCTDecode and SubFileDecode stages. All of it is synchronous so the interpreter stays synchronous: Flate uses a small inflate in ps-filters.ts, and a DCT stream is read to its EOI marker and handed to the browser as the image asset itself (Decode is ignored for JPEG, the browser already undoes Adobe's inverted CMYK). Samples are 1, 2, 4, 8, 12 or 16 bits per component, gray, RGB or CMYK (naive conversion, like toRgb without a profile), with Decode arrays and Indexed colour spaces whose lookup is a string; a CMYK image is converted to RGB because the engine image node is RGB. The image matrix gives xf = flip x ctm x inverse(matrix), so rotation, flips and shear carry over, and the node goes through emit, so a clip in force wraps it in the usual clip group. imagemask paints the current colour where the sample is 0 (Decode [0 1], polarity false) or 1 (polarity true) and leaves the rest transparent, as an image node named Image mask; that is a bitmap, not a vector fill, so it does not stay sharp at any size. Raw images are encoded to PNG after interpretation, which is why readEpsVector is now async and returns the assets map that readForeign hands to the project. epsSource decodes true latin1 now: TextDecoder's latin1 label is windows-1252 and corrupted bytes 0x80 to 0x9f of binary data. Left out still: LZWDecode, CCITTFax, ImageType 3 and 4 (masked images), image dictionaries whose DataSource is a procedure reading a stream held in a variable name, and the colour space is not restored by grestore.
 
 ### src/io/ps-read.ts · reading foreign EPS
 - refers-to: src/io/ps-read.ts :: Interp, Lexer, OPS, readEpsVector, epsSource, shadingPaint, showText
@@ -3197,3 +3247,59 @@ A live compound shape is a group with compoundShape true whose children carry a 
 - logged: v0.36.0 · 2026-10-16
 
 The shape mode buttons now make a live compound shape on Alt-click (and set the mode of a selected compound child when one is chosen), the old Make Compound Shape button, which made a compound path, is gone from the panel and lives in the panel menu with Release, Expand and Pathfinder Options; Expand is also a button, enabled only for a compound shape. Layout shift measured 0 under 4x CPU throttle for every panel interaction and for opening the dialog. The MCP tool pathfinder gains live (the four shape modes only), compound (expand or release), shape_mode and the three option fields, and the commands compound-shape-*, shape-mode-*, pf-options and fx-pathfinder.* have entries in command-meta.ts; ./formpth agents sync was run.
+
+## src/io/icc-embed.ts
+
+### src/io/icc-embed.ts · ICC profiles in PNG, JPEG, WebP and TIFF exports
+- refers-to: src/io/icc-embed.ts :: embedPng, embedJpeg, embedWebp, embedIcc; src/io/tiff.ts :: encodeTiff (tag 34675, convert); src/io/raster.ts :: exportRaster, rasterIcc, canvasBlob; src/engine/color-management.ts :: outputProfileBytes, printCmykLuts, rgbToCmykBytes; src/ui/app-dialogs.ts :: ExportDialog.embedIcc
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+The canvas encoders write no profile, so the bytes are rewritten after encoding: PNG gets an iCCP chunk (keyword from the profile name, zlib body through CompressionStream, existing sRGB, gAMA and iCCP chunks removed, gAMA 45455 added for sRGB), JPEG gets APP2 ICC_PROFILE segments of at most 65519 bytes numbered n of count right after the JFIF segment, WebP is rewritten as VP8X plus ICCP (a plain VP8 or VP8L file gets a VP8X built from its size and alpha flag), TIFF gets tag 34675 in encodeTiff. The profile is the document RGB profile (built-in sRGB when the document has none), the document CMYK profile for a CMYK TIFF. Default: the Export dialog row Embed ICC Profile starts on when the document has colour settings (doc.cm) and off otherwise, as Illustrator ties it to the working space; callers that pass no icc (Export for Screens, Send to NodeMode, Data Merge) follow the same rule, and icc true embeds the built-in sRGB for a document without settings. A CMYK TIFF converts through the document RGB-to-CMYK table (17 point grid, trilinear in rgbToCmykBytes, one lookup per run of equal pixels) whenever doc.cm.cmyk is set, even with the embed switch off; without a CMYK profile it keeps the formula and embeds nothing, because the formula values do not belong to any profile (the synthetic formpth Generic CMYK is deliberately not used as a silent fallback). Verified by reading the files back with Pillow: PNG, JPEG, WebP and TIFF return the profile byte for byte (sRGB 588 bytes, FOGRA39L 121368 bytes, JPEG in two segments, a 1.8 MB ECI profile in 28 JPEG segments, PNG and WebP too; Pillow caps a PNG iCCP at 1 MB unless MAX_TEXT_CHUNK is raised, which is Pillow, not the file). Pixel values are unchanged by embedding. CMYK TIFF of 8 known colours through FOGRA39L against lcms (Pillow ImageCms, relative colorimetric with black point compensation): 6 colours identical, grey and (216,58,58) within 1 to 2 of 255, formula values differ by up to 69 (red formula 0,255,255,0 against 0,247,251,0). Not done: no profile in SVG or EPS, no soft proof applied to the raster before a CMYK TIFF, and JPEG CMYK is not offered.
+
+## src/engine/inks.ts
+
+### src/engine/inks.ts · Ink Manager model: print, convert to process, aliases
+- refers-to: src/engine/inks.ts :: platesOf, inkRows, inkTarget, plateValue, setInkPrint, setInkProcess, setInkAlias, withInks; src/engine/types.ts :: Doc.inks, InkSettings; src/ui/ink-manager.ts :: InkManagerDialog; src/engine/render.ts :: plateGray; src/io/pdf.ts :: Painter.separation; src/io/pdf-plate-map.ts :: routeInk
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+Ink settings live in the document (doc.inks: off, process, alias, allSpotsToProcess), so they travel in .fpth through the generic document copy (checked: serialize then docFromManifest returns the same object) and take part in Undo as one step named Ink Manager. A spot ink resolves through inkTarget: follow the alias chain to the last spot that exists (a cycle stops), then it is process if All Spots to Process, the ink or the alias target is converted, otherwise it is a spot plate under the target name. plateValue gives one ink's coverage for one paint and is the only place that decides it, used by the Separations Preview in render.ts, the vector plates and the PDF spot export, so the three cannot disagree. Spot-to-process uses the swatch CMYK equivalent scaled by the tint. platesOf(doc, true) leaves out inks that are off; the Separations Preview lists that set and drops the shown plate if it disappears. PDF export of a spot colour uses routeInk: a converted spot is written as its CMYK (or RGB for PDF/A) with the tint, an aliased one as a Separation of the target name; verified with qpdf on four settings (two Separations, one Separation plus CMYK, one Separation shared by both objects, none). The dialog (ui/ink-manager.ts) opens from Window > Ink Manager (command ink-manager, entry in command-meta.ts), from the Separations Preview footer and from the Print dialog Output pane; its list is patched in place with patchList and reserves its height (248 px). Separations Preview list now has a fixed height (232 px) because adding or removing a plate through the Ink Manager shrank the bottom anchored window and shifted layout by 0.003; after the change layout shift is 0 under 4x CPU throttle for the dialog, the Print dialog path and the Export dialog. Not done: no ink limit or Black Overprint, no per-ink screen angle or density, the Ink Manager does not rename inks, and SVG and EPS exports ignore the ink settings.
+
+## src/io/pdf-plates.ts
+
+### src/io/pdf-plates.ts · Separations as vector plates
+- refers-to: src/io/pdf-plates.ts :: exportPlates; src/io/pdf-plate-map.ts :: PlatePaint, routeInk; src/io/pdf.ts :: Painter.plate; src/ui/print-dialog.ts :: PrintDialog
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+File > Print separations used to render every ink to a grayscale bitmap per page. Each plate is now a page drawn by the normal PDF Painter with a PlatePaint set: every colour becomes the ink's coverage as DeviceGray (1 minus coverage, so ink is black), strokes and fills, gradient stops (Axial or radial shading in DeviceGray, freeform and mesh through the same map), spot colours on their own plate with their tint, and overprint is honoured by dropping a fill or stroke that carries nothing on this plate when it overprints (so it neither knocks out nor draws) while a knockout paints white over lower inks. Rasters keep the bitmap path: an image is converted per pixel to the ink's value with the same CMYK formula the engine uses for RGB art (it does not go through the document profile), and a raster effect or an image warp is rendered with separation set and placed as a gray picture. Pages that no plate touches are left out (an empty document gets one blank K page). Marks, bleed, trim boxes, UserUnit and the sheet and tile layouts are the same code as the composite PDF. Verified on a test document (CMYK rectangles, a K overprint with a stroke, a 60 percent spot ellipse, a gradient, live text, a raster image, a spot under a K knockout): 5 pages, exactly 5 image XObjects in the file (one per plate, all the 80 by 60 raster picture), none for the vector art, qpdf --check clean; pdftoppm at 300 ppi against the old bitmap plates outside the image and the overprint area: mean difference 0.04 to 0.35 of 255 per plate, at most 0.36 percent of pixels differ by more than 32; spot converted to process gives magenta 54 and yellow 48 percent on the 60 percent tint (pixels 117 and 133, expected 117 and 133). With marks, color bars, page information and custom bleed the plates render correctly. The file size for the test is 11 KB against 2.8 MB of PNG references at the same resolution. Not done: raster images use the RGB-to-CMYK formula and not the document profile, plates are DeviceGray and carry no /Separation page tag or ink name metadata (the ink is in the page information line), and only linear gradients were checked on a real plate (freeform and mesh shadings take the plate map in code but were not rendered here).
+
+## src/io/pdf-icc.ts
+
+### src/io/pdf-icc.ts · PDF import honours ICCBased colour spaces
+- refers-to: src/io/pdf-icc.ts :: pdfProfiles, assignPdfProfile; src/io/pdf-read.ts :: Painter.toColor (ICCBased branch); src/app.ts :: openFiles (PDF)
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+An ICCBased space used to be read as DeviceGray, DeviceRGB or DeviceCMYK by its component count alone. Now the reader uses the profile stream's /Alternate when it matches the count (CalGray, CalRGB, Lab, the Device spaces), so a Lab alternate no longer comes in as RGB numbers. For a CMYK profile the colour numbers stay CMYK and the profile becomes the document CMYK working space, which is what Illustrator does with a tagged CMYK PDF and is the only way both the numbers and the look are kept: the colours then display, proof and export through that profile's table from the engine. pdf-icc.ts finds the profile streams without the page interpreter (the async inflate cannot run inside the synchronous colour reader), by scanning the file for stream dictionaries with /N 1, 3 or 4 that are not images, honouring /Length, inflating Flate, and checking the acsp signature and the data colour space; the first CMYK profile wins, it is uploaded to the engine (which dedupes by SHA-1 id, so a profile it already has is not copied again) and the toast names it. Verified with a hand written PDF (FOGRA39L ICCBased N 4 and an ICCBased N 3 with a Lab alternate): the four fills come in as CMYK 100/0/0/0, 0/100/0/0, 0/0/0/100 and the Lab 50, 60, -40 as RGB 184, 72, 188, and opening the file in the window sets doc.cm.cmyk to the profile. Only one hook lives in pdf-read.ts (the ICCBased branch of toColor, nine lines). Not done: an RGB ICC profile that is not sRGB is not converted (there is no RGB to RGB table route), ICCBased images are still read by their component count, an encrypted file yields no profile, and a PDF with several different CMYK profiles gets only the first.
+
+### src/io/pdf-text.ts · live text as runs
+- refers-to: src/io/pdf-text.ts :: liveRuns, liveStream, LiveFonts.plan; src/io/pdf-read.ts :: Painter.place
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+Supersedes the one Tm and Tj per glyph of the v0.32.0 entry. Consecutive glyphs with the same face, ink and linear matrix whose origins lie on one baseline (perpendicular distance under 0.01 pt) go out in one BT with one Tm and one TJ array; the numbers are the pen position minus the layout position in thousandths of text space, so kerning, tracking and justification are exact, and any residue under 0.25 is left out without accumulating (the next number includes it). Spaces stay real glyphs, so pdftotext gives words and lines. Type on a path, rotated glyphs and baseline shifts break the run and keep a Tm of their own. Advances in W are written with one decimal. On the way in, pdf-read.ts joins a line that sits directly under the previous point text (same matrix, left edge, style, even step) into one text object with leading, so a formpth PDF without the native copy reopens as paragraphs: an area text of four lines came back as one node, a point line with tracking as one node. Not done: justified lines whose word gaps differ are one run with big TJ numbers, which reopens as one line with a tracking fit.
+
+### src/io/pdf.ts · export security, standards, compression and layers
+- refers-to: src/io/pdf-std.ts; src/io/pdf-crypt.ts :: makeSealer, sealStrings; src/io/pdf.ts :: PdfFile.build, exportPdf, Painter.backdrop, Painter.flat; src/io/pdf-image.ts; src/io/pdf-x.ts :: pdfaParts, xmpPdfA; src/ui/app-dialogs.ts :: ExportDialog; backend/app/routers/mcp.py :: export_file
+- kind: rationale
+- logged: v0.37.0 · 2026-10-16
+
+Security is the Standard handler V5 R6 with AESV3: a random 32 byte file key, U/UE from the user password, O/OE from the owner password and U, Perms with the P flags, and every string and stream sealed with that key directly (AES-256-CBC, random IV in front, PKCS#7), no per-object derivation. The Encrypt dictionary, xref and trailer stay clear; the document ID is made when absent. Verified against pikepdf, qpdf and poppler (user and owner open, wrong password refused, all eight permission flags read back as set, U, O, UE, OE and Perms recomputed independently in Python), and by formpth's own reader. Passwords longer than 127 bytes are cut as the specification says, which poppler does not do; SASLprep is not applied. Without an owner password a random one is made, and restricting anything without one is refused. PDF/X and PDF/A with passwords are refused with a message, as are layers in X-1a and X-3, in both the dialog (controls disabled) and the MCP tool. The editing payload is left out when encrypted, like under the standards.
+
+Standards: X-1a writes 1.3, everything as DeviceCMYK or Separation (images too, flattened on white), GTS_PDFXVersion PDF/X-1:2001 with conformance PDF/X-1a:2001, no XMP. X-3 writes 1.3 with the CMYK intent and keeps RGB tagged through a DefaultRGB ICC space. Both flatten transparency by drawing the region of each object that needs it (opacity, blend, mask, knockout, soft gradients, translucent images, raster effects) as the whole document looks there, at the document resolution, as one opaque picture over the vectors below it; objects inside patterns and symbols cannot be placed that way, so the export stops and lists them. X-4 is as before, and its layer configuration no longer carries /AS. PDF/A-2b writes 1.7, DeviceRGB only with an sRGB GTS_PDFA1 output intent, an XMP packet with pdfaid part 2 conformance B whose title, producer and dates repeat the Info dictionary, embedded fonts, no encryption and no editing payload. veraPDF is not available, so these were checked by a script of the key requirements, not by a validator; the X-3 flattened pictures are RGB over CMYK vectors, which a strict preflight may flag as a colour mismatch.
+
+Compression: content, form, shading and tile streams can be left uncompressed (images and fonts keep theirs), images are automatic (JPEG kept, the rest Flate), all Flate, or all JPEG at a quality, and downsampling resamples with the browser's high quality filter only images above the "above" resolution (default 1.5 times the target); a JPEG source stays JPEG after resampling in automatic mode. Fill gradients with stop opacity are now rasterised like stroke gradients, because the PDF gradient ignored the stop opacity (found when comparing the render with the canvas).
+
+Layers: each non-template top-level layer becomes an OCG (hidden layers start in /OFF and print state OFF, non printing layers print state OFF), with /Order top first, the content in BDC /OC ... EMC, and /AS only without a standard. pdf-read.ts reads OCGs back: a BDC /OC group with a known OCG becomes a layer in order of first painting, named from the OCG, hidden from /OFF and BaseState, non printing from Print usage; content in a clip group keeps its clip around each piece. The export dialog groups the PDF options in four tabs (General, Marks and Bleeds, Compression, Security) so its reserved height is 599 px for every format and tab; the note sits in the footer.

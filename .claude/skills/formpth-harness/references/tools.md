@@ -100,7 +100,16 @@ Exports the art to an absolute path; the extension chooses the format: .svg, .pd
 - `transparent`: boolean; default false
 - `outline_text`: boolean; default false; SVG and DXF: type as outlines (DXF writes TEXT otherwise).
 - `live_text`: boolean; default true; PDF only: write type as selectable, searchable text with the fonts embedded (default). Type with gradients, effects, 3D or an unavailable font is outlined either way; false outlines all type.
-- `pdf_standard`: string (none | x4); default "none"; PDF only: x4 writes PDF/X-4 with the document CMYK profile (set_color_settings) as the output intent, XMP metadata and a document ID, and leaves out formpth editing data.
+- `pdf_standard`: string (none | x1a | x3 | x4 | a2b); default "none"; PDF only: x4 writes PDF/X-4 with the document CMYK profile (set_color_settings) as the output intent, XMP metadata and a document ID, and leaves out formpth editing data. x1a writes PDF/X-1a:2001 (version 1.3, CMYK and spot colours only, transparency flattened into pictures) and x3 writes PDF/X-3:2002 (version 1.3, flattened, RGB stays tagged); both fail with a message naming what could not be flattened. a2b writes PDF/A-2b (sRGB output intent, fonts embedded, XMP identification). The standards cannot be combined with passwords or permissions, and x1a and x3 cannot have layers.
+- `pdf_layers`: boolean; default false; PDF only: Create Acrobat Layers from Top-Level Layers. Each layer becomes an optional content group in the Layers panel (hidden layers start off); needs pdf_standard none, x4 or a2b.
+- `open_password`: string; PDF only: password asked when the file is opened (AES-256, revision 6). Cannot be combined with a PDF/X or PDF/A standard.
+- `permissions_password`: string; PDF only: password that unlocks the permissions; required when permissions restricts anything. The file also opens with it.
+- `permissions`: object; PDF only: what a reader may do, applied with permissions_password. Defaults allow everything.
+- `image_compression`: string (auto | zip | jpeg); default "auto"; PDF only: auto keeps JPEG pictures as they are and writes the rest with ZIP (Flate); zip is lossless for all; jpeg recompresses every picture with jpeg_quality.
+- `jpeg_quality`: number; default 0.8; PDF only: JPEG quality when image_compression is jpeg.
+- `downsample_ppi`: number; default 0; PDF only: resample pictures to this many pixels per inch; 0 keeps them as they are.
+- `downsample_above_ppi`: number; default 0; PDF only: only pictures above this resolution are resampled; 0 means 1.5 times downsample_ppi.
+- `compress_line_art`: boolean; default true; PDF only: Flate-compress page content and line art; false writes it readable.
 - `color`: string (rgb | cmyk); EPS only: colour model; default the document's colour mode.
 - `dxf_version`: string (2000 | R12); default "2000"; DXF only: 2000 writes splines, solid hatches for fills, true colours and lineweights; R12 writes polylines with arcs.
 - `units`: string (mm | cm | m | km | in | ft | yd | mi | pt | px); default "mm"; DXF only: the drawing units.

@@ -12,7 +12,8 @@ A zip of `manifest.json` (`format: com.nodemode.formpth`, `version: 1`, `app`, `
 ## SVG (`io/svg.ts`)
 
 - Export: `exportSvg(project, { artboard, outlineText, preserve, precision, ids })`. Gradients in user space with midpoint stops expanded, patterns, filters for raster effects (objects with Effect Gallery or Rasterize effects are baked to an image at `rasterPpi`), clip paths, masks, symbols as `defs` and `use`, mesh as quads. With `preserve`, the manifest rides in a `metadata` element with the id `formpth-data` and images carry `data-formpth-src`, so formpth reopens it exactly.
-- Import: `importSvg(text, title)` reads transforms, CSS classes, gradients with `href` chains, clip paths, `use` and `symbol`, text, data URI images; named top-level groups become layers.
+- Import: `importSvg(text, title)` reads transforms, CSS classes, gradients with `href` chains, `use` and `symbol`, data URI images; named top-level groups become layers. `io/svg-refs.ts` resolves `pattern` (to pattern swatches), `mask` (to opacity masks), `clipPath` and `marker` (to arrowheads when the art matches `ARROWHEADS`, else a group); `io/svg-filter.ts` maps blur, drop shadow and offset-blur-merge chains to live effects; `io/svg-text.ts` maps `text`, `tspan` and `textPath` to styled point text and type on a path. What cannot map (feColorMatrix, feTurbulence, feBlend, feMorphology) is returned in `SvgImport.leftOut` and shown in the open toast. The exporter's own `data-formpth-pattern`, `data-arrows` and `data-formpth-textpath` attributes let a file round-trip with `preserve` false.
+- EPS foreign import (`io/ps-read.ts`, async): runs the PostScript, including `image`, `colorimage` and `imagemask` with ASCIIHex, ASCII85, RunLength, Flate and DCT filters (`io/ps-filters.ts`); images arrive as image nodes plus an `assets` map.
 
 ## PDF (`io/pdf.ts`)
 

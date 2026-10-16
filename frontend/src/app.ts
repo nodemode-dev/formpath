@@ -107,6 +107,8 @@ import { TerminalDock } from './ui/terminal-dock';
 import { Catalogue } from './automation/catalogue';
 import { SpellingDialog, resetSpellCache } from './ui/panels/spelling';
 import { SeparationsDialog } from './ui/panels/separations';
+import { InkManagerDialog } from './ui/ink-manager';
+import { assignPdfProfile } from './io/pdf-icc';
 import { DocumentInfoDialog } from './ui/panels/document-info';
 import { packageProject } from './io/package';
 import { SpellMarks } from './ui/spell-marks';
@@ -434,8 +436,8 @@ export function startApp(): void {
     }
     const data = await f.arrayBuffer(), native = readEpsNative(data);
     if (native) return { doc: docFromManifest(native.manifest), assets: native.assets, title, note: '' };
-    const r = readEpsVector(data, title);
-    return { doc: r.doc, assets: new Map(), title, note: `Opened ${f.name} by running its PostScript: paths, fills, strokes, clipping, gradients and text.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
+    const r = await readEpsVector(data, title);
+    return { doc: r.doc, assets: r.assets, title, note: `Opened ${f.name} by running its PostScript: paths, fills, strokes, clipping, gradients, images and text.${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}` };
   }
 
   async function openFiles(files: File[], dxf: Partial<DxfImportOptions> | null = null, password?: string): Promise<void> {
@@ -446,7 +448,7 @@ export function startApp(): void {
           if (/\.(dxf|dwg|eps|epsf|ps)$/.test(lower)) { const r = await readForeign(f, dxf); if (r) { adopt(r.doc, r.title, r.assets); if (r.note) toast(r.note); } continue; }
           if (lower.endsWith('.fpth')) await openFpth(await f.arrayBuffer(), f.name);
           else if (lower.endsWith('.ase')) await openLibraryFile(f, 'swatch');
-          else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, clipping, type and images; filters and masks it cannot match are left out.`); }
+          else if (lower.endsWith('.svg') || lower.endsWith('.svgz')) { const r = await importSvg(await svgText(f), f.name.replace(/\.svgz?$/i, '')); adopt(r.doc, r.title, r.assets); if (!r.native) toast(`Opened ${f.name}. SVG brings paths, shapes, gradients, patterns, masks, clipping, markers, type and images.${r.leftOut.length ? ` Left out: ${r.leftOut.slice(0, 4).join(' ')}` : ''}`); }
           else if (lower.endsWith('.pdf') || lower.endsWith('.ai')) {
             const data = await f.arrayBuffer(), title = f.name.replace(/\.(pdf|ai)$/i, '');
             if (lower.endsWith('.ai') && isLegacyAi(data)) {
@@ -466,8 +468,10 @@ export function startApp(): void {
                 pw = next;
               }
             }
-            adopt(r.doc, title, r.assets);
-            const subs = r.fonts.slice(0, 4).map(([from, to]) => `${from} as ${to}`).join(', ') + (r.fonts.length > 4 ? ` and ${r.fonts.length - 4} more` : '');
+            const tagged = await assignPdfProfile(r.doc, data);
+            adopt(tagged.doc, title, r.assets);
+            if (tagged.name) toast(`The PDF colours use the CMYK profile ${tagged.name}; it is now this document's CMYK working space.`);
+            const subs =r.fonts.slice(0, 4).map(([from, to]) => `${from} as ${to}`).join(', ') + (r.fonts.length > 4 ? ` and ${r.fonts.length - 4} more` : '');
             toast(`Opened ${f.name}: ${r.pages === 1 ? 'one page as an artboard' : `${r.pages} pages as artboards`}.${r.fonts.length ? ` Fonts not installed, set in their nearest match: ${subs}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
           } else if (f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
             const s = await imageSize(f);
@@ -711,7 +715,7 @@ export function startApp(): void {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
       return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
     }
-    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none' });
+    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : false, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined });
     if (c.format === 'eps') {
       const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
       if (scope === 'all' && p.doc.artboards.length > 1) {
@@ -732,16 +736,22 @@ export function startApp(): void {
     if (!region) return null;
     const only = scope === 'selection' ? engine.targetIds().map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n) : undefined;
     const bg = scope === 'artboard' ? p.doc.artboards[ab]?.bg ?? null : null;
-    return exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only, tiff: c.format === 'tiff' ? c.tiff : undefined });
+    return exportRaster(p, { region, scale: c.scale, format: c.format, quality: c.quality, transparent: c.transparent, bg, only, tiff: c.format === 'tiff' ? c.tiff : undefined, icc: c.icc });
   }
 
   const exportDialog = new ExportDialog(), screensDialog = new ScreensDialog();
   let printDialog: PrintDialog | null = null;
+  let inkManager: InkManagerDialog | null = null;
+  function openInkManager(after?: () => void): void {
+    if (!engine.doc) return;
+    inkManager ??= new InkManagerDialog(engine);
+    inkManager.show(after);
+  }
   async function printDocument(): Promise<void> {
     const p = engine.current;
     if (!p) return;
     typing.end();
-    printDialog ??= new PrintDialog();
+    printDialog ??= new PrintDialog(openInkManager);
     const s = await printDialog.ask(p);
     if (!s) return;
     await engine.task(async () => {
@@ -755,7 +765,7 @@ export function startApp(): void {
   async function exportAs(format: ExportChoice['format']): Promise<void> {
     const p = engine.current;
     if (!p) return;
-    const c = await exportDialog.ask(format, p.activeArtboard, engine.hasSelection, p.doc.colorMode === 'cmyk', p.doc.artboards.length);
+    const c = await exportDialog.ask(format, p.activeArtboard, engine.hasSelection, p.doc.colorMode === 'cmyk', p.doc.artboards.length, !!p.doc.cm);
     if (!c) return;
     await engine.task(async () => {
       try {
@@ -896,7 +906,7 @@ export function startApp(): void {
     placeLinked: async (path, at, width) => placeLinked(await links.readPath(path), at, width),
     links: (a) => linkTool(a),
     projectBlob: projectZip,
-    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' || format === 'eps', liveText: o.liveText, standard: o.standard, cmyk: o.cmyk, cad: o.cad }); },
+    exportBlob: (format, o) => { const p = engine.current; if (!p) return Promise.resolve(null); const scope = o.scope === 'all_artboards' ? 'all' : o.scope === 'document' ? 'art' : o.scope === 'selection' ? 'selection' : 'artboard'; return exportBlob({ format: format === 'jpeg' ? 'jpg' : format, scope, artboard: o.artboard ?? p.activeArtboard, scale: o.scale, quality: o.quality, transparent: o.transparent, outlineText: o.outlineText, preserve: format === 'pdf' || format === 'svg' || format === 'eps', liveText: o.liveText, standard: o.standard, layers: o.layers, compression: o.compression, security: o.security, cmyk: o.cmyk, cad: o.cad }); },
     image: async (scope, artboard, maxSize, outline) => {
       const p = engine.current;
       if (!p) return null;
@@ -1457,6 +1467,7 @@ export function startApp(): void {
     { id: 'assign-profile', label: 'Assign Profile...', enabled: has, run: () => void assignProfileDialog(engine) },
     { id: 'convert-to-profile', label: 'Convert to Profile...', enabled: has, run: () => void convertToProfileDialog(engine) },
     { id: 'proof-setup', label: 'Customize...', enabled: has, run: () => void proofSetupDialog(engine) },
+    { id: 'ink-manager', label: 'Ink Manager...', group: 'Window', description: 'Opens the Ink Manager to choose which process and spot inks print, convert spot inks to process, or alias one spot ink to another; the choices drive separations, Separations Preview and PDF export.', enabled: has, run: () => openInkManager() },
     { id: 'proof-colors', label: 'Proof Colors', enabled: has, checked: () => isProofing(), run: () => void toggleProofColors(engine) },
     { id: 'send-nodemode', label: 'Send to NodeMode', enabled: has, run: () => void engine.task(async () => { const p = engine.current; if (!p) return; try { const r = exportRegion(p, p.activeArtboard); const b = await exportRaster(p, { region: r, scale: 2, format: 'png', quality: 1, transparent: true }); const res = await api.sendToNodeMode(loadPrefs().nodemodeUrl, p.name, [{ name: p.name, kind: 'image', width: Math.round(r.w * 2), height: Math.round(r.h * 2) }], [{ name: '0.png', blob: b }]); toast(res.placed ? 'Sent to NodeMode: the artwork is on its canvas.' : res.detail ?? 'Uploaded to NodeMode.'); } catch (err) { toast(message(err), 'error'); } }) },
 
@@ -1527,7 +1538,7 @@ export function startApp(): void {
     { id: 'smooth-path', label: 'Smooth...', group: 'Object', description: 'Smooths the selected paths with a Smoothness amount from 0 to 100 percent, previewed live.', enabled: sel, mutates: true, params: { smoothness: { type: 'number', min: 0, max: 100, description: 'Smoothness in percent' } }, run: (params) => void smoothDialog(params) },
     { id: 'swatch-info', label: 'Create Swatch Info', group: 'Window', description: 'Places a card beside the artboard for each selected swatch, or every swatch when none is selected, with its colour and its name, HEX, RGB, CMYK and spot name, as one group named Swatch Info.', enabled: has, mutates: true, run: () => void swatchInfo() },
     { id: 'overprint-preview', label: 'Overprint Preview', keys: ['Alt+Shift+Mod+Y'], group: 'View', description: 'Shows how objects marked to overprint multiply onto the art beneath them, as a printing plate would; off by default and never applied to exports.', enabled: has, checked: () => engine.view.overprintPreview, run: () => engine.setView({ overprintPreview: !engine.view.overprintPreview }) },
-    { id: 'separations-preview', label: 'Separations Preview', group: 'Window', description: 'Opens a window to show a single ink plate in gray: All, Cyan, Magenta, Yellow, Black or one spot color; closing it returns to the full color view.', enabled: has, params: { plate: { type: 'string', description: 'Plate to show: All, C, M, Y, K or the name of a spot swatch' } }, run: (params) => { separations ??= new SeparationsDialog(engine); separations.show(); if (typeof params?.plate === 'string') engine.setView({ separation: /^all$/i.test(params.plate) ? null : params.plate }); } },
+    { id: 'separations-preview', label: 'Separations Preview', group: 'Window', description: 'Opens a window to show a single ink plate in gray: All, Cyan, Magenta, Yellow, Black or one spot color; closing it returns to the full color view.', enabled: has, params: { plate: { type: 'string', description: 'Plate to show: All, C, M, Y, K or the name of a spot swatch' } }, run: (params) => { separations ??= new SeparationsDialog(engine, () => openInkManager()); separations.show(); if (typeof params?.plate === 'string') engine.setView({ separation: /^all$/i.test(params.plate) ? null : params.plate }); } },
     { id: 'document-info', label: 'Document Info', group: 'Window', description: 'Opens a read-only window with the counts for the document: artboards, objects, paths and anchors, fonts, linked images, swatches, spot colors, gradients, patterns, symbols and brushes.', enabled: has, run: () => { docInfo ??= new DocumentInfoDialog(engine); docInfo.show(); } },
     { id: 'package', label: 'Package...', group: 'File', description: 'Collects the document, its linked images and the fonts it uses into one folder with a report, optionally relinking the document to the copied images; an existing folder is refused.', enabled: has, params: { folder: { type: 'string', description: 'Full path of the new package folder; empty writes inside the Exports folder' }, links: { type: 'boolean', description: 'Copy linked images' }, fonts: { type: 'boolean', description: 'Copy fonts' }, separate: { type: 'boolean', description: 'Collect links in a separate folder' }, relink: { type: 'boolean', description: 'Relink the document to the copied images' }, report: { type: 'boolean', description: 'Create a report' } }, run: () => void packageDialog() },
     { id: 'corners-dialog', label: 'Corners...', group: 'Object', enabled: sel, mutates: true, params: { type: { type: 'string', enum: ['round', 'inverted', 'chamfer'], description: 'Corner type' }, radius: { type: 'number', min: 0, description: 'Radius in document units, or percent when mode is relative' }, mode: { type: 'string', enum: ['absolute', 'relative'], description: 'Rounding mode' } }, run: (params) => void cornersDialog(params) },
@@ -1825,7 +1836,7 @@ export function startApp(): void {
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
     { label: 'View', items: ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', { label: 'Proof Setup', items: ['proof-setup'] }, 'proof-colors', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
-    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype', 'text-to-vector'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
+    { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'ink-manager', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype', 'text-to-vector'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);
