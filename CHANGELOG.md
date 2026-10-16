@@ -2,6 +2,23 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.43.0 · 2026-10-16
+
+Plan v0.9.0 phase 40: canvas proof and snapping.
+
+### Added
+
+- Smart Guides snap to the nearest point on any path and to path intersections, with labels and the segment highlighted; equal-spacing markers show their distance. Preferences > Selection and Snapping: Anchor/Path Labels, Measurement Labels, Object Highlighting, Spacing Guides.
+- Knife: Alt cuts a straight line, Shift+Alt at 45 degrees. Eraser: Alt erases a rectangle.
+- The Gradient panel's Classic and Perceptual choice is labelled Method.
+
+### Fixed
+
+- Scissors missed a segment under another filled shape and ignored compound paths; Knife fused a selected group; Eraser skipped open paths and treated stroke-only shapes as fills.
+- EPS and `.ai` export dropped the perceptual gradient method.
+- New type in a new document was white on a white artboard; it is now black with no stroke unless a fill was picked.
+- Adding or duplicating layers shifted the rows below; rows now move by transform.
+
 ## 0.42.0 · 2026-10-16
 
 Plan v0.8.0 phase 39: the sixth independent audit, and two defects it found.

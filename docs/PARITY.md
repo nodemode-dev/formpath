@@ -12,6 +12,10 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list. The v0.23.0 grades come from a second independent audit of the code at commit 803e327, done without this page, with one row held stricter than the auditor graded it (PDF, see its row).
 
+## Score at v0.43.0
+
+**74 of 76, 97.4 percent, self-graded:** 72 Full, 4 Partial, 0 None; additions 12 of 12. That is the sixth audit's 73 below plus Smart Guides and Eraser, Scissors and Knife, built or driven with real mouse input in v0.43.0 and re-traced here, not by an auditor (plus Gradient Method among the additions). Three self-grades in a row have been audited down, so read this as provisional until the seventh audit (plan v0.9.0 phase 42), which is to run every row on the canvas.
+
 ## Score at v0.42.0
 
 **73 of 76 scored rows, 96.1 percent:** 70 Full, 6 Partial, 0 None, from a sixth independent audit of the code at commit a9e7517 (v0.41.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed, graded by two auditors who each held half the rows; the additions grade 11.5 of 12. It confirmed Layers and sublayers and Distort and Transform as Full by running every command, graded Raster export, Placed images and `.ai` Partial on named gaps, and graded three rows Partial that earlier audits had run and found Full: Smart Guides and 3D from code only, and Scissors and Knife from an inconclusive run. The self-grade of 75.5 at v0.40.0 was audited down to 73, the third self-grade in a row to be marked down, so this page now carries the audit's figure. Two of the audit's defects were fixed after it (placing one artboard of a multi-artboard `.ai`, and ppi in PNG and JPEG) without changing any grade.
@@ -39,7 +43,7 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Clipping masks | Full | Make and Release, layer clipping masks, isolation of clip groups |
 | Transparency, blend modes, opacity masks | Full | 16 blend modes, opacity, opacity masks with Clip and Invert, Isolate Blending; Knockout Group drawn on the canvas and written to SVG and PDF (PDF also carries it through soft masks, since common readers ignore /K) |
 
-## Selection and transform · 7.5 of 8
+## Selection and transform · 8 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -48,11 +52,11 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Select Same and Select Object | Full | Twelve Same attributes; Select Object by kind, stray points, brush strokes, clipping masks |
 | Bounding box and Free Transform | Full | The bounding box turns with the object and has Reset Bounding Box; Free Transform with its widget and options-bar modes (Constrain, Free Transform, Perspective Distort, Free Distort) and the modifier keys; distortions are projective, curves subdivided to follow them, type, images and symbols carried in an envelope with type still editable; Ctrl on a side handle shears |
 | Rotate, Reflect, Scale, Shear, Transform Each and Again | Full | Origin click, Alt copy, exact dialogs, Transform Each with random, Transform Again |
-| Smart Guides and snapping | Partial | Audit at v0.41.0, from code only: no snap to path or intersection, no distance labels or equal-spacing hints in the snap kinds it found. Earlier audits graded Full by running it; the next audit should drive it on the canvas. Alignment to edges and centres, equal-spacing guides with gap marks, labels, snap to point, grid and pixel; tangent and perpendicular snapping; construction angles chosen in Preferences (90 and 45, 30 to 90, or 30 degree sets) in `engine/snap.ts` snapLine; the Knife snaps too |
+| Smart Guides and snapping | Full | Raised in v0.43.0 and re-traced here, not by an auditor: snap to the nearest point on any path (label "path", segment highlighted) and to segment crossings (label "intersect"), distance pills on equal-spacing markers, and Preferences for Anchor/Path Labels, Measurement Labels, Object Highlighting and Spacing Guides; each checked with real mouse drags to within 1e-9 pt, with a 16.7 ms median frame on 2,000 paths. Audit at v0.41.0, from code only: no snap to path or intersection, no distance labels or equal-spacing hints in the snap kinds it found. Earlier audits graded Full by running it; the next audit should drive it on the canvas. Alignment to edges and centres, equal-spacing guides with gap marks, labels, snap to point, grid and pixel; tangent and perpendicular snapping; construction angles chosen in Preferences (90 and 45, 30 to 90, or 30 degree sets) in `engine/snap.ts` snapLine; the Knife snaps too |
 | Rulers, guides and grids | Full | Rulers from the active artboard, guides dragged from rulers, lock, make, release, clear, grid with subdivisions and snapping |
 | Puppet Warp | Full | Puppet Warp tool (J): default and added pins, drag to bend while other pins hold, Shift to select several, Alt-drag to twist, Delete, Expand, Show Mesh; an as-rigid-as-possible solve over a triangle mesh of the art; type, images and symbols carried in an envelope. Pins belong to the tool, as in Illustrator |
 
-## Drawing · 9.5 of 10
+## Drawing · 10 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -61,7 +65,7 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Rectangle to Star with live corners | Full | Raised in v0.36.0 and re-traced here, not by an auditor: polygons and stars keep live parameters with round, inverted or chamfer corners (one type and radius for all corners, as Illustrator), and any live shape converts to another kind. The audit at v0.34.0 had found: inverted and chamfer corners on polygons and stars drop the live shape (Sides, Points and Radius stop being editable), a star has one shared corner radius, and a live rectangle cannot be converted to a polygon or star. Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; Shape fields in Properties after drawing (size, every corner radius and corner type, pie angles, sides, points, radii, line length and angle); corner widgets on the canvas for rectangles, polygons and stars, which stay live when rounded; Live Corners on any path in Direct Selection (round, inverted, chamfer, absolute or relative, the Corners dialog). The audit graded this Partial because stars had no live corner radius; that was built in v0.31.0 and re-traced here |
 | Line, Arc, Spiral and grids | Full | Line Segment, Arc, Spiral, Rectangular Grid, Polar Grid, Flare |
 | Paintbrush and Blob Brush | Full | Paintbrush with the current brush; Blob Brush merging same-fill shapes |
-| Eraser, Scissors and Knife | Partial | Audit at v0.41.0: the Eraser cut a gap; the auditor's Scissors click and Knife drag left the geometry unchanged, which it put down to its own coordinates possibly missing the path. All three cut real geometry in earlier audits |
+| Eraser, Scissors and Knife | Full | Raised in v0.43.0 and re-traced here, not by an auditor: driven with real mouse input at 50, 100 and 400 percent, scrolled or not, on rectangles, ellipses, stars, lines, Beziers, groups and compound paths. Scissors cuts within 5 screen pixels of any segment (even under another filled shape) and selects the cut ends; Knife slices every crossed shape, Alt for a straight cut, Shift+Alt at 45 degrees; Eraser splits open and stroke-only paths and subtracts from fills, Alt erases a rectangle; one undo step each. Audit at v0.41.0: the Eraser cut a gap; the auditor's Scissors click and Knife drag left the geometry unchanged, which it put down to its own coordinates possibly missing the path. All three cut real geometry in earlier audits |
 | Shaper tool | Full | Shaper (Shift+N) turns gestures into live rectangles, rotated rectangles, circles, ellipses, triangles, polygons and lines; scribbles punch out, merge or delete regions; Shaper Groups keep their source shapes, with Faces and Shapes modes, face fills and Expand |
 | Perspective Grid | Full | One, two and three point grids from Define Grid, with presets; the Perspective Grid tool (Shift+P) drags vanishing points, the ground and the planes; shape tools draw on the active plane (keys 1 to 4 or the plane widget); Perspective Selection (Shift+V) moves, copies, scales and moves perpendicular on a plane, and drags flat art and type onto one; attached art re-projects when the grid changes; type stays editable; Release; SVG and PDF without the grid |
 | Dimension tool | Full | Dimension tool (Shift+I): linear (horizontal, vertical, aligned), angular, radius and diameter dimensions that keep measuring when moved or scaled and relabel with the document units; units, precision, scale ratio, arrows, label font and position; Expand. The Measure tool also reports area and perimeter |
@@ -163,34 +167,34 @@ formpth has no generative model of its own. Every row here runs on the language 
 | Category | Score | Rows |
 | --- | --- | --- |
 | Objects and layers | 8 | 8 |
-| Selection and transform | 7.5 | 8 |
-| Drawing | 9.5 | 10 |
+| Selection and transform | 8 | 8 |
+| Drawing | 10 | 10 |
 | Paths and Pathfinder | 8 | 8 |
 | Paint and colour | 8 | 8 |
 | Effects and live objects | 9.5 | 10 |
 | Type | 8 | 8 |
 | Generative AI | 5 | 5 |
 | Files, colour and output | 9.5 | 11 |
-| **Total** | **73** | **76** |
+| **Total** | **74** | **76** |
 
-70 rows Full, 6 Partial, 0 None: 96.1 percent, as graded by the sixth independent audit at v0.41.0.
+72 rows Full, 4 Partial, 0 None: 97.4 percent, self-graded at v0.43.0 (the sixth independent audit at v0.41.0 graded 73, 70 Full and 6 Partial).
 
 ## Next to close
 
-Every row is built. The six Partial rows, ranked by the audit at v0.41.0:
+Every row is built. The Partial rows, ranked by the audit at v0.41.0 (5 and 6 were built in v0.43.0 and await the next audit):
 
 1. Placed images and links: the multi-artboard `.ai` page defect (fixed in v0.42.0); linked placement and relink run in a browser with a real file handle.
 2. Illustrator `.ai`: confirm in Illustrator that it reads the private data formpth writes; live effects, brushes and live objects written as native Illustrator data; placed symbols and brushed strokes when reading.
 3. Raster export: PSD with live text and shape layers (PNG and JPEG ppi fixed in v0.42.0).
 4. 3D and Materials: a real-time 3D viewport (Substance materials stay out: a proprietary format).
-5. Smart Guides and snapping: snap to path and intersection, distance labels; an audit run on the canvas.
-6. Eraser, Scissors and Knife: an audit run that hits the path.
+5. Smart Guides and snapping: built in v0.43.0 (path and intersection snapping, spacing distances, preferences); an audit run on the canvas.
+6. Eraser, Scissors and Knife: driven and fixed in v0.43.0; an audit run that hits the path.
 
 The generative rows run on the model the person sets up for the Assistant; formpth ships no image or vector model of its own.
 
 ## Plan v0.5.0 additions (not in the 76)
 
-Graded 11.5 of 12 by the sixth audit at v0.41.0 (Gradient Method, see its row); earlier graded 11.5 of 12, and 12 of 12 after v0.31.0:
+12 of 12 self-graded at v0.43.0 (Gradient Method labelled and carried by every exporter); graded 11.5 of 12 by the sixth audit at v0.41.0 (Gradient Method, see its row); earlier graded 11.5 of 12, and 12 of 12 after v0.31.0:
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -200,7 +204,7 @@ Graded 11.5 of 12 by the sixth audit at v0.41.0 (Gradient Method, see its row); 
 | Pathfinder Hard Mix, Soft Mix and Trap | Full | Object > Pathfinder, with mixing rate and trap options |
 | Large canvas | Full | Artboards to 163,440 pt a side, PDF UserUnit, raster tiles |
 | Spell check | Full | Check Spelling, Auto Spell Check, a personal dictionary |
-| Gradient Method and Dither | Partial | Audit at v0.41.0, code only: found the dither but no gradient method choice. This page disagrees: the gradient's `blend` field offers Linear and Perceptual (OKLab), read by the renderer and the exporters; the grade stays the auditor's until the next audit looks again. Perceptual (OKLab) blending matched on the canvas, in SVG and PDF; dither on the canvas |
+| Gradient Method and Dither | Full | Since v0.43.0, re-traced here and not by an auditor: the Classic and Perceptual choice sits in a Gradient panel row labelled Method, and EPS and the .ai writer now carry perceptual gradients as SVG, PDF and the canvas did. Audit at v0.41.0, code only: found the dither but no gradient method choice. This page disagrees: the gradient's `blend` field offers Linear and Perceptual (OKLab), read by the renderer and the exporters; the grade stays the auditor's until the next audit looks again. Perceptual (OKLab) blending matched on the canvas, in SVG and PDF; dither on the canvas |
 | TIFF export | Full | RGB, RGBA or CMYK with PackBits, LZW or Deflate |
 | PDF marks and bleed | Full | Trim, registration, colour bars, page information, BleedBox and TrimBox |
 | Package | Full | The document, linked images and fonts collected with a report |

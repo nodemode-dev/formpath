@@ -2,7 +2,7 @@
 <h1 align="center">formpth</h1>
 <p align="center"><b>Vector illustration for the web and the desktop, in the NodeMode design system.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-0.42.0-f97316" alt="version 0.42.0">
+<img src="https://img.shields.io/badge/version-0.43.0-f97316" alt="version 0.43.0">
 <img src="https://img.shields.io/badge/node-22-339933" alt="node 22">
 <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
 <img src="https://img.shields.io/badge/tauri-2-24C8DB" alt="tauri 2">
@@ -120,7 +120,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 73 of 76 rows against Illustrator 30 (70 Full, 6 Partial, 0 None), 96.1 percent, from a sixth independent audit of the code at v0.41.0. It confirmed the layer commands and vector effects on groups and type as Full. Partial: Placed images (a multi-artboard `.ai` page defect, fixed in v0.42.0), `.ai` (written Illustrator data unconfirmed in Illustrator), Raster export (flat PSD layers; PNG and JPEG ppi fixed in v0.42.0), 3D (no real-time viewport), Smart Guides and Scissors and Knife (graded from code or an inconclusive run). DWG R2000 to R2018 reads natively since v0.35.0. The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
+- **Parity.** 74 of 76 rows against Illustrator 30, self-graded at v0.43.0 after building Smart Guides path and intersection snapping and fixing Scissors, Knife and Eraser; the sixth independent audit graded 73 of 76 (70 Full, 6 Partial, 0 None), 96.1 percent, of the code at v0.41.0. It confirmed the layer commands and vector effects on groups and type as Full. Partial: Placed images (a multi-artboard `.ai` page defect, fixed in v0.42.0), `.ai` (written Illustrator data unconfirmed in Illustrator), Raster export (flat PSD layers; PNG and JPEG ppi fixed in v0.42.0), 3D (no real-time viewport), Smart Guides and Scissors and Knife (graded from code or an inconclusive run). DWG R2000 to R2018 reads natively since v0.35.0. The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors

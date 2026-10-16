@@ -103,8 +103,9 @@ ask it questions.
   tool and the Shape section of Properties edit it too), and the faces recompute. Expand (options bar, Properties,
   or Object > Shape > Expand Shaper Group) turns the group into plain paths; Ungroup gives the shapes back.
 - Paintbrush (B) draws strokes with the current brush. Blob Brush (Shift+B) draws filled shapes that merge with
-  overlapping shapes of the same fill. Eraser (Shift+E) cuts shapes away; Scissors (C) splits a path at a point; Knife
-  cuts shapes along a freehand line.
+  overlapping shapes of the same fill. Eraser (Shift+E) cuts shapes away, open paths included ([ and ] change its size,
+  Alt-drag erases a rectangle); Scissors (C) splits a path at any point you click on it; Knife cuts shapes along a
+  freehand line (Alt for a straight cut, Shift+Alt at 45 degrees), only the selected ones when something is selected.
 - Smart guides (Ctrl+U) show alignment to other objects' edges and centres, equal spacing between neighbours (the
   matched gaps are marked), and angles of 0, 45, 90 and 135 degrees; snapping to the grid, to points and to whole
   pixels is in the View menu.
@@ -136,6 +137,9 @@ ask it questions.
   spaced, optionally rotated along it; Arrange on Path changes the spacing, offset, rotation and side.
 - Smart Guides also snap a line's end to a tangent of a nearby curve or perpendicular to a nearby segment, and to
   construction angles; the Knife's start and end snap to Smart Guides.
+- Smart Guides snap to any point on a path (labelled path, the segment highlighted) and to where two paths cross
+  (intersect); equal-spacing markers show the gap. Preferences > Selection and Snapping turns Anchor/Path Labels,
+  Measurement Labels, Object Highlighting and Spacing Guides on or off.
 - Align: to the selection, a key object (the last one selected) or the artboard; Distribute Objects and Distribute
   Spacing with an exact gap.
 - Puppet Warp (J, with Free Transform on the rail) bends art like a jointed puppet. Select paths, groups or compound
