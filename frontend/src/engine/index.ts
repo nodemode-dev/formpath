@@ -10,6 +10,7 @@ import { apply, arcPath, ellipsePath, emptyRect, fitCurve, flarePath, insideFill
 import { hitTest, nodeTouchesRect, type Hit } from './hit';
 import { liveChildren } from './live';
 import { buildMesh } from './mesh';
+import { getMesh, MESH_MIME, registerMesh, setMeshSource, type Mesh } from './modelmesh';
 import { align, arrange, duplicateNodes, fillRuleTargets, groupNodes, makeClip, makeCompound, moveRelative, moveToParent, releaseClip, releaseCompound, setFillRule, setProps, transformNodes, ungroupNodes, type AlignAction, type ArrangeOrder, type OpResult } from './ops/objects';
 import { expandAppearance } from './ops/expand';
 import { allTargets, expandCornersOp, setCornersOp, type CornerTargets } from './ops/corner-ops';
@@ -123,6 +124,7 @@ export class Engine extends Emitter<EngineEvents> {
   constructor() {
     super();
     onTraceReady(() => { invalidateLayers(); this.emit('render', null); });
+    setMeshSource((key) => { for (const p of this.projects) { const b = p.assets.get(key); if (b) return b; } return undefined; }, () => { invalidateLayers(); this.emit('render', null); });
   }
 
   get current(): Project | null { return this.projects.find((p) => p.id === this.currentId) ?? null; }
@@ -2080,9 +2082,9 @@ export class Engine extends Emitter<EngineEvents> {
     return id;
   }
 
-  addPatternSwatches(list: Array<{ name: string; tile: Rect; art: VNode }>, fillIds: string[] = [], step = 'Generate Patterns'): string[] {
+  addPatternSwatches(list: Array<{ name: string; tile: Rect; art: VNode; type?: PatternDef['type']; hs?: number; vs?: number }>, fillIds: string[] = [], step = 'Generate Patterns'): string[] {
     if (!this.current || !list.length) return [];
-    const defs: PatternDef[] = list.map((x) => ({ id: newId('pt'), name: x.name, tile: { ...x.tile }, art: cloneNode(x.art), type: 'grid', hs: 0, vs: 0 }));
+    const defs: PatternDef[] = list.map((x) => ({ id: newId('pt'), name: x.name, tile: { ...x.tile }, art: cloneNode(x.art), type: x.type ?? 'grid', hs: x.hs ?? 0, vs: x.vs ?? 0 }));
     const sw = defs.map((def) => ({ id: newId('s'), name: def.name, paint: { type: 'pattern' as const, pattern: def.id, xf: [1, 0, 0, 1, 0, 0] as Mat }, global: false, spot: false }));
     const paint: Paint = sw[0].paint;
     const ok = this.edit(step, (d) => {
@@ -2287,7 +2289,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (!t.length) return;
     const nodes = t.map((id) => findNode(p.doc, id) as VNode);
     const syms = new Set<string>(), imgs = new Set<string>(), pats = new Set<string>();
-    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const e of n.ap.effects) if (e.id.startsWith('3d.') && typeof e.params.texture === 'string') { const t = e.params.texture, s = p.doc.symbols.find((x) => x.id === t || x.name === t); if (p.doc.images[t]) imgs.add(t); else if (s) syms.add(s.id); } for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
+    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const e of n.ap.effects) if (e.id === '3d.model' && typeof e.params.model === 'string') { const m = p.doc.images[e.params.model] ? getMesh(e.params.model) : null; imgs.add(e.params.model); for (const g of m?.groups ?? []) if (g.tex) imgs.add(g.tex); } else if (e.id.startsWith('3d.') && typeof e.params.texture === 'string') { const t = e.params.texture, s = p.doc.symbols.find((x) => x.id === t || x.name === t); if (p.doc.images[t]) imgs.add(t); else if (s) syms.add(s.id); } for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
     const assets = new Map<string, Blob>();
     for (const k of imgs) { const b = p.assets.get(k); if (b) assets.set(k, b); }
     this.clipboard = {
@@ -2352,6 +2354,19 @@ export class Engine extends Emitter<EngineEvents> {
     const p = this.current; if (!p) return false;
     p.assets.set(key, blob);
     return this.edit('3D and Materials', (d) => ({ ...d, images: { ...d.images, [key]: { mime: blob.type || 'image/png', w, h } } }));
+  }
+  addModel(mesh: Mesh, blob: Blob, key: string, textures: Array<{ key: string; blob: Blob; w: number; h: number }>, name: string, center: Pt, size = 260): string {
+    const p = this.current; if (!p) return '';
+    registerMesh(key, mesh);
+    p.assets.set(key, blob);
+    for (const t of textures) p.assets.set(t.key, t.blob);
+    const big = Math.max(mesh.ext[0], mesh.ext[1], 1e-6), w = Math.max(1, (size * mesh.ext[0]) / big), h = Math.max(1, (size * mesh.ext[1]) / big);
+    const node: VNode = { ...this.makePath(rectPath(center.x - w / 2, center.y - h / 2, w, h, [0, 0, 0, 0])), name, ap: { items: [fill(solid(WHITE))], effects: [effect('3d.model', { ...effectDefaults('3d.model'), model: key })] } };
+    this.beginStep();
+    this.edit('Place', (d) => ({ ...d, images: { ...d.images, [key]: { mime: MESH_MIME, w: 0, h: 0 }, ...Object.fromEntries(textures.map((t) => [t.key, { mime: t.blob.type || 'image/png', w: t.w, h: t.h }])) } }));
+    const id = this.addNodes('Place', [node])[0] ?? '';
+    this.endStep();
+    return id;
   }
   documentSetup(patch: Partial<Pick<Doc, 'units' | 'colorMode' | 'title' | 'rasterPpi'>>): void { this.edit('Document Setup', (d) => ({ ...d, ...patch })); }
   setGrid(spacing: number, subdivisions: number): void { this.edit('Grid', (d) => ({ ...d, grid: { spacing, subdivisions } })); }

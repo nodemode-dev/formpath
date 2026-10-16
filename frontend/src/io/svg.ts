@@ -6,6 +6,7 @@ import { liveChildren } from '../engine/live';
 import { liveFaceNodes } from '../engine/livepaint';
 import { derivedArt } from '../engine/shaper';
 import { meshQuads } from '../engine/mesh';
+import { isMeshMime } from '../engine/modelmesh';
 import { latticeCopies, patternLattice } from '../engine/pattern';
 import { instanceArt } from '../engine/symbolism';
 import { cssColor, fill, freeformPixels, gradientAt, hex, NONE, perceptualStops, parseColor, resolvePaint, solid, stop, stroke, linearGradient, radialGradient } from '../engine/paint';
@@ -368,7 +369,7 @@ export function exportRegion(p: Project, which: SvgOptions['artboard']): Rect {
 
 export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
   const images = new Map<string, string>();
-  for (const key of Object.keys(p.doc.images)) { const b = p.assets.get(key); if (b) images.set(key, await blobToDataUrl(b)); }
+  for (const key of Object.keys(p.doc.images)) { const b = p.assets.get(key); if (b && !isMeshMime(p.doc.images[key].mime)) images.set(key, await blobToDataUrl(b)); }
   for (const key of textureImageKeys(p.doc)) { const b = p.assets.get(key); if (b && !p.bitmaps.has(key)) try { p.bitmaps.set(key, await createImageBitmap(b)); } catch { } }
   const outlines = new Map<string, PathData>();
   if (o.outlineText) {

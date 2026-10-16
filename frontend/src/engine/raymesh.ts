@@ -1,4 +1,5 @@
-import type { RayMesh, RayTexture } from './raytrace';
+import type { RayMesh, RaySurf, RayTexture } from './raytrace';
+import type { Mesh } from './modelmesh';
 import type { Raw, Solid, TraceGeom, V3 } from './threed';
 
 interface Nd { i: number; x: number; y: number; prev: Nd; next: Nd }
@@ -120,24 +121,33 @@ export function triangulate(xs: number[], ys: number[], outerLen: number, holes:
 export interface RayMap { x: number; y: number; w: number; h: number; tex: RayTexture }
 export interface MatMap { tex: RayTexture; tw: number; th: number; rot: number; ox: number; oy: number }
 
-export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null, mat: MatMap | null = null): RayMesh {
+export interface SurfExt { rays: Map<string, RaySurf>; mats: Map<string, MatMap | null> }
+
+export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null, mat: MatMap | null = null, ext: SurfExt | null = null): RayMesh {
   const R = g.R, c = g.center, pos: number[] = [], nrm: number[] = [], obj: number[] = [], sol: number[] = [], uvs: number[] = [], uvOn: number[] = [], uvm: number[] = [], eps = Math.max(1e-6, g.size * 1e-4);
-  const mr = mat ? (mat.rot * Math.PI) / 180 : 0, mcos = Math.cos(mr), msin = Math.sin(mr);
-  const matUv = (s: number, t: number): void => {
-    const a = s - (mat as MatMap).ox, b = t - (mat as MatMap).oy;
-    uvm.push((a * mcos - b * msin) / (mat as MatMap).tw + 0.5, (a * msin + b * mcos) / (mat as MatMap).th + 0.5);
+  const trig = new Map<MatMap, [number, number]>(), texList: RayTexture[] = [], texAt = new Map<MatMap, number>(), matIdx: number[] = [], surfArr: RaySurf[] = [], surfAt = new Map<string, number>(), sidx: number[] = [];
+  const anyMat = !!mat || (!!ext && [...ext.mats.values()].some((m) => m !== null));
+  const matUv = (mm: MatMap, s: number, t: number): void => {
+    let tc = trig.get(mm);
+    if (!tc) { const mr = (mm.rot * Math.PI) / 180; tc = [Math.cos(mr), Math.sin(mr)]; trig.set(mm, tc); }
+    const a = s - mm.ox, b = t - mm.oy;
+    uvm.push((a * tc[0] - b * tc[1]) / mm.tw + 0.5, (a * tc[1] + b * tc[0]) / mm.th + 0.5);
   };
+  const texIndex = (mm: MatMap): number => { let i = texAt.get(mm); if (i === undefined) { i = texList.length; texList.push(mm.tex); texAt.set(mm, i); } return i; };
+  const surfIndex = (id: string, r: RaySurf): number => { let i = surfAt.get(id); if (i === undefined) { i = surfArr.length; surfArr.push(r); surfAt.set(id, i); } return i; };
   const view = (v: V3): V3 => { const x = v[0] - c[0], y = v[1] - c[1], z = v[2] - c[2]; return [R[0] * x + R[1] * y + R[2] * z, R[3] * x + R[4] * y + R[5] * z, R[6] * x + R[7] * y + R[8] * z]; };
   const turn = (v: V3): V3 => [R[0] * v[0] + R[1] * v[1] + R[2] * v[2], R[3] * v[0] + R[4] * v[1] + R[5] * v[2], R[6] * v[0] + R[7] * v[1] + R[8] * v[2]];
   const colors = new Float32Array(Math.max(1, solids.length) * 3), index = new Map<Solid, number>();
   solids.forEach((s, i) => { index.set(s, i); const b = s.fill ?? s.stroke ?? [0.6, 0.6, 0.6]; colors[i * 3] = b[0]; colors[i * 3 + 1] = b[1]; colors[i * 3 + 2] = b[2]; });
-  const emit = (si: number, a: V3, b: V3, d: V3, na: V3, nb: V3, nd: V3, textured = false, st?: Array<[number, number] | undefined>): void => {
+  const emit = (si: number, a: V3, b: V3, d: V3, na: V3, nb: V3, nd: V3, textured = false, st?: Array<[number, number] | undefined>, sf?: string): void => {
+    const mm = ext && sf !== undefined && ext.mats.has(sf) ? (ext.mats.get(sf) as MatMap | null) : mat, sr = ext && sf !== undefined ? ext.rays.get(sf) : undefined;
     for (const [v, n, k] of [[a, na, 0], [b, nb, 1], [d, nd, 2]] as Array<[V3, V3, number]>) {
       pos.push(...view(v)); nrm.push(...turn(n)); obj.push(v[0] - c[0], v[1] - c[1], v[2] - c[2]);
-      if (mat) { const q = st?.[k]; if (q) matUv(q[0], q[1]); else matUv(v[0] - c[0], v[1] - c[1]); }
+      if (anyMat) { if (mm) { const q = st?.[k]; if (q) matUv(mm, q[0], q[1]); else matUv(mm, v[0] - c[0], v[1] - c[1]); } else uvm.push(0, 0); }
       if (map) { if (textured) uvs.push((v[0] - map.x) / map.w, (v[1] - map.y) / map.h); else uvs.push(0, 0); }
     }
     if (map) uvOn.push(textured ? 1 : 0);
+    if (ext) { sidx.push(sr && sf !== undefined ? surfIndex(sf, sr) : -1); if (anyMat) matIdx.push(mm ? texIndex(mm) : -1); }
     sol.push(si);
   };
   const facing = R[8] >= 0;
@@ -167,7 +177,7 @@ export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null
       group.forEach((r, gi) => { if (gi) holes.push(xs.length); pts[r].forEach((p, k) => { xs.push(p[0]); ys.push(p[1]); vs.push(rings[r][k]); sts.push(raw.ruv?.[keep[r]]?.[k]); }); });
       const tris = triangulate(xs, ys, pts[i].length, holes);
       const art = !!map && raw.role === 'front' && facing;
-      for (let t = 0; t < tris.length; t += 3) emit(si, vs[tris[t]], vs[tris[t + 1]], vs[tris[t + 2]], n0, n0, n0, art, [sts[tris[t]], sts[tris[t + 1]], sts[tris[t + 2]]]);
+      for (let t = 0; t < tris.length; t += 3) emit(si, vs[tris[t]], vs[tris[t + 1]], vs[tris[t + 2]], n0, n0, n0, art, [sts[tris[t]], sts[tris[t + 1]], sts[tris[t + 2]]], raw.surf);
     });
   }
   for (const q of sides) {
@@ -178,11 +188,40 @@ export function rayMesh(g: TraceGeom, solids: Solid[], map: RayMap | null = null
       return Math.hypot(x, y, z) > 1e-9 ? unit([x, y, z]) : q.n;
     });
     const U = q.raw.uv, at4 = (i: number): [number, number] | undefined => (U ? [U[i * 2], U[i * 2 + 1]] : undefined);
-    emit(q.si, P[0], P[1], P[2], N[0], N[1], N[2], false, [at4(0), at4(1), at4(2)]);
-    emit(q.si, P[0], P[2], P[3], N[0], N[2], N[3], false, [at4(0), at4(2), at4(3)]);
+    emit(q.si, P[0], P[1], P[2], N[0], N[1], N[2], false, [at4(0), at4(1), at4(2)], q.raw.surf);
+    emit(q.si, P[0], P[2], P[3], N[0], N[2], N[3], false, [at4(0), at4(2), at4(3)], q.raw.surf);
   }
   const mesh: RayMesh = { tris: sol.length, pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), obj: Float32Array.from(obj), solid: Int32Array.from(sol), colors };
   if (map) { mesh.uv = Float32Array.from(uvs); mesh.uvOn = Uint8Array.from(uvOn); mesh.tex = map.tex; }
-  if (mat) { mesh.uvm = Float32Array.from(uvm); mesh.mat = mat.tex; }
+  if (ext) {
+    mesh.surfs = surfArr; mesh.sidx = Int32Array.from(sidx);
+    if (anyMat) { mesh.uvm = Float32Array.from(uvm); mesh.mats = texList; mesh.matOf = Int32Array.from(matIdx); }
+  } else if (mat) { mesh.uvm = Float32Array.from(uvm); mesh.mat = mat.tex; }
   return mesh;
+}
+
+export function modelRayMesh(mesh: Mesh, R: number[], k: number, ext: SurfExt | null, textures: Map<number, MatMap>): RayMesh {
+  const nv = mesh.pos.length / 3, nt = mesh.idx.length / 3, pos = new Float32Array(nt * 9), nrm = new Float32Array(nt * 9), obj = new Float32Array(nt * 9), solid = new Int32Array(nt), uvm = mesh.uv ? new Float32Array(nt * 6) : null;
+  const colors = new Float32Array(Math.max(1, mesh.groups.length) * 3), surfArr: RaySurf[] = [], sidx = new Int32Array(nt), texList: RayTexture[] = [], texAt = new Map<number, number>(), matOf = new Int32Array(nt).fill(-1);
+  mesh.groups.forEach((g, i) => { colors[i * 3] = g.color[0]; colors[i * 3 + 1] = g.color[1]; colors[i * 3 + 2] = g.color[2]; });
+  const surfAt = new Map<number, number>();
+  void nv;
+  for (let t = 0; t < nt; t++) {
+    const gi = mesh.grp[t];
+    solid[t] = gi;
+    const sr = ext?.rays.get(`g${gi}`);
+    if (sr) { let i = surfAt.get(gi); if (i === undefined) { i = surfArr.length; surfArr.push(sr); surfAt.set(gi, i); } sidx[t] = i; } else sidx[t] = -1;
+    const tx = textures.get(gi);
+    if (tx && uvm) { let i = texAt.get(gi); if (i === undefined) { i = texList.length; texList.push(tx.tex); texAt.set(gi, i); } matOf[t] = i; }
+    for (let c = 0; c < 3; c++) {
+      const v = mesh.idx[t * 3 + c], px = mesh.pos[v * 3] * k, py = mesh.pos[v * 3 + 1] * k, pz = mesh.pos[v * 3 + 2] * k, qx = mesh.nrm[v * 3], qy = mesh.nrm[v * 3 + 1], qz = mesh.nrm[v * 3 + 2], o = t * 9 + c * 3;
+      pos[o] = R[0] * px + R[1] * py + R[2] * pz; pos[o + 1] = R[3] * px + R[4] * py + R[5] * pz; pos[o + 2] = R[6] * px + R[7] * py + R[8] * pz;
+      nrm[o] = R[0] * qx + R[1] * qy + R[2] * qz; nrm[o + 1] = R[3] * qx + R[4] * qy + R[5] * qz; nrm[o + 2] = R[6] * qx + R[7] * qy + R[8] * qz;
+      obj[o] = px; obj[o + 1] = py; obj[o + 2] = pz;
+      if (uvm && mesh.uv) { uvm[t * 6 + c * 2] = mesh.uv[v * 2]; uvm[t * 6 + c * 2 + 1] = mesh.uv[v * 2 + 1]; }
+    }
+  }
+  const out: RayMesh = { tris: nt, pos, nrm, obj, solid, colors, surfs: surfArr, sidx };
+  if (uvm && texList.length) { out.uvm = uvm; out.mats = texList; out.matOf = matOf; }
+  return out;
 }
