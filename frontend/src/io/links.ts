@@ -9,14 +9,15 @@ export interface LinkStatus { state: LinkState; size?: number; mtime?: number }
 export interface LinkFile { blob: Blob; name: string; size: number; mtime: number; path?: string; handle?: string; shown?: boolean }
 
 export const linkKey = (l: ImageLink): string => (l.path ? `path:${l.path}` : `handle:${l.handle ?? ''}`);
-export const IMAGE_KINDS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.pdf', '.ai', '.psd', '.tif', '.tiff'];
+export const IMAGE_KINDS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.pdf', '.ai', '.psd', '.psb', '.tif', '.tiff'];
+export const linkable = (name: string): boolean => IMAGE_KINDS.some((k) => name.toLowerCase().endsWith(k));
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' };
 export function typed(blob: Blob, name: string): Blob {
   const t = MIME[(name.split('.').pop() ?? '').toLowerCase()];
   return t && blob.type !== t ? new Blob([blob], { type: t }) : blob;
 }
 
-interface FileHandle { kind: 'file'; name: string; getFile(): Promise<File>; queryPermission?(o: { mode: string }): Promise<string>; requestPermission?(o: { mode: string }): Promise<string>; createWritable?(): Promise<{ write(b: Blob): Promise<void>; close(): Promise<void> }> }
+export interface FileHandle { kind: 'file'; name: string; getFile(): Promise<File>; queryPermission?(o: { mode: string }): Promise<string>; requestPermission?(o: { mode: string }): Promise<string>; createWritable?(): Promise<{ write(b: Blob): Promise<void>; close(): Promise<void> }> }
 interface DirHandle { kind: 'directory'; name: string; values(): AsyncIterable<FileHandle | DirHandle> }
 type Picker = { showOpenFilePicker?(o: unknown): Promise<FileHandle[]>; showSaveFilePicker?(o: unknown): Promise<FileHandle>; showDirectoryPicker?(o?: unknown): Promise<DirHandle> };
 const picker = (): Picker => window as unknown as Picker;
@@ -50,6 +51,35 @@ export async function pickLinkedFile(): Promise<LinkFile | null> {
   if (!h) return null;
   const f = await h.getFile();
   return { blob: f, name: f.name, size: f.size, mtime: f.lastModified, handle: await keepHandle(h) };
+}
+
+async function linkFromHandle(h: FileHandle, keep: boolean): Promise<LinkFile> {
+  const f = await h.getFile();
+  return { blob: f, name: f.name, size: f.size, mtime: f.lastModified, ...(keep ? { handle: await keepHandle(h) } : {}) };
+}
+
+/** File > Place: the picker returns handles, so a linkable file keeps its handle; anything else (SVG, EPS, models) comes back as a plain file. */
+export async function pickPlaceFiles(): Promise<LinkFile[] | null> {
+  const p = picker();
+  if (!p.showOpenFilePicker) return null;
+  let hs: FileHandle[];
+  try { hs = await p.showOpenFilePicker({ types: IMAGE_TYPES, multiple: true }); } catch { return null; }
+  const out: LinkFile[] = [];
+  for (const h of hs) out.push(await linkFromHandle(h, linkable(h.name)));
+  return out;
+}
+
+/** Drag and drop: must be called synchronously inside the drop event, because the items are dead after the first await. */
+export async function dropHandles(dt: DataTransfer | null): Promise<Map<string, () => Promise<LinkFile>>> {
+  const out = new Map<string, () => Promise<LinkFile>>();
+  if (!dt) return out;
+  const asks = Array.from(dt.items ?? []).map((i) => {
+    const get = (i as unknown as { getAsFileSystemHandle?: () => Promise<FileHandle | DirHandle | null> }).getAsFileSystemHandle;
+    if (i.kind !== 'file' || typeof get !== 'function') return Promise.resolve(null);
+    try { return get.call(i).catch(() => null); } catch { return Promise.resolve(null); }
+  });
+  for (const h of await Promise.all(asks)) if (h && h.kind === 'file' && linkable(h.name)) { const fh = h; out.set(fh.name, () => linkFromHandle(fh, true)); }
+  return out;
 }
 
 export async function pickLinkFolder(): Promise<Map<string, () => Promise<LinkFile>> | null> {

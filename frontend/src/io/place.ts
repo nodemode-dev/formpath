@@ -18,7 +18,7 @@ export type CropTo = 'bounding' | 'art' | 'crop' | 'trim' | 'bleed' | 'media';
 export type PlaceKind = 'pdf' | 'psd' | 'tiff';
 export interface PlaceOptions { mode?: 'embed' | 'link'; page?: number; crop?: CropTo; psd?: 'layers' | 'flatten' }
 export interface PlacePage { label: string; w: number; h: number; thumb: () => Promise<Blob | null> }
-export interface PlaceSpec { title: string; ok: string; file: string; kind: PlaceKind; pages: PlacePage[]; canLink: boolean; layered: boolean; note: string }
+export interface PlaceSpec { title: string; ok: string; file: string; kind: PlaceKind; pages: PlacePage[]; canLink: boolean; layered: boolean; note: string; linkHint?: string }
 export type PlaceAsk = (spec: PlaceSpec) => Promise<PlaceOptions | null>;
 export interface PlaceDeps { ask: PlaceAsk | null; password: (file: string, again: boolean) => Promise<string | null> }
 export interface PlaceSource { blob: Blob; name: string; link?: ImageLink }
