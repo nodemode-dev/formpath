@@ -2,6 +2,19 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.42.0 · 2026-10-16
+
+Plan v0.8.0 phase 39: the sixth independent audit, and two defects it found.
+
+### Fixed
+
+- Placing one page of a multi-artboard `.ai` embedded through its Illustrator data brought in every artboard; it now brings in the objects on the chosen artboard.
+- PNG and JPEG exports record the export resolution (300 ppi reads back as 300 ppi).
+
+### Changed
+
+- `docs/PARITY.md`: 73 of 76 (96.1 percent) from the sixth independent audit, which graded six rows Partial: Placed images, `.ai`, Raster export, 3D and Materials, Smart Guides, and Eraser, Scissors and Knife.
+
 ## 0.41.0 · 2026-10-16
 
 Plan v0.8.0 phase 38: modern Illustrator files.

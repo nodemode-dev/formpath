@@ -12,6 +12,10 @@ A control that only stores a value, with nothing reading it, does not count towa
 
 The list is the 76-row baseline shared with the Illustrator, Inkscape and formpth comparison: every capability a working illustrator reaches for in Illustrator 30, generative features included. Until v0.16.0 this page graded a narrower list of 59 rows that left out 17 capabilities formpth did not have, and graded several rows Full on controls that did nothing. An independent audit of v0.16.1 against the full list found 41 Full, 22 Partial and 13 None (52 of 76). This page now follows that list. The v0.23.0 grades come from a second independent audit of the code at commit 803e327, done without this page, with one row held stricter than the auditor graded it (PDF, see its row).
 
+## Score at v0.42.0
+
+**73 of 76 scored rows, 96.1 percent:** 70 Full, 6 Partial, 0 None, from a sixth independent audit of the code at commit a9e7517 (v0.41.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed, graded by two auditors who each held half the rows; the additions grade 11.5 of 12. It confirmed Layers and sublayers and Distort and Transform as Full by running every command, graded Raster export, Placed images and `.ai` Partial on named gaps, and graded three rows Partial that earlier audits had run and found Full: Smart Guides and 3D from code only, and Scissors and Knife from an inconclusive run. The self-grade of 75.5 at v0.40.0 was audited down to 73, the third self-grade in a row to be marked down, so this page now carries the audit's figure. Two of the audit's defects were fixed after it (placing one artboard of a multi-artboard `.ai`, and ppi in PNG and JPEG) without changing any grade.
+
 ## Score at v0.41.0
 
 Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern files open through Illustrator's own data, and export writes it) without closing it; see the row.
@@ -35,7 +39,7 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Clipping masks | Full | Make and Release, layer clipping masks, isolation of clip groups |
 | Transparency, blend modes, opacity masks | Full | 16 blend modes, opacity, opacity masks with Clip and Invert, Isolate Blending; Knockout Group drawn on the canvas and written to SVG and PDF (PDF also carries it through soft masks, since common readers ignore /K) |
 
-## Selection and transform · 8 of 8
+## Selection and transform · 7.5 of 8
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -44,11 +48,11 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Select Same and Select Object | Full | Twelve Same attributes; Select Object by kind, stray points, brush strokes, clipping masks |
 | Bounding box and Free Transform | Full | The bounding box turns with the object and has Reset Bounding Box; Free Transform with its widget and options-bar modes (Constrain, Free Transform, Perspective Distort, Free Distort) and the modifier keys; distortions are projective, curves subdivided to follow them, type, images and symbols carried in an envelope with type still editable; Ctrl on a side handle shears |
 | Rotate, Reflect, Scale, Shear, Transform Each and Again | Full | Origin click, Alt copy, exact dialogs, Transform Each with random, Transform Again |
-| Smart Guides and snapping | Full | Alignment to edges and centres, equal-spacing guides with gap marks, labels, snap to point, grid and pixel; tangent and perpendicular snapping; construction angles chosen in Preferences (90 and 45, 30 to 90, or 30 degree sets) in `engine/snap.ts` snapLine; the Knife snaps too |
+| Smart Guides and snapping | Partial | Audit at v0.41.0, from code only: no snap to path or intersection, no distance labels or equal-spacing hints in the snap kinds it found. Earlier audits graded Full by running it; the next audit should drive it on the canvas. Alignment to edges and centres, equal-spacing guides with gap marks, labels, snap to point, grid and pixel; tangent and perpendicular snapping; construction angles chosen in Preferences (90 and 45, 30 to 90, or 30 degree sets) in `engine/snap.ts` snapLine; the Knife snaps too |
 | Rulers, guides and grids | Full | Rulers from the active artboard, guides dragged from rulers, lock, make, release, clear, grid with subdivisions and snapping |
 | Puppet Warp | Full | Puppet Warp tool (J): default and added pins, drag to bend while other pins hold, Shift to select several, Alt-drag to twist, Delete, Expand, Show Mesh; an as-rigid-as-possible solve over a triangle mesh of the art; type, images and symbols carried in an envelope. Pins belong to the tool, as in Illustrator |
 
-## Drawing · 10 of 10
+## Drawing · 9.5 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -57,7 +61,7 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Rectangle to Star with live corners | Full | Raised in v0.36.0 and re-traced here, not by an auditor: polygons and stars keep live parameters with round, inverted or chamfer corners (one type and radius for all corners, as Illustrator), and any live shape converts to another kind. The audit at v0.34.0 had found: inverted and chamfer corners on polygons and stars drop the live shape (Sides, Points and Radius stop being editable), a star has one shared corner radius, and a live rectangle cannot be converted to a polygon or star. Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; Shape fields in Properties after drawing (size, every corner radius and corner type, pie angles, sides, points, radii, line length and angle); corner widgets on the canvas for rectangles, polygons and stars, which stay live when rounded; Live Corners on any path in Direct Selection (round, inverted, chamfer, absolute or relative, the Corners dialog). The audit graded this Partial because stars had no live corner radius; that was built in v0.31.0 and re-traced here |
 | Line, Arc, Spiral and grids | Full | Line Segment, Arc, Spiral, Rectangular Grid, Polar Grid, Flare |
 | Paintbrush and Blob Brush | Full | Paintbrush with the current brush; Blob Brush merging same-fill shapes |
-| Eraser, Scissors and Knife | Full | All three cut real geometry |
+| Eraser, Scissors and Knife | Partial | Audit at v0.41.0: the Eraser cut a gap; the auditor's Scissors click and Knife drag left the geometry unchanged, which it put down to its own coordinates possibly missing the path. All three cut real geometry in earlier audits |
 | Shaper tool | Full | Shaper (Shift+N) turns gestures into live rectangles, rotated rectangles, circles, ellipses, triangles, polygons and lines; scribbles punch out, merge or delete regions; Shaper Groups keep their source shapes, with Faces and Shapes modes, face fills and Expand |
 | Perspective Grid | Full | One, two and three point grids from Define Grid, with presets; the Perspective Grid tool (Shift+P) drags vanishing points, the ground and the planes; shape tools draw on the active plane (keys 1 to 4 or the plane widget); Perspective Selection (Shift+V) moves, copies, scales and moves perpendicular on a plane, and drags flat art and type onto one; attached art re-projects when the grid changes; type stays editable; Release; SVG and PDF without the grid |
 | Dimension tool | Full | Dimension tool (Shift+I): linear (horizontal, vertical, aligned), angular, radius and diameter dimensions that keep measuring when moved or scaled and relabel with the document units; units, precision, scale ratio, arrows, label font and position; Expand. The Measure tool also reports area and perimeter |
@@ -89,7 +93,7 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Stroke panel | Full | Weight, caps, joins, miter, alignment, dashes, arrowheads with scale, profiles |
 | Appearance and Graphic Styles | Full | Multiple fills and strokes, effects on the object or on one fill or stroke from the panel and MCP, visibility, Clear and Reduce to Basic; Graphic Styles with new, redefine, libraries and apply |
 
-## Effects and live objects · 10 of 10
+## Effects and live objects · 9.5 of 10
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -101,7 +105,7 @@ Unchanged at 75.5 of 76, self-graded. v0.41.0 narrows the `.ai` row (modern file
 | Repeat | Full | Radial, grid and mirror, with options, release and expand |
 | Brushes | Full | Calligraphic, scatter, art, pattern and Bristle brushes; pen pressure recorded by the Paintbrush; five-tile pattern brushes with stretch, add space and approximate fit; art brushes that scale, stretch or stretch between guides and flip; five brush libraries, User Defined and Save Brushes; Outline Stroke and Expand Appearance follow brushes; New Brush from art for all four kinds, Brush Options, colorization, Delete Brush, previews drawn from the brush |
 | Image Trace | Full | Traces at the image's own resolution (up to 2000 px on the long side) in a worker; Paths, Corners, Noise, abutting or overlapping Method, Automatic, Limited, Full Tone and Document Library palettes, fills and centreline strokes, Snap Curves to Lines; live tracing objects with eleven presets, colour, grayscale and black and white modes, paths, ignore white and smoothing; five views; the Image Trace panel with preview; Make, Make and Expand, Expand, Release |
-| 3D and Materials | Full | Graded Full by the audit at v0.38.0, noting seven built-in material presets and no Substance library. Extrude & Bevel (depth, cap, classic and rounded bevels), Revolve (angle, offset, either edge), Inflate and Plane as live effects on paths, compound paths, type and groups; position presets, X, Y and Z rotation and perspective, Inflate included; plastic, matte, metal, wireframe and flat materials; light direction, intensity, ambient, highlight and shading colour; Map Art (a symbol on the front face of an Extrude or Plane, scaled, offset and shaded with the surface); shadows behind or below with distance, softness and opacity; the 3D and Materials panel; vector faces in SVG and PDF; Expand Appearance to shaded paths. Since v0.32.0: lighting presets and up to eight lights with colour, intensity, rotation, height and softness; Render with Ray Tracing at Low, Medium and High (soft shadows, ambient occlusion, specular) exported as an image; brushed metal, wood and rough materials. Since v0.34.0 Inflate and Map Art are ray traced; since v0.35.0 a Graphic material takes an image or symbol texture with scale, rotation and offset, and Roughness and Metallic drive the ray tracer. The audit at v0.34.0 graded Partial for no Substance library, no editable material properties (since built), no 3D model import and no per-face materials. Since v0.38.0: per-surface materials (front, back, sides, bevel; outer, inner, caps) and OBJ and glTF model import as rotatable, lit 3D objects. Not built: Substance materials (a proprietary format) |
+| 3D and Materials | Partial | Audit at v0.41.0, from code only: no Substance materials (a proprietary format) and no real-time 3D viewport. Graded Full by the audit at v0.38.0, noting seven built-in material presets and no Substance library. Extrude & Bevel (depth, cap, classic and rounded bevels), Revolve (angle, offset, either edge), Inflate and Plane as live effects on paths, compound paths, type and groups; position presets, X, Y and Z rotation and perspective, Inflate included; plastic, matte, metal, wireframe and flat materials; light direction, intensity, ambient, highlight and shading colour; Map Art (a symbol on the front face of an Extrude or Plane, scaled, offset and shaded with the surface); shadows behind or below with distance, softness and opacity; the 3D and Materials panel; vector faces in SVG and PDF; Expand Appearance to shaded paths. Since v0.32.0: lighting presets and up to eight lights with colour, intensity, rotation, height and softness; Render with Ray Tracing at Low, Medium and High (soft shadows, ambient occlusion, specular) exported as an image; brushed metal, wood and rough materials. Since v0.34.0 Inflate and Map Art are ray traced; since v0.35.0 a Graphic material takes an image or symbol texture with scale, rotation and offset, and Roughness and Metallic drive the ray tracer. The audit at v0.34.0 graded Partial for no Substance library, no editable material properties (since built), no 3D model import and no per-face materials. Since v0.38.0: per-surface materials (front, back, sides, bevel; outer, inner, caps) and OBJ and glTF model import as rotatable, lit 3D objects. Not built: Substance materials (a proprietary format) |
 | Effect Gallery raster filters | Full | The Effect Gallery with live thumbnails, options and preview; 55 Photoshop effects (Artistic 15, Blur 2 beside Gaussian Blur, Brush Strokes 8, Distort 3, Pixelate 4, Sketch 14, Stylize 1, Texture 6, Video 2) as live effects in the Appearance panel; the Rasterize effect and Document Raster Effects Settings; PDF and SVG export them at the document's raster resolution |
 
 ## Type · 8 of 8
@@ -129,7 +133,7 @@ formpth has no generative model of its own. Every row here runs on the language 
 | Text to Pattern | Full | Raised in v0.38.0 and re-traced here: the same controls plus tile size, layout, spacing and a seamless check. Audit at v0.34.0: same limits as Text to Vector Graphic. Generate Patterns turns a prompt, a colour preset or custom palette and a density into tile variations saved as editable pattern swatches |
 | Retype | Full | Retype reads outlined type (by letter-shape matching, no model needed) or an image region (with a model that reads images), ranks installed fonts by shape and replaces the source with live text. Matches only installed fonts |
 
-## Files, colour and output · 10.5 of 11
+## Files, colour and output · 9.5 of 11
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -138,9 +142,9 @@ formpth has no generative model of its own. Every row here runs on the language 
 | SVG in and out | Full | Raised in v0.37.0 and re-traced here, not by an auditor: import brings pattern fills and strokes as swatches, masks as opacity masks, blur, shadow and glow filters as live effects, markers as arrowheads or marker art, styled tspans and text on a path; formpth's own SVG round-trips without its native copy. Still left out and reported: feColorMatrix, feBlend, feMorphology, feTurbulence. The audit at v0.34.0 had found: export is complete, but import drops pattern fills, masks, filters and markers and flattens tspan styling, so formpth's own pattern and mask SVG only round-trips through its embedded native copy. Gradients, patterns, clipping, masks, symbols, type, images; editing data embedded for exact round trips |
 | PDF in and out | Full | Raised in v0.33.0 and confirmed Full by the audit at v0.34.0. Since v0.37.0: live text as runs that extract and re-import as lines, AES-256 security with permissions, PDF/X-1a, X-3 and PDF/A-2b presets, compression options, and Acrobat layers out and in. The audit had noted live text written per glyph (formpth's own PDF re-imports one text node per glyph), no export security, and no PDF/X-1a, X-3 or PDF/A presets. Import since v0.33.0: soft masks as opacity masks, image soft masks and stencil masks as alpha, grid-shaped mesh shadings as gradient meshes (other meshes as a picture of the region, reported), tiling patterns as pattern swatches, and encrypted files through the Standard security handler R2 to R6 with a password prompt. Still left out on import: function-based shadings, public-key encryption. Export since v0.33.0: opacity masks as soft masks, gradient meshes as Coons patch shadings, patterns as tiling patterns and freeform gradients as triangle shadings, so only raster effects are rasterised, as in Illustrator. Built: export with vectors, shadings, transparency and CMYK, one page per artboard; live, searchable type with embedded font subsets since v0.32.0 (type with gradients, effects or an unavailable font is outlined); bleed and printer's marks since v0.30.0; PDF/X-4 with the document CMYK profile as the output intent since v0.32.0; formpth's own PDFs and `.ai` files reopen exactly; any other PDF or PDF-compatible `.ai` opens one artboard per page with paths, gradients, clipping, images and point type in installed fonts, and reports what it left out |
 | EPS, DXF and DWG | Full | Raised in v0.38.0 and re-traced here, not by an auditor: DWG now exports natively as AutoCAD 2000 and R2007 reads natively, so every release from 2000 to 2018 opens without a converter. DXF R12 to 2018 import (entities, blocks, layers, units and scale) and AutoCAD 2000 or R12 export; EPS Level 3 export per artboard in RGB or CMYK, formpth's own EPS reopened editable, other EPS read by a PostScript path reader. DWG opens since v0.32.0 through the ODA File Converter or LibreDWG's dwg2dxf, and since v0.35.0 natively for R2000, R2004, R2010, R2013 and R2018 (R2007 and older still need a converter). Since v0.37.0 foreign EPS brings in its images. Limits: DWG is written as AutoCAD 2000 only, without blocks or paper-space viewports, and was validated with LibreDWG, not AutoCAD; DWG before 2000 still needs a converter; images in DXF are not read |
-| Raster export | Full | Raised in v0.40.0 and re-traced here, not by an auditor: GIF and PNG-8 (Perceptual, Selective and Adaptive palettes of 2 to 256 colours, dither amount, interlacing, transparency and matte), 24-bit BMP, and Photoshop PSD with one pixel layer per top-level layer under a flattened composite and an embedded ICC profile; every raster export takes any resolution in ppi and Art Optimized, Type Optimized or no anti-aliasing. The audit at v0.38.0 had found PNG, JPEG, WebP and TIFF only. PNG, JPEG, WebP of an artboard, all artboards or the selection, at any scale, with transparency |
+| Raster export | Partial | Audit at v0.41.0, run: every format exported and the PSD header parsed by hand, but PNG and JPEG carried no ppi (fixed after the audit in v0.42.0, not regraded) and PSD layers are flat pixel layers, with no live text or shape layers as Illustrator's PSD export can keep. Raised in v0.40.0 and re-traced here, not by an auditor: GIF and PNG-8 (Perceptual, Selective and Adaptive palettes of 2 to 256 colours, dither amount, interlacing, transparency and matte), 24-bit BMP, and Photoshop PSD with one pixel layer per top-level layer under a flattened composite and an embedded ICC profile; every raster export takes any resolution in ppi and Art Optimized, Type Optimized or no anti-aliasing. The audit at v0.38.0 had found PNG, JPEG, WebP and TIFF only. PNG, JPEG, WebP of an artboard, all artboards or the selection, at any scale, with transparency |
 | Export for Screens and asset export | Full | Export for Screens with artboards, scales, suffixes and formats in a zip; the Asset Export panel with Collect for Export as single or multiple assets, renaming, and each asset cropped to its art in PNG, JPEG, WebP, SVG or PDF |
-| Placed images and links | Full | Raised in v0.40.0 and re-traced here, not by an auditor: Place takes PDF and `.ai` (page picker, Crop To Bounding Box, Art or Media; linked as a high-resolution picture redrawn when the file changes, or embedded as editable art), PSD (flattened, or layers converted to objects with name, opacity and blend mode) and TIFF (8 and 16 bit; grey, RGB, CMYK, Lab; LZW, PackBits, Deflate, JPEG). The audit at v0.38.0 had found none of these could be placed. Place Linked keeps a path or file handle; the Links panel shows Linked, Modified and Missing and checks on focus; Relink, Relink All Instances, Relink Missing from Folder, Update, Update All, Go To Link, Embed, Unembed and Link Info; `.fpth` keeps links with a cached preview; exports use the full pixels |
+| Placed images and links | Partial | Audit at v0.41.0, run: the page picker, crop choices, PSD flattened and as layers, and TIFF all worked, but placing a multi-artboard .ai through its Illustrator data brought in every artboard whatever page was chosen (fixed after the audit in v0.42.0, not regraded); linked placement and relink could not be run headless. Raised in v0.40.0 and re-traced here, not by an auditor: Place takes PDF and `.ai` (page picker, Crop To Bounding Box, Art or Media; linked as a high-resolution picture redrawn when the file changes, or embedded as editable art), PSD (flattened, or layers converted to objects with name, opacity and blend mode) and TIFF (8 and 16 bit; grey, RGB, CMYK, Lab; LZW, PackBits, Deflate, JPEG). The audit at v0.38.0 had found none of these could be placed. Place Linked keeps a path or file handle; the Links panel shows Linked, Modified and Missing and checks on focus; Relink, Relink All Instances, Relink Missing from Folder, Update, Update All, Go To Link, Embed, Unembed and Link Info; `.fpth` keeps links with a cached preview; exports use the full pixels |
 | History and Actions | Full | History panel with every step, New Document from State and History Options; Actions record menu commands, dialog values, transforms (tool drags included), drawn shapes, fills, strokes, opacity and styles, with per-step toggles, modal dialogs, stops, editing and reordering; action sets saved as `.fpaction` files with a Default Actions set; Batch over a folder or over data sets with a log. Dialogs outside the common form (Export, Effect Gallery) open during playback instead of replaying |
 | Colour management and print | Full | Graded Full by the audit at v0.38.0, noting no Graphics or Advanced tabs in Print and no bundled press profile. Since v0.37.0: ICC profiles embedded in PNG, JPEG, WebP and TIFF, CMYK TIFF through the document profile, vector separation plates, an Ink Manager, and ICC-based colours read on PDF import. Still missing: a bundled press CMYK profile (none found with redistribution terms compatible with Apache-2.0; load one in Color Settings), and raster images on plates convert by formula. Audit at v0.34.0: every named feature works, but separations print as raster plates with no Ink Manager, PNG, JPEG, WebP and TIFF exports embed no ICC profile, CMYK TIFF converts by formula instead of the profile, no real press CMYK profile ships, and PDF import ignores ICC. CMYK document mode and CMYK PDF; Overprint and Separations Preview, printer's marks and bleed since v0.30.0. Since v0.32.0, on LittleCMS: Color Settings with RGB and CMYK working spaces from installed, system or loaded ICC profiles, four intents and black point compensation; Assign Profile; Convert to Profile; Proof Setup and Proof Colors; PDF/X-4 output intent; formpth Generic CMYK when no press profile is loaded. Since v0.33.0: File > Print (paper, orientation, fit, percent or tiled scaling, marks and bleed, composite or separations, colour managed by formpth with a printer profile or by the printer; the printer is picked in the system dialog), proofing on the detected display profile, and Preserve CMYK Numbers. Limits: display detection was run on Linux only; separation plates print as raster pages |
 | Variables and data merge | Full | Variables panel with text, image, visibility and graph variables bound to objects; data sets captured, updated, deleted and stepped through live; CSV and JSON import; Export Variations as PNG, SVG, PDF or `.fpth` per data set to a folder or a zip |
@@ -159,31 +163,34 @@ formpth has no generative model of its own. Every row here runs on the language 
 | Category | Score | Rows |
 | --- | --- | --- |
 | Objects and layers | 8 | 8 |
-| Selection and transform | 8 | 8 |
-| Drawing | 10 | 10 |
+| Selection and transform | 7.5 | 8 |
+| Drawing | 9.5 | 10 |
 | Paths and Pathfinder | 8 | 8 |
 | Paint and colour | 8 | 8 |
-| Effects and live objects | 10 | 10 |
+| Effects and live objects | 9.5 | 10 |
 | Type | 8 | 8 |
 | Generative AI | 5 | 5 |
-| Files, colour and output | 10.5 | 11 |
-| **Total** | **75.5** | **76** |
+| Files, colour and output | 9.5 | 11 |
+| **Total** | **73** | **76** |
 
-75 rows Full, 1 Partial, 0 None: 99.3 percent, self-graded at v0.40.0 (the fifth independent audit at v0.38.0 graded 73.5, 71 Full and 5 Partial).
+70 rows Full, 6 Partial, 0 None: 96.1 percent, as graded by the sixth independent audit at v0.41.0.
 
 ## Next to close
 
-Every row is built. One row is Partial:
+Every row is built. The six Partial rows, ranked by the audit at v0.41.0:
 
-1. Illustrator `.ai`: confirm in Illustrator that it reads the private data formpth writes; placed symbol instances, brushed strokes and the remaining live effects when reading (each needs a real file that uses it); opacity masks; the three corpus files that still fall back to the PDF page.
-
-The four rows the audit at v0.38.0 found short (Distort and Transform, Placed images, Layers, Raster export) were built in v0.40.0; the sixth audit grades them again.
+1. Placed images and links: the multi-artboard `.ai` page defect (fixed in v0.42.0); linked placement and relink run in a browser with a real file handle.
+2. Illustrator `.ai`: confirm in Illustrator that it reads the private data formpth writes; live effects, brushes and live objects written as native Illustrator data; placed symbols and brushed strokes when reading.
+3. Raster export: PSD with live text and shape layers (PNG and JPEG ppi fixed in v0.42.0).
+4. 3D and Materials: a real-time 3D viewport (Substance materials stay out: a proprietary format).
+5. Smart Guides and snapping: snap to path and intersection, distance labels; an audit run on the canvas.
+6. Eraser, Scissors and Knife: an audit run that hits the path.
 
 The generative rows run on the model the person sets up for the Assistant; formpth ships no image or vector model of its own.
 
 ## Plan v0.5.0 additions (not in the 76)
 
-Graded by the same audit, 11.5 of 12, and 12 of 12 after v0.31.0:
+Graded 11.5 of 12 by the sixth audit at v0.41.0 (Gradient Method, see its row); earlier graded 11.5 of 12, and 12 of 12 after v0.31.0:
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
@@ -193,7 +200,7 @@ Graded by the same audit, 11.5 of 12, and 12 of 12 after v0.31.0:
 | Pathfinder Hard Mix, Soft Mix and Trap | Full | Object > Pathfinder, with mixing rate and trap options |
 | Large canvas | Full | Artboards to 163,440 pt a side, PDF UserUnit, raster tiles |
 | Spell check | Full | Check Spelling, Auto Spell Check, a personal dictionary |
-| Gradient Method and Dither | Full | Perceptual (OKLab) blending matched on the canvas, in SVG and PDF; dither on the canvas |
+| Gradient Method and Dither | Partial | Audit at v0.41.0, code only: found the dither but no gradient method choice. This page disagrees: the gradient's `blend` field offers Linear and Perceptual (OKLab), read by the renderer and the exporters; the grade stays the auditor's until the next audit looks again. Perceptual (OKLab) blending matched on the canvas, in SVG and PDF; dither on the canvas |
 | TIFF export | Full | RGB, RGBA or CMYK with PackBits, LZW or Deflate |
 | PDF marks and bleed | Full | Trim, registration, colour bars, page information, BleedBox and TrimBox |
 | Package | Full | The document, linked images and fonts collected with a report |
