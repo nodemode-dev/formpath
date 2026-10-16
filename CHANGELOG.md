@@ -2,6 +2,25 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.36.0 · 2026-10-16
+
+Plan v0.7.0 phase 32: Pathfinder and shapes.
+
+### Added
+
+- Live compound shapes: Alt-click a Shape Mode in Pathfinder, or Make Compound Shape; children stay editable with their own mode; Expand and Release.
+- Effect > Pathfinder: Add, Intersect, Exclude, Subtract, Minus Back, Divide, Trim, Merge, Crop, Outline, Hard Mix, Soft Mix and Trap as live effects on groups.
+- Pathfinder Options: precision, Remove Redundant Points, Divide and Outline Will Remove Unpainted Artwork.
+- Live polygons and stars keep inverted and chamfer corners; Object > Shape > Convert to Rectangle, Rounded Rectangle, Ellipse, Polygon or Star, and Convert to in Properties.
+- Width tool: move, resize one side, duplicate and delete width points; Width Point Edit; Flip Along, Flip Across, Add to Profiles, Delete Profile, Reset Profiles.
+- MCP: `pathfinder` takes `live`; `edit_shape` takes `corner_type` and `convert_to`; `set_stroke` takes `width_points`, flips and custom profiles.
+- 52 new strings in all 25 languages.
+
+### Changed
+
+- Variable-width strokes now sample at every width point, so a width point in the middle of a two-anchor path shows.
+- `docs/PARITY.md`: 72 of 76 (94.7 percent), the audited 70.5 plus three rows built since.
+
 ## 0.35.0 · 2026-10-15
 
 Plan v0.6.0 phase 31: the fourth independent audit, and three rows narrowed.

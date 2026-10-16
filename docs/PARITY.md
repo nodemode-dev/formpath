@@ -14,7 +14,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 
 ## Score at v0.31.0
 
-**70.5 of 76 scored rows, 92.8 percent:** 65 Full, 11 Partial, 0 None, from a fourth independent audit of the code at commit d6275a3 (v0.34.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed. It confirmed PDF in and out as Full, kept colour management and print Partial (raster separation plates, no ICC in raster exports), and graded eight rows lower than this page had: Rectangle to Star, Pathfinder (no live compound shapes), the Width tool, Text to Vector Graphic, Generative Shape Fill, Text to Pattern (model-written primitives only), SVG import and colour management. The self-graded 74.5 at v0.34.0 was too generous. Work after the audit (native DWG, the Graphic 3D material, `.ai` symbols and brushes) narrows three Partial rows without closing them, so the score stands at 70.5; the additions grade 12 of 12. A third independent audit graded every row from a snapshot of the code at commit 85dbe07 (v0.30.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed: 71 of 76 (68 Full, 6 Partial, 2 None), plus 11.5 of 12 for the plan v0.5.0 additions. It raised Smart Guides to Full, lowered Rectangle to Star to Partial (stars had no live corner radius), and graded Text to Vector Graphic and Generative Recolor None, since the Assistant is not those features. All three gaps were then built in v0.31.0 and re-traced here, not by the auditor; the rows say so. The tally is at the end.
+**72 of 76 scored rows, 94.7 percent, at v0.36.0:** 68 Full, 8 Partial, 0 None. That is the audited 70.5 below plus Pathfinder, Rectangle to Star and the Width tool, built in v0.36.0 against the audit's own gap lists and re-traced here; the next audit grades them again. The audited figure, **70.5 of 76 scored rows, 92.8 percent:** 65 Full, 11 Partial, 0 None, comes from a fourth independent audit of the code at commit d6275a3 (v0.34.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed. It confirmed PDF in and out as Full, kept colour management and print Partial (raster separation plates, no ICC in raster exports), and graded eight rows lower than this page had: Rectangle to Star, Pathfinder (no live compound shapes), the Width tool, Text to Vector Graphic, Generative Shape Fill, Text to Pattern (model-written primitives only), SVG import and colour management. The self-graded 74.5 at v0.34.0 was too generous. Work after the audit (native DWG, the Graphic 3D material, `.ai` symbols and brushes) narrows three Partial rows without closing them, so the score stands at 70.5; the additions grade 12 of 12. A third independent audit graded every row from a snapshot of the code at commit 85dbe07 (v0.30.0) with this page, the changelog, the README, the manual, the wiki and the HASHOUT logs removed: 71 of 76 (68 Full, 6 Partial, 2 None), plus 11.5 of 12 for the plan v0.5.0 additions. It raised Smart Guides to Full, lowered Rectangle to Star to Partial (stars had no live corner radius), and graded Text to Vector Graphic and Generative Recolor None, since the Assistant is not those features. All three gaps were then built in v0.31.0 and re-traced here, not by the auditor; the rows say so. The tally is at the end.
 
 ## Objects and layers · 8 of 8
 
@@ -48,7 +48,7 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 | --- | --- | --- |
 | Pen, Curvature and anchor tools | Full | Pen with close, continue, add and delete on paths, convert; Add, Delete and Anchor Point tools; Curvature |
 | Pencil, Smooth, Path Eraser, Join | Full | Fitted Pencil that extends and closes paths; Smooth, Path Eraser and Join tools |
-| Rectangle to Star with live corners | Partial | Audit at v0.34.0: inverted and chamfer corners on polygons and stars drop the live shape (Sides, Points and Radius stop being editable), a star has one shared corner radius, and a live rectangle cannot be converted to a polygon or star. Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; Shape fields in Properties after drawing (size, every corner radius and corner type, pie angles, sides, points, radii, line length and angle); corner widgets on the canvas for rectangles, polygons and stars, which stay live when rounded; Live Corners on any path in Direct Selection (round, inverted, chamfer, absolute or relative, the Corners dialog). The audit graded this Partial because stars had no live corner radius; that was built in v0.31.0 and re-traced here |
+| Rectangle to Star with live corners | Full | Raised in v0.36.0 and re-traced here, not by an auditor: polygons and stars keep live parameters with round, inverted or chamfer corners (one type and radius for all corners, as Illustrator), and any live shape converts to another kind. The audit at v0.34.0 had found: inverted and chamfer corners on polygons and stars drop the live shape (Sides, Points and Radius stop being editable), a star has one shared corner radius, and a live rectangle cannot be converted to a polygon or star. Live rectangles, rounded rectangles, ellipses, polygons and stars with exact dialogs and arrow-key changes while drawing; Shape fields in Properties after drawing (size, every corner radius and corner type, pie angles, sides, points, radii, line length and angle); corner widgets on the canvas for rectangles, polygons and stars, which stay live when rounded; Live Corners on any path in Direct Selection (round, inverted, chamfer, absolute or relative, the Corners dialog). The audit graded this Partial because stars had no live corner radius; that was built in v0.31.0 and re-traced here |
 | Line, Arc, Spiral and grids | Full | Line Segment, Arc, Spiral, Rectangular Grid, Polar Grid, Flare |
 | Paintbrush and Blob Brush | Full | Paintbrush with the current brush; Blob Brush merging same-fill shapes |
 | Eraser, Scissors and Knife | Full | All three cut real geometry |
@@ -61,13 +61,13 @@ The list is the 76-row baseline shared with the Illustrator, Inkscape and formpt
 
 | Row | Grade | Evidence or gap |
 | --- | --- | --- |
-| Pathfinder | Partial | Audit at v0.34.0: destructive only; no live compound shapes (Alt-click), no Pathfinder effects, no Pathfinder Options (precision, remove redundant points), and Make Compound Shape makes a compound path. Unite, Minus Front, Intersect, Exclude, Divide, Trim, Merge, Crop, Outline, Minus Back on curves through paper.js |
+| Pathfinder | Full | Raised in v0.36.0 and re-traced here, not by an auditor: live compound shapes (Alt-click a Shape Mode, per-child modes, Expand, Release), thirteen Pathfinder effects on groups, and Pathfinder Options used by every operation. The audit at v0.34.0 had found: destructive only; no live compound shapes (Alt-click), no Pathfinder effects, no Pathfinder Options (precision, remove redundant points), and Make Compound Shape makes a compound path. Unite, Minus Front, Intersect, Exclude, Divide, Trim, Merge, Crop, Outline, Minus Back on curves through paper.js |
 | Shape Builder | Full | Drag to merge regions, Alt to delete |
 | Live Paint | Full | Live Paint groups (Make, Merge, Release, Expand) whose faces re-flow as the paths are edited, the Live Paint Bucket on faces and Shift on edges, each edge painted per segment between crossings, the Live Paint Selection tool (faces and edges, Shift to add, fill and stroke from the panels, Delete), Gap Options |
 | Compound paths | Full | Make and Release; the Attributes panel sets non-zero or even-odd and reverses path direction, rendered and exported |
 | Offset Path and Outline Stroke | Full | With joins and miter limit, as commands and as live effects |
 | Simplify, Average, Join, anchors | Full | Simplify with preview, Smooth, Average, Join, Add and Remove Anchors, Reverse, Divide Objects Below, Split into Grid, Clean Up |
-| Width tool and profiles | Partial | Audit at v0.34.0: width points can only be created or overwritten by dragging, not moved, deleted or duplicated, with no handles on a selected path; eight fixed profiles with no flip and no saving of custom profiles. Width points dragged on strokes; eight width profiles |
+| Width tool and profiles | Full | Raised in v0.36.0 and re-traced here, not by an auditor: width points move, resize per side, duplicate and delete, with Width Point Edit, Flip Along and Across, and saved custom profiles. The audit at v0.34.0 had found: width points can only be created or overwritten by dragging, not moved, deleted or duplicated, with no handles on a selected path; eight fixed profiles with no flip and no saving of custom profiles. Width points dragged on strokes; eight width profiles |
 | Intertwine | Full | Make, Release and Edit Intertwine; the Intertwine tool (Shift+J) highlights overlaps, flips or cycles which object is on top with a click, and draws free zones with a drag; zones stay put when members move; Expand; drawn and exported with real clip paths |
 
 ## Paint and colour · 8 of 8
@@ -154,30 +154,27 @@ formpth has no generative model of its own. Every row here runs on the language 
 | --- | --- | --- |
 | Objects and layers | 8 | 8 |
 | Selection and transform | 8 | 8 |
-| Drawing | 9.5 | 10 |
-| Paths and Pathfinder | 7 | 8 |
+| Drawing | 10 | 10 |
+| Paths and Pathfinder | 8 | 8 |
 | Paint and colour | 8 | 8 |
 | Effects and live objects | 9.5 | 10 |
 | Type | 8 | 8 |
 | Generative AI | 3.5 | 5 |
 | Files, colour and output | 9 | 11 |
-| **Total** | **70.5** | **76** |
+| **Total** | **72** | **76** |
 
-65 rows Full, 11 Partial, 0 None: 92.8 percent.
+68 rows Full, 8 Partial, 0 None: 94.7 percent (70.5 as audited at v0.34.0; three rows raised in v0.36.0 on work re-traced here).
 
 ## Next to close
 
-Every row is built. The eleven Partial rows, ranked by the audit at v0.34.0:
+Every row is built. The eight Partial rows, ranked by the audit at v0.34.0 (Pathfinder, Rectangle to Star and the Width tool were built in v0.36.0):
 
-1. Pathfinder: live compound shapes, Pathfinder effects, Pathfinder Options.
-2. Text to Vector Graphic, Generative Shape Fill, Text to Pattern: style reference, colour and tone controls, richer output than model-written primitives.
-3. Illustrator `.ai`: private data and layers in the writer; graphic styles, live effects and art-to-symbol and brush links when reading.
-4. SVG in and out: import of pattern fills, masks, filters, markers and tspan styling.
-5. Colour management and print: vector separation plates, an Ink Manager, ICC profiles in raster exports, profile-managed CMYK TIFF.
-6. EPS, DXF and DWG: writing DWG, R2007 natively, images in foreign EPS.
-7. 3D and Materials: Substance materials, model import, per-face materials.
-8. Rectangle to Star: inverted and chamfer corners keeping polygons and stars live, per-corner radii on stars, shape conversion.
-9. Width tool and profiles: move, delete and duplicate width points, handles on the selected path, flip and saved custom profiles.
+1. Text to Vector Graphic, Generative Shape Fill, Text to Pattern: style reference, colour and tone controls, richer output than model-written primitives.
+2. Illustrator `.ai`: private data and layers in the writer; graphic styles, live effects and art-to-symbol and brush links when reading.
+3. SVG in and out: import of pattern fills, masks, filters, markers and tspan styling.
+4. Colour management and print: vector separation plates, an Ink Manager, ICC profiles in raster exports, profile-managed CMYK TIFF.
+5. EPS, DXF and DWG: writing DWG, R2007 natively, images in foreign EPS.
+6. 3D and Materials: Substance materials, model import, per-face materials.
 
 The generative rows run on the model the person sets up for the Assistant; formpth ships no image or vector model of its own.
 

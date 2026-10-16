@@ -2,7 +2,7 @@
 <h1 align="center">formpth</h1>
 <p align="center"><b>Vector illustration for the web and the desktop, in the NodeMode design system.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-0.35.0-f97316" alt="version 0.35.0">
+<img src="https://img.shields.io/badge/version-0.36.0-f97316" alt="version 0.36.0">
 <img src="https://img.shields.io/badge/node-22-339933" alt="node 22">
 <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
 <img src="https://img.shields.io/badge/tauri-2-24C8DB" alt="tauri 2">
@@ -120,7 +120,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 70.5 of 76 rows against Illustrator 30 (65 Full, 11 Partial, 0 None), 92.8 percent, from an independent audit of the code at v0.34.0 that graded stricter than this page's own 74.5. Partial: Rectangle to Star, Pathfinder (no live compound shapes), the Width tool, three generative rows (model-written primitives), `.ai`, SVG import, EPS, DXF and DWG (no DWG export), colour management (raster separation plates, no ICC in raster exports) and 3D (no Substance). DWG R2000 to R2018 reads natively since v0.35.0. The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
+- **Parity.** 72 of 76 rows against Illustrator 30 (68 Full, 8 Partial, 0 None), 94.7 percent: an independent audit of the code at v0.34.0 graded 70.5, stricter than this page's own 74.5, and v0.36.0 built three of its gaps (live compound shapes and Pathfinder effects, live corners on polygons and stars, Width point editing), re-traced here until the next audit. Partial: three generative rows (model-written primitives), `.ai`, SVG import, EPS, DXF and DWG (no DWG export), colour management (raster separation plates, no ICC in raster exports) and 3D (no Substance). DWG R2000 to R2018 reads natively since v0.35.0. The 12 plan additions grade 12 of 12. See `docs/PARITY.md`.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors

@@ -247,7 +247,15 @@ ask it questions.
   the largest radius its segments allow draws in red. Corners stay editable; Object > Path > Expand Corners turns them
   into plain points.
 - Pathfinder: Unite, Minus Front, Intersect, Exclude, and Divide, Trim, Merge, Crop, Outline and Minus Back. Shape
-  modes make a single new path; Divide and the rest make groups of pieces.
+  modes make a single new path; Divide and the rest make groups of pieces. Alt-click a Shape Mode (or Make Compound
+  Shape in the panel menu) to keep the shapes live as a compound shape you can still edit; Expand makes it a path and
+  Release gives the shapes back. Effect > Pathfinder applies the same operations live to a group. Pathfinder Options
+  sets precision and removes redundant points or unpainted pieces.
+- Width tool (Shift+W): drag along a stroke to add a width point, drag a point to move it, drag a handle to change the
+  width (Alt for one side), Alt-drag to copy, Delete to remove, double-click for Width Point Edit. The Stroke panel
+  flips profiles and saves your own.
+- Live polygons and stars keep inverted and chamfer corners; Object > Shape > Convert to turns a live shape into
+  another kind.
 - Shape Builder (Shift+M): drag across regions of the selected shapes to merge them; Alt-drag to delete regions.
 - Live Paint Bucket (K): click an area closed by the selected paths to fill it with the current fill, as if the
   paths were a colouring book. The paths become a Live Paint group (Object > Live Paint > Make, Ctrl+Alt+X) that stays
