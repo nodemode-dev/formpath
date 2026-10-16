@@ -3636,3 +3636,17 @@ Open: the godot jam header (a compound path of text outlines whose gradient fill
 - logged: v0.41.0 · 2026-10-16
 
 Done for the todo above: the .ai open path now calls assignPdfProfile on the private data document before the guard, and the guard tags the PDF page document the same way before rendering, so CMYK paint is converted through the file's own profile on both sides. On the 36-file corpus that leaves 33 files on the private data (worst artboard 0 to 7.7 percent) and three on the PDF page (godot jam header 81.9, godot jam icon 15.0, kubernetes do-not-use 16.6). Because the PDF page document comes back already tagged, the PDF branch's own assignPdfProfile finds a profile set and returns no name, so after a guard fallback the "it is now this document's CMYK working space" toast does not show; the profile is still applied.
+
+### src/io/place.ts · placing one artboard of a multi-artboard .ai
+- refers-to: src/io/place.ts :: placeSpecial (.ai embedded through private data)
+- kind: decision
+- logged: v0.42.0 · 2026-10-16
+
+The sixth audit found that placing page 2 of a multi-artboard .ai through its Illustrator data brought in the whole file, the same 444 paths for every page. The private data branch now keeps, per layer, only the top-level objects whose visual bounds overlap the chosen artboard (the private data's artboards are in the same order as the PDF pages). The CNCF Green Reviews file now places 148, 74 and 148 leaf objects for pages 1 to 3. An object that straddles two artboards comes with both, as Illustrator's own Place of a page crops it rather than splitting it; it is not clipped to the artboard.
+
+### src/io/icc-embed.ts · PNG and JPEG record the export ppi
+- refers-to: src/io/icc-embed.ts :: stampPpi; src/io/raster.ts :: canvasBlob
+- kind: decision
+- logged: v0.42.0 · 2026-10-16
+
+The sixth audit found that PNG and JPEG exports carried no resolution, so 300 ppi was only a pixel scale. canvasBlob now writes the ppi it is given (exportRaster always passes 72 times the scale) into a pHYs chunk in pixels per metre for PNG and into the JFIF APP0 density in dots per inch for JPEG, inserting an APP0 if the browser wrote none. PIL reads a 300 ppi export back as 299.9994 (PNG, metre rounding) and 300 (JPEG). WebP has no standard resolution field and is left alone; GIF, PNG-8, BMP, TIFF and PSD already wrote theirs.

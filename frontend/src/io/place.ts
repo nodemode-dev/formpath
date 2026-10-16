@@ -236,7 +236,9 @@ export async function placeSpecial(engine: Engine, src: PlaceSource, at: Pt | nu
     if (/\.ai$/i.test(name) && !(o.mode === 'link' && canLink)) {
       const mr = await readAiModern(data, title, pw, session);
       if (mr.read) {
-        const r = mr.read, kids: VNode[] = r.doc.layers.filter((l) => l.children.length).map((l) => ({ id: newId('g'), kind: 'group', clip: false, children: l.children, opacity: 1, blend: 'normal', ap: { ...BARE }, name: l.name, ...(l.hidden ? { hidden: true } : {}) }) as GroupNode);
+        const r = mr.read, ab = r.doc.artboards.length > 1 ? r.doc.artboards[Math.min(pageIx, r.doc.artboards.length - 1)] : null;
+        const onBoard = (n: VNode): boolean => { if (!ab) return true; const b = visualBounds(r.doc, n); return b.w >= 0 && b.x < ab.x + ab.w && b.x + b.w > ab.x && b.y < ab.y + ab.h && b.y + b.h > ab.y; };
+        const kids: VNode[] = r.doc.layers.map((l) => ({ l, children: l.children.filter(onBoard) })).filter((e) => e.children.length).map(({ l, children }) => ({ id: newId('g'), kind: 'group', clip: false, children, opacity: 1, blend: 'normal', ap: { ...BARE }, name: l.name, ...(l.hidden ? { hidden: true } : {}) }) as GroupNode);
         if (kids.length) {
           const g: GroupNode = { id: newId('g'), kind: 'group', clip: false, children: kids, opacity: 1, blend: 'normal', ap: { ...BARE }, name: title };
           const doc: Doc = { ...r.doc, layers: [{ ...r.doc.layers[0], children: [g] }] };

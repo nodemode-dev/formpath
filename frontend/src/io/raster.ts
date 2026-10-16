@@ -10,7 +10,7 @@ import { exportRegion, exportSvg } from './svg';
 import { zipFiles } from './zip';
 import { encodeTiff, type TiffCompression } from './tiff';
 import { outputProfileBytes, printCmykLuts, rgbToCmykBytes, type Lut } from '../engine/color-management';
-import { embedIcc, type IccPayload } from './icc-embed';
+import { embedIcc, stampPpi, type IccPayload } from './icc-embed';
 import { quantize, type PaletteDither, type PaletteMethod } from './palette';
 import { encodeGif } from './gif';
 import { encodePng8 } from './png8';
@@ -175,7 +175,8 @@ export async function canvasBlob(c: HTMLCanvasElement, format: RasterFormat, qua
   }
   const type = format === 'jpg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
   const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error(`This browser cannot write ${format.toUpperCase()} files.`))), type, quality));
-  return icc?.profile ? embedIcc(blob, format === 'jpg' || format === 'webp' ? format : 'png', icc.profile) : blob;
+  const tagged = icc?.profile ? await embedIcc(blob, format === 'jpg' || format === 'webp' ? format : 'png', icc.profile) : blob;
+  return tiff?.ppi && (format === 'png' || format === 'jpg') ? stampPpi(tagged, format, tiff.ppi) : tagged;
 }
 
 export async function rasterIcc(p: Project, cmyk: boolean): Promise<RasterIcc | null> {

@@ -56,6 +56,32 @@ export async function embedPng(png: Uint8Array, icc: IccPayload): Promise<Uint8A
   return join([png.subarray(0, ihdrEnd), ...extra, ...rest]);
 }
 
+/** Records the export resolution in the file: a pHYs chunk (pixels per metre) in a PNG, the JFIF APP0 density (dots per inch) in a JPEG, as Illustrator writes the chosen ppi. */
+export async function stampPpi(blob: Blob, format: 'png' | 'jpg', ppi: number): Promise<Blob> {
+  const b = new Uint8Array(await blob.arrayBuffer()), dpi = Math.max(1, Math.min(65535, Math.round(ppi)));
+  if (format === 'png') {
+    const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (b.length < 33 || sig.some((v, i) => b[i] !== v)) return blob;
+    const dv = new DataView(b.buffer, b.byteOffset, b.length), ihdrEnd = 8 + 12 + dv.getUint32(8), rest: Uint8Array[] = [];
+    for (let o = ihdrEnd; o + 12 <= b.length;) {
+      const len = dv.getUint32(o), type = String.fromCharCode(b[o + 4], b[o + 5], b[o + 6], b[o + 7]);
+      if (type !== 'pHYs') rest.push(b.subarray(o, o + 12 + len));
+      o += 12 + len;
+    }
+    const ppm = Math.round(dpi / 0.0254), body = new Uint8Array(9), bd = new DataView(body.buffer);
+    bd.setUint32(0, ppm); bd.setUint32(4, ppm); body[8] = 1;
+    return new Blob([join([b.subarray(0, ihdrEnd), pngChunk('pHYs', body), ...rest]) as Uint8Array<ArrayBuffer>], { type: 'image/png' });
+  }
+  if (b.length < 20 || b[0] !== 0xff || b[1] !== 0xd8) return blob;
+  const out = b.slice();
+  if (out[2] === 0xff && out[3] === 0xe0 && String.fromCharCode(...out.subarray(6, 11)) === 'JFIF\0') {
+    out[13] = 1; out[14] = dpi >> 8; out[15] = dpi & 255; out[16] = dpi >> 8; out[17] = dpi & 255;
+    return new Blob([out], { type: 'image/jpeg' });
+  }
+  const app0 = Uint8Array.of(0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 1, dpi >> 8, dpi & 255, dpi >> 8, dpi & 255, 0, 0);
+  return new Blob([join([b.subarray(0, 2), app0, b.subarray(2)]) as Uint8Array<ArrayBuffer>], { type: 'image/jpeg' });
+}
+
 export function embedJpeg(jpg: Uint8Array, icc: IccPayload): Uint8Array {
   if (jpg.length < 4 || jpg[0] !== 0xff || jpg[1] !== 0xd8) return jpg;
   let at = 2;
