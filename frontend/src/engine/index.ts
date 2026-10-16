@@ -66,7 +66,7 @@ export const SYMBOLISM_NAMES: Record<SymbolismOp, string> = { shift: 'Symbol Shi
 export { Viewport } from './viewport';
 
 export interface ViewFlags {
-  outline: boolean; rulers: boolean; guides: boolean; guidesLocked: boolean; grid: boolean; smartGuides: boolean; snapGrid: boolean; snapPoint: boolean;
+  outline: boolean; rulers: boolean; guides: boolean; guidesLocked: boolean; grid: boolean; smartGuides: boolean; smartLabels: boolean; smartMeasure: boolean; smartHighlight: boolean; smartSpacing: boolean; snapGrid: boolean; snapPoint: boolean;
   boundingBox: boolean; edges: boolean; artboards: boolean; threads: boolean; transparencyGrid: boolean; previewBounds: boolean; scaleStrokes: boolean;
   transformPatterns: boolean; scaleCorners: boolean; cornerWidget: boolean; gradientAnnotator: boolean; pixelPreview: boolean; snapPixel: boolean;
   overprintPreview: boolean; separation: null | 'C' | 'M' | 'Y' | 'K' | string;
@@ -102,10 +102,11 @@ export class Engine extends Emitter<EngineEvents> {
   fillPaint: Paint = solid(WHITE);
   strokePaint: Paint = solid(BLACK);
   strokeWidth = 1;
+  fillPicked = false;
   activeSlot: 'fill' | 'stroke' = 'fill';
   newArtBasic = true;
   maskDefaults = { clip: true, invert: false };
-  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, scaleCorners: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false, overprintPreview: false, separation: null };
+  view: ViewFlags = { outline: false, rulers: true, guides: true, guidesLocked: false, grid: false, smartGuides: true, smartLabels: true, smartMeasure: true, smartHighlight: true, smartSpacing: true, snapGrid: false, snapPoint: true, boundingBox: true, edges: true, artboards: true, threads: true, transparencyGrid: false, previewBounds: false, scaleStrokes: true, transformPatterns: true, scaleCorners: true, cornerWidget: true, gradientAnnotator: true, pixelPreview: false, snapPixel: false, overprintPreview: false, separation: null };
   options: ToolOptions = { polygonSides: 6, starPoints: 5, starRatio: 0.5, cornerRadius: 0, spiralDecay: 0.8, spiralSegments: 10, flareRays: 15, gridRows: 5, gridCols: 5, pencilFidelity: 0.5, pencilSmooth: 0.3, keepSelected: false, brushSize: 3, blobSize: 12, eraserSize: 12, widthPreset: 'uniform', magicTolerance: 32, symbolDensity: 5, symbolIntensity: 5, symbolMethod: 'user', meshRows: 4, meshCols: 4, blendSteps: 8, shapeMode: 'normal', textMode: 'point', vertical: false, arcConvex: true, liquifySize: 60, liquifyKind: 'warp' };
   currentBrush: string | null = null;
   currentSymbol: string | null = null;
@@ -114,7 +115,7 @@ export class Engine extends Emitter<EngineEvents> {
   readonly failures: ErrorEntry[] = [];
   lastTransform: { m: Mat; copy: boolean } | null = null;
   lastEffect: { id: string; params: Record<string, number | string | boolean> } | null = null;
-  overlay: { lines: Array<{ x1: number; y1: number; x2: number; y2: number }>; label: string | null; at: Pt | null } = { lines: [], label: null, at: null };
+  overlay: { lines: Array<{ x1: number; y1: number; x2: number; y2: number }>; label: string | null; at: Pt | null; tags: Array<{ x: number; y: number; v: number }> } = { lines: [], label: null, at: null, tags: [] };
   private busy = 0;
   private gestureDepth = 0;
   private gestureEdits = 0;
@@ -151,7 +152,10 @@ export class Engine extends Emitter<EngineEvents> {
   newDocument(w: number, h: number, opts: { title?: string; units?: Units; colorMode?: 'rgb' | 'cmyk'; artboards?: number } = {}): Project {
     const d = newDoc(w, h, opts);
     d.brushes = defaultBrushes(newId);
-    return this.addProject(d, opts.title ?? 'Untitled');
+    this.fillPicked = false; this.fillPaint = solid(WHITE); this.strokePaint = solid(BLACK); this.strokeWidth = 1;
+    const created = this.addProject(d, opts.title ?? 'Untitled');
+    this.emit('colors', null);
+    return created;
   }
 
   addProject(doc: Doc, name: string): Project {
@@ -300,7 +304,7 @@ export class Engine extends Emitter<EngineEvents> {
   update(patch: Partial<ToolOptions>): void { this.options = { ...this.options, ...patch }; this.emit('options', null); }
   setTool(id: ToolId): void { if (this.tool === id) return; this.tool = id; this.emit('tool', null); this.emit('overlay', null); }
   setOverlay(o: Partial<Engine['overlay']>): void { this.overlay = { ...this.overlay, ...o }; this.emit('overlay', null); }
-  clearOverlay(): void { if (!this.overlay.lines.length && !this.overlay.label) return; this.overlay = { lines: [], label: null, at: null }; this.emit('overlay', null); }
+  clearOverlay(): void { if (!this.overlay.lines.length && !this.overlay.label && !this.overlay.tags.length) return; this.overlay = { lines: [], label: null, at: null, tags: [] }; this.emit('overlay', null); }
 
   selectedIds(): string[] { const p = this.current; return p ? inDocOrder(p.doc, p.selection) : []; }
   selected(): VNode[] { const p = this.current; return p ? this.selectedIds().map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n) : []; }
@@ -547,7 +551,12 @@ export class Engine extends Emitter<EngineEvents> {
     }
     return { ...n, ap: fn(n.ap, n) };
   }
+  typeFill(): Paint {
+    const f = this.fillPaint, c = f.type === 'color' ? toRgb(f.color) : null;
+    return f.type === 'none' || (!this.fillPicked && c && c.r > 245 && c.g > 245 && c.b > 245) ? solid(BLACK) : f;
+  }
   setFill(paint: Paint, ids?: string[]): void {
+    this.fillPicked = true;
     this.fillPaint = paint;
     this.emit('colors', null);
     const lps = ids ? null : this.livePaintSelected();
@@ -593,7 +602,7 @@ export class Engine extends Emitter<EngineEvents> {
     this.emit('colors', null);
     this.applyToSelection('Swap Fill and Stroke', (n) => this.paintDeep(n, (ap) => { const a = firstFill(ap), b = firstStroke(ap); return withFirstStroke(withFirstFill(ap, b ? b.paint : NONE), { paint: a ? a.paint : NONE }); }));
   }
-  defaultFillStroke(): void { this.fillPaint = solid(WHITE); this.strokePaint = solid(BLACK); this.strokeWidth = 1; this.emit('colors', null); this.applyToSelection('Default Fill and Stroke', (n) => this.paintDeep(n, () => basicAppearance(solid(WHITE), solid(BLACK), 1))); }
+  defaultFillStroke(): void { this.fillPicked = false; this.fillPaint = solid(WHITE); this.strokePaint = solid(BLACK); this.strokeWidth = 1; this.emit('colors', null); this.applyToSelection('Default Fill and Stroke', (n) => this.paintDeep(n, () => basicAppearance(solid(WHITE), solid(BLACK), 1))); }
   setActiveSlot(s: 'fill' | 'stroke'): void { this.activeSlot = s; this.emit('colors', null); }
   setActivePaint(paint: Paint): void { if (this.activeSlot === 'fill') this.setFill(paint); else this.setStroke({ paint }); }
   syncPaintFromSelection(): void {
@@ -951,7 +960,7 @@ export class Engine extends Emitter<EngineEvents> {
   releaseGuides(): void { const p = this.current; if (!p) return; const ids = allNodes(p.doc).filter((n) => n.kind === 'path' && n.guide).map((n) => n.id); this.edit('Release Guides', (d) => ({ doc: updateNodes(d, ids, (n) => (n.kind === 'path' ? { ...n, guide: false } : n)), select: ids })); }
 
   addText(text: string, x: number, y: number, opts: { mode?: 'point' | 'area' | 'path'; width?: number; height?: number; path?: PathData; framePath?: PathData; style?: Partial<CharStyle>; para?: Partial<ParaStyle>; name?: string; layer?: string; vertical?: boolean } = {}): string {
-    const fillPaint = this.fillPaint.type === 'none' ? solid(BLACK) : this.fillPaint;
+    const fillPaint = this.typeFill();
     const style: CharStyle = { ...DEFAULT_CHAR, fill: fillPaint, stroke: NONE, ...(opts.style ?? {}) };
     const mode = opts.mode ?? 'point';
     const node: TextNode = { id: newId('t'), kind: 'text', mode, spans: [{ text, style }], para: { ...DEFAULT_PARA, ...(opts.para ?? {}) }, xf: [1, 0, 0, 1, mode === 'area' ? 0 : x, mode === 'area' ? 0 : y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(opts.name ? { name: opts.name } : {}), ...(opts.vertical ? { vertical: true } : {}) };

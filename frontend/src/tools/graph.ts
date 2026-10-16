@@ -2,7 +2,7 @@ import { GRAPH_TYPES } from '../engine/graph';
 import type { Engine, GraphSpec, GraphType, Pt } from '../engine';
 import { registerTool, toolHost, type OptionSpec } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
-import { dragRect, hud, inView, layerColor, unitLabel } from './util';
+import { dragRect, inView, measureHud, layerColor, unitLabel } from './util';
 
 export const pendingGraph: { type: GraphType; at: Pt } = { type: 'column', at: { x: 0, y: 0 } };
 const S = { on: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, shift: false, alt: false };
@@ -54,7 +54,7 @@ function graphTool(type: GraphType, order: number, shortcut?: string): void {
       if (!S.on) return;
       const v = ctx.view(), r = dragRect(S.start, S.cur, S.shift, S.alt);
       inView(ctx, g, () => { g.strokeStyle = layerColor(ctx.engine); g.strokeRect(r.x, r.y, r.w, r.h); });
-      hud(ctx, g, v.toScreen(S.cur), [`W: ${unitLabel(ctx.engine, r.w)}`, `H: ${unitLabel(ctx.engine, r.h)}`]);
+      measureHud(ctx, g, v.toScreen(S.cur), [`W: ${unitLabel(ctx.engine, r.w)}`, `H: ${unitLabel(ctx.engine, r.h)}`]);
     },
   });
 }

@@ -4,7 +4,7 @@ import type { Engine, Mat, PathData, Pt, VNode } from '../engine';
 import { attachPlace, planeAt, snapPlane } from '../engine/perspective';
 import { registerTool, toolHost, type OptionSpec } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
-import { dragRect, fmt, hud, inView, layerColor, unitLabel } from './util';
+import { dragRect, fmt, inView, measureHud, layerColor, unitLabel } from './util';
 import { cachedPath } from '../engine/render';
 
 export const pendingShape: { kind: string; at: Pt } = { kind: 'rectangle', at: { x: 0, y: 0 } };
@@ -80,6 +80,7 @@ function shapeTool(id: string, label: string, iconName: string, group: string, o
     hint: () => hint,
     cursor: () => CURSORS.cross,
     options: (e) => [{ kind: 'title', text: label }, ...shapeOptions(kind, e)],
+    hover: (ctx, p) => { if (S.on || ctx.engine.perspActive) return; if (p) ctx.snap(p.doc); else ctx.engine.clearOverlay(); },
     down: (ctx, p) => { S.on = true; S.plane = ctx.engine.perspActive; S.start = S.plane ? p.doc : ctx.snap(p.doc).p; S.cur = S.start; S.preview = null; },
     move: (ctx, p) => {
       if (!S.on) return;
@@ -121,7 +122,7 @@ function shapeTool(id: string, label: string, iconName: string, group: string, o
       const lines = linear.has(kind)
         ? [`D: ${unitLabel(e, Math.hypot(S.cur.x - S.start.x, S.cur.y - S.start.y))}`, `${fmt((-Math.atan2(S.cur.y - S.start.y, S.cur.x - S.start.x) * 180) / Math.PI)}°`]
         : [`W: ${unitLabel(e, b.w)}`, `H: ${unitLabel(e, b.h)}`];
-      hud(ctx, g, ctx.view().toScreen(S.cur), lines);
+      measureHud(ctx, g, ctx.view().toScreen(S.cur), lines);
     },
   });
 }

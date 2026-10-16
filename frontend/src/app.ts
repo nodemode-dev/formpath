@@ -217,6 +217,8 @@ export function startApp(): void {
   commands.gate = (cmd) => prefs.showGenerative || !GENERATIVE.includes(cmd.id);
   const applyUiPrefs = (pr: Prefs): void => {
     Stage.prefs = { ...Stage.prefs, zoomWheel: pr.zoomWheel, gridColor: pr.gridColor, guideColor: pr.guideColor, snapTol: pr.snapTolerance, gridInBack: pr.gridInBack, cell: CHECKER_CELL[pr.checkerSize], snapAngles: SNAP_ANGLES[pr.snapAngleSet] };
+    const sg = { smartLabels: pr.smartLabels, smartMeasure: pr.smartMeasure, smartHighlight: pr.smartHighlight, smartSpacing: pr.smartSpacing };
+    if ((Object.keys(sg) as Array<keyof typeof sg>).some((k) => engine.view[k] !== sg[k])) engine.setView(sg);
     anchorUi.scale = ANCHOR_SCALE[pr.anchorSize];
     for (const t of ['shape-fill', 'generate-patterns', 'retype', 'text-to-vector']) PanelGroup.setTabHidden(t, !pr.showGenerative);
     const rootEl = document.documentElement, helpOn = pr.helpBar ? 'on' : 'off';

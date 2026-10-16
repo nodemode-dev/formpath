@@ -2,7 +2,7 @@ import { geomBounds } from '../engine/bounds';
 import { findNode, layerOf, topObjects } from '../engine/doc';
 import { apply, flatIndex, hasIn, hasOut, tracePath, transformPath } from '../engine/geometry';
 import { cachedPath, invalidateLayers, renderDocument, renderNode, type RenderContext } from '../engine/render';
-import { collectTargets, DEFAULT_SNAP_ANGLES, snapLine, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
+import { collectTargets, DEFAULT_SNAP_ANGLES, snapIntersect, snapLine, snapPath, snapPoint, snapRect, type SnapLine, type SnapTargets } from '../engine/snap';
 import { layoutText, lineBaseline, pathBrackets } from '../engine/text';
 import { framePort, threadChains } from '../engine/flow';
 import { envelopeFrame, envelopeGrid } from '../engine/live';
@@ -13,7 +13,8 @@ import { latticeCopies, tileOutline } from '../engine/pattern';
 import { UNIT_PT, type Doc, type Engine, type Mat, type PathData, type Pt, type Rect, type TextNode, type VNode } from '../engine';
 import type { Project } from '../engine/project';
 import { getTool, type SnapAt, type Tool, type ToolContext, type ToolPointer, type ViewInfo } from '../extensions/registry';
-import { anchorUi } from '../tools/util';
+import { anchorUi, unitLabel } from '../tools/util';
+import { t } from '../i18n';
 import { el, isMac, q, setClass, setHidden, setStyleVar } from './dom';
 import { icon } from './icons';
 import { paint, type StagePaint } from './palette';
@@ -100,7 +101,7 @@ export class Stage {
       paint: () => paint(),
       antsPhase: () => 0,
       snap: (p, exclude, opts) => this.snap(p, exclude, opts),
-      snapRect: (r, exclude) => this.snapBox(r, exclude),
+      snapRect: (r, exclude, ref) => this.snapBox(r, exclude, ref),
       invalidateTargets: () => { this.targets = null; },
       redraw: () => this.queue(false, true),
       typeAt: (detail) => this.typeHandler?.(detail),
@@ -154,29 +155,39 @@ export class Stage {
     const base = this.engine.dragOrigin ?? pr.doc, key = [...exclude].sort().join(',');
     if (!this.targets || this.targets.doc !== base || this.targets.key !== key) this.targets = { doc: base, key, t: collectTargets(base, exclude) };
     const tol = Stage.prefs.snapTol / pr.viewport.zoom;
-    const r = snapPoint(p, this.targets.t, { tol, smart: v.smartGuides, point: v.snapPoint, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
+    const r = snapPoint(p, this.targets.t, { tol, smart: v.smartGuides, point: v.snapPoint, path: true, intersect: true, highlight: v.smartHighlight, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
     let out: SnapAt = { p: r.p, lines: r.lines, label: r.label };
-    if (opts.from && v.smartGuides && r.hit !== 'spot') {
+    if (opts.from && v.smartGuides && r.hit !== 'spot' && !(r.hit === 'curve' && r.label === 'intersect')) {
       const s = snapLine(p, opts.from, this.targets.t, tol, Stage.prefs.snapAngles);
-      if (s) out = { p: s.p, lines: s.lines, label: s.label };
+      if (s && (r.hit !== 'curve' || Math.hypot(s.p.x - p.x, s.p.y - p.y) < Math.hypot(r.p.x - p.x, r.p.y - p.y))) out = { p: s.p, lines: s.lines, label: s.label };
     }
-    if (out.lines.length || out.label) this.engine.setOverlay({ lines: out.lines, label: out.label, at: out.p });
+    if (!v.smartLabels) out = { ...out, label: null };
+    if (out.lines.length || out.label) this.engine.setOverlay({ lines: out.lines, label: out.label, at: out.p, tags: [] });
     else this.engine.clearOverlay();
     return out;
   }
 
-  private snapBox(r: Rect, exclude: Set<string>): { dx: number; dy: number } {
-    const s = this.snapBoxRaw(r, exclude);
+  private snapBox(r: Rect, exclude: Set<string>, ref?: Pt): { dx: number; dy: number } {
+    const s = this.snapBoxRaw(r, exclude, ref);
     return this.engine.view.snapPixel ? { dx: Math.round(r.x + s.dx) - r.x, dy: Math.round(r.y + s.dy) - r.y } : s;
   }
 
-  private snapBoxRaw(r: Rect, exclude: Set<string>): { dx: number; dy: number } {
+  private snapBoxRaw(r: Rect, exclude: Set<string>, ref?: Pt): { dx: number; dy: number } {
     const pr = this.engine.current, v = this.engine.view;
     if (!pr || (!v.smartGuides && !v.snapGrid)) return { dx: 0, dy: 0 };
     const base = this.engine.dragOrigin ?? pr.doc, key = [...exclude].sort().join(',');
     if (!this.targets || this.targets.doc !== base || this.targets.key !== key) this.targets = { doc: base, key, t: collectTargets(base, exclude) };
-    const s = snapRect(r, this.targets.t, { tol: Stage.prefs.snapTol / pr.viewport.zoom, smart: v.smartGuides, point: false, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
-    if (s.lines.length || this.engine.overlay.lines.length) this.engine.setOverlay({ lines: s.lines, label: null, at: null });
+    const tol = Stage.prefs.snapTol / pr.viewport.zoom;
+    const s = snapRect(r, this.targets.t, { tol, smart: v.smartGuides, point: false, spacing: v.smartSpacing, grid: { on: v.snapGrid, spacing: pr.doc.grid.spacing, sub: pr.doc.grid.subdivisions } });
+    if (ref && v.smartGuides && !s.lines.length && s.dx === 0 && s.dy === 0) {
+      const c = snapIntersect(ref, this.targets.t, tol, v.smartHighlight) ?? snapPath(ref, this.targets.t, tol, v.smartHighlight);
+      if (c) {
+        this.engine.setOverlay({ lines: c.lines, label: v.smartLabels ? c.label : null, at: c.p, tags: [] });
+        return { dx: c.p.x - ref.x, dy: c.p.y - ref.y };
+      }
+    }
+    const tags = s.tags.map((g) => ({ x: g.x, y: g.y, v: g.v }));
+    if (s.lines.length || this.engine.overlay.lines.length || this.engine.overlay.tags.length) this.engine.setOverlay({ lines: s.lines, label: null, at: null, tags: v.smartSpacing ? tags : [] });
     return { dx: s.dx, dy: s.dy };
   }
 
@@ -520,7 +531,7 @@ export class Stage {
 
   private drawSmart(g: CanvasRenderingContext2D, p: Project, pal: StagePaint): void {
     const o = this.engine.overlay, v = p.viewport;
-    if (!o.lines.length && !o.label) return;
+    if (!o.lines.length && !o.label && !o.tags.length) return;
     g.save();
     g.strokeStyle = pal.smart;
     g.lineWidth = 1;
@@ -533,14 +544,27 @@ export class Stage {
     if (o.label && o.at) {
       const s = v.toScreen(o.at.x, o.at.y);
       g.font = '600 10px Inter, system-ui, sans-serif';
-      const w = Math.ceil(g.measureText(o.label).width) + 10, x = Math.round(s.x) - w - 6, y = Math.round(s.y) - 21;
+      const label = t(o.label), w = Math.ceil(g.measureText(label).width) + 10, x = Math.round(s.x) - w - 6, y = Math.round(s.y) - 21;
       g.fillStyle = pal.smart;
       g.beginPath();
       g.roundRect(x, y, w, 15, 7.5);
       g.fill();
       g.fillStyle = '#ffffff';
       g.textBaseline = 'middle';
-      g.fillText(o.label, x + 5, y + 8);
+      g.fillText(label, x + 5, y + 8);
+    }
+    if (o.tags.length) {
+      g.font = '600 10px Inter, system-ui, sans-serif';
+      g.textBaseline = 'middle';
+      for (const tg of o.tags) {
+        const s = v.toScreen(tg.x, tg.y), text = unitLabel(this.engine, tg.v), w = Math.ceil(g.measureText(text).width) + 8;
+        g.fillStyle = pal.smart;
+        g.beginPath();
+        g.roundRect(Math.round(s.x - w / 2), Math.round(s.y - 7.5), w, 15, 7.5);
+        g.fill();
+        g.fillStyle = '#ffffff';
+        g.fillText(text, Math.round(s.x - w / 2) + 4, Math.round(s.y));
+      }
     }
     g.restore();
   }

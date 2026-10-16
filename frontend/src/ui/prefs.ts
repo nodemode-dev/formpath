@@ -31,6 +31,10 @@ export interface Prefs {
   showGenerative: boolean;
   anchorSize: AnchorSize;
   snapAngleSet: SnapAngleSet;
+  smartLabels: boolean;
+  smartMeasure: boolean;
+  smartHighlight: boolean;
+  smartSpacing: boolean;
   scaleCorners: boolean;
   helpBar: boolean;
   taskBar: boolean;
@@ -59,7 +63,7 @@ export const DEFAULT_PREFS: Prefs = {
   shortcuts: {}, restoreSession: true, agentsAllowed: false, nodemodeUrl: 'http://localhost:8000', historyStates: 200, recoverySeconds: 20, autoShowHome: true,
   zoomWheel: false, keyIncrement: 1, snapTolerance: 4, units: 'pt', scaleStrokes: true, previewBounds: false, gridInBack: true, gridSpacing: 72, gridSubdivisions: 8,
   guideColor: '', gridColor: '', checkerSize: 'medium', checkerColors: 'light', narrowCollapse: true, newMaskClip: true, newMaskInvert: false,
-  showGenerative: true, anchorSize: 'small', snapAngleSet: 'a45', scaleCorners: true, helpBar: false, taskBar: true, pasteOnArtboards: false, autoSpell: false,
+  showGenerative: true, anchorSize: 'small', snapAngleSet: 'a45', smartLabels: true, smartMeasure: true, smartHighlight: true, smartSpacing: true, scaleCorners: true, helpBar: false, taskBar: true, pasteOnArtboards: false, autoSpell: false,
   pfPrecision: 0.028, pfRemoveRedundant: false, pfRemoveUnpainted: false,
 };
 
@@ -98,6 +102,10 @@ export function loadPrefs(): Prefs {
       showGenerative: bool(r.showGenerative, true),
       anchorSize: ANCHOR_SIZES.some(([k]) => k === r.anchorSize) ? r.anchorSize as AnchorSize : 'small',
       snapAngleSet: SNAP_ANGLE_SETS.some(([k]) => k === r.snapAngleSet) ? r.snapAngleSet as SnapAngleSet : 'a45',
+      smartLabels: bool(r.smartLabels, true),
+      smartMeasure: bool(r.smartMeasure, true),
+      smartHighlight: bool(r.smartHighlight, true),
+      smartSpacing: bool(r.smartSpacing, true),
       scaleCorners: bool(r.scaleCorners, true),
       helpBar: bool(r.helpBar, false),
       taskBar: bool(r.taskBar, true),

@@ -3650,3 +3650,80 @@ The sixth audit found that placing page 2 of a multi-artboard .ai through its Il
 - logged: v0.42.0 · 2026-10-16
 
 The sixth audit found that PNG and JPEG exports carried no resolution, so 300 ppi was only a pixel scale. canvasBlob now writes the ppi it is given (exportRaster always passes 72 times the scale) into a pHYs chunk in pixels per metre for PNG and into the JFIF APP0 density in dots per inch for JPEG, inserting an APP0 if the browser wrote none. PIL reads a 300 ppi export back as 299.9994 (PNG, metre rounding) and 300 (JPEG). WebP has no standard resolution field and is left alone; GIF, PNG-8, BMP, TIFF and PSD already wrote theirs.
+
+### src/ui/panels/color.ts · Gradient panel Method row
+
+- refers-to: src/ui/panels/color.ts :: method; src/styles/formpth.css :: .cv-gradp-method; src/engine/paint.ts :: paintFromInput, describePaint
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+The Classic and Perceptual choice already existed in the Gradient panel as an unlabelled segmented control, which an audit missed. It now sits in a row labelled Method with a tooltip. Adobe's public Photoshop help page on gradient interpolation names the options Classic, Perceptual (OKLab) and Linear (linear colour space); the Illustrator pages for perceptual interpolation could not be read (their body is script rendered), so the label follows the Photoshop wording. Linear is not offered because the engine has no linear-light mix; the stored value 'linear' means Classic. paintFromInput takes a `method` of classic or perceptual for agents and describePaint reports the perceptual method.
+
+### src/io/eps.ts · perceptual gradients in EPS and .ai
+
+- refers-to: src/io/eps.ts :: fnFor; src/io/ai-private.ts :: gradientBlock
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+EPS dropped Gradient.blend (it wrote only the stops, so a perceptual gradient came out Classic); fnFor now takes the 16 extra stops per segment from perceptualStops like SVG and PDF. The .ai writer stores each stop pair as a 256 sample ramp per channel, which was a straight line between the two stop colours; for a perceptual gradient each sample is now the OKLab mix of the pair (CMYK derived from the mixed colour), so the Illustrator gradient definition carries the curve. Illustrator itself was not available to open the result.
+
+### src/ui/layers.ts · layer rows placed by transform
+
+- refers-to: src/ui/layers.ts :: Row.y, paint, fill; src/styles/formpth.css :: .cv-lp-rows, .cv-lrow
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+Opening the panel menu moved nothing (it is a fixed overlay), but every command that inserted a layer row above others (New Sublayer, Duplicate Layer, a new layer) shifted the rows below because they sat in a flex column under a padding spacer, which the layout-shift API counts. Rows are now absolutely placed with translateY from the known row offsets and the container has an explicit height, so row movement is a transform and not layout.
+
+### src/engine/snap.ts · snap to path and intersection, spacing tags
+
+- refers-to: src/engine/snap.ts :: snapPath, snapIntersect, nearSegs, closestOn, crossings, SnapTargets.segGrid, snapRect (tags, SnapOpts.spacing)
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+The audit was right about path and intersection, but equal spacing and the dX/dY and W/H labels already existed (snapRect spacing, the tool HUDs) and fire in real drags. collectTargets now indexes every visible segment (up to 60000) in a 64 pt cell grid, with segments that span more than 256 cells in a side list, so a query only looks at the segments whose box holds the pointer within the tolerance. snapPoint tries anchors and centres first, then intersections of the nearby segments (flattened to 12 pieces, refined with Newton on the real curves; a line is linear in its own parameter, not the cubic's, which the first version got wrong and put the point 8 pt off), then the guide rules, and last the nearest point on a path. snapRect now also returns a tag per equal gap so the stage can write its distance. Measured with 2000 paths: building the targets takes about 22 ms once per drag and a query 0.02 ms, and drag frame time is the same with Smart Guides on or off.
+
+### src/ui/stage.ts · smart guide overlay and moved-object reference point
+
+- refers-to: src/ui/stage.ts :: snapRaw, snapBoxRaw, drawSmart; src/engine/index.ts :: overlay.tags, ViewFlags.smartLabels, smartMeasure, smartHighlight, smartSpacing; src/extensions/registry.ts :: ToolContext.snapRect
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+ctx.snapRect takes an optional reference point (the pointer). When the box finds no guide or spacing snap, a moved selection puts that point on an intersection or on the nearest path, drawing the highlighted segment and the label. The overlay gains tags (distance pills on the equal-gap markers, written in document units). Labels, highlighting and spacing guides follow four view flags set from the Preferences; View > Smart Guides gates all of them. Tools that draw from a click now also show the snap on hover (shape tools), so the guide is visible before the press.
+
+### src/tools/util.ts · measureHud
+
+- refers-to: src/tools/util.ts :: measureHud; src/tools/select.ts, draw.ts, graph.ts (overlay)
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+measureHud wraps hud for the dX, dY, W and H readouts of moving, resizing and drawing, so they obey View > Smart Guides and the Measurement Labels preference. Rotation and the other tools keep the plain hud.
+
+### src/ui/prefs.ts · Smart Guide preferences
+
+- refers-to: src/ui/prefs.ts (smartLabels, smartMeasure, smartHighlight, smartSpacing); src/ui/app-dialogs.ts (Selection & Snapping); src/app.ts (applyUiPrefs)
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+Four checkboxes in Preferences > Selection and Snapping: Anchor/Path Labels, Measurement Labels, Object Highlighting and Spacing Guides, all on by default and tolerated when missing from older saved preferences. applyUiPrefs copies them onto the engine view flags only when they differ, so the stage and tools read one place.
+
+### src/tools/freehand.ts · Scissors, Knife and Eraser pools, Alt and Shift+Alt
+- refers-to: src/tools/freehand.ts :: leaves, strokeReach, straightLine, eraserMarquee, scissors, knife, eraser
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+An audit reported that the Scissors click and Knife drag changed nothing. Driven with real mouse input at 50, 100 and 400 percent and with the artboard scrolled, both cut correctly on rectangles, ellipses, stars and lines, so that report came from the audit's own coordinates; the real faults were elsewhere. Scissors went through `engine.hit`, which returns the topmost fill, so an edge under another filled shape was missed, and it ignored compound paths; it now scans every visible unlocked leaf for the nearest segment within 5 screen pixels, snaps to an anchor inside that radius, and leaves the cut ends as selected anchors. Knife and Eraser took the selected group itself as a target, which fused its children into one shape (Knife) or did nothing (Eraser); `leaves` now expands groups and layers to their paths and compounds, and compound children are never handled alone. Knife had no Alt: Alt now cuts a straight start to end line and Shift+Alt snaps it to 45 degrees; Eraser with Alt erases the dragged rectangle. Eraser bounds are widened by half the stroke width so a thick stroke near the edge is reached.
+
+### src/engine/ops/paths.ts · eraseRegion on open and stroke-only paths, scissorsCut on compounds
+- refers-to: src/engine/ops/paths.ts :: eraseRegion, outsideRegion, scissorsCut, cutSub
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+`eraseRegion` skipped every path with an open subpath and subtracted the eraser from stroke-only closed shapes as if they were fills, which turned a ring outline into a solid. Filled closed shapes still use the boolean subtract (and are now left alone when the eraser misses them); everything else is cut along the outline: each subpath is split where it crosses the eraser, with the eraser grown by half the stroke width, and pieces whose midpoint lies inside are dropped, so open lines and stroke-only shapes become open pieces that keep their appearance. `scissorsCut` shares `cutSub` for paths and for the subpaths of a compound path, removes the handle that pointed across the cut at both new ends, and returns the document unchanged when the cut lands on an open path's end, so no empty history step is made.
+
+### src/engine/index.ts · default type fill
+- refers-to: src/engine/index.ts :: fillPicked, typeFill, setFill, defaultFillStroke, newDocument, addText; src/tools/type.ts :: activate
+- kind: decision
+- logged: v0.43.0 · 2026-10-16
+
+New documents were created with whatever fill the previous document left, and `addText` used the current fill, which is white at start, so type made without choosing the Type tool (agents, scripts) was invisible on a white artboard. Shapes already matched Illustrator (white fill, black 1 pt stroke) and stay as they are. `newDocument` now resets the current fill and stroke to that default and clears `fillPicked`; `setFill` sets it and `defaultFillStroke` clears it. `typeFill` gives type black when the current fill is none, or white-ish while the user has not picked a fill, and the user's fill otherwise; the stroke of new type is always none. The Type tool's activate keeps a picked fill instead of forcing black over it. Opened files and existing documents are untouched.

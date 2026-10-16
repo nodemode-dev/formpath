@@ -11,7 +11,7 @@ export interface ToolContext {
   paint(): Paint;
   antsPhase(): number;
   snap(p: Pt, exclude?: Set<string>, opts?: { from?: Pt }): SnapAt;
-  snapRect(r: Rect, exclude: Set<string>): { dx: number; dy: number };
+  snapRect(r: Rect, exclude: Set<string>, ref?: Pt): { dx: number; dy: number };
   invalidateTargets(): void;
   redraw(): void;
   typeAt(detail: { id?: string; x?: number; y?: number; box?: { w: number; h: number }; path?: string; caret?: number; vertical?: boolean }): void;

@@ -18,7 +18,7 @@ import { CORNER_TYPES, cornerAlong, cornerFrame, cornerRadiusFor, tangentFromAlo
 import { setCornersOp, type CornerTargets } from '../engine/ops/corner-ops';
 import { CURSORS, cursorFor } from '../ui/cursors';
 import { isMac } from '../ui/dom';
-import { anchorUi, fmt, hud, layerColor, marquee, outlineNode, stroke2, tolDoc, unitLabel } from './util';
+import { anchorUi, fmt, hud, layerColor, measureHud, marquee, outlineNode, stroke2, tolDoc, unitLabel } from './util';
 
 const xf = (e: Engine) => ({ strokes: e.view.scaleStrokes, patterns: e.view.transformPatterns, gradients: true });
 
@@ -64,7 +64,7 @@ export function dragTransform(ctx: ToolContext, S: Drag, p: ToolPointer): void {
   if (S.mode === 'move') {
     const q = p.shift ? constrainAngle(S.start, p.doc) : p.doc;
     let dx = q.x - S.start.x, dy = q.y - S.start.y;
-    if (!p.shift) { const s = ctx.snapRect({ x: b.x + dx, y: b.y + dy, w: b.w, h: b.h }, new Set(S.ids)); dx += s.dx; dy += s.dy; }
+    if (!p.shift) { const s = ctx.snapRect({ x: b.x + dx, y: b.y + dy, w: b.w, h: b.h }, new Set(S.ids), q); dx += s.dx; dy += s.dy; }
     const r = transformNodes(origin, S.ids, translate(dx, dy), p.alt, xf(e));
     S.copyIds = p.alt ? r.ids : null;
     e.dragTo(r.doc);
@@ -351,7 +351,7 @@ registerTool({
     if (L.drag) marquee(ctx, g, L.start, L.cur);
     else if (S.mode === 'marquee') marquee(ctx, g, S.start, S.cur);
     else if (!S.mode && hover && !pr.selection.has(hover)) { const n = findNode(pr.doc, hover); if (n) outlineNode(ctx, g, pr.doc, n, layerColor(e, hover), 1.5); }
-    if (S.mode && S.moved) hud(ctx, g, ctx.view().toScreen(S.cur), S.info);
+    if (S.mode && S.moved) (S.mode === 'rotate' ? hud : measureHud)(ctx, g, ctx.view().toScreen(S.cur), S.info);
   },
 });
 

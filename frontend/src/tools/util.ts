@@ -83,6 +83,11 @@ export function hud(ctx: ToolContext, g: CanvasRenderingContext2D, at: Pt, lines
   g.restore();
 }
 
+export function measureHud(ctx: ToolContext, g: CanvasRenderingContext2D, at: Pt, lines: string[]): void {
+  const v = ctx.engine.view;
+  if (v.smartGuides && v.smartMeasure) hud(ctx, g, at, lines);
+}
+
 export const fmt = (v: number): string => `${Math.round(v * 100) / 100}`;
 
 export function unitLabel(engine: Engine, pt: number): string {
