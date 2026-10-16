@@ -12,7 +12,7 @@ function clone(p: Project, doc: Doc): Project {
   return q;
 }
 
-async function managed(p: Project, s: PrintSettings): Promise<{ project: Project; x4: boolean }> {
+export async function managed(p: Project, s: PrintSettings): Promise<{ project: Project; x4: boolean }> {
   if (s.colors !== 'formpth' || !s.profile) return { project: p, x4: false };
   if (!profileList().length) await refreshProfiles();
   const target = profileList().find((x) => x.id === s.profile);

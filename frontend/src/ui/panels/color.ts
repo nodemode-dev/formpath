@@ -4,6 +4,7 @@ import { el, patchList, q, setClass, setHidden, setStyleVar, setText, setTitle }
 import { icon } from '../icons';
 import { askForm } from '../form-dialog';
 import { paintCss } from '../rail';
+import { onPatternThumb } from '../pattern-thumb';
 import { numField, selectCtl, seg, slider, type Ctl } from './kit';
 import { FF } from '../../tools/paint';
 import { toolHost } from '../../extensions/registry';
@@ -201,6 +202,7 @@ export class SwatchesPanel {
     this.bindDrag();
     this.body.append(head, this.grid, foot);
     for (const k of ['doc', 'active', 'projects'] as const) engine.on(k, () => this.queue());
+    onPatternThumb(() => this.queue());
     this.sync();
   }
 

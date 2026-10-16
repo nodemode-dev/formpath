@@ -114,6 +114,24 @@ export async function proofSetupDialog(engine: Engine): Promise<void> {
   if (isProofing()) void setProofing(true, engine.doc);
 }
 
+export async function proofPreset(engine: Engine, which: 'working' | 'monitor' | ProfileInfo): Promise<void> {
+  if (!(await ready(engine))) return;
+  const doc = engine.doc;
+  if (!doc) return;
+  if (which === 'monitor') { await toggleProofColors(engine, false); return; }
+  const pr = doc.cm?.proof ?? {};
+  applySettings(engine, { proof: { ...pr, device: which === 'working' ? undefined : refOf(which) } }, 'Proof Setup');
+  await toggleProofColors(engine, true);
+}
+
+export function proofPresetOn(engine: Engine, which: 'working' | 'monitor' | ProfileInfo): boolean {
+  const dev = engine.doc?.cm?.proof?.device;
+  if (which === 'monitor') return !isProofing();
+  if (!isProofing()) return false;
+  if (which === 'working') return !dev;
+  return !!dev && (dev.id === which.id || dev.name === which.name);
+}
+
 export async function toggleProofColors(engine: Engine, on?: boolean): Promise<boolean> {
   const want = on ?? !isProofing();
   if (want && !(await ready(engine))) return false;

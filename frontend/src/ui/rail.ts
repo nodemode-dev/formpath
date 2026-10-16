@@ -4,6 +4,7 @@ import type { Tool } from '../extensions/registry';
 import { el, q, setClass, setHidden, setHtml, setStyleVar, setText, setTitle } from './dom';
 import { Dialog } from './dialogs';
 import { icon } from './icons';
+import { patternThumb } from './pattern-thumb';
 import { rememberTool, slotTool, toolGroups, type ToolGroup } from './tool-groups';
 
 export function paintCss(p: Paint, engine?: Engine): string {
@@ -20,6 +21,7 @@ export function paintCss(p: Paint, engine?: Engine): string {
     const stops = [...pp.gradient.stops].sort((a, b) => a.offset - b.offset).map((s) => `${cssColor(s.color, s.opacity)} ${Math.round(s.offset * 100)}%`).join(', ');
     return pp.gradient.kind === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(${90 - pp.gradient.angle}deg, ${stops})`;
   }
+  if (pp.type === 'pattern' && engine) { const t = patternThumb(engine, pp.pattern); if (t) return t; }
   return 'repeating-conic-gradient(#999 0% 25%, #ddd 0% 50%) 50% / 8px 8px';
 }
 

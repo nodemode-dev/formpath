@@ -572,7 +572,12 @@ Generated from the engine's stored catalogue by `./formpth agents sync`; do not 
 - `persp-show` (View > Perspective Grid > Show Grid): Show Grid, as in View > Perspective Grid > Show Grid.
 - `persp-snap` (View > Perspective Grid > Snap to Grid): Snap to Grid, as in View > Perspective Grid > Snap to Grid.
 - `proof-colors` (View > Proof Colors): Turns the on-screen soft proof on or off, showing the art as the proof device would print it. Use when checking how saturated colours will look in print.
+- `proof-monitor-rgb` (View > Proof Setup > Monitor RGB): Monitor RGB, as in View > Proof Setup > Monitor RGB.
+- `proof-profile-0` (View > Proof Setup > formpth Generic CMYK): formpth Generic CMYK, as in View > Proof Setup > formpth Generic CMYK.
+- `proof-profile-1` (View > Proof Setup > U.S. Web Coated (SWOP) v2): U.S. Web Coated (SWOP) v2, as in View > Proof Setup > U.S. Web Coated (SWOP) v2.
+- `proof-profile-2` (View > Proof Setup > FOGRA39L Coated): FOGRA39L Coated, as in View > Proof Setup > FOGRA39L Coated.
 - `proof-setup` (View > Proof Setup > Customize): Opens Proof Setup to pick the device to simulate, whether to preserve numbers, and whether to simulate paper color and black ink. Use before Proof Colors to describe the printing condition being checked.
+- `proof-working-cmyk` (View > Proof Setup > Working CMYK): Working CMYK, as in View > Proof Setup > Working CMYK.
 - `release-guides` (View > Guides > Release Guides): Release Guides, as in View > Guides > Release Guides.
 - `reset-rotation` (View > Reset Rotate View): Reset Rotate View, as in View > Reset Rotate View.
 - `screen-full` (View > Screen Mode > Full Screen Mode): Full Screen Mode, as in View > Screen Mode > Full Screen Mode.

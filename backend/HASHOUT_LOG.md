@@ -415,6 +415,20 @@ export_file accepts a .dwg path next to .dxf: the extension list, the descriptio
 
 The shared colour description for set_paint and the other paint parameters now documents `method: classic|perceptual` on a linear or radial gradient. It is a description change only (no new parameter on the schema level, the paint is a free object), and ./formpth agents sync regenerated the tool reference.
 
+### app/services/rgb_profiles.py · built-in Adobe RGB (1998) compatible and Display P3
+- refers-to: app/services/rgb_profiles.py :: build, SPACES; app/services/color.py :: _entries, profile_bytes
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+formpth writes both RGB working spaces itself as ICC v2.4 matrix/TRC profiles from the published primaries (Adobe RGB: 0.64/0.33, 0.21/0.71, 0.15/0.06, D65, gamma 563/256; Display P3: 0.680/0.320, 0.265/0.690, 0.150/0.060, D65, sRGB curve as a 1024 point table). The colorants are the D65 matrix Bradford-adapted to the D50 PCS and a chad tag records the adaptation; no vendor file is copied. They are named "Adobe RGB (1998) compatible" and "Display P3", listed as builtin, and found by name in profile_bytes. Checked with PIL.ImageCms as a black box: both parse, colorants match the known D50 values (Adobe R 0.6097 0.3111 0.0195, P3 R 0.5151 0.2412 -0.0011) and white, mid grey and primaries convert to sRGB as expected.
+
+### app/services/color.py · lists and serves the new RGB profiles
+- refers-to: app/services/color.py :: _entries, profile_bytes
+- kind: decision
+- logged: v0.47.0 · 2026-10-16
+
+_entries adds the two profiles after the generic CMYK so the first builtin RGB stays sRGB, which the frontend default lookup relies on; profile_bytes serves them by name.
+
 ### app/routers/mcp.py · psd_edit on export_file
 - refers-to: app/routers/mcp.py :: export_file
 - kind: decision

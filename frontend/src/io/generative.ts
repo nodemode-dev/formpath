@@ -28,7 +28,7 @@ export function sanitizeSvg(src: string): string { return repairSvg(src, 1000, 1
 
 const SYSTEM = 'You draw vector graphics as SVG. Answer with one complete <svg> element and nothing else: no prose, no code fences. Use only g, path, rect, circle, ellipse, polygon, polyline, line, defs, linearGradient, radialGradient and stop. Paint with solid colours, and with gradients only when the brief allows them: define each gradient in defs with an id and two or more stops (offset 0 to 1), then use fill="url(#id)". Strokes may set stroke-width, stroke-linecap and stroke-linejoin. Make holes with one path of several subpaths and fill-rule="evenodd". Group related shapes in named groups such as <g id="sky" data-name="Sky">; opacity on groups is fine, and mix-blend-mode in a style attribute (multiply, screen or overlay) is allowed for shadows and highlights. Close every filled path with Z. No text, images, filters, masks, scripts, CSS classes or external references.';
 
-interface SvgArt { nodes: VNode[]; report: Report }
+interface SvgArt { nodes: VNode[]; report: Report; vbW: number; vbH: number }
 
 async function svgNodes(text: string, vw: number, vh: number, c: Constraints, scene = false): Promise<SvgArt> {
   const svg = extractSvg(text);
@@ -47,7 +47,7 @@ async function svgNodes(text: string, vw: number, vh: number, c: Constraints, sc
   report.notes.push(...r.leftOut);
   const nodes = finishNodes(r.doc.layers.flatMap((l) => l.children), { vbW: hasVb ? vb[2] : vw, vbH: hasVb ? vb[3] : vh, limits: c.limits, scene }, report);
   if (!nodes.length) throw new Error(`The model answered with an SVG that has no usable shapes${reportLines(report).length ? ` (${reportLines(report).join('; ')})` : ''}.`);
-  return { nodes, report };
+  return { nodes, report, vbW: hasVb ? vb[2] : vw, vbH: hasVb ? vb[3] : vh };
 }
 
 const MAX_TOKENS = 12000;
@@ -141,7 +141,8 @@ export async function patternVariations(o: PatternGenOptions): Promise<PatternVa
     try {
       const made = await svgNodes(await ask(c, user, i, n, 0.6 + i * 0.2), V, V, c);
       let art = wrapGroup(made.nodes, 'Pattern Tile');
-      art = moved(art, [T / V, 0, 0, T / V, 0, 0]);
+      const fit = T / Math.max(made.vbW, made.vbH);
+      art = moved(art, [fit, 0, 0, fit, (T - made.vbW * fit) / 2, (T - made.vbH * fit) / 2]);
       art = enforcePalette(art, c.palette);
       let seam: SeamCheck | null = null;
       if (o.seamless !== false && art.kind === 'group') {

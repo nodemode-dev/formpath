@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 from app.core import config
-from app.services import display
+from app.services import display, rgb_profiles
 
 GENERIC_CMYK = "formpth Generic CMYK"
 SRGB_NAME = "sRGB (built-in)"
@@ -329,6 +329,8 @@ def _entries() -> list[dict]:
 
     add(_describe(srgb_bytes(), SRGB_NAME), "builtin")
     add(_describe(generic_cmyk_bytes(), GENERIC_CMYK), "builtin")
+    for extra in rgb_profiles.names():
+        add(_describe(rgb_profiles.build(extra), extra), "builtin")
     for source, folders in (("user", [profiles_dir()]), ("system", system_folders())):
         for folder in folders:
             for path, st in _scan(folder):
@@ -359,7 +361,7 @@ def profile_bytes(pid: str) -> bytes | None:
     for e in _entries():
         if e["id"] == pid:
             if e["source"] == "builtin":
-                return srgb_bytes() if e["name"] == SRGB_NAME else generic_cmyk_bytes()
+                return srgb_bytes() if e["name"] == SRGB_NAME else rgb_profiles.build(e["name"]) if e["name"] in rgb_profiles.SPACES else generic_cmyk_bytes()
             try:
                 return Path(e["path"]).read_bytes()
             except OSError:

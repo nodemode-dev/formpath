@@ -1,7 +1,8 @@
 import type { Project } from '../engine';
 import { profileList, refreshProfiles } from '../engine/color-management';
 import { platesOf } from '../engine/inks';
-import { bleedFor, DEFAULT_MARKS, pageGeometry, type PdfMarks } from '../io/pdf-marks';
+import { bleedFor, DEFAULT_MARKS, pageGeometry, type Bleed, type PdfMarks } from '../io/pdf-marks';
+import { managed } from '../io/print';
 import { DEFAULT_PRINT, MAX_SHEETS, PAPERS, scaleFor, sheetFor, tilesFor, type PaperId, type PrintSettings } from '../io/print-layout';
 import { renderRegion } from '../io/raster';
 import { numberInput, parseArtboardRange, row, selectOf } from './app-dialogs';
@@ -40,6 +41,7 @@ export class PrintDialog extends Dialog {
   private readonly bleedRight = numberInput(0, 720, 0.25);
   private readonly output = selectOf([['composite', 'Composite'], ['separations', 'Separations']]);
   private readonly plateDpi = selectOf([['150', '150 ppi'], ['300', '300 ppi'], ['600', '600 ppi']]);
+  private readonly plate = selectOf([['', 'All plates']]);
   private readonly handling = selectOf([['printer', 'Let the printer determine colors'], ['formpth', 'Let formpth determine colors']]);
   private readonly profile = selectOf([['', 'Choose a profile']]);
   private readonly intent = selectOf([['0', 'Perceptual'], ['1', 'Relative Colorimetric'], ['2', 'Saturation'], ['3', 'Absolute Colorimetric']]);
@@ -47,7 +49,9 @@ export class PrintDialog extends Dialog {
   private readonly printBtn: HTMLButtonElement;
   private readonly panesList: HTMLElement[] = [];
   private readonly navBtns: HTMLButtonElement[] = [];
-  private readonly thumbs = new Map<number, HTMLCanvasElement>();
+  private readonly thumbs = new Map<string, HTMLCanvasElement>();
+  private shown: { img: HTMLCanvasElement; l: number; r: number; t: number; b: number } | null = null;
+  private plateKeys = '';
   private project: Project | null = null;
   private current = 0;
   private frame = 0;
@@ -80,7 +84,7 @@ export class PrintDialog extends Dialog {
       pair('Top, Bottom', this.bleedTop, this.bleedBottom), pair('Left, Right', this.bleedLeft, this.bleedRight),
     ]);
     pane('output', [
-      row('Output', this.output), row('Plate resolution', this.plateDpi), row('Inks', this.inkBtn),
+      row('Output', this.output), row('Plate resolution', this.plateDpi), row('Preview plate', this.plate), row('Inks', this.inkBtn),
       el('<p class="cv-note cv-print-note">Composite prints the artwork in colour. Separations print one page per ink as vector art, with blank plates left out. Raster images and effects are printed as gray pictures on each plate.</p>'),
     ]);
     this.inkBtn.addEventListener('click', () => this.openInks(() => this.update()));
@@ -103,7 +107,7 @@ export class PrintDialog extends Dialog {
     this.button('Cancel', 'ghost', () => this.close());
     this.printBtn = this.button('Print', 'primary', () => this.accept());
     const touch = (): void => this.update();
-    for (const c of [this.copies, this.collate, this.range, this.media, this.customW, this.customH, this.orientation, this.placement, this.scaling, this.percent, this.overlap, this.markTrim, this.markReg, this.markBars, this.markInfo, this.markOffset, this.markWeight, this.bleedMode, this.bleedTop, this.bleedBottom, this.bleedLeft, this.bleedRight, this.output, this.plateDpi, this.handling, this.profile, this.intent]) {
+    for (const c of [this.copies, this.collate, this.range, this.media, this.customW, this.customH, this.orientation, this.placement, this.scaling, this.percent, this.overlap, this.markTrim, this.markReg, this.markBars, this.markInfo, this.markOffset, this.markWeight, this.bleedMode, this.bleedTop, this.bleedBottom, this.bleedLeft, this.bleedRight, this.output, this.plateDpi, this.plate, this.handling, this.profile, this.intent]) {
       c.addEventListener('input', touch);
       c.addEventListener('change', touch);
     }
@@ -120,6 +124,8 @@ export class PrintDialog extends Dialog {
   ask(p: Project): Promise<PrintSettings | null> {
     this.project = p;
     this.thumbs.clear();
+    this.shown = null;
+    this.plateKeys = '';
     this.fill(this.last, p);
     this.range.value = this.last.range.length === p.doc.artboards.length && p.doc.artboards.length > 1 ? 'All' : 'Current';
     this.fillProfiles();
@@ -201,6 +207,14 @@ export class PrintDialog extends Dialog {
     for (const b of [this.bleedTop, this.bleedBottom, this.bleedLeft, this.bleedRight]) setDisabled(b, !bleedOn);
     const sep = this.output.value === 'separations';
     setDisabled(this.plateDpi, !sep);
+    const plates = platesOf(p.doc, true), keys = plates.map((x) => x.value).join('|');
+    if (keys !== this.plateKeys) {
+      const keep = this.plate.value;
+      this.plateKeys = keys;
+      this.plate.replaceChildren(...[['', 'All plates'], ...plates.map((x) => [x.value, x.label])].map(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; return o; }));
+      this.plate.value = plates.some((x) => x.value === keep) ? keep : '';
+    }
+    setDisabled(this.plate, !sep);
     const mine = this.handling.value === 'formpth';
     setDisabled(this.profile, !mine || sep); setDisabled(this.intent, !mine || sep);
     setDisabled(this.handling, sep);
@@ -225,16 +239,27 @@ export class PrintDialog extends Dialog {
     this.draw();
   }
 
-  private thumb(i: number): HTMLCanvasElement | null {
-    const hit = this.thumbs.get(i);
-    if (hit) return hit;
-    const p = this.project, a = p?.doc.artboards[i];
+  private thumb(s: PrintSettings, bleed: Bleed): { img: HTMLCanvasElement; l: number; r: number; t: number; b: number } | null {
+    const p = this.project, i = s.range[0], a = p?.doc.artboards[i];
     if (!p || !a) return null;
+    const sep = s.output === 'separations' ? platesOf(p.doc, true).find((x) => x.value === this.plate.value)?.value ?? null : null;
+    const prof = s.output === 'composite' && s.colors === 'formpth' && s.profile ? `${s.profile}:${s.intent}` : '';
+    const key = [i, bleed.t, bleed.b, bleed.l, bleed.r, sep ?? '', prof].join('|');
+    const hit = this.thumbs.get(key);
+    if (hit) return hit.width > 1 ? { img: hit, l: bleed.l, r: bleed.r, t: bleed.t, b: bleed.b } : this.shown;
     const hold = document.createElement('canvas');
     hold.width = 1; hold.height = 1;
-    this.thumbs.set(i, hold);
-    void renderRegion(p, { region: { x: a.x, y: a.y, w: a.w, h: a.h }, scale: Math.min(1, 320 / Math.max(a.w, a.h)), transparent: false, bg: a.bg ?? null }).then((c) => { if (this.project === p) { this.thumbs.set(i, c); this.draw(); } }, () => undefined);
-    return null;
+    this.thumbs.set(key, hold);
+    const region = { x: a.x - bleed.l, y: a.y - bleed.t, w: a.w + bleed.l + bleed.r, h: a.h + bleed.t + bleed.b };
+    void (async () => {
+      let src = p;
+      if (prof) { try { src = (await managed(p, s)).project; } catch { src = p; } }
+      const c = await renderRegion(src, { region, scale: Math.min(1, 320 / Math.max(region.w, region.h)), transparent: false, bg: a.bg ?? null, separation: sep });
+      if (this.project !== p) return;
+      this.thumbs.set(key, c);
+      this.draw();
+    })().catch(() => undefined);
+    return this.shown;
   }
 
   private draw(): void {
@@ -275,9 +300,32 @@ export class PrintDialog extends Dialog {
     const ax = X(pg.ml * k), ay = Y((pg.mb + a.h) * k), aw = a.w * k * f, ah = a.h * k * f;
     g.strokeStyle = tok('--accent-color', '#f97316'); g.setLineDash([]);
     g.strokeRect(X(0) + 0.5, Y(ch) + 0.5, cw * f, ch * f);
-    const img = this.thumb(s.range[0]);
-    if (img && img.width > 1) g.drawImage(img, ax, ay, aw, ah);
-    else { g.fillStyle = tok('--surface-2', '#ddd'); g.fillRect(ax, ay, aw, ah); }
+    const img = this.thumb(s, bleed);
+    if (img) {
+      this.shown = img;
+      g.drawImage(img.img, ax - img.l * k * f, ay - img.t * k * f, aw + (img.l + img.r) * k * f, ah + (img.t + img.b) * k * f);
+    } else { g.fillStyle = tok('--surface-2', '#ddd'); g.fillRect(ax, ay, aw, ah); }
+    const m = s.marks, px = (x: number): number => X(x * k), py = (y: number): number => Y(y * k);
+    const gx0 = pg.ml, gy0 = pg.mb, gx1 = pg.ml + a.w, gy1 = pg.mb + a.h, st = pg.start, L = 18;
+    g.strokeStyle = '#000000'; g.fillStyle = '#000000'; g.lineWidth = Math.max(0.75, m.weight * k * f);
+    const seg = (x1: number, y1: number, x2: number, y2: number): void => { g.beginPath(); g.moveTo(px(x1), py(y1)); g.lineTo(px(x2), py(y2)); g.stroke(); };
+    if (m.trim) {
+      for (const [x, sx, side] of [[gx0, -1, st.l], [gx1, 1, st.r]] as const) for (const [y, sy, vs] of [[gy0, -1, st.b], [gy1, 1, st.t]] as const) {
+        seg(x + sx * side, y, x + sx * (side + L), y);
+        seg(x, y + sy * vs, x, y + sy * (vs + L));
+      }
+    }
+    if (m.registration) {
+      const r = 4.5, cross = 8;
+      const target = (cx: number, cy: number): void => { g.beginPath(); g.arc(px(cx), py(cy), r * k * f, 0, Math.PI * 2); g.stroke(); seg(cx - cross, cy, cx + cross, cy); seg(cx, cy - cross, cx, cy + cross); };
+      const mx = (gx0 + gx1) / 2, my = (gy0 + gy1) / 2;
+      target(mx, gy0 - st.b - L / 2); target(mx, gy1 + st.t + L / 2); target(gx0 - st.l - L / 2, my); target(gx1 + st.r + L / 2, my);
+    }
+    if (m.colorBars) {
+      const sz = 9, y = gy0 - st.b - sz, room = Math.max(0, Math.floor(((gx1 - gx0) / 2 - 16) / sz));
+      ['#00aeef', '#ec008c', '#fff200', '#000000', '#ed1c24', '#00a651', '#2e3192', '#80d7f7', '#f49ac2', '#fff799', '#808080', '#231f20'].slice(0, room).forEach((c, n) => { g.fillStyle = c; g.fillRect(px(gx0 + 16 + n * sz), py(y + sz), sz * k * f, sz * k * f); });
+    }
+    if (m.pageInfo) { g.fillStyle = '#000000'; g.font = `${Math.max(4, 6 * k * f)}px system-ui, sans-serif`; g.fillText(`${a.name ?? 'Artboard'} | ${new Date().toLocaleDateString()}`, px(gx0 + 16), py(gy1 + st.t + 3)); }
     if (bleed.t + bleed.b + bleed.l + bleed.r > 0) {
       g.strokeStyle = tok('--accent-color', '#f97316'); g.setLineDash([2, 2]);
       g.strokeRect(X((pg.ml - bleed.l) * k) + 0.5, Y((pg.mb + a.h + bleed.t) * k) + 0.5, (a.w + bleed.l + bleed.r) * k * f, (a.h + bleed.t + bleed.b) * k * f);
