@@ -156,7 +156,7 @@ async function psdLayerArt(layers: PsdLayers, name: string, ox: number, oy: numb
   };
   const kids = await build(layers.nodes);
   const notes = [...layers.notes];
-  if (odd.size) notes.push(`${[...odd].join(', ')} ${odd.size === 1 ? 'is' : 'are'} not a blend mode formpth has, so ${odd.size === 1 ? 'that layer is' : 'those layers are'} set to Normal`);
+  if (odd.size) notes.push(`${[...odd].join(', ')} ${odd.size === 1 ? 'is' : 'are'} not a blend mode formpath has, so ${odd.size === 1 ? 'that layer is' : 'those layers are'} set to Normal`);
   return { group: { id: newId('g'), kind: 'group', clip: false, children: kids, opacity: 1, blend: 'normal', ap: { ...BARE }, name }, assets, images, notes };
 }
 

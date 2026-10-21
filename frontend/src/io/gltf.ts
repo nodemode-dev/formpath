@@ -51,7 +51,7 @@ export function parseGltf(data: ArrayBuffer, external: (uri: string) => Uint8Arr
     if (!text) throw new Error('This GLB file has no JSON chunk.');
     json = JSON.parse(text) as Json;
   } else json = JSON.parse(new TextDecoder().decode(new Uint8Array(data))) as Json;
-  for (const x of json.extensionsRequired ?? []) if (x === 'KHR_draco_mesh_compression' || x === 'EXT_meshopt_compression') throw new Error(`This glTF needs the ${x} extension, which formpth does not read.`);
+  for (const x of json.extensionsRequired ?? []) if (x === 'KHR_draco_mesh_compression' || x === 'EXT_meshopt_compression') throw new Error(`This glTF needs the ${x} extension, which formpath does not read.`);
   const buffers: Array<Uint8Array | null> = (json.buffers ?? []).map((b, i) => {
     if (!b.uri) return i === 0 ? bin : null;
     const d = dataUri(b.uri);

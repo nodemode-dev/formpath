@@ -9,7 +9,7 @@ export interface SpellHit { word: string; suggestions: string[] }
 export interface SimilarFont { id: string; family: string; style: string; score: number }
 export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file'; vision?: boolean }
 export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown>; inapp?: boolean }
-const BRIDGE_HEADER = 'X-Formpth-Bridge';
+const BRIDGE_HEADER = 'X-Formpath-Bridge';
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -18,7 +18,7 @@ export class ApiError extends Error {
 async function request(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
   try { res = await fetch(`/api${path}`, init); } catch {
-    throw new ApiError('The formpth engine is not reachable. Start it with ./formpth boot.', 0);
+    throw new ApiError('The formpath engine is not reachable. Start it with ./formpath boot.', 0);
   }
   if (!res.ok) {
     let detail = res.statusText || `Request failed (${res.status})`;
@@ -85,7 +85,7 @@ export const api = {
   async readFileInfo(path: string): Promise<{ blob: Blob; name: string; path: string; size: number; mtime: number }> {
     const r = await request('/files/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
     const h = (k: string): string => decodeURIComponent(r.headers.get(k) ?? '');
-    return { blob: await r.blob(), name: h('X-Formpth-Name') || path.split(/[\\/]/).pop() || path, path: h('X-Formpth-Path') || path, size: Number(r.headers.get('X-Formpth-Size') ?? 0), mtime: Number(r.headers.get('X-Formpth-Mtime') ?? 0) };
+    return { blob: await r.blob(), name: h('X-Formpath-Name') || path.split(/[\\/]/).pop() || path, path: h('X-Formpath-Path') || path, size: Number(r.headers.get('X-Formpath-Size') ?? 0), mtime: Number(r.headers.get('X-Formpath-Mtime') ?? 0) };
   },
   async statFiles(paths: string[]): Promise<Array<{ path: string; exists: boolean; size: number; mtime: number }>> { return (await json<{ files: Array<{ path: string; exists: boolean; size: number; mtime: number }> }>(await request('/files/stat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths }) }))).files; },
   async writeFile(folder: string, name: string, blob: Blob): Promise<string> { return (await json<{ path: string }>(await request('/files/write', { method: 'POST', body: form({ folder, name }, [{ name, blob }], 'file') }))).path; },

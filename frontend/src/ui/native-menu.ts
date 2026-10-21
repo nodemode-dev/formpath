@@ -46,8 +46,8 @@ export class NativeMenus {
         return item;
       };
       const top = [];
-      top.push(await api.Submenu.new({ text: 'formpth', items: [
-        await api.PredefinedMenuItem.new({ item: { About: { name: 'formpth' } } }),
+      top.push(await api.Submenu.new({ text: 'formpath', items: [
+        await api.PredefinedMenuItem.new({ item: { About: { name: 'formpath' } } }),
         await api.PredefinedMenuItem.new({ item: 'Separator' }),
         ...(this.commands.get('settings') ? [await make('settings')] : []),
         await api.PredefinedMenuItem.new({ item: 'Separator' }),

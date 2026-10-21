@@ -2,7 +2,7 @@ import type { Engine, ToolId } from '../engine';
 import { toolList, type Tool } from '../extensions/registry';
 
 export interface ToolGroup { key: string; tools: Tool[] }
-const STORE = 'formpth.toolGroups.last';
+const STORE = 'formpath.toolGroups.last';
 
 export function toolGroups(): ToolGroup[] {
   const out: ToolGroup[] = [];

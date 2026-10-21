@@ -14,7 +14,7 @@ export class HelpDialog extends Dialog {
   private readonly items: Array<{ s: Section; nav: HTMLButtonElement; box: HTMLElement }> = [];
 
   constructor() {
-    super('formpth Help', 780);
+    super('formpath Help', 780);
     for (const s of this.all) {
       const box = el('<section class="cv-help-section"></section>'), h = document.createElement('h2');
       h.textContent = s.title; box.append(h, render(s.body));
@@ -54,9 +54,9 @@ export class HelpDialog extends Dialog {
     const context = found.map((s) => `## ${s.title}\n${s.body}`).join('\n\n');
     try {
       const r = await api.assistantStep([
-        { role: 'system', content: 'Answer questions about formpth, a vector illustration editor, from the manual sections below and nothing else. If they do not say, reply that the manual does not cover it. Be short and name the menus and settings exactly.\n\n' + context },
+        { role: 'system', content: 'Answer questions about formpath, a vector illustration editor, from the manual sections below and nothing else. If they do not say, reply that the manual does not cover it. Be short and name the menus and settings exactly.\n\n' + context },
         { role: 'user', content: q }], false);
       setText(this.answer, `${r.content.trim() || 'No answer came back.'}\n\nFrom: ${found.map((s) => s.title).join(', ')}.`);
-    } catch (err) { setText(this.answer, err instanceof ApiError ? err.message : 'The formpth engine is offline (./formpth boot).'); }
+    } catch (err) { setText(this.answer, err instanceof ApiError ? err.message : 'The formpath engine is offline (./formpath boot).'); }
   }
 }

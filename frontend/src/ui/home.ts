@@ -25,11 +25,11 @@ export class HomeScreen {
   constructor(host: HTMLElement, private readonly d: HomeDeps) {
     const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
     const center = el(`<div class="cv-home-center">
-      <h1 class="cv-home-brand">formpth<span class="cv-home-by">by NodeMode</span></h1>
+      <h1 class="cv-home-brand">formpath<span class="cv-home-by">by NodeMode</span></h1>
       <p class="cv-home-sub">Vector illustration for print, screens and agents. Start a document, pick a size, or open a file.</p>
       <div class="cv-home-actions"></div>
       <div class="cv-home-presets"></div>
-      <p class="cv-home-hint">${icon('image', 14)}<span>Drop an SVG, a PDF made by formpth, a .fpth project or an image anywhere to open or place it.</span></p>
+      <p class="cv-home-hint">${icon('image', 14)}<span>Drop an SVG, a PDF made by formpath, a .fpth project or an image anywhere to open or place it.</span></p>
     </div>`);
     const actions = center.querySelector('.cv-home-actions') as HTMLElement;
     for (const [label, cmd, ic, key] of [['New document…', 'new', 'newFile', 'N'], ['Open…', 'open', 'folderOpen', 'O']] as const) {

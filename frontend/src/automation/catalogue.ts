@@ -54,7 +54,7 @@ export class Catalogue {
   attach(): void {
     this.deps.commands.onChange = () => this.schedule();
     this.schedule();
-    Object.assign(window, { formpth: { catalogue: {
+    Object.assign(window, { formpath: { catalogue: {
       listCommands: (group?: string, text?: string) => this.list(group, text),
       describeCommand: (id: string) => this.describe(id),
       runCommand: (id: string, params?: Record<string, unknown>) => this.run(id, params),

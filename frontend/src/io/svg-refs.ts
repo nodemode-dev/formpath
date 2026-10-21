@@ -82,7 +82,7 @@ export function patternPaint(c: RefCtx, el: Element, m: Mat, ubox: Rect | null, 
   const pt = c.parseTransform(attr('patternTransform')), pid = el.getAttribute('id') ?? '';
   c.stack.push(el);
   try {
-    const hint = chain[0].getAttribute('data-formpth-pattern'), artEl = c.ids.get(chain[0].getAttribute('data-formpth-art') ?? '');
+    const hint = chain[0].getAttribute('data-formpath-pattern'), artEl = c.ids.get(chain[0].getAttribute('data-formpath-art') ?? '');
     if (hint && artEl) {
       const h = hint.trim().split(/\s+/), n = h.slice(1, 8).map(Number), type = h[0] as PatternDef['type'];
       if (['grid', 'brick_row', 'brick_col', 'hex_col', 'hex_row'].includes(type) && n.length === 7 && n.every(Number.isFinite) && n[2] > 0 && n[3] > 0) {

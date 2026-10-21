@@ -678,10 +678,10 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     const { manifest, files } = serialize(p);
     const assets: Record<string, string> = {};
     for (const fp of files) { const b = new Uint8Array(await fp.blob.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000)); assets[fp.name] = `data:${fp.blob.type || 'application/octet-stream'};base64,${btoa(bin)}`; }
-    const payload = new TextEncoder().encode(JSON.stringify({ formpthPdf: 1, manifest, assets }));
+    const payload = new TextEncoder().encode(JSON.stringify({ formpathPdf: 1, manifest, assets }));
     const ef = pdf.add('<< /Type /EmbeddedFile /Subtype /application#2Fjson >>', payload);
-    const spec = pdf.add(`<< /Type /Filespec /F (formpth-document.json) /UF (formpth-document.json) /Desc (formpth editing data) /EF << /F ${ef} 0 R >> /AFRelationship /Source >>`);
-    names = ` /Names << /EmbeddedFiles << /Names [(formpth-document.json) ${spec} 0 R] >> >> /AF [${spec} 0 R]`;
+    const spec = pdf.add(`<< /Type /Filespec /F (formpath-document.json) /UF (formpath-document.json) /Desc (formpath editing data) /EF << /F ${ef} 0 R >> /AFRelationship /Source >>`);
+    names = ` /Names << /EmbeddedFiles << /Names [(formpath-document.json) ${spec} 0 R] >> >> /AF [${spec} 0 R]`;
   }
   const now = new Date(), stamp = `D:${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}${String(now.getUTCSeconds()).padStart(2, '0')}Z`;
   const title = o.title ?? p.doc.title ?? p.name;
@@ -692,11 +692,11 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     const intent = pdf.add(xp.intentDict(icc));
     const iso = now.toISOString().replace(/\.\d+Z$/, 'Z'), esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     docId = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
-    const xmp = `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"><dc:format>application/pdf</dc:format><dc:title><rdf:Alt><rdf:li xml:lang="x-default">${esc(title)}</rdf:li></rdf:Alt></dc:title><xmp:CreateDate>${iso}</xmp:CreateDate><xmp:ModifyDate>${iso}</xmp:ModifyDate><xmp:MetadataDate>${iso}</xmp:MetadataDate><xmp:CreatorTool>formpth</xmp:CreatorTool><pdf:Producer>${esc(`formpth ${o.version ?? ''}`.trim())}</pdf:Producer><pdf:Trapped>False</pdf:Trapped><pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion><xmpMM:DocumentID>uuid:${docId.replace(/^(.{8})(.{4})(.{4})(.{4})/, '$1-$2-$3-$4-')}</xmpMM:DocumentID><xmpMM:VersionID>1</xmpMM:VersionID><xmpMM:RenditionClass>default</xmpMM:RenditionClass></rdf:Description></rdf:RDF></x:xmpmeta>\n<?xpacket end="w"?>`;
+    const xmp = `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"><dc:format>application/pdf</dc:format><dc:title><rdf:Alt><rdf:li xml:lang="x-default">${esc(title)}</rdf:li></rdf:Alt></dc:title><xmp:CreateDate>${iso}</xmp:CreateDate><xmp:ModifyDate>${iso}</xmp:ModifyDate><xmp:MetadataDate>${iso}</xmp:MetadataDate><xmp:CreatorTool>formpath</xmp:CreatorTool><pdf:Producer>${esc(`formpath ${o.version ?? ''}`.trim())}</pdf:Producer><pdf:Trapped>False</pdf:Trapped><pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion><xmpMM:DocumentID>uuid:${docId.replace(/^(.{8})(.{4})(.{4})(.{4})/, '$1-$2-$3-$4-')}</xmpMM:DocumentID><xmpMM:VersionID>1</xmpMM:VersionID><xmpMM:RenditionClass>default</xmpMM:RenditionClass></rdf:Description></rdf:RDF></x:xmpmeta>\n<?xpacket end="w"?>`;
     if (std === 'x4') { const meta = pdf.add('<< /Type /Metadata /Subtype /XML >>', new TextEncoder().encode(xmp)); extra = ` /OutputIntents [${intent} 0 R] /Metadata ${meta} 0 R`; }
     else extra = ` /OutputIntents [${intent} 0 R]`;
   }
-  const producer = `formpth ${o.version ?? ''}`.trim();
+  const producer = `formpath ${o.version ?? ''}`.trim();
   if (std === 'a2b' && rgbOut) {
     const pa = pdfaParts(rgbOut.bytes, rgbOut.name), icc = pdf.add(pa.iccDict, pa.iccStream), intent = pdf.add(pa.intentDict(icc));
     docId = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -715,13 +715,13 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     extra += ' /Extensions << /ADBE << /BaseVersion /1.7 /ExtensionLevel 8 >> >>';
   }
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names}${extra} >>`);
-  const info = pdf.add(`<< /Title ${pdfTextString(title)} /Producer ${pdfString(producer)} /Creator (formpth) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
+  const info = pdf.add(`<< /Title ${pdfTextString(title)} /Producer ${pdfString(producer)} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
   return pdf.build(root, info, rules.header, docId, sealer, (o.compression ?? DEFAULT_COMPRESSION).flate !== false);
 }
 
 export async function readPdfNative(data: ArrayBuffer): Promise<{ manifest: Record<string, unknown>; assets: Map<string, Blob> } | null> {
   const bytes = new Uint8Array(data), text = new TextDecoder('latin1').decode(bytes);
-  const at = text.indexOf('{"formpthPdf":1');
+  const at = text.indexOf('{"formpathPdf":1');
   if (at < 0) return null;
   const end = text.indexOf('\nendstream', at);
   if (end < 0) return null;

@@ -3,25 +3,25 @@ import { api } from '../io/api';
 import type { AgentBridge } from '../automation/agent-bridge';
 import type { Commands } from '../ui/commands';
 
-const OFF = 'formpth.plugins.off';
+const OFF = 'formpath.plugins.off';
 const CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; object-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'";
 
 const RUNTIME = `<script>
 (() => {
   for (const k of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCRtpSender', 'RTCRtpReceiver', 'RTCRtpTransceiver', 'RTCIceTransport', 'RTCDtlsTransport', 'RTCSctpTransport']) { try { Object.defineProperty(window, k, { value: undefined, writable: false, configurable: false }); } catch (e) { } }
   const pending = new Map(), commands = {}; let n = 0, name = '';
-  const send = (m) => parent.postMessage(Object.assign({ formpthPlugin: true }, m), '*');
+  const send = (m) => parent.postMessage(Object.assign({ formpathPlugin: true }, m), '*');
   const rpc = (op, args) => new Promise((ok, no) => { const id = ++n; pending.set(id, { ok, no }); send({ id, op, args }); });
   addEventListener('message', async (e) => {
     const m = e.data;
     if (!m || e.source !== parent) return;
-    if (m.formpthReply && pending.has(m.id)) { const p = pending.get(m.id); pending.delete(m.id); m.error ? p.no(new Error(m.error)) : p.ok(m.result); return; }
-    if (m.formpthRun) {
+    if (m.formpathReply && pending.has(m.id)) { const p = pending.get(m.id); pending.delete(m.id); m.error ? p.no(new Error(m.error)) : p.ok(m.result); return; }
+    if (m.formpathRun) {
       try { const f = commands[m.command]; if (!f) throw new Error('No command ' + m.command); await f(); send({ op: 'done', runId: m.runId }); }
       catch (err) { send({ op: 'done', runId: m.runId, error: String(err && err.message || err) }); }
     }
   });
-  window.formpth = {
+  window.formpath = {
     register(spec) {
       name = String(spec && spec.name || 'Plugin');
       const list = (spec && spec.commands || []).filter((c) => c && c.id && typeof c.run === 'function');
@@ -92,14 +92,14 @@ export class PluginHost {
   private run(p: Loaded, command: string, label: string): void {
     const runId = ++this.runId;
     this.runs.set(runId, (error) => { if (error) this.note(`${label}: ${error}`, 'error'); });
-    p.frame.contentWindow?.postMessage({ formpthRun: true, runId, command }, '*');
+    p.frame.contentWindow?.postMessage({ formpathRun: true, runId, command }, '*');
   }
 
   private async receive(e: MessageEvent): Promise<void> {
     const p = [...this.loaded.values()].find((x) => x.frame.contentWindow === e.source);
-    const m = e.data as { formpthPlugin?: boolean; id?: number; op?: string; args?: Record<string, unknown>; runId?: number; error?: string };
-    if (!p || !m || m.formpthPlugin !== true) return;
-    const reply = (result?: unknown, error?: string): void => { p.frame.contentWindow?.postMessage({ formpthReply: true, id: m.id, result, error }, '*'); };
+    const m = e.data as { formpathPlugin?: boolean; id?: number; op?: string; args?: Record<string, unknown>; runId?: number; error?: string };
+    if (!p || !m || m.formpathPlugin !== true) return;
+    const reply = (result?: unknown, error?: string): void => { p.frame.contentWindow?.postMessage({ formpathReply: true, id: m.id, result, error }, '*'); };
     try {
       switch (m.op) {
         case 'register': {

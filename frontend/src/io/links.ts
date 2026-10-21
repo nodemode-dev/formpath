@@ -29,7 +29,7 @@ export const canLinkHandles = (): boolean => typeof picker().showOpenFilePicker 
 let dbp: Promise<IDBDatabase> | null = null;
 function db(): Promise<IDBDatabase> {
   dbp ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open('formpth-links', 1);
+    const r = indexedDB.open('formpath-links', 1);
     r.onupgradeneeded = () => { r.result.createObjectStore('handles'); };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);

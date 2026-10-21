@@ -75,7 +75,7 @@ export async function encodeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number
     }
     strips.push(comp === 'packbits' ? packBits(raw) : comp === 'lzw' ? lzw(raw) : comp === 'deflate' ? await zlib(raw) : raw);
   }
-  const enc = new TextEncoder(), software = enc.encode('formpth\0'), ppi = Math.max(1, Math.round(o.ppi));
+  const enc = new TextEncoder(), software = enc.encode('formpath\0'), ppi = Math.max(1, Math.round(o.ppi));
   const tags: Array<[number, number, number, number | number[]]> = [];
   const n = strips.length;
   const icc = o.icc && o.icc.length ? o.icc : null;

@@ -37,7 +37,7 @@ export function render(body: string): DocumentFragment {
 }
 
 export function relevant(all: Section[], question: string, n = 3): Section[] {
-  const common = new Set(['the', 'and', 'how', 'can', 'does', 'what', 'where', 'with', 'for', 'you', 'this', 'that', 'into', 'from', 'are', 'there', 'formpth']);
+  const common = new Set(['the', 'and', 'how', 'can', 'does', 'what', 'where', 'with', 'for', 'you', 'this', 'that', 'into', 'from', 'are', 'there', 'formpath']);
   const stem = (w: string): string => (w.length > 4 ? w.slice(0, 4) : w);
   const words = (t: string): string[] => t.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [];
   const asked = words(question).filter((w) => !common.has(w)).map(stem);

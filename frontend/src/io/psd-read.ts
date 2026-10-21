@@ -76,7 +76,7 @@ class Psd {
     this.depth = this.dv.getUint16(22);
     this.mode = this.dv.getUint16(24);
     if (!this.width || !this.height) throw new Error('its image has no size');
-    if (this.width * this.height > MAX_PIXELS) throw new Error(`its image is ${this.width} by ${this.height} pixels, more than formpth can hold`);
+    if (this.width * this.height > MAX_PIXELS) throw new Error(`its image is ${this.width} by ${this.height} pixels, more than formpath can hold`);
     let p = 26;
     const cm = this.dv.getUint32(p);
     p += 4;

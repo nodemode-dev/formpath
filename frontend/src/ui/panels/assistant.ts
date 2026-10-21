@@ -3,7 +3,7 @@ import { api, ApiError } from '../../io/api';
 import type { AgentBridge, McpResult } from '../../automation/agent-bridge';
 import { el, setHidden, setText } from '../dom';
 
-const SYSTEM = 'You are the assistant inside formpth, a vector illustration editor. Act on the open document with the tools: call get_document first '
+const SYSTEM = 'You are the assistant inside formpath, a vector illustration editor. Act on the open document with the tools: call get_document first '
   + 'to learn its artboards, layers and object ids. Coordinates are points, x right and y down. Each change is one undoable step. '
   + 'Prefer live shapes (draw_shape) and editable effects; keep replies short and say what you changed.';
 const MAX_STEPS = 14;
@@ -84,7 +84,7 @@ export class AssistantPanel {
       }
       if (this.stopped) this.line('note', 'Stopped.');
     } catch (err) {
-      this.line('note', err instanceof ApiError ? err.message : 'The assistant could not reach the formpth engine (./formpth boot).');
+      this.line('note', err instanceof ApiError ? err.message : 'The assistant could not reach the formpath engine (./formpath boot).');
     } finally {
       this.busy = false;
       this.send.disabled = false; this.stop.disabled = true;

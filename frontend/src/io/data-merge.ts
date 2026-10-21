@@ -96,9 +96,9 @@ export async function exportDataSets(engine: Engine, o: MergeOpts, version: stri
   }
   if (o.folder) {
     for (const f of files) { try { written.push(await api.writeFile(o.folder, f.name, f.blob)); } catch (err) { errors.push(`${f.name}: ${err instanceof Error ? err.message : String(err)}`); } }
-    if (errors.length) { try { await api.writeFile(o.folder, 'formpth-data-merge-errors.txt', new Blob([errors.join('\n') + '\n'], { type: 'text/plain' })); } catch { } }
+    if (errors.length) { try { await api.writeFile(o.folder, 'formpath-data-merge-errors.txt', new Blob([errors.join('\n') + '\n'], { type: 'text/plain' })); } catch { } }
     return { files: written, errors, zip: null, folder: o.folder };
   }
-  if (errors.length) files.push({ name: 'formpth-data-merge-errors.txt', blob: new Blob([errors.join('\n') + '\n'], { type: 'text/plain' }) });
+  if (errors.length) files.push({ name: 'formpath-data-merge-errors.txt', blob: new Blob([errors.join('\n') + '\n'], { type: 'text/plain' }) });
   return { files: files.map((f) => f.name), errors, zip: files.length ? await zipFiles(files) : null, folder: null };
 }

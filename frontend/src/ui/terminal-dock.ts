@@ -6,7 +6,7 @@ import { ChatPane } from './chat-pane';
 import { el, isMac, q, setDisabled, setHidden, setText } from './dom';
 import { icon } from './icons';
 
-const KEY = 'formpth.terminal';
+const KEY = 'formpath.terminal';
 const MIN_H = 120;
 const keys = isMac ? 'Opt+Shift+Cmd+' : 'Alt+Shift+Ctrl+';
 

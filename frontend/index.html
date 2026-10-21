@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="frame-src blob:; object-src blob:">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <title>formpth</title>
+  <title>formpath</title>
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -70,7 +70,7 @@
 (function () {
   var r = document.documentElement, open = 0, h = 280;
   try {
-    var t = JSON.parse(localStorage.getItem('formpth.terminal') || '{}');
+    var t = JSON.parse(localStorage.getItem('formpath.terminal') || '{}');
     open = t.open === true ? 1 : 0;
     if (typeof t.h === 'number' && t.h >= 120 && t.h <= 2000) h = Math.round(t.h);
   } catch (e) { open = 0; }
@@ -82,7 +82,7 @@
   <script>
 (function () {
   var on = 0;
-  try { on = JSON.parse(localStorage.getItem('formpth.prefs') || '{}').helpBar === true ? 1 : 0; } catch (e) { on = 0; }
+  try { on = JSON.parse(localStorage.getItem('formpath.prefs') || '{}').helpBar === true ? 1 : 0; } catch (e) { on = 0; }
   document.documentElement.setAttribute('data-fp-help', on ? 'on' : 'off');
 })();
   </script>
@@ -91,7 +91,7 @@
   <link rel="stylesheet" href="/src/styles/shell.css">
   <link rel="stylesheet" href="/src/styles/panels.css">
   <link rel="stylesheet" href="/src/styles/dialogs.css">
-  <link rel="stylesheet" href="/src/styles/formpth.css">
+  <link rel="stylesheet" href="/src/styles/formpath.css">
   <link rel="stylesheet" href="/src/styles/light-mode.css">
   <link rel="stylesheet" href="/src/styles/scrollbars.css">
   <link rel="stylesheet" href="/src/styles/terminal.css">

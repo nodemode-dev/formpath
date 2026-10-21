@@ -2,12 +2,12 @@ import { allNodes, newDoc } from '../engine/doc';
 import type { Artboard, Doc, Project } from '../engine';
 import type { FilePart } from './api';
 
-export const FORMAT = 'com.nodemode.formpth';
+export const FORMAT = 'com.nodemode.formpath';
 export const FORMAT_VERSION = 1;
 
 export interface Manifest extends Record<string, unknown> { format: string; version: number; app: string; document: Record<string, unknown>; view?: { activeArtboard: number; activeLayer: string } }
 
-export function serialize(p: Project, app = 'formpth'): { manifest: Manifest; files: FilePart[] } {
+export function serialize(p: Project, app = 'formpath'): { manifest: Manifest; files: FilePart[] } {
   const d = p.doc;
   const document: Record<string, unknown> = { ...d, artboards: d.artboards.map((a) => ({ ...a, rect: [a.x, a.y, a.w, a.h] })), perspView: p.persp };
   const files: FilePart[] = [];
@@ -26,8 +26,8 @@ export function serialize(p: Project, app = 'formpth'): { manifest: Manifest; fi
 }
 
 export function docFromManifest(manifest: Record<string, unknown>): Doc {
-  if (manifest.format !== FORMAT) throw new Error('This is not a formpth project.');
-  if (typeof manifest.version !== 'number' || manifest.version > FORMAT_VERSION) throw new Error(`This project was saved by a newer formpth (format ${String(manifest.version)}).`);
+  if (manifest.format !== FORMAT) throw new Error('This is not a formpath project.');
+  if (typeof manifest.version !== 'number' || manifest.version > FORMAT_VERSION) throw new Error(`This project was saved by a newer formpath (format ${String(manifest.version)}).`);
   const raw = manifest.document as Partial<Doc> & { artboards?: Array<Partial<Artboard> & { rect?: number[] }> };
   if (!raw || typeof raw !== 'object') throw new Error('The document is missing from the project.');
   const base = newDoc(612, 792);

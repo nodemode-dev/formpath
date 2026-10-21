@@ -59,7 +59,7 @@ class Writer {
     let art = this.patArts.get(def.id);
     if (!art) { art = this.id('patart'); this.patArts.set(def.id, art); this.defs.push(`<g id="${art}">${this.node(def.art)}</g>`); }
     const copies = latticeCopies(def, 1).map((o) => `<use href="#${art}" transform="translate(${num(o.x - def.tile.x)} ${num(o.y - def.tile.y)})"/>`).join('');
-    const meta = ` data-name="${esc(def.name)}" data-formpth-art="${art}" data-formpth-pattern="${def.type} ${num(def.tile.x)} ${num(def.tile.y)} ${num(def.tile.w)} ${num(def.tile.h)} ${num(def.hs)} ${num(def.vs)} ${num(def.brick ?? 0.5)} ${(def.overlap ?? ['left', 'top']).join(' ')}"`;
+    const meta = ` data-name="${esc(def.name)}" data-formpath-art="${art}" data-formpath-pattern="${def.type} ${num(def.tile.x)} ${num(def.tile.y)} ${num(def.tile.w)} ${num(def.tile.h)} ${num(def.hs)} ${num(def.vs)} ${num(def.brick ?? 0.5)} ${(def.overlap ?? ['left', 'top']).join(' ')}"`;
     this.defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" x="${num(def.tile.x)}" y="${num(def.tile.y)}" width="${num(l.w)}" height="${num(l.h)}"${p.xf ? ` patternTransform="${mat(p.xf, this.o.precision)}"` : ''}${meta}>${copies}</pattern>`);
     this.patIds.set(pkey, id);
     return { v: `url(#${id})`, op: 1 };
@@ -295,7 +295,7 @@ class Writer {
       }
       const xf = n.mode === 'path' || (n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5]) ? '' : ` transform="${mat(n.xf, pr)}"`;
       const runs = n.spans.map((s) => { const fv = this.paint(s.style.fill, b).v; return { t: s.text, ft: s.style.font, fs: s.style.style, z: s.style.size, c: fv.startsWith('#') ? fv : '#000000', k: s.style.tracking, b: s.style.baseline }; });
-      const tp = n.mode === 'path' && n.path ? ` data-formpth-textpath="${esc(JSON.stringify({ d: this.d(n.path), s: n.pathStart ?? 0, e: n.pathEnd ?? 1, f: n.pathFlip ? 1 : 0, fx: n.pathEffect ?? 'rainbow', al: n.pathAlign ?? 'baseline', sp: n.pathSpacing ?? 0, pa: n.para.align, r: runs }))}"` : '';
+      const tp = n.mode === 'path' && n.path ? ` data-formpath-textpath="${esc(JSON.stringify({ d: this.d(n.path), s: n.pathStart ?? 0, e: n.pathEnd ?? 1, f: n.pathFlip ? 1 : 0, fx: n.pathEffect ?? 'rainbow', al: n.pathAlign ?? 'baseline', sp: n.pathSpacing ?? 0, pa: n.para.align, r: runs }))}"` : '';
       return `<g${xf}${tp} style="font-kerning:none">${parts.join('')}</g>`;
     }
     for (const l of lay.lines) if (l.glyphs.length) runs.push(glyphRuns(l.glyphs));
@@ -347,7 +347,7 @@ class Writer {
       case 'path': if (n.guide) return ''; return this.wrap(n, this.shape(n, effectPath(n.d, n.ap.effects), n.rule));
       case 'compound': return this.wrap(n, this.shape(n, effectPath(n.children.flatMap((c) => c.d), n.ap.effects), n.rule));
       case 'text': return this.wrap(n, this.text(n));
-      case 'image': { const href = this.images.get(n.src); return href ? this.wrap(n, `<image data-formpth-src="${esc(n.src)}" width="${n.w}" height="${n.h}" transform="${mat(n.xf, this.o.precision)}" preserveAspectRatio="none" href="${href}"/>`) : ''; }
+      case 'image': { const href = this.images.get(n.src); return href ? this.wrap(n, `<image data-formpath-src="${esc(n.src)}" width="${n.w}" height="${n.h}" transform="${mat(n.xf, this.o.precision)}" preserveAspectRatio="none" href="${href}"/>`) : ''; }
       case 'symbol': {
         const s = this.doc.symbols.find((x) => x.id === n.symbol), art = instanceArt(this.doc, n);
         if (!s || !art) return '';
@@ -388,11 +388,11 @@ export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
     const bytes = new TextEncoder().encode(JSON.stringify(manifest));
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    meta = `<metadata id="formpth-data">${btoa(bin)}</metadata>`;
+    meta = `<metadata id="formpath-data">${btoa(bin)}</metadata>`;
     const used = new Set<string>(), seen = (x: VNode): void => { if (x.kind === 'image') used.add(x.src); childrenOf(x)?.forEach(seen); };
     p.doc.layers.forEach(seen);
     const loose = [...textureImageKeys(p.doc)].filter((k) => !used.has(k) && images.has(k));
-    if (loose.length) meta += `<g display="none">${loose.map((k) => `<image data-formpth-src="${esc(k)}" width="1" height="1" href="${images.get(k)}"/>`).join('')}</g>`;
+    if (loose.length) meta += `<g display="none">${loose.map((k) => `<image data-formpath-src="${esc(k)}" width="1" height="1" href="${images.get(k)}"/>`).join('')}</g>`;
   }
   const bg = typeof o.artboard === 'number' ? p.doc.artboards[o.artboard]?.bg : null;
   const bgRect = bg ? `<rect x="${num(r.x)}" y="${num(r.y)}" width="${num(r.w)}" height="${num(r.h)}" fill="${hex(bg)}"/>` : '';
@@ -449,9 +449,9 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
   const dom = new DOMParser().parseFromString(text, 'image/svg+xml');
   const svg = dom.documentElement;
   if (!svg || svg.nodeName.toLowerCase() !== 'svg' || dom.querySelector('parsererror')) throw new Error('This file is not a readable SVG.');
-  const meta = svg.querySelector('metadata#formpth-data');
+  const meta = svg.querySelector('metadata#formpath-data');
   const imgAssets = new Map<string, Blob>();
-  for (const im of Array.from(svg.querySelectorAll('image[data-formpth-src]'))) { const key = im.getAttribute('data-formpth-src') ?? '', href = im.getAttribute('href') ?? im.getAttribute('xlink:href') ?? ''; const b = dataUrlToBlob(href); if (key && b) imgAssets.set(key, b); }
+  for (const im of Array.from(svg.querySelectorAll('image[data-formpath-src]'))) { const key = im.getAttribute('data-formpath-src') ?? '', href = im.getAttribute('href') ?? im.getAttribute('xlink:href') ?? ''; const b = dataUrlToBlob(href); if (key && b) imgAssets.set(key, b); }
   if (meta?.textContent) {
     try {
       const bin = atob(meta.textContent.trim()), bytes = new Uint8Array(bin.length);
@@ -562,7 +562,7 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     const blend = (BLEND_MODES.find((b) => b.css === st['mix-blend-mode'])?.id ?? 'normal');
     const label = e.getAttribute('data-name') ?? e.getAttribute('inkscape:label') ?? e.getAttribute('id') ?? undefined;
     if (tag === 'g' || tag === 'svg' || tag === 'a' || tag === 'switch') {
-      const hint = e.getAttribute('data-formpth-textpath');
+      const hint = e.getAttribute('data-formpath-textpath');
       if (hint) { const tn = textFromHint(hint, m, opacity, blend, label); if (tn) { out.push(tn); return; } }
       const kids: VNode[] = [];
       for (const c of Array.from(e.children)) walk(c, st, tag === 'svg' && e !== svg ? vbMat(e, e.getAttribute('width'), e.getAttribute('height'), mul(m, [1, 0, 0, 1, len(e.getAttribute('x') ?? undefined), len(e.getAttribute('y') ?? undefined)])) : m, kids, depth + 1);
@@ -683,7 +683,7 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
       if (fid) {
         const chain = filterChain(ids.get(fid), ids);
         fx = chain.length ? filterEffects(chain, sc) : null;
-        if (!fx) leftOut.add(chain.length ? `Filter "${fid}" uses ${filterPrimitives(chain).filter((n) => !/^fe(GaussianBlur|Offset|Flood|Composite|Merge|MergeNode|DropShadow)$/.test(n)).join(', ') || 'a combination of effects'} that formpth cannot match, so it was left out.` : `Filter "${fid}" was not found and was left out.`);
+        if (!fx) leftOut.add(chain.length ? `Filter "${fid}" uses ${filterPrimitives(chain).filter((n) => !/^fe(GaussianBlur|Offset|Flood|Composite|Merge|MergeNode|DropShadow)$/.test(n)).join(', ') || 'a combination of effects'} that formpath cannot match, so it was left out.` : `Filter "${fid}" was not found and was left out.`);
       } else {
         fx = cssFilterEffects(fl, sc);
         if (!fx) leftOut.add(`The CSS filter "${fl}" was left out.`);

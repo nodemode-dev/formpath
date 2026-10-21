@@ -24,7 +24,7 @@ export class ChatPane {
 <button type="button" class="cv-btn ft-chat-adopt" title="Bring a conversation you had in a Claude Code tab into this chat">From Claude Code...</button>
 <button type="button" class="cv-btn ft-chat-handoff" title="Continue this conversation in a Claude Code terminal tab">Open in Claude Code</button>
 <button type="button" class="cv-btn ft-chat-new">New Chat</button></div>
-<div class="ft-chat-log" role="log" aria-live="polite"><p class="ft-chat-empty cv-note">Ask Claude in the line below to draw, restyle, arrange or export the open document. It works through formpth's own tools, every change appears in the window as it happens, and each one can be undone.</p></div>
+<div class="ft-chat-log" role="log" aria-live="polite"><p class="ft-chat-empty cv-note">Ask Claude in the line below to draw, restyle, arrange or export the open document. It works through formpath's own tools, every change appears in the window as it happens, and each one can be undone.</p></div>
 </div>`);
   onFail: (err: unknown) => void = () => undefined;
   onHandoff: (session: string) => void = () => undefined;
@@ -188,7 +188,7 @@ export class ChatPane {
   private async adopt(): Promise<void> {
     try {
       const r = await api.chatSessions();
-      if (!r.sessions.length) { this.onFail(new Error('There is no Claude Code conversation in formpth yet: open one with the Claude Code button first.')); return; }
+      if (!r.sessions.length) { this.onFail(new Error('There is no Claude Code conversation in formpath yet: open one with the Claude Code button first.')); return; }
       const when = (t: number) => new Date(t * 1000).toLocaleString(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       const choices = r.sessions.map((s): readonly [string, string] => [s.id, `${when(s.modified)} · ${s.title || 'untitled'}${s.current ? ' (this chat)' : ''}`]);
       const v = await askForm('Continue from Claude Code', [

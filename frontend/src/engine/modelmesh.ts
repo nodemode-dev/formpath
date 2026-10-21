@@ -12,7 +12,7 @@ export interface Mesh {
 export interface RawGroup { name: string; color: MeshRgb; image?: number }
 export interface RawModel { pos: number[]; nrm: number[] | null; uv: number[] | null; idx: number[]; grp: number[]; groups: RawGroup[] }
 
-export const MESH_MIME = 'application/x-formpth-mesh';
+export const MESH_MIME = 'application/x-formpath-mesh';
 export const isMeshMime = (m: string | undefined): boolean => m === MESH_MIME;
 export const MESH_GROUP_LIMIT = 64;
 const MAGIC = 0x314d5046;
@@ -124,7 +124,7 @@ export function encodeMesh(m: Mesh): Uint8Array<ArrayBuffer> {
 
 export function decodeMesh(buf: ArrayBuffer): Mesh {
   const dv = new DataView(buf);
-  if (buf.byteLength < 20 || dv.getUint32(0, true) !== MAGIC) throw new Error('This is not a formpth mesh.');
+  if (buf.byteLength < 20 || dv.getUint32(0, true) !== MAGIC) throw new Error('This is not a formpath mesh.');
   const nv = dv.getUint32(4, true), nt = dv.getUint32(8, true), flags = dv.getUint32(12, true), hl = dv.getUint32(16, true), wide = (flags & 4) !== 0;
   const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, hl))) as { groups: MeshGroup[]; ext: [number, number, number] };
   let o = 20 + ((hl + 3) & ~3);

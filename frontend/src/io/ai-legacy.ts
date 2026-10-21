@@ -913,7 +913,7 @@ function buildDefs(rd: Reader, doc: Doc): string[] {
 function styleNotices(rd: Reader, kept: string[]): void {
   const s = rd.styleStats, sk = rd.meta.skipped;
   if (s.objects) kept.push(`${s.objects} styled object${s.objects === 1 ? '' : 's'} as editable source art${s.effects ? ` with ${s.effects} live effect${s.effects === 1 ? '' : 's'}` : ''}`);
-  if (s.kept.size) sk.add(`live effects with no formpth equivalent, kept as Illustrator's expanded art (${[...s.kept].join(', ')})`);
+  if (s.kept.size) sk.add(`live effects with no formpath equivalent, kept as Illustrator's expanded art (${[...s.kept].join(', ')})`);
 }
 
 export async function readAiLegacy(data: ArrayBuffer, title: string): Promise<AiRead> {

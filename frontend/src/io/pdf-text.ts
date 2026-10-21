@@ -62,7 +62,7 @@ export async function embeddedMarkFont(pdf: PdfSink, deflate: (b: Uint8Array) =>
   const widths = gids.map((g) => Math.round((font.glyphs.get(g).advanceWidth ?? 0) * k));
   const file = await deflate(sub.data);
   const ff = sub.cff ? pdf.add(`<< /Subtype /OpenType /Filter /FlateDecode >>`, file) : pdf.add(`<< /Length1 ${sub.data.length} /Filter /FlateDecode >>`, file);
-  const name = `${tagOf('formpth-marks')}+${psName(font)}`;
+  const name = `${tagOf('formpath-marks')}+${psName(font)}`;
   const desc = pdf.add(`<< /Type /FontDescriptor /FontName /${name} /Flags 32 /FontBBox [${[head.xMin, head.yMin, head.xMax, head.yMax].map((v) => Math.round(v * k)).join(' ')}] /ItalicAngle 0 /Ascent ${Math.round(font.ascender * k)} /Descent ${Math.round(font.descender * k)} /CapHeight ${Math.round((os2?.sCapHeight || font.ascender * 0.7) * k)} /StemV 80 ${sub.cff ? '/FontFile3' : '/FontFile2'} ${ff} 0 R >>`);
   return pdf.add(`<< /Type /Font /Subtype /TrueType /BaseFont /${name} /FirstChar 32 /LastChar 126 /Widths [${widths.join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${desc} 0 R >>`);
 }

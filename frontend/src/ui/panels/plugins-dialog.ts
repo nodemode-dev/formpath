@@ -13,7 +13,7 @@ export class PluginsDialog extends Dialog {
     const add = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Add Plugin...</button>');
     add.addEventListener('click', () => this.file.click());
     this.file.addEventListener('change', () => void this.add());
-    this.body.append(el('<p class="cv-note">A plugin runs in a sandbox: it can change the open document through formpth\'s tools, each change undoable; it cannot see your keys or your files. Its commands are in the Plugins menu.</p>'), this.list, add, this.file, this.note);
+    this.body.append(el('<p class="cv-note">A plugin runs in a sandbox: it can change the open document through formpath\'s tools, each change undoable; it cannot see your keys or your files. Its commands are in the Plugins menu.</p>'), this.list, add, this.file, this.note);
     this.button('Close', 'ghost', () => this.close());
   }
 
@@ -36,12 +36,12 @@ export class PluginsDialog extends Dialog {
     const f = this.file.files?.[0];
     this.file.value = '';
     if (!f) return;
-    if (!(await this.confirm(`Add ${f.name}?`, 'It will be able to change the open document through formpth\'s tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.', 'Add'))) return;
+    if (!(await this.confirm(`Add ${f.name}?`, 'It will be able to change the open document through formpath\'s tools (each change undoable). It cannot see your keys or files. Add only plugins you trust.', 'Add'))) return;
     try {
       await api.addPlugin(f.name, await f.text());
       this.host.setOn(f.name, true);
       await this.refresh();
       setText(this.note, `${f.name} added; its commands are in the Plugins menu.`);
-    } catch (err) { setText(this.note, err instanceof ApiError ? err.message : 'The formpth engine is offline (./formpth boot).'); }
+    } catch (err) { setText(this.note, err instanceof ApiError ? err.message : 'The formpath engine is offline (./formpath boot).'); }
   }
 }

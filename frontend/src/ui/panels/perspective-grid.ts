@@ -4,7 +4,7 @@ import type { Doc, Engine, PerspGrid } from '../../engine';
 import { askForm, type Field, type FieldValue } from '../form-dialog';
 import { previewEdit } from './preview-edit';
 
-const STORE = 'formpth.perspectivePresets';
+const STORE = 'formpath.perspectivePresets';
 
 export interface GridPreset { name: string; grid: PerspGrid }
 

@@ -99,6 +99,6 @@ export async function exportPlates(p: Project, o: PlateOptions): Promise<Blob> {
   pdf.set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((x) => `${x} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`), now = new Date();
   const stamp = `D:${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}${String(now.getUTCSeconds()).padStart(2, '0')}Z`;
-  const info = pdf.add(`<< /Title ${text(`${title} separations`)} /Producer ${text(`formpth ${o.version ?? ''}`.trim())} /Creator (formpth) /CreationDate (${stamp}) /ModDate (${stamp}) >>`);
+  const info = pdf.add(`<< /Title ${text(`${title} separations`)} /Producer ${text(`formpath ${o.version ?? ''}`.trim())} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp}) >>`);
   return pdf.build(root, info);
 }

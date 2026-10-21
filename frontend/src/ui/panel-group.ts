@@ -3,7 +3,7 @@ import { icon } from './icons';
 
 export interface GroupTab { id: string; label: string; body: HTMLElement }
 
-const KEY = 'formpth.groups';
+const KEY = 'formpath.groups';
 function loadState(): Record<string, { tab?: string; min?: boolean }> {
   try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, { tab?: string; min?: boolean }>; } catch { return {}; }
 }
@@ -11,7 +11,7 @@ function saveState(id: string, patch: { tab?: string; min?: boolean }): void {
   try { const s = loadState(); s[id] = { ...s[id], ...patch }; localStorage.setItem(KEY, JSON.stringify(s)); } catch { }
 }
 
-const HOMES = 'formpth.tabHomes';
+const HOMES = 'formpath.tabHomes';
 
 export class PanelGroup {
 

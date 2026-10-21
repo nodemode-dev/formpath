@@ -11,7 +11,7 @@ const choices = (list: ProfileInfo[]): Array<[string, string]> => list.map((p) =
 async function ready(engine: Engine): Promise<boolean> {
   if (!engine.doc) return false;
   const list = await refreshProfiles();
-  if (!list.length) { toast('The formpth engine is offline, so colour profiles cannot be listed. Start it with ./formpth boot.', 'error'); return false; }
+  if (!list.length) { toast('The formpath engine is offline, so colour profiles cannot be listed. Start it with ./formpath boot.', 'error'); return false; }
   return true;
 }
 
@@ -38,7 +38,7 @@ export async function colorSettingsDialog(engine: Engine, seed?: Record<string, 
     { kind: 'select', key: 'cmyk', label: 'CMYK working space', value: String(seed?.cmyk ?? s.cmyk?.id ?? NONE), choices: [[NONE, 'None (formula)'], ...choices(cmyks)] },
     { kind: 'select', key: 'intent', label: 'Rendering intent', value: String(seed?.intent ?? s.intent), choices: INTENTS.map(([n, name]) => [String(n), name] as const) },
     { kind: 'check', key: 'bpc', label: 'Use black point compensation', value: seed?.bpc === undefined ? s.bpc : !!seed.bpc },
-    { kind: 'note', text: 'With a CMYK working space set, CMYK colours are shown and converted through that profile. With None, formpth keeps its simple formula.' },
+    { kind: 'note', text: 'With a CMYK working space set, CMYK colours are shown and converted through that profile. With None, formpath keeps its simple formula.' },
   ];
   let load: Promise<File | null> | null = null;
   const v = await askForm('Color Settings', fields, { ok: 'OK', extra: { label: 'Load Profile...', run: () => { load = pickFile(); } } });
@@ -99,7 +99,7 @@ export async function proofSetupDialog(engine: Engine): Promise<void> {
   const cur = proofDevice(doc.cm);
   const pr = doc.cm?.proof ?? {};
   const shown = await refreshDisplayProfile();
-  const via = { colord: 'colord', x11: 'the X11 _ICC_PROFILE atom', colorsync: 'ColorSync', windows: 'Windows colour management', env: 'FORMPTH_DISPLAY_PROFILE' }[shown?.via ?? ''] ?? '';
+  const via = { colord: 'colord', x11: 'the X11 _ICC_PROFILE atom', colorsync: 'ColorSync', windows: 'Windows colour management', env: 'FORMPATH_DISPLAY_PROFILE' }[shown?.via ?? ''] ?? '';
   const v = await askForm('Proof Setup', [
     { kind: 'select', key: 'device', label: 'Device to simulate', value: cur?.id ?? cmyks[0]?.id ?? '', choices: choices(cmyks) },
     { kind: 'note', text: shown ? `Display: ${shown.name} (from ${via}).` : 'Display: sRGB (built-in). No display profile was found on this computer.' },

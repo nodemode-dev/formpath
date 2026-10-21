@@ -91,7 +91,7 @@ export interface OpenActions { openLibrary(name: string): Promise<boolean>; open
 export class OpenDialog extends Dialog {
   private readonly list = el('<div class="cv-list" role="listbox" aria-label="Saved projects"></div>');
   private readonly empty = el('<div class="cv-list-empty" hidden>No saved projects yet.</div>');
-  private readonly status = el('<p class="cv-note">Projects saved in the formpth library.</p>');
+  private readonly status = el('<p class="cv-note">Projects saved in the formpath library.</p>');
   private readonly fileInput = el<HTMLInputElement>('<input type="file" accept=".fpth,.svg,.svgz,.pdf,.ai,.eps,.epsf,.ps,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.gif,.bmp,.psd,.psb,.tif,.tiff" multiple hidden>');
   private readonly openBtn: HTMLButtonElement;
   private readonly deleteBtn: HTMLButtonElement;
@@ -117,7 +117,7 @@ export class OpenDialog extends Dialog {
   async show(): Promise<void> { this.selected = null; this.sync(); this.open(this.openBtn); await this.reload(); }
 
   private async reload(): Promise<void> {
-    try { this.items = await api.library(); setText(this.status, 'Projects saved in the formpth library.'); }
+    try { this.items = await api.library(); setText(this.status, 'Projects saved in the formpath library.'); }
     catch (err) { this.items = []; setText(this.status, err instanceof Error ? err.message : String(err)); }
     if (this.selected && !this.items.some((i) => i.name === this.selected)) this.selected = null;
     patchList(this.list, this.items, {
@@ -194,13 +194,13 @@ export class SettingsDialog extends Dialog {
     const sel = (key: keyof Prefs, label: string, choices: ReadonlyArray<readonly [string, string]>): HTMLElement => { const s = selectOf(choices); s.setAttribute('aria-label', label); s.addEventListener('change', () => this.change({ [key]: key === 'recoverySeconds' ? Number(s.value) : s.value } as Partial<Prefs>)); this.ctl[key] = s; return row(label, s); };
     const color = (key: 'guideColor' | 'gridColor', label: string): HTMLElement => { const c = el<HTMLInputElement>('<input class="cv-input" type="color">'); c.setAttribute('aria-label', label); c.addEventListener('input', () => this.change({ [key]: c.value } as Partial<Prefs>)); const b = el<HTMLButtonElement>('<button class="cv-btn" type="button">Theme colour</button>'); b.addEventListener('click', () => this.change({ [key]: '' } as Partial<Prefs>)); this.ctl[key] = c; return row(label, c, b); };
     const reset = el<HTMLButtonElement>('<button class="cv-btn" type="button">Reset All Preferences...</button>');
-    reset.addEventListener('click', () => { void confirmAction('Reset all preferences?', 'Every preference, the panel arrangement and the tools shown go back to how formpth comes; your documents and library are kept. formpth reloads.', 'Reset').then((ok) => { if (!ok) return; for (const k of Object.keys(localStorage)) if (k.startsWith('formpth.') || k === 'nodemode_ui_settings') localStorage.removeItem(k); location.reload(); }); });
+    reset.addEventListener('click', () => { void confirmAction('Reset all preferences?', 'Every preference, the panel arrangement and the tools shown go back to how formpath comes; your documents and library are kept. formpath reloads.', 'Reset').then((ok) => { if (!ok) return; for (const k of Object.keys(localStorage)) if (k.startsWith('formpath.') || k === 'nodemode_ui_settings') localStorage.removeItem(k); location.reload(); }); });
     add('General', check('autoShowHome', 'Show the Home screen when no document is open'), num('keyIncrement', 'Keyboard increment (pt)', 0.01, 1000, 0.1), check('scaleStrokes', 'Scale strokes and effects'), check('scaleCorners', 'Scale corners'), check('previewBounds', 'Use preview bounds'), check('showGenerative', 'Show generative features'), reset);
     this.intensity.addEventListener('input', () => setIntensity(Number(this.intensity.value) / 100));
     const lang = el<HTMLSelectElement>(`<select class="cv-select" translate="no" aria-label="Language">${LANGUAGES.map(([c, n]) => `<option value="${c}">${escapeHtml(n)}</option>`).join('')}</select>`);
     lang.value = language();
     lang.addEventListener('change', () => setLanguage(lang.value));
-    add('Interface', row('Language', lang), el('<p class="cv-note">formpth reloads in the chosen language.</p>'), row('Theme', this.grid), row('Accent', this.accent), row('Accent intensity', this.intensity), el('<p class="cv-note">Theme and accent are shared with NodeMode and formvis on this device.</p>'));
+    add('Interface', row('Language', lang), el('<p class="cv-note">formpath reloads in the chosen language.</p>'), row('Theme', this.grid), row('Accent', this.accent), row('Accent intensity', this.intensity), el('<p class="cv-note">Theme and accent are shared with NodeMode and formvis on this device.</p>'));
     const lock = el<HTMLInputElement>('<input type="checkbox" aria-label="Lock workspace">');
     lock.addEventListener('change', () => this.workspaceLock?.set(lock.checked));
     this.ctl.lock = lock;
@@ -210,9 +210,9 @@ export class SettingsDialog extends Dialog {
     add('Guides & Grid', color('guideColor', 'Guides'), color('gridColor', 'Grid'), num('gridSpacing', 'Gridline every (pt)', 1, 5000), num('gridSubdivisions', 'Subdivisions', 1, 64), check('gridInBack', 'Grids in back'), sel('checkerSize', 'Transparency grid size', CHECKER_SIZES), sel('checkerColors', 'Transparency grid colours', CHECKER_COLORS));
     const libApply = el<HTMLButtonElement>('<button class="cv-btn" type="button">Use this folder</button>');
     libApply.addEventListener('click', () => void this.applyLibrary());
-    add('File Handling', this.libNow, row('Library folder', this.libPath), row('Move my projects there', this.libMove), libApply, check('restoreSession', 'Reopen the documents that were open when formpth closed'), sel('recoverySeconds', 'Keep recovery data, within', RECOVERY_CHOICES), num('historyStates', 'Undo steps kept', 10, 1000));
+    add('File Handling', this.libNow, row('Library folder', this.libPath), row('Move my projects there', this.libMove), libApply, check('restoreSession', 'Reopen the documents that were open when formpath closed'), sel('recoverySeconds', 'Keep recovery data, within', RECOVERY_CHOICES), num('historyStates', 'Undo steps kept', 10, 1000));
     const agents = el<HTMLInputElement>('<input type="checkbox" aria-label="Allow outside agents">');
-    agents.addEventListener('change', () => { this.change({ agentsAllowed: agents.checked }); window.dispatchEvent(new CustomEvent('formpth:agents', { detail: agents.checked })); });
+    agents.addEventListener('change', () => { this.change({ agentsAllowed: agents.checked }); window.dispatchEvent(new CustomEvent('formpath:agents', { detail: agents.checked })); });
     this.ctl.agentsAllowed = agents;
     const save = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Save</button>'), chk = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Check</button>'), forget = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Forget key</button>');
     save.addEventListener('click', () => void this.saveLlm(false));
@@ -247,7 +247,7 @@ export class SettingsDialog extends Dialog {
     this.intensity.value = String(Math.round((readChoice().intensity ?? 1) * 100));
     void this.refreshLibrary();
     void this.loadLlm();
-    void api.mcpStatus().then((s) => setText(this.mcpNote, s ? `Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: ${s.endpoint} (${s.tools} tools). Claude Code: claude mcp add --transport http formpth ${s.endpoint}, or the stdio bridge ./formpth mcp.` : 'The engine is offline: start it with ./formpth boot to connect agents.'));
+    void api.mcpStatus().then((s) => setText(this.mcpNote, s ? `Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: ${s.endpoint} (${s.tools} tools). Claude Code: claude mcp add --transport http formpath ${s.endpoint}, or the stdio bridge ./formpath mcp.` : 'The engine is offline: start it with ./formpath boot to connect agents.'));
     if (section && this.sections.has(section)) this.showSection(section);
     this.syncTheme();
     this.open();
@@ -275,7 +275,7 @@ export class SettingsDialog extends Dialog {
     const f = await api.libraryFolder();
     if (!f) { setText(this.libNow, 'The library folder shows when the engine is running.'); return; }
     this.libPath.value = f.folder;
-    setText(this.libNow, f.fixed ? `The library is in ${f.folder}, set by FORMPTH_LIBRARY_DIR.` : `The library is in ${f.folder}.${f.synced.length ? ` Synced folders found: ${f.synced.map((s) => s.label).join(', ')}.` : ''}`);
+    setText(this.libNow, f.fixed ? `The library is in ${f.folder}, set by FORMPATH_LIBRARY_DIR.` : `The library is in ${f.folder}.${f.synced.length ? ` Synced folders found: ${f.synced.map((s) => s.label).join(', ')}.` : ''}`);
   }
 
   private async applyLibrary(): Promise<void> {
@@ -285,7 +285,7 @@ export class SettingsDialog extends Dialog {
 
   private async loadLlm(): Promise<void> {
     const s = await api.llmStatus();
-    if (!s) { setText(this.llmNote, 'The formpth engine is offline: the Assistant needs it.'); return; }
+    if (!s) { setText(this.llmNote, 'The formpath engine is offline: the Assistant needs it.'); return; }
     if (document.activeElement !== this.llmUrl) this.llmUrl.value = s.baseUrl;
     if (document.activeElement !== this.llmModel) this.llmModel.value = s.model;
     this.llmKey.value = '';
@@ -367,15 +367,15 @@ export class ShortcutsDialog extends Dialog {
 export class AboutDialog extends Dialog {
   private readonly engineLine = el('<p class="cv-note"></p>');
   constructor() {
-    super('About formpth', 440);
-    this.body.appendChild(el(`<div class="cv-welcome-title">${brandMark(28)}formpth ${VERSION}</div>`));
+    super('About formpath', 440);
+    this.body.appendChild(el(`<div class="cv-welcome-title">${brandMark(28)}formpath ${VERSION}</div>`));
     this.body.appendChild(el('<p class="cv-note">Vector illustration for the web and the desktop, in the NodeMode design system, driven by people and agents alike.</p>'));
     this.body.appendChild(this.engineLine);
     this.body.appendChild(el('<p class="cv-note">Apache License 2.0. Copyright 2026 nodemode-ai. Third-party notices are in NOTICE.md.</p>'));
     this.button('Close', 'primary', () => this.close());
   }
   show(caps: Capabilities | null): void {
-    setText(this.engineLine, caps ? `Engine ${caps.version}${caps.desktop ? ' (desktop)' : ''} · library in ${caps.libraryDir} · system fonts ${caps.fonts ? 'available' : 'unavailable'}` : 'Engine offline. Start it with ./formpth boot.');
+    setText(this.engineLine, caps ? `Engine ${caps.version}${caps.desktop ? ' (desktop)' : ''} · library in ${caps.libraryDir} · system fonts ${caps.fonts ? 'available' : 'unavailable'}` : 'Engine offline. Start it with ./formpath boot.');
     this.open();
   }
 }
@@ -514,12 +514,12 @@ export class ExportDialog extends Dialog {
     this.dither.addEventListener('change', () => this.sync());
     this.rows.quality = row('Quality (%)', this.quality);
     this.rows.transparent = row('Transparent background', this.transparent);
-    this.rows.preserve = row('Preserve formpth editing (reopens fully editable)', this.preserve);
+    this.rows.preserve = row('Preserve formpath editing (reopens fully editable)', this.preserve);
     this.rows.outline = row('Convert type to outlines', this.outline);
     this.rows.liveText = row('Preserve text as live text', this.liveText);
     this.liveText.title = 'Writes selectable, searchable text with the fonts embedded. Type with gradients, effects or an unavailable font is outlined instead.';
     this.rows.standard = row('Standard', this.standard);
-    this.standard.title = 'PDF/X and PDF/A files embed an output intent and leave out formpth editing data. X-1a writes CMYK and spot colours only and flattens transparency; X-3 allows tagged RGB and flattens; X-4 keeps live transparency; A-2b embeds sRGB and every font. None of them can be encrypted.';
+    this.standard.title = 'PDF/X and PDF/A files embed an output intent and leave out formpath editing data. X-1a writes CMYK and spot colours only and flattens transparency; X-3 allows tagged RGB and flattens; X-4 keeps live transparency; A-2b embeds sRGB and every font. None of them can be encrypted.';
     this.rows.layers = row('Create Acrobat Layers from Top-Level Layers', this.layers);
     this.layers.title = 'Each top-level layer becomes an optional content group that Acrobat lists in its Layers panel; hidden layers start switched off. Not available in PDF/X-1a and PDF/X-3.';
     this.rows.epsColor = row('Color', this.epsColor);

@@ -42,7 +42,7 @@ export class PrintDialog extends Dialog {
   private readonly output = selectOf([['composite', 'Composite'], ['separations', 'Separations']]);
   private readonly plateDpi = selectOf([['150', '150 ppi'], ['300', '300 ppi'], ['600', '600 ppi']]);
   private readonly plate = selectOf([['', 'All plates']]);
-  private readonly handling = selectOf([['printer', 'Let the printer determine colors'], ['formpth', 'Let formpth determine colors']]);
+  private readonly handling = selectOf([['printer', 'Let the printer determine colors'], ['formpath', 'Let formpath determine colors']]);
   private readonly profile = selectOf([['', 'Choose a profile']]);
   private readonly intent = selectOf([['0', 'Perceptual'], ['1', 'Relative Colorimetric'], ['2', 'Saturation'], ['3', 'Absolute Colorimetric']]);
   private readonly inkBtn = el<HTMLButtonElement>('<button class="cv-btn cv-btn-ghost" type="button">Ink Manager...</button>');
@@ -90,7 +90,7 @@ export class PrintDialog extends Dialog {
     this.inkBtn.addEventListener('click', () => this.openInks(() => this.update()));
     pane('color', [
       row('Color handling', this.handling), row('Printer profile', this.profile), row('Rendering intent', this.intent),
-      el('<p class="cv-note cv-print-note">With formpth in charge, colours are converted to the profile you choose and the printer driver must not convert them again.</p>'),
+      el('<p class="cv-note cv-print-note">With formpath in charge, colours are converted to the profile you choose and the printer driver must not convert them again.</p>'),
     ]);
     SECTIONS.forEach(([id, label], i) => {
       const b = el<HTMLButtonElement>('<button class="cv-print-tab" type="button" role="tab"></button>');
@@ -215,7 +215,7 @@ export class PrintDialog extends Dialog {
       this.plate.value = plates.some((x) => x.value === keep) ? keep : '';
     }
     setDisabled(this.plate, !sep);
-    const mine = this.handling.value === 'formpth';
+    const mine = this.handling.value === 'formpath';
     setDisabled(this.profile, !mine || sep); setDisabled(this.intent, !mine || sep);
     setDisabled(this.handling, sep);
     const s = this.value();
@@ -243,7 +243,7 @@ export class PrintDialog extends Dialog {
     const p = this.project, i = s.range[0], a = p?.doc.artboards[i];
     if (!p || !a) return null;
     const sep = s.output === 'separations' ? platesOf(p.doc, true).find((x) => x.value === this.plate.value)?.value ?? null : null;
-    const prof = s.output === 'composite' && s.colors === 'formpth' && s.profile ? `${s.profile}:${s.intent}` : '';
+    const prof = s.output === 'composite' && s.colors === 'formpath' && s.profile ? `${s.profile}:${s.intent}` : '';
     const key = [i, bleed.t, bleed.b, bleed.l, bleed.r, sep ?? '', prof].join('|');
     const hit = this.thumbs.get(key);
     if (hit) return hit.width > 1 ? { img: hit, l: bleed.l, r: bleed.r, t: bleed.t, b: bleed.b } : this.shown;

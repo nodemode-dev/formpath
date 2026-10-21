@@ -117,12 +117,12 @@ export class AgentBridge {
         if (status === 403) { this.secret = null; await sleep(1000); continue; }
         if (status === 200 && item) {
           if (item.name === '__consent__') {
-            const yes = this.on || await this.deps.ask('Allow an outside agent to edit?', 'An AI agent connected to formpth (such as Claude Code, Codex or Cursor) asks to draw in and edit your documents. Each change is one undoable step. You can turn this off in Preferences > Plugins.');
+            const yes = this.on || await this.deps.ask('Allow an outside agent to edit?', 'An AI agent connected to formpath (such as Claude Code, Codex or Cursor) asks to draw in and edit your documents. Each change is one undoable step. You can turn this off in Preferences > Plugins.');
             if (yes && !this.on) { this.on = true; this.deps.allow(); }
             await api.mcpResult(secret, item.id, { allowed: yes });
             continue;
           }
-          const result = this.on || item.inapp === true ? await this.run(item.name, item.arguments ?? {}) : fail('formpth stopped taking requests.');
+          const result = this.on || item.inapp === true ? await this.run(item.name, item.arguments ?? {}) : fail('formpath stopped taking requests.');
           await api.mcpResult(secret, item.id, result);
         } else if (status !== 204) await sleep(2000);
       } catch { await sleep(2000); }
@@ -449,7 +449,7 @@ export class AgentBridge {
       }
       case 'export': {
         const folder = str('folder').trim();
-        if (!folder) return fail('Give folder, an absolute path where formpth writes one file per data set (it is created if missing).');
+        if (!folder) return fail('Give folder, an absolute path where formpath writes one file per data set (it is created if missing).');
         const fmt = str('format', 'png');
         if (!['png', 'svg', 'pdf'].includes(fmt)) return fail('format is png, svg or pdf.');
         const r = await exportDataSets(e, { format: fmt as 'png', fpth: a.fpth === true, nameVar: has('name_variable') ? str('name_variable') : null, folder, scale: Math.max(0.1, Math.min(8, num('scale', 1))), artboard: Math.round(num('artboard', p.activeArtboard)), sets: Array.isArray(a.data_sets) ? a.data_sets.map(Number) : undefined }, VERSION);
@@ -566,7 +566,7 @@ export class AgentBridge {
     const e = this.engine, doc = e.doc;
     if (!doc) return fail('No document is open.');
     const list = await refreshProfiles();
-    if (!list.length) return fail('The colour profiles are unavailable: is the engine running (./formpth boot)?');
+    if (!list.length) return fail('The colour profiles are unavailable: is the engine running (./formpath boot)?');
     const pick = (key: string, space: 'RGB' | 'CMYK'): ProfileInfo | string => {
       const hit = findProfile(str(key), space);
       return hit ?? `${key} "${str(key)}" is not a ${space} profile on this computer. list_color_profiles shows the names to use.`;
@@ -764,7 +764,7 @@ export class AgentBridge {
           const id = await this.deps.placeFile(file, has('x') && has('y') ? { x: num('x', 0), y: num('y', 0) } : null, has('width') ? num('width', 100) : null, this.dxfArgs(a, true), placing);
           return id ? text(`Placed ${file.name} (id ${id}).`, { id }) : fail(`Could not place ${file.name}.`);
         }
-        case '__project': { const blob = await this.deps.projectBlob(); return blob ? text('Packed the project.', { data: await b64(blob) }) : fail('Could not pack the project: is the engine running (./formpth boot)?'); }
+        case '__project': { const blob = await this.deps.projectBlob(); return blob ? text('Packed the project.', { data: await b64(blob) }) : fail('Could not pack the project: is the engine running (./formpath boot)?'); }
         case '__export': {
           const asked = str('format') as 'svg' | 'pdf' | 'ai' | 'png' | 'gif' | 'bmp' | 'psd' | 'tiff' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg';
           const fmt = asked === 'png' && has('colors') ? 'png8' : asked;
@@ -1743,7 +1743,7 @@ export class AgentBridge {
         case 'create_outlines': { const ok = await this.deps.outlines(this.ids(a)); return ok ? text('Created outlines.', { selection: e.selectedIds() }) : fail('Nothing was outlined: select type, and check that its font can be read.'); }
         case 'undo': { const n = Math.max(1, Math.round(num('steps', 1))); return e.undo(n) ? text(`Undid ${n} step${n === 1 ? '' : 's'}.`) : fail('Nothing to undo.'); }
         case 'redo': { const n = Math.max(1, Math.round(num('steps', 1))); return e.redo(n) ? text(`Redid ${n} step${n === 1 ? '' : 's'}.`) : fail('Nothing to redo.'); }
-        default: return fail(`formpth has no tool named ${name}.`);
+        default: return fail(`formpath has no tool named ${name}.`);
       }
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));

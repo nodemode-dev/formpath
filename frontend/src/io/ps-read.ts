@@ -433,7 +433,7 @@ const OPS: Record<string, (ps: Interp) => void> = {
   xcheck: (ps) => { const o = ps.pop(); ps.push(isProc(o) || (isName(o) && !o.lit)); }, cvn: (ps) => { const o = ps.pop(); ps.push({ t: 'name', v: keyOf(o), lit: true }); },
   cvs: (ps) => { ps.pop(); const o = ps.pop(); ps.push(keyOf(o)); }, type: (ps) => { const o = ps.pop(); ps.push({ t: 'name', v: typeof o === 'number' ? (Number.isInteger(o) ? 'integertype' : 'realtype') : typeof o === 'boolean' ? 'booleantype' : typeof o === 'string' ? 'stringtype' : o === null ? 'nulltype' : isDict(o) ? 'dicttype' : isArr(o) || isProc(o) ? 'arraytype' : isName(o) ? 'nametype' : 'operatortype', lit: false }); },
   readonly: () => undefined, executeonly: () => undefined, noaccess: () => undefined, rcheck: (ps) => { ps.pop(); ps.push(true); }, wcheck: (ps) => { ps.pop(); ps.push(true); },
-  languagelevel: (ps) => ps.push(3), version: (ps) => ps.push('3010'), product: (ps) => ps.push('formpth'), revision: (ps) => ps.push(1), vmstatus: (ps) => ps.push(0, 0, 1e7),
+  languagelevel: (ps) => ps.push(3), version: (ps) => ps.push('3010'), product: (ps) => ps.push('formpath'), revision: (ps) => ps.push(1), vmstatus: (ps) => ps.push(0, 0, 1e7),
   currentfile: (ps) => ps.push(ps.rawFile()),
   filter: (ps) => {
     const name = keyOf(ps.pop());

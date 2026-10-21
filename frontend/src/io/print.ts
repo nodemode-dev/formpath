@@ -13,19 +13,19 @@ function clone(p: Project, doc: Doc): Project {
 }
 
 export async function managed(p: Project, s: PrintSettings): Promise<{ project: Project; x4: boolean }> {
-  if (s.colors !== 'formpth' || !s.profile) return { project: p, x4: false };
+  if (s.colors !== 'formpath' || !s.profile) return { project: p, x4: false };
   if (!profileList().length) await refreshProfiles();
   const target = profileList().find((x) => x.id === s.profile);
-  if (!target) throw new Error('The printer profile is not available. Choose another profile or start the formpth engine.');
+  if (!target) throw new Error('The printer profile is not available. Choose another profile or start the formpath engine.');
   const cur = resolveSettings(p.doc.cm);
-  if (!cur.rgb) throw new Error('The RGB working space is unavailable. Start the formpth engine and try again.');
+  if (!cur.rgb) throw new Error('The RGB working space is unavailable. Start the formpath engine and try again.');
   if (target.space === 'CMYK') {
     const old = cur.cmyk ? await cmykLuts(cur.rgb, cur.cmyk, s.intent, cur.bpc) : null, next = await cmykLuts(cur.rgb, target, s.intent, cur.bpc);
     const doc = withSettings({ ...convertDoc(p.doc, throughCmykFn(old ? old.c2r : null, next.r2c)), colorMode: 'cmyk' }, { cmyk: refOf(target) });
     return { project: clone(p, doc), x4: true };
   }
   const source = cur.cmyk ?? genericCmyk();
-  if (!source) throw new Error('No CMYK profile is available to convert from. Start the formpth engine and try again.');
+  if (!source) throw new Error('No CMYK profile is available to convert from. Start the formpath engine and try again.');
   const luts = await cmykLuts(target, source, s.intent, cur.bpc), builtin = resolveProfile(undefined, 'RGB');
   const doc = withSettings({ ...convertDoc(p.doc, toRgbFn(luts.c2r)), colorMode: 'rgb' }, { rgb: target.id === builtin?.id ? undefined : refOf(target) });
   return { project: clone(p, doc), x4: false };

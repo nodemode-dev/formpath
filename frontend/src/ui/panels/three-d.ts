@@ -177,7 +177,7 @@ export class ThreeDPanel {
     const p = this.engine.current;
     if (!p) return;
     let bmp: ImageBitmap;
-    try { bmp = await createImageBitmap(f); } catch { this.engine.notice(`${f.name} is not an image formpth can read.`, 'error'); return; }
+    try { bmp = await createImageBitmap(f); } catch { this.engine.notice(`${f.name} is not an image formpath can read.`, 'error'); return; }
     const ext = (f.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '') || 'png', base = f.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'image';
     const key = `img-tex${newId('').replace(/[^a-z0-9]/gi, '')}-${base}.${ext}`, avg = imageAverage(bmp, bmp.width, bmp.height);
     p.bitmaps.set(key, bmp);

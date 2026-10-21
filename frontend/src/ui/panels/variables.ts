@@ -119,7 +119,7 @@ export class VariablesPanel {
       try {
         const r = await exportDataSets(e, { format: v.format as 'png', fpth: !!v.fpth, nameVar: String(v.name) || null, folder: folder || null, scale: Number(v.scale), artboard: Number(v.artboard) }, this.host.version);
         if (r.zip) await this.host.deliver(r.zip, `${p.name}-variations.zip`);
-        e.notice(`Exported ${r.files.length} file${r.files.length === 1 ? '' : 's'}${r.folder ? ` to ${r.folder}` : ''}.${r.errors.length ? ` ${r.errors.length} problem${r.errors.length === 1 ? '' : 's'}: ${r.errors[0]}${r.folder ? ' (see formpth-data-merge-errors.txt)' : ''}` : ''}`, r.errors.length ? 'error' : 'info');
+        e.notice(`Exported ${r.files.length} file${r.files.length === 1 ? '' : 's'}${r.folder ? ` to ${r.folder}` : ''}.${r.errors.length ? ` ${r.errors.length} problem${r.errors.length === 1 ? '' : 's'}: ${r.errors[0]}${r.folder ? ' (see formpath-data-merge-errors.txt)' : ''}` : ''}`, r.errors.length ? 'error' : 'info');
       } catch (err) { e.notice(err instanceof Error ? err.message : String(err), 'error'); }
     });
   }

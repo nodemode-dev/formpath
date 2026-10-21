@@ -22,8 +22,8 @@ export function unregisterPanel(id: string): void { const i = ALL_PANELS.findInd
 const DEFAULT_SIDE = SIDE_PANELS.map((p) => p.id);
 
 interface DockState { order: string[]; hidden: string[]; side: string[] }
-const KEY = 'formpth.dock';
-const HEIGHTS_KEY = 'formpth.dock.heights';
+const KEY = 'formpath.dock';
+const HEIGHTS_KEY = 'formpath.dock.heights';
 
 const DEFAULT: DockState = { order: ['color', 'layers', 'appearance', 'stroke', 'symbols', 'navigator'], hidden: ['stroke', 'symbols', 'navigator'], side: [...DEFAULT_SIDE] };
 
@@ -120,8 +120,8 @@ export class Dock {
     this.save();
   }
 
-  get locked(): boolean { try { return localStorage.getItem('formpth.lock') === '1'; } catch { return false; } }
-  set locked(on: boolean) { try { localStorage.setItem('formpth.lock', on ? '1' : '0'); } catch { } this.dock.classList.toggle('is-locked', on); }
+  get locked(): boolean { try { return localStorage.getItem('formpath.lock') === '1'; } catch { return false; } }
+  set locked(on: boolean) { try { localStorage.setItem('formpath.lock', on ? '1' : '0'); } catch { } this.dock.classList.toggle('is-locked', on); }
 
   private section(id: string): HTMLElement | null {
     const p = ALL_PANELS.find((x) => x.id === id);
@@ -129,10 +129,10 @@ export class Dock {
   }
 
   onCollapse: ((on: boolean) => void) | null = null;
-  get collapsed(): boolean { try { return localStorage.getItem('formpth.dockCollapsed') === '1'; } catch { return false; } }
+  get collapsed(): boolean { try { return localStorage.getItem('formpath.dockCollapsed') === '1'; } catch { return false; } }
   setCollapsed(on: boolean): void {
     this.closeFly();
-    try { localStorage.setItem('formpth.dockCollapsed', on ? '1' : '0'); } catch { }
+    try { localStorage.setItem('formpath.dockCollapsed', on ? '1' : '0'); } catch { }
     this.dock.classList.toggle('is-collapsed', on);
     this.renderStrip();
     this.onCollapse?.(on);

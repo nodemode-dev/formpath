@@ -12,7 +12,7 @@ export interface CmykLuts { r2c: Lut; c2r: Lut }
 export interface Resolved { rgb: ProfileInfo | null; cmyk: ProfileInfo | null; intent: 0 | 1 | 2 | 3; bpc: boolean }
 
 export const INTENTS: ReadonlyArray<readonly [0 | 1 | 2 | 3, string]> = [[0, 'Perceptual'], [1, 'Relative Colorimetric'], [2, 'Saturation'], [3, 'Absolute Colorimetric']];
-export const GENERIC_CMYK_NAME = 'formpth Generic CMYK';
+export const GENERIC_CMYK_NAME = 'formpath Generic CMYK';
 export const SRGB_NAME = 'sRGB (built-in)';
 const GRID = { 'rgb-to-cmyk': 17, 'cmyk-to-rgb': 9, proof: 33, preserve: 9 } as const;
 
@@ -72,7 +72,7 @@ function fetchLut(kind: keyof typeof GRID, body: Record<string, unknown>): Promi
   const key = `${kind}|${JSON.stringify(body)}`;
   let p = lutCache.get(key);
   if (!p) {
-    if (!backend) return Promise.reject(new Error('The formpth engine is not reachable.'));
+    if (!backend) return Promise.reject(new Error('The formpath engine is not reachable.'));
     p = backend.lut(kind, { ...body, grid: GRID[kind] });
     lutCache.set(key, p);
     p.catch(() => lutCache.delete(key));

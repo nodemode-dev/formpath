@@ -2,7 +2,7 @@ import type { FilePart } from './api';
 
 export interface RecoveryRecord { id: string; name: string; savedAt: number; manifest: Record<string, unknown>; files: FilePart[]; modified?: boolean; libraryName?: string | null }
 
-const DB_NAME = 'formpth-recovery';
+const DB_NAME = 'formpath-recovery';
 const STORE = 'docs';
 
 function openDb(): Promise<IDBDatabase | null> {

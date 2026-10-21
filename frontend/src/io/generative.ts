@@ -19,7 +19,7 @@ export const NO_MODEL = 'No language model is set. Generative features use the m
 
 export async function modelState(): Promise<ModelState> {
   const s = await api.llmStatus();
-  if (!s) return { ready: false, vision: false, model: '', message: 'The formpth engine is offline. Start it with ./formpth boot; generative features run through it.' };
+  if (!s) return { ready: false, vision: false, model: '', message: 'The formpath engine is offline. Start it with ./formpath boot; generative features run through it.' };
   if (!s.configured) return { ready: false, vision: false, model: '', message: NO_MODEL };
   return { ready: true, vision: !!s.vision, model: s.model, message: `Uses ${s.model}${s.vision ? ', which reads images' : ''}.` };
 }
@@ -75,7 +75,7 @@ export async function shapeFillVariations(t: ShapeTarget, o: ShapeFillOptions): 
   const user = [
     `Make SVG art with viewBox="0 0 ${W} ${H}" that fills this outline: <path d="${outline}"${t.rule === 'evenodd' ? ' fill-rule="evenodd"' : ''}/>.`,
     `Subject: ${o.prompt.trim() || 'an ornamental illustration that suits the outline'}.`,
-    `Shape strength ${strength} of 100 (${strengthMode(strength)}): ${strength >= 67 ? 'fit the silhouette first: the subject must take the shape of the outline and reach every edge of it, and formpth then clips it to the outline' : strength >= 34 ? 'arrange the subject to follow the outline loosely and cover it; formpth then clips it to the outline' : 'compose freely: the outline only crops the art, so cover the whole viewBox'}.`,
+    `Shape strength ${strength} of 100 (${strengthMode(strength)}): ${strength >= 67 ? 'fit the silhouette first: the subject must take the shape of the outline and reach every edge of it, and formpath then clips it to the outline' : strength >= 34 ? 'arrange the subject to follow the outline loosely and cover it; formpath then clips it to the outline' : 'compose freely: the outline only crops the art, so cover the whole viewBox'}.`,
     c.text,
     c.palette.length || o.reference?.palette.length || o.style !== undefined && o.style !== 'auto' ? '' : t.color ? `Work with a palette that suits ${hex(t.color)}.` : 'Choose a harmonious palette.',
     'The art will be clipped to the outline, so let shapes run past its edge rather than leave gaps.',
@@ -133,7 +133,7 @@ export async function patternVariations(o: PatternGenOptions): Promise<PatternVa
     `Density: ${DENSITY[density]} per tile.`,
     c.text,
     c.palette.length ? 'You may put a full-tile background rect in one of the colours first.' : 'Choose a harmonious palette and a background rect first.',
-    'Motifs may cross the tile edges: formpth repeats the tile so anything past an edge shows on the opposite side. Draw each crossing motif once, at its true position; do not draw the wrapped copies yourself.',
+    'Motifs may cross the tile edges: formpath repeats the tile so anything past an edge shows on the opposite side. Draw each crossing motif once, at its true position; do not draw the wrapped copies yourself.',
   ].join('\n');
   const n = Math.max(1, Math.min(4, Math.round(o.variations)));
   const tile: Rect = { x: 0, y: 0, w: T, h: T };

@@ -13,7 +13,7 @@ import { paintCss } from '../rail';
 import { selectCtl } from './kit';
 import { swatchPaint } from './color';
 
-const USER_SW = 'formpth.userSwatchLibraries', USER_BR = 'formpth.userBrushLibraries';
+const USER_SW = 'formpath.userSwatchLibraries', USER_BR = 'formpath.userBrushLibraries';
 const read = <T>(key: string): T[] => { try { const v: unknown = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(v) ? (v as T[]) : []; } catch { return []; } };
 const write = (key: string, v: unknown): boolean => { try { localStorage.setItem(key, JSON.stringify(v)); return true; } catch { return false; } };
 
@@ -21,7 +21,7 @@ export const userSwatchLibraries = (): SwatchLibrary[] => read<SwatchLibrary>(US
 export const userBrushLibraries = (): BrushLibrary[] => read<BrushLibrary>(USER_BR).filter((l) => l && typeof l.id === 'string' && Array.isArray(l.brushes)).map((l) => ({ ...l, user: true }));
 export function keepUserSwatchLibrary(lib: SwatchLibrary): boolean { return write(USER_SW, [...userSwatchLibraries().filter((l) => l.id !== lib.id), { ...lib, user: true }]); }
 export function keepUserBrushLibrary(lib: BrushLibrary): boolean { return write(USER_BR, [...userBrushLibraries().filter((l) => l.id !== lib.id), { ...lib, user: true }]); }
-const USER_SY = 'formpth.userSymbolLibraries';
+const USER_SY = 'formpath.userSymbolLibraries';
 export const userSymbolLibraries = (): SymbolLibrary[] => read<SymbolLibrary>(USER_SY).filter((l) => l && typeof l.id === 'string' && Array.isArray(l.symbols)).map((l) => ({ ...l, user: true }));
 export function keepUserSymbolLibrary(lib: SymbolLibrary): boolean { return write(USER_SY, [...userSymbolLibraries().filter((l) => l.id !== lib.id), { ...lib, user: true }]); }
 

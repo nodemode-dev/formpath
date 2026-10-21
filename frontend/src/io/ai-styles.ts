@@ -176,6 +176,6 @@ export function resolveStyle(def: StyleDef, host: StyleHost): StyleResult {
   }
   if (!def.root) return { ap: { items: [], effects: [] }, opacity: 1, blend: 'normal', missing, mapped, brushes };
   const p = walk(def.root);
-  // the file lists a stack top first, formpth keeps its items bottom first
+  // the file lists a stack top first, formpath keeps its items bottom first
   return { ap: { items: p.items.reverse(), effects: p.effects }, opacity: p.opacity, blend: p.blend, missing, mapped, brushes };
 }

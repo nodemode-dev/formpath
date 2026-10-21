@@ -213,7 +213,7 @@ export async function decodeTiffPage(data: ArrayBuffer, index: number, cmykToRgb
   if (!f) throw new Error(`it has no page ${index + 1}`);
   const width = t.num(f, 256, 0), height = t.num(f, 257, 0);
   if (!width || !height) throw new Error('its image has no size');
-  if (width * height > MAX_PIXELS) throw new Error(`its image is ${width} by ${height} pixels, more than formpth can hold`);
+  if (width * height > MAX_PIXELS) throw new Error(`its image is ${width} by ${height} pixels, more than formpath can hold`);
   const spp = t.num(f, 277, 1), photo = t.num(f, 262, 1), comp = t.num(f, 259, 1), planar = t.num(f, 284, 1), pred = t.num(f, 317, 1);
   const bpsList = t.nums(f, 258), bps = bpsList[0] ?? 1;
   if (bpsList.some((b) => b !== bps)) throw new Error('its samples have different bit depths');

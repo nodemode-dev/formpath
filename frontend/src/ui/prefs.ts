@@ -67,7 +67,7 @@ export const DEFAULT_PREFS: Prefs = {
   pfPrecision: 0.028, pfRemoveRedundant: false, pfRemoveUnpainted: false,
 };
 
-const KEY = 'formpth.prefs';
+const KEY = 'formpath.prefs';
 const num = (v: unknown, lo: number, hi: number, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const bool = (v: unknown, d: boolean): boolean => (typeof v === 'boolean' ? v : d);
 const color = (v: unknown): string => (typeof v === 'string' && /^(#[0-9a-f]{6})?$/i.test(v) ? v : '');

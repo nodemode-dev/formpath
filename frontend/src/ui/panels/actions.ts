@@ -21,7 +21,7 @@ export interface ActionsHost { openFile(f: File): Promise<void>; deliver(blob: B
 export interface BatchOpts { set: string; action: string; source: 'folder' | 'datasets'; folder?: string; kinds?: string[]; dest: 'folder' | 'zip'; out?: string; format: 'same' | 'fpth' | 'svg' | 'pdf' | 'png'; name?: string | null; stopOnError: boolean }
 export interface BatchResult { done: number; failed: number; files: string[]; log: string; logPath: string | null; zip: boolean }
 
-export const FORMAT = 'com.nodemode.formpth.actions';
+export const FORMAT = 'com.nodemode.formpath.actions';
 const SKIP = /^(undo|redo|zoom|fit|actual|panel-|toggle-|screen-|help|about|settings|shortcuts|play-action|action-|recent-|open|new$|save|download-project|export|print|close-tab|copy-error-log|manage-plugins|assistant|reset-panels|graph-data|tool-)/;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const r2 = (v: number): number => Math.round(v * 100) / 100;
@@ -148,10 +148,10 @@ export class ActionsPanel {
     catch { this.offline = !(await api.capabilities()); if (!this.offline) { try { const r = await api.actionSets(); fromLib = r.sets.map((x) => validSet(x.set)).filter((s): s is ActionSet => !!s); } catch { this.offline = true; } } }
     this.sets = [...fromLib, ...this.sets.filter((s) => !fromLib.some((x) => x.name === s.name))];
     let legacy: Array<{ name: string; steps: Array<{ id: string; label: string }> }> = [];
-    try { const v = JSON.parse(localStorage.getItem('formpth.actions') ?? '[]'); if (Array.isArray(v)) legacy = v; } catch { }
+    try { const v = JSON.parse(localStorage.getItem('formpath.actions') ?? '[]'); if (Array.isArray(v)) legacy = v; } catch { }
     if (legacy.length && !this.offline) {
       this.sets.push({ id: newId('as'), name: 'My Actions', actions: legacy.filter((a) => a && Array.isArray(a.steps)).map((a) => ({ id: newId('a'), name: String(a.name || 'Action'), steps: a.steps.map((s) => ({ kind: 'command' as const, id: String(s.id), label: String(s.label ?? s.id), on: true })) })) });
-      try { localStorage.removeItem('formpth.actions'); } catch { }
+      try { localStorage.removeItem('formpath.actions'); } catch { }
     }
     if (!this.sets.length) this.sets.push(predefined());
     if (!this.offline) for (const s of this.sets) if (!fromLib.some((x) => x.name === s.name)) this.save(s);
@@ -353,7 +353,7 @@ export class ActionsPanel {
   private loadText(text: string, name: string): void {
     try {
       const s = validSet(JSON.parse(text));
-      if (!s) throw new Error('it is not a formpth action set.');
+      if (!s) throw new Error('it is not a formpath action set.');
       let nm = s.name, i = 2;
       while (this.sets.some((x) => x.name === nm)) nm = `${s.name} ${i++}`;
       s.name = nm;
@@ -425,7 +425,7 @@ export class ActionsPanel {
       { kind: 'select', key: 'act', label: 'Play', value: cur, choices: all },
       { kind: 'select', key: 'source', label: 'Source', value: 'folder', choices: [['folder', 'Folder (.fpth, SVG and PDF files)'], ['datasets', `Data Sets of this document (${d?.dataSets?.length ?? 0})`]] },
       { kind: 'text', key: 'folder', label: 'Source folder', value: '', placeholder: '/Users/you/Documents/in' },
-      { kind: 'select', key: 'format', label: 'Save as', value: 'same', choices: [['same', 'The source format (.fpth for data sets)'], ['fpth', 'formpth project (.fpth)'], ['svg', 'SVG'], ['pdf', 'PDF'], ['png', 'PNG']] },
+      { kind: 'select', key: 'format', label: 'Save as', value: 'same', choices: [['same', 'The source format (.fpth for data sets)'], ['fpth', 'formpath project (.fpth)'], ['svg', 'SVG'], ['pdf', 'PDF'], ['png', 'PNG']] },
       { kind: 'select', key: 'dest', label: 'Destination', value: this.host.desktop() ? 'folder' : 'zip', choices: [['folder', 'A folder (through the engine)'], ['zip', 'A zip download']] },
       { kind: 'text', key: 'out', label: 'Destination folder', value: '', placeholder: '/Users/you/Documents/out' },
       { kind: 'select', key: 'name', label: 'Name data set files from', value: '', choices: [['', 'Data set name'], ...texts.map((t) => [t.name, t.name] as const)] },
@@ -442,7 +442,7 @@ export class ActionsPanel {
     const f = this.findAction(o.set, o.action);
     if (!f) throw new Error('There is no such action: list the actions and pass a set and action name.');
     if (o.dest === 'folder' && !o.out?.trim()) throw new Error('Give the destination folder as an absolute path, or choose a zip download.');
-    const e = this.engine, home = e.current?.id ?? null, log: string[] = [`formpth batch: ${f.set.name} › ${f.action.name}`, `started ${new Date().toISOString()}`], out: Array<{ name: string; blob: Blob }> = [], files: string[] = [];
+    const e = this.engine, home = e.current?.id ?? null, log: string[] = [`formpath batch: ${f.set.name} › ${f.action.name}`, `started ${new Date().toISOString()}`], out: Array<{ name: string; blob: Blob }> = [], files: string[] = [];
     let done = 0, failed = 0;
     const emit = async (name: string, blob: Blob): Promise<void> => { if (o.dest === 'folder') files.push(await api.writeFile(String(o.out).trim(), name, blob)); else { out.push({ name, blob }); files.push(name); } };
     const render = async (fmt: string, stem: string): Promise<void> => {
@@ -502,8 +502,8 @@ export class ActionsPanel {
     log.push(`finished ${new Date().toISOString()}: ${done} done, ${failed} failed`);
     const text = log.join('\n') + '\n';
     let logPath: string | null = null;
-    if (o.dest === 'folder') { try { logPath = await api.writeFile(String(o.out).trim(), 'formpth-batch-log.txt', new Blob([text], { type: 'text/plain' })); } catch { } }
-    else { out.push({ name: 'formpth-batch-log.txt', blob: new Blob([text], { type: 'text/plain' }) }); await this.host.deliver(await zipFiles(out), `${f.action.name}-batch.zip`); }
+    if (o.dest === 'folder') { try { logPath = await api.writeFile(String(o.out).trim(), 'formpath-batch-log.txt', new Blob([text], { type: 'text/plain' })); } catch { } }
+    else { out.push({ name: 'formpath-batch-log.txt', blob: new Blob([text], { type: 'text/plain' }) }); await this.host.deliver(await zipFiles(out), `${f.action.name}-batch.zip`); }
     return { done, failed, files, log: text, logPath, zip: o.dest !== 'folder' };
   }
 }

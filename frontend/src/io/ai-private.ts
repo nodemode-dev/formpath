@@ -213,7 +213,7 @@ class Emit {
       case 'text': {
         const d = this.outlines.get(n.id), st = n.spans[0]?.style;
         if (!d || !st) { this.note('type that could not be outlined'); return; }
-        this.note('type (written as outlines, the live text stays in the formpth data)');
+        this.note('type (written as outlines, the live text stays in the formpath data)');
         const ap = { ...n.ap, items: [{ kind: 'fill' as const, paint: st.fill, opacity: 1, blend: 'normal' as const, visible: true, effects: [] }, ...(st.stroke.type !== 'none' && st.strokeWidth > 0 ? [{ kind: 'stroke' as const, paint: st.stroke, width: st.strokeWidth, cap: 'butt' as const, join: 'miter' as const, miter: 10, align: 'center' as const, dash: [], dashOffset: 0, dashCorners: false, startArrow: 'none', endArrow: 'none', arrowScale: [100, 100] as [number, number], arrowAlign: 'tip' as const, profile: null, brush: null, opacity: 1, blend: 'normal' as const, visible: true, effects: [] }] : [])] };
         this.shape({ ...n, ap, name: n.name || n.spans.map((s) => s.text).join('').slice(0, 40) }, d, 'nonzero', layerLocked);
         return;
@@ -527,7 +527,7 @@ export async function buildAiPrivate(inp: AiPrivateInput): Promise<AiPrivate> {
     '%!PS-Adobe-3.0 ',
     '%%Creator: Adobe Illustrator(R) 17.0',
     '%%AI8_CreatorVersion: 21.0.0',
-    '%%For: (formpth) ()',
+    '%%For: (formpath) ()',
     `%%Title: ${ps(inp.title)}`,
     `%%CreationDate: ${dateLine(now)}`,
     '%%Canvassize: 16383',

@@ -1066,7 +1066,7 @@ export class Engine extends Emitter<EngineEvents> {
     const made = new Map<string, VNode>();
     for (const t of texts) {
       const d = await provider(t);
-      if (!d || !d.length) { this.notice(`The outlines of “${plainText(t).slice(0, 30)}” need its font, ${t.spans[0]?.style.font}, which formpth could not load.`, 'error'); continue; }
+      if (!d || !d.length) { this.notice(`The outlines of “${plainText(t).slice(0, 30)}” need its font, ${t.spans[0]?.style.font}, which formpath could not load.`, 'error'); continue; }
       const st = t.spans[0]?.style ?? DEFAULT_CHAR;
       const items = [...(st.fill.type !== 'none' ? [fill(st.fill)] : []), ...(st.stroke.type !== 'none' ? [stroke(st.stroke, st.strokeWidth)] : []), ...t.ap.items];
       made.set(t.id, { id: newId('c'), kind: 'compound', rule: 'nonzero', children: d.map((sp) => ({ id: newId(), kind: 'path', d: [sp], rule: 'nonzero', opacity: 1, blend: 'normal', ap: emptyAppearance() })), opacity: t.opacity, blend: t.blend, ap: { items, effects: t.ap.effects }, name: t.name });

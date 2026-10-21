@@ -3,7 +3,7 @@ import { Dialog } from './dialogs';
 import { el, patchList, q, setClass, setDisabled, setText, setTitle, setValue } from './dom';
 import { icon } from './icons';
 
-const LAST = 'formpth.linkFolder';
+const LAST = 'formpath.linkFolder';
 interface Entry { key: string; name: string; path: string; dir: boolean; size?: number }
 const kb = (n: number): string => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 

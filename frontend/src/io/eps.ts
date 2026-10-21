@@ -19,7 +19,7 @@ import { serialize } from './project-io';
 export interface EpsOptions { region: Rect; cmyk: boolean; preserve: boolean; ppi: number; title?: string; version?: string }
 
 const f = (v: number): string => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? '0' : String(r); };
-const EMBED_BEGIN = '%FormpthDocument-Begin', EMBED_END = '%FormpthDocument-End', EMBED_LINE = '%FPTH:';
+const EMBED_BEGIN = '%FormpathDocument-Begin', EMBED_END = '%FormpathDocument-End', EMBED_LINE = '%FPTH:';
 
 async function deflate(data: Uint8Array): Promise<Uint8Array> {
   if (typeof CompressionStream === 'undefined') return data;
@@ -266,7 +266,7 @@ class PsPainter {
 }
 
 const PROLOG = [
-  '/formpthDict 40 dict def formpthDict begin',
+  '/formpathDict 40 dict def formpathDict begin',
   '/m { moveto } bind def /l { lineto } bind def /c { curveto } bind def /h { closepath } bind def',
   'end',
 ];
@@ -284,7 +284,7 @@ export async function exportEps(p: Project, o: EpsOptions): Promise<Blob> {
   for (const l of p.doc.layers) { const s = await painter.node(l); if (s) body.push(`%%BeginLayer: ${(l.name ?? 'Layer').replace(/[\r\n]/g, ' ')}\n${s}\n%%EndLayer`); }
   const head = [
     '%!PS-Adobe-3.0 EPSF-3.0',
-    `%%Creator: ${`formpth ${o.version ?? ''}`.trim()}`,
+    `%%Creator: ${`formpath ${o.version ?? ''}`.trim()}`,
     `%%Title: ${(o.title ?? p.name).replace(/[\r\n]/g, ' ')}`,
     `%%CreationDate: ${new Date().toISOString()}`,
     `%%BoundingBox: 0 0 ${Math.ceil(W)} ${Math.ceil(H)}`,
@@ -300,7 +300,7 @@ export async function exportEps(p: Project, o: EpsOptions): Promise<Blob> {
     const { manifest, files } = serialize(p);
     const assets: Record<string, string> = {};
     for (const fp of files) { const b = new Uint8Array(await fp.blob.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000)); assets[fp.name] = `data:${fp.blob.type || 'application/octet-stream'};base64,${btoa(bin)}`; }
-    const json = new TextEncoder().encode(JSON.stringify({ formpthEps: 1, manifest, assets }));
+    const json = new TextEncoder().encode(JSON.stringify({ formpathEps: 1, manifest, assets }));
     let bin = ''; for (let i = 0; i < json.length; i += 0x8000) bin += String.fromCharCode(...json.subarray(i, i + 0x8000));
     const b64 = btoa(bin);
     embed.push(EMBED_BEGIN);
@@ -311,7 +311,7 @@ export async function exportEps(p: Project, o: EpsOptions): Promise<Blob> {
     ...head,
     '%%BeginProlog', ...PROLOG, '%%EndProlog',
     '%%Page: 1 1',
-    'save formpthDict begin',
+    'save formpathDict begin',
     `[1 0 0 -1 ${f(-r.x)} ${f(r.y + r.h)}] concat`,
     ...body,
     'end restore',

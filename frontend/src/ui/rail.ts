@@ -33,7 +33,7 @@ export class Rail {
   private readonly modeBtn: HTMLButtonElement;
   private suppressClick = false;
   private box: HTMLElement;
-  private hidden = new Set<string>((() => { try { const v = JSON.parse(localStorage.getItem('formpth.railHidden') ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []; } catch { return []; } })());
+  private hidden = new Set<string>((() => { try { const v = JSON.parse(localStorage.getItem('formpath.railHidden') ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []; } catch { return []; } })());
   private editor: EditToolbar | null = null;
 
   constructor(root: HTMLElement, private readonly engine: Engine) {
@@ -111,7 +111,7 @@ export class Rail {
 
   setHiddenGroups(keys: Iterable<string>): void {
     this.hidden = new Set(keys);
-    try { localStorage.setItem('formpth.railHidden', JSON.stringify([...this.hidden])); } catch { }
+    try { localStorage.setItem('formpath.railHidden', JSON.stringify([...this.hidden])); } catch { }
     this.applyHidden();
   }
 

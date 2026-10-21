@@ -23,7 +23,7 @@ export interface PrintSettings {
   marks: PdfMarks;
   output: 'composite' | 'separations';
   plateDpi: number;
-  colors: 'formpth' | 'printer';
+  colors: 'formpath' | 'printer';
   profile: string;
   intent: 0 | 1 | 2 | 3;
 }

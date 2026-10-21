@@ -51,7 +51,7 @@ export async function convertToProfile(engine: Engine, target: ProfileInfo): Pro
   if (!doc) throw new Error('Open a document first.');
   if (!profileList().length) await refreshProfiles();
   const s = resolveSettings(doc.cm);
-  if (!s.rgb) throw new Error('The RGB working space is unavailable. Start the formpth engine and try again.');
+  if (!s.rgb) throw new Error('The RGB working space is unavailable. Start the formpath engine and try again.');
   if (target.space === 'CMYK') {
     const old = s.cmyk ? await cmykLuts(s.rgb, s.cmyk, s.intent, s.bpc) : null;
     const next = await cmykLuts(s.rgb, target, s.intent, s.bpc);
@@ -60,7 +60,7 @@ export async function convertToProfile(engine: Engine, target: ProfileInfo): Pro
   }
   if (target.space === 'RGB') {
     const source = s.cmyk ?? genericCmyk();
-    if (!source) throw new Error('No CMYK profile is available to convert from. Start the formpth engine and try again.');
+    if (!source) throw new Error('No CMYK profile is available to convert from. Start the formpath engine and try again.');
     const luts = await cmykLuts(target, source, s.intent, s.bpc);
     const fn = toRgbFn(luts.c2r);
     const builtin = resolveProfile(undefined, 'RGB');

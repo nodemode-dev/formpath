@@ -133,14 +133,14 @@ import { slotTool, toolGroups } from './ui/tool-groups';
 import { Viewport } from './engine/viewport';
 import { VERSION } from './version';
 
-const LAYERS_W_KEY = 'formpth.layersW';
+const LAYERS_W_KEY = 'formpath.layersW';
 const message = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 function stored(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
 function store(key: string, value: string): void { try { localStorage.setItem(key, value); } catch { } }
 
 const SHELL = `<div class="cv-app">
 <header class="cv-titlebar">
-<div class="cv-brand">${brandMark(18)}<span class="cv-brand-name">formpth</span></div>
+<div class="cv-brand">${brandMark(18)}<span class="cv-brand-name">formpath</span></div>
 <nav class="cv-menubar" aria-label="Main menu"></nav>
 <div class="cv-zoom">
 <button class="cv-icon-btn" type="button" data-cmd="undo">${icon('undo', 16)}</button>
@@ -167,7 +167,7 @@ const SHELL = `<div class="cv-app">
 <canvas class="cv-ruler cv-ruler-v" hidden></canvas>
 <div class="cv-isolation" hidden><span class="cv-isolation-label"></span><button class="cv-btn cv-iso-exit" type="button" data-cmd="exit-isolation">${icon('exitIsolation', 14)}Exit Isolation Mode</button><span class="cv-iso-pattern" hidden><button class="cv-btn cv-btn-primary" type="button" data-cmd="pattern-done">Done</button><button class="cv-btn" type="button" data-cmd="pattern-copy">Save a Copy</button><button class="cv-btn" type="button" data-cmd="pattern-cancel">Cancel</button></span><span class="cv-iso-pattern cv-iso-symbol" hidden><button class="cv-btn cv-btn-primary" type="button" data-cmd="symbol-exit">${icon('exitIsolation', 14)}Exit</button><button class="cv-btn" type="button" data-cmd="symbol-cancel">Cancel</button></span></div>
 <div class="cv-welcome"><div class="cv-welcome-card">
-<div class="cv-welcome-title">${brandMark(28)}formpth</div>
+<div class="cv-welcome-title">${brandMark(28)}formpath</div>
 <div class="cv-welcome-sub">Vector illustration. Start a document, open a project, or drop an SVG anywhere on this stage.</div>
 <div class="cv-welcome-actions"><button class="cv-btn cv-btn-primary" type="button" data-cmd="new">${icon('newFile', 14)}New Document</button><button class="cv-btn" type="button" data-cmd="open">${icon('load', 14)}Open</button></div>
 </div></div>
@@ -290,7 +290,7 @@ export function startApp(): void {
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
   new PanelGroup(sideHost, 'type-group', [{ id: 'character', label: 'Character', body: charP.body }, { id: 'paragraph', label: 'Paragraph', body: paraP.body }, { id: 'character-styles', label: 'Character Styles', body: charStylesP.body }, { id: 'paragraph-styles', label: 'Paragraph Styles', body: paraStylesP.body }, { id: 'glyphs', label: 'Glyphs', body: glyphsP.body }, { id: 'tabs', label: 'Tabs', body: tabsP.body }, { id: 'retype', label: 'Retype', body: retypeP.body }], 'Type');
   const dock = new Dock(dockHost, sideHost);
-  const propsShown = (): boolean => stored('formpth.propsCol') !== 'hidden';
+  const propsShown = (): boolean => stored('formpath.propsCol') !== 'hidden';
   const sideOpen = (): boolean => propsShown() && dock.sideShown() > 0;
   const syncPropsCol = (): void => { setHidden(sideHost, !sideOpen()); setStyleVar(root, '--cv-props-w', sideOpen() ? '46px' : '0px'); Viewport.insetRight = sideOpen() ? 238 : 0; };
   dock.onChange = () => syncPropsCol();
@@ -305,7 +305,7 @@ export function startApp(): void {
     const g = gid ? PanelGroup.all.get(gid) : null;
     const dockId = ALL_PANELS.find((x) => x.selector === `section.cv-${gid}`)?.id;
     if (dockId && !dock.isShown(dockId)) dock.toggle(dockId);
-    if (gid === 'properties-group' || gid === 'type-group') { store('formpth.propsCol', 'shown'); syncPropsCol(); }
+    if (gid === 'properties-group' || gid === 'type-group') { store('formpath.propsCol', 'shown'); syncPropsCol(); }
     g?.setMinimised(false);
     g?.show(tab);
   };
@@ -313,7 +313,7 @@ export function startApp(): void {
   enhanceAllSelects();
   new TitleTools(q(root, '.cv-titlebar'), {
     commands,
-    arrange: (w) => { dock.arrange(w.order, w.hidden); store('formpth.propsCol', w.propsColumn ? 'shown' : 'hidden'); syncPropsCol(); },
+    arrange: (w) => { dock.arrange(w.order, w.hidden); store('formpath.propsCol', w.propsColumn ? 'shown' : 'hidden'); syncPropsCol(); },
     locked: () => dock.locked,
     setLocked: (on) => { dock.locked = on; },
   });
@@ -337,15 +337,15 @@ export function startApp(): void {
   termDock.onFail = (err) => toast(message(err), 'error');
   termDock.context = () => {
     const p = engine.current;
-    if (!p) return 'formpth window: no document is open';
+    if (!p) return 'formpath window: no document is open';
     const ids = engine.selectedIds();
-    const where = `formpth window: document "${p.name}"`;
+    const where = `formpath window: document "${p.name}"`;
     return ids.length ? `${where}; selection: ${ids.length === 1 ? 'node id' : 'node ids'} ${ids.slice(0, 200).join(', ')}${ids.length > 200 ? ` and ${ids.length - 200} more` : ''}` : where;
   };
   termDock.note = () => { const n = engine.selectedIds().length; return n ? `with ${n} selected ${n === 1 ? 'object' : 'objects'}` : ''; };
   stage.onPointerDoc = (pt) => { status.setPointer(pt); infoP.setPointer(pt); };
 
-  const RECENT_KEY = 'formpth.recent';
+  const RECENT_KEY = 'formpath.recent';
   let recent: string[] = [];
   try { const v: unknown = JSON.parse(stored(RECENT_KEY) ?? '[]'); if (Array.isArray(v)) recent = v.filter((n): n is string => typeof n === 'string' && !!n).slice(0, 10); } catch { recent = []; }
   const keepRecent = (next: string[]): void => { recent = next.slice(0, 10); store(RECENT_KEY, JSON.stringify(recent)); };
@@ -401,7 +401,7 @@ export function startApp(): void {
   async function openFpth(data: ArrayBuffer, name: string, libraryName: string | null = null): Promise<void> {
     const files = await unzip(data);
     const mk = [...files.keys()].find((k) => /(^|\/)manifest\.json$/.test(k));
-    if (!mk) throw new Error(`${name} is not a formpth project (no manifest.json).`);
+    if (!mk) throw new Error(`${name} is not a formpath project (no manifest.json).`);
     const prefix = mk.slice(0, -'manifest.json'.length);
     const manifest = JSON.parse(new TextDecoder().decode(files.get(mk))) as Record<string, unknown>;
     const doc = docFromManifest(manifest), assets = new Map<string, Blob>();
@@ -559,7 +559,7 @@ export function startApp(): void {
             const key = imageKey(f);
             engine.addImage(key, f, s.w, s.h, { x: 0, y: 0 }, undefined, f.name);
             p.history.markSaved();
-          } else toast(`formpth cannot open ${f.name}.`, 'error');
+          } else toast(`formpath cannot open ${f.name}.`, 'error');
         } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); }
       }
     });
@@ -602,7 +602,7 @@ export function startApp(): void {
 
   async function chooseLinkFile(title: string): Promise<LinkFile | null> {
     if (caps && !useHandles()) {
-      const path = await fileDialog.choose({ title, mode: 'file', kinds: IMAGE_KINDS, ok: 'Link', note: 'formpth keeps the path and reads the file again when it changes.' });
+      const path = await fileDialog.choose({ title, mode: 'file', kinds: IMAGE_KINDS, ok: 'Link', note: 'formpath keeps the path and reads the file again when it changes.' });
       if (!path) return null;
       try { return await links.readPath(path); } catch (err) { toast(message(err), 'error'); return null; }
     }
@@ -998,7 +998,7 @@ export function startApp(): void {
     userLibraries: () => ({ swatches: userSwatchLibraries(), brushes: userBrushLibraries(), symbols: userSymbolLibraries() }),
     ask: (title, text) => agentConfirm.ask(title, text),
     note: (t) => status.setEngine(t),
-    allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpth:agents', { detail: true })); },
+    allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpath:agents', { detail: true })); },
     openFile: (f, dxf, password) => openFiles([f], dxf ?? { merge: false }, password),
     placeFile: (f, at, w, dxf, placing) => placeFile(f, at, w, dxf ?? { merge: true }, placing ?? {}),
     placeLinked: async (path, at, width, placing) => placeLinked(await links.readPath(path), at, width, placing ?? {}),
@@ -1023,7 +1023,7 @@ export function startApp(): void {
   agents.commands = commands;
   agents.actions = actionsP;
   agents.setEnabled(loadPrefs().agentsAllowed);
-  window.addEventListener('formpth:agents', (ev) => agents.setEnabled((ev as CustomEvent<boolean>).detail === true));
+  window.addEventListener('formpath:agents', (ev) => agents.setEnabled((ev as CustomEvent<boolean>).detail === true));
   const assistant = new AssistantPanel(engine, agents);
   document.body.appendChild(assistant.el);
   const pluginHost = new PluginHost(engine, agents, commands, (t, kind) => toast(t, kind ?? 'info'));
@@ -1333,7 +1333,7 @@ export function startApp(): void {
   async function libraryDoc(f: File): Promise<Doc> {
     const files = await unzip(await f.arrayBuffer());
     const mk = [...files.keys()].find((k) => /(^|\/)manifest\.json$/.test(k));
-    if (!mk) throw new Error(`${f.name} is not a formpth project.`);
+    if (!mk) throw new Error(`${f.name} is not a formpath project.`);
     return docFromManifest(JSON.parse(new TextDecoder().decode(files.get(mk))) as Record<string, unknown>);
   }
 
@@ -1341,14 +1341,14 @@ export function startApp(): void {
     try {
       const name = f.name.replace(/\.(ase|fpth)$/i, '');
       if (kind === 'symbol') {
-        if (!/\.fpth$/i.test(f.name)) throw new Error('Symbol libraries are formpth projects (.fpth).');
+        if (!/\.fpth$/i.test(f.name)) throw new Error('Symbol libraries are formpath projects (.fpth).');
         const d = await libraryDoc(f);
         if (!d.symbols.length) throw new Error(`${f.name} holds no symbols.`);
         showSymbolLib(symbolLibraryFromDoc(d, name, `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`));
         return;
       }
       if (kind === 'brush') {
-        if (!/\.fpth$/i.test(f.name)) throw new Error('Brush libraries are formpth projects (.fpth).');
+        if (!/\.fpth$/i.test(f.name)) throw new Error('Brush libraries are formpath projects (.fpth).');
         const d = await libraryDoc(f);
         if (!d.brushes.length) throw new Error(`${f.name} holds no brushes.`);
         showBrushLib({ id: `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: d.brushes.map(({ id: _id, ...b }) => { void _id; return b; }), user: true });
@@ -1367,7 +1367,7 @@ export function startApp(): void {
   async function saveSymbolLibrary(): Promise<void> {
     const p = engine.current;
     if (!p || !p.doc.symbols.length) { toast('The document has no symbols to save.', 'error'); return; }
-    const v = await askForm('Save Symbols', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Symbols` }, { kind: 'note', text: 'Saves the document’s symbols as a formpth project to open later with Open Symbol Library; it also appears under User Defined.' }], { ok: 'Save' });
+    const v = await askForm('Save Symbols', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Symbols` }, { kind: 'note', text: 'Saves the document’s symbols as a formpath project to open later with Open Symbol Library; it also appears under User Defined.' }], { ok: 'Save' });
     if (!v) return;
     const name = String(v.name).trim() || 'Symbols';
     keepUserSymbolLibrary(symbolLibraryFromDoc(p.doc, name));
@@ -1403,7 +1403,7 @@ export function startApp(): void {
   async function saveSwatchLibrary(format: 'ase' | 'fpth'): Promise<void> {
     const p = engine.current;
     if (!p) return;
-    const v = await askForm(format === 'ase' ? 'Save Swatch Library as ASE' : 'Save Swatch Library as formpth', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Swatches` }, { kind: 'note', text: format === 'ase' ? 'ASE keeps solid colours (process, global and spot) and their groups; gradients and patterns are left out. The library also appears under User Defined.' : 'A formpth project holding the swatches, groups, gradients and patterns. The library also appears under User Defined.' }], { ok: 'Save' });
+    const v = await askForm(format === 'ase' ? 'Save Swatch Library as ASE' : 'Save Swatch Library as formpath', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Swatches` }, { kind: 'note', text: format === 'ase' ? 'ASE keeps solid colours (process, global and spot) and their groups; gradients and patterns are left out. The library also appears under User Defined.' : 'A formpath project holding the swatches, groups, gradients and patterns. The library also appears under User Defined.' }], { ok: 'Save' });
     if (!v) return;
     const name = String(v.name).trim() || 'Swatches', lib = libraryFromDoc(p.doc, name);
     if (!lib.groups.length) { toast('The document has no swatches to save.', 'error'); return; }
@@ -1415,7 +1415,7 @@ export function startApp(): void {
   async function saveBrushLibrary(): Promise<void> {
     const p = engine.current;
     if (!p || !p.doc.brushes.length) { toast('The document has no brushes to save.', 'error'); return; }
-    const v = await askForm('Save Brushes', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Brushes` }, { kind: 'note', text: 'Saves the document’s brushes as a formpth project to open later with Open Brush Library; it also appears under User Defined.' }], { ok: 'Save' });
+    const v = await askForm('Save Brushes', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Brushes` }, { kind: 'note', text: 'Saves the document’s brushes as a formpath project to open later with Open Brush Library; it also appears under User Defined.' }], { ok: 'Save' });
     if (!v) return;
     const name = String(v.name).trim() || 'Brushes';
     keepUserBrushLibrary({ id: `user_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: p.doc.brushes.map(({ id: _id, ...b }) => { void _id; return b; }) });
@@ -1857,23 +1857,23 @@ export function startApp(): void {
     { id: 'claude-chat', label: 'Chat with Claude', keys: ['Alt+Shift+Mod+H'], run: () => void termDock.showChat() },
     { id: 'manage-plugins', label: 'Manage Plugins...', run: () => void pluginsDialog.show() },
     ...Object.keys(TAB_HOMES).map((tab) => ({ id: `panel-${tab}`, label: tab.replace(/-/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase()), run: () => showPanel(tab) })).filter((c) => !['panel-character', 'panel-paragraph', 'panel-glyphs', 'panel-three-d'].includes(c.id)),
-    { id: 'panel-properties-col', label: 'Properties Column', checked: () => propsShown(), run: () => { store('formpth.propsCol', propsShown() ? 'hidden' : 'shown'); syncPropsCol(); } },
+    { id: 'panel-properties-col', label: 'Properties Column', checked: () => propsShown(), run: () => { store('formpath.propsCol', propsShown() ? 'hidden' : 'shown'); syncPropsCol(); } },
     ...STYLE_LIBRARIES.map((l) => ({ id: `gs-lib-${l.id}`, label: l.name, run: () => { showPanel('graphic-styles'); stylesP.showLibrary(l.id); } })),
     ...SWATCH_LIBRARIES.map((l) => ({ id: `sw-lib-${l.id}`, label: l.name, run: () => showSwatchLib(l) })),
     ...Array.from({ length: 12 }, (_, i) => ({ id: `sw-user-${i}`, label: () => userSwatchLibraries()[i]?.name ?? '', enabled: () => !!userSwatchLibraries()[i], run: () => { const l = userSwatchLibraries()[i]; if (l) showSwatchLib(l); } })),
     { id: 'sw-user-none', label: 'No saved libraries yet', enabled: () => false, run: () => undefined },
     { id: 'sw-lib-other', label: 'Other Library...', run: () => { libKind = 'swatch'; libInput.accept = '.ase,.fpth'; libInput.click(); } },
     { id: 'sw-lib-save-ase', label: 'Save Swatch Library as ASE...', enabled: has, run: () => void saveSwatchLibrary('ase') },
-    { id: 'sw-lib-save-fpth', label: 'Save Swatch Library as formpth...', enabled: has, run: () => void saveSwatchLibrary('fpth') },
+    { id: 'sw-lib-save-fpth', label: 'Save Swatch Library as formpath...', enabled: has, run: () => void saveSwatchLibrary('fpth') },
     ...BRUSH_LIBRARIES.map((l) => ({ id: `br-lib-${l.id}`, label: l.name, run: () => showBrushLib(l) })),
     ...Array.from({ length: 12 }, (_, i) => ({ id: `br-user-${i}`, label: () => userBrushLibraries()[i]?.name ?? '', enabled: () => !!userBrushLibraries()[i], run: () => { const l = userBrushLibraries()[i]; if (l) showBrushLib(l); } })),
     { id: 'br-user-none', label: 'No saved libraries yet', enabled: () => false, run: () => undefined },
     { id: 'br-lib-other', label: 'Open Brush Library...', run: () => { libKind = 'brush'; libInput.accept = '.fpth'; libInput.click(); } },
     { id: 'br-lib-save', label: 'Save Brushes...', enabled: has, run: () => void saveBrushLibrary() },
-    { id: 'reset-panels', label: 'Reset Essentials', run: () => { dock.reset(); PanelGroup.resetStates(); PanelGroup.resetHomes(TAB_HOMES); store('formpth.propsCol', 'shown'); syncPropsCol(); } },
-    { id: 'help', label: 'formpth Help', keys: ['F1'], run: () => help.show() },
+    { id: 'reset-panels', label: 'Reset Essentials', run: () => { dock.reset(); PanelGroup.resetStates(); PanelGroup.resetHomes(TAB_HOMES); store('formpath.propsCol', 'shown'); syncPropsCol(); } },
+    { id: 'help', label: 'formpath Help', keys: ['F1'], run: () => help.show() },
     { id: 'copy-error-log', label: 'Copy Error Log', run: () => { void navigator.clipboard?.writeText(errorLog.text()); toast('Copied the error log.'); } },
-    { id: 'about', label: 'About formpth', run: () => about.show(caps) },
+    { id: 'about', label: 'About formpath', run: () => about.show(caps) },
 
     { id: 'swap-fill-stroke', label: 'Swap Fill and Stroke', keys: ['Shift+X'], run: () => engine.swapFillStroke() },
     { id: 'default-fill-stroke', label: 'Default Fill and Stroke', keys: ['D'], run: () => engine.defaultFillStroke() },
@@ -2139,14 +2139,14 @@ export function startApp(): void {
   void api.capabilities().then((c) => {
     caps = c;
     status.setEngine(c ? `Engine ${c.version}${c.desktop ? ' · desktop' : ''}` : 'Engine offline');
-    if (!c) toast('The formpth engine is offline. Drawing works; library saves, system fonts, the assistant and agents need it (./formpth boot).');
+    if (!c) toast('The formpath engine is offline. Drawing works; library saves, system fonts, the assistant and agents need it (./formpath boot).');
     else void systemFonts().then(() => engine.emit('options', null));
   });
 
   for (const [id, keys] of Object.entries(loadPrefs().shortcuts)) commands.setKeys(id, keys);
-  if (import.meta.env.DEV) (window as unknown as { formpth: Record<string, unknown> }).formpth = { ...(window as unknown as { formpth?: Record<string, unknown> }).formpth, engine, commands, agents, stage };
+  if (import.meta.env.DEV) (window as unknown as { formpath: Record<string, unknown> }).formpath = { ...(window as unknown as { formpath?: Record<string, unknown> }).formpath, engine, commands, agents, stage };
 
-  const SESSION = 'formpth.session';
+  const SESSION = 'formpath.session';
   const keptAt = new Map<string, string>();
   let keepTimer = 0;
   async function keepModified(): Promise<void> {
@@ -2170,7 +2170,7 @@ export function startApp(): void {
       try { const { manifest, files } = serialize(p); await recovery.keep({ id: p.id, name: p.name, savedAt: Date.now(), manifest, files, modified: p.modified, libraryName: p.libraryName }); }
       catch (err) { errorLog.add('Recovery copy', message(err)); }
     }
-    try { localStorage.setItem(SESSION, JSON.stringify({ order: engine.projects.map((p) => p.id), active: engine.current?.id ?? null })); sessionStorage.setItem('formpth.langswitch', '1'); } catch { }
+    try { localStorage.setItem(SESSION, JSON.stringify({ order: engine.projects.map((p) => p.id), active: engine.current?.id ?? null })); sessionStorage.setItem('formpath.langswitch', '1'); } catch { }
   };
   function reopen(r: RecoveryRecord, name: string): boolean {
     try {
@@ -2188,7 +2188,7 @@ export function startApp(): void {
     const found = await recovery.list();
     if (!found.length) return;
     let switched = false;
-    try { switched = sessionStorage.getItem('formpth.langswitch') === '1'; sessionStorage.removeItem('formpth.langswitch'); } catch { }
+    try { switched = sessionStorage.getItem('formpath.langswitch') === '1'; sessionStorage.removeItem('formpath.langswitch'); } catch { }
     if ((switched || loadPrefs().restoreSession) && !engine.projects.length) {
       let meta: { order?: string[] } = {};
       try { meta = JSON.parse(localStorage.getItem(SESSION) ?? '{}') as typeof meta; } catch { }
@@ -2202,7 +2202,7 @@ export function startApp(): void {
     }
     const lost = found.filter((r) => r.modified !== false);
     if (!lost.length) { await recovery.clear(); return; }
-    if (!(await confirmAction('Recover unsaved work?', `formpth closed with unsaved changes in ${lost.map((r) => r.name).join(', ')}. Open them again?`, 'Recover'))) { await recovery.clear(); return; }
+    if (!(await confirmAction('Recover unsaved work?', `formpath closed with unsaved changes in ${lost.map((r) => r.name).join(', ')}. Open them again?`, 'Recover'))) { await recovery.clear(); return; }
     for (const r of lost) reopen(r, `${r.name} (recovered)`);
     await recovery.clear();
   }

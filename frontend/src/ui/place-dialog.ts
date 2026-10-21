@@ -98,7 +98,7 @@ class PlaceDialog extends Dialog {
     setDisabled(this.layers, link);
     setText(this.count, s.pages.length > 1 ? `${p?.label ?? ''} of ${s.pages.length}` : p?.label ?? '');
     let text = '';
-    if (s.kind === 'pdf') text = link ? 'Link keeps the page as a high-resolution picture that formpth draws again when the file changes.' : 'Embed turns the page into editable paths, type and images in a group.';
+    if (s.kind === 'pdf') text = link ? 'Link keeps the page as a high-resolution picture that formpath draws again when the file changes.' : 'Embed turns the page into editable paths, type and images in a group.';
     else if (s.kind === 'psd') text = link ? 'A linked Photoshop file is placed as one flattened picture.' : this.layers.value === 'layers' ? 'Each pixel layer becomes an image, with its name, opacity and blend mode. Groups stay groups.' : 'The merged image is placed as a single picture.';
     else text = link ? 'The picture stays linked to its file.' : 'The picture is embedded in the document.';
     setText(this.note, `${s.note ? `${s.note} ` : ''}${text}${s.canLink || s.ok !== 'Place' ? '' : ` ${s.linkHint || 'File > Place Linked keeps it linked to its file.'}`}`);

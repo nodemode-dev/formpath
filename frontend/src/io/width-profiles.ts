@@ -1,7 +1,7 @@
 import { CUSTOM_WIDTH_PROFILES, normalizeWidthPoints, WIDTH_PROFILES } from '../engine/effects';
 import type { WidthPoint } from '../engine/types';
 
-const KEY = 'formpth.widthProfiles';
+const KEY = 'formpath.widthProfiles';
 const listeners = new Set<() => void>();
 
 const persist = (): void => { try { localStorage.setItem(KEY, JSON.stringify(CUSTOM_WIDTH_PROFILES)); } catch { } };
