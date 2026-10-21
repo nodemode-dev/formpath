@@ -2,6 +2,22 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.48.0 · 2026-10-21
+
+The project is renamed from formpth to formpath.
+
+### Changed
+
+- Every name, file, folder, script, module, skill pack, MCP tool prefix (`mcp__formpath`), environment variable (`FORMPATH_*`), storage key and translation now says formpath: `./formpath`, `formpath.bat`, `backend/formpath_engine.py`, `frontend/src/styles/formpath.css`, `assets/formpath_icon.*`, `.claude/skills/formpath-skillset` and `formpath-harness`.
+- The desktop identifier is `ai.nodemode.formpath` and the update endpoint is `nodemode-ai/formpath`.
+- The `.fpth` project extension is unchanged, so existing projects still open.
+
+### Upgrading
+
+- Rename any `FORMPTH_*` variables in your `.env` to `FORMPATH_*`.
+- Preferences and panel layout saved in the browser under the old name start fresh, and the desktop app keeps its data under the new identifier.
+- Re-add the MCP server in other agents as `formpath` if they were set up by hand.
+
 ## 0.47.0 · 2026-10-16
 
 Plan v0.10.0 phase 43, second part: the rest of the defects the seventh audit found.
