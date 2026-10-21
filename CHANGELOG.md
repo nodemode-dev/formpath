@@ -8,7 +8,7 @@ Plan v0.10.0 phase 43, second part: the rest of the defects the seventh audit fo
 
 ### Added
 
-- Adobe RGB (1998) compatible and Display P3 working spaces, built by formpth from their published definitions.
+- Adobe RGB (1998) compatible and Display P3 working spaces, built by formpath from their published definitions.
 - View > Proof Setup presets: Working CMYK, each installed CMYK profile, Monitor RGB.
 - The Effect Gallery groups its filters in folders (Artistic, Brush Strokes, Distort, Sketch, Stylize, Texture), includes the vector Distort and Stylize effects, and stacks several effect layers as one effect.
 - Asset Export settings per asset, with several assets edited at once; Collect for Export in the canvas context menu.
@@ -111,7 +111,7 @@ Plan v0.8.0 phase 38: modern Illustrator files.
 
 ### Known gaps
 
-- Placed symbol instances and art, pattern and scatter brushes on strokes come in expanded, as do live effects formpth has no equivalent for; opacity masks are dropped.
+- Placed symbol instances and art, pattern and scatter brushes on strokes come in expanded, as do live effects formpath has no equivalent for; opacity masks are dropped.
 
 ## 0.40.0 · 2026-10-16
 
@@ -166,7 +166,7 @@ Plan v0.7.0 phase 33: files.
 
 ### Added
 
-- SVG import: pattern fills and strokes, masks, blur, drop shadow and glow filters as live effects, markers, styled tspans and text on a path; formpth's own SVG round-trips without its native copy.
+- SVG import: pattern fills and strokes, masks, blur, drop shadow and glow filters as live effects, markers, styled tspans and text on a path; formpath's own SVG round-trips without its native copy.
 - EPS import brings in images (image, colorimage, imagemask) with the common PostScript filters.
 - PNG, JPEG, WebP and TIFF embed the document ICC profile (Embed ICC Profile in Export); CMYK TIFF converts through the document profile.
 - Separations print as vector plates; the Ink Manager turns inks off, converts spots to process and aliases spots.
@@ -218,8 +218,8 @@ Plan v0.6.0 phase 30: printing, import and 3D.
 
 ### Added
 
-- File > Print: paper and orientation, fit, percent or tiled scaling, printer's marks and bleed, composite or separations, colour handling by formpth or the printer, live page preview.
-- Proofing uses the display profile the engine detects (colord, X11, ColorSync, Windows, or FORMPTH_DISPLAY_PROFILE); Preserve CMYK Numbers works.
+- File > Print: paper and orientation, fit, percent or tiled scaling, printer's marks and bleed, composite or separations, colour handling by formpath or the printer, live page preview.
+- Proofing uses the display profile the engine detects (colord, X11, ColorSync, Windows, or FORMPATH_DISPLAY_PROFILE); Preserve CMYK Numbers works.
 - PDF import: soft masks, image masks, mesh shadings, tiling patterns, and encrypted files (Standard handler R2 to R6) with a password prompt; `open_file` takes `password`.
 - `.ai` files saved without PDF compatibility open, including AI9 private data compressed with Deflate or ZStandard.
 - 3D: Inflate and Map Art under ray tracing.
@@ -254,7 +254,7 @@ Plan v0.6.0 phase 28: the five Partial rows, first pass.
 
 ### Added
 
-- Colour management on LittleCMS: Edit > Color Settings, Assign Profile, Convert to Profile; View > Proof Setup and Proof Colors; installed, system and loaded ICC profiles; formpth Generic CMYK when no press profile is loaded. MCP `list_color_profiles`, `set_color_settings`, `convert_to_profile`, `proof_colors`. 92 MCP tools.
+- Colour management on LittleCMS: Edit > Color Settings, Assign Profile, Convert to Profile; View > Proof Setup and Proof Colors; installed, system and loaded ICC profiles; formpath Generic CMYK when no press profile is loaded. MCP `list_color_profiles`, `set_color_settings`, `convert_to_profile`, `proof_colors`. 92 MCP tools.
 - PDF export writes live, searchable type with embedded font subsets (fontTools); PDF/X-4 with the CMYK profile as the output intent (`export_file` `pdf_standard`).
 - Export > Illustrator (.ai): PDF-compatible, every artboard a page, reopens fully editable.
 - DWG opens through the ODA File Converter or LibreDWG's dwg2dxf when installed, in the window and through `open_file`.
@@ -277,7 +277,7 @@ The re-grade, and the rows it found short.
 
 ### Fixed
 
-- Package copies fonts formpth bundles as well as installed ones.
+- Package copies fonts formpath bundles as well as installed ones.
 - Document Setup is one undo step.
 - The preference to show the side column as icons in a narrow window now does so.
 
@@ -296,7 +296,7 @@ Output, and the home screen fixed.
 - File > Package... collects the document, linked images and fonts into a folder with a report. Window > Document Info.
 - View > Overprint Preview and Window > Separations Preview (process and spot plates).
 - Edit > Spelling > Auto Spell Check; Find Similar Fonts in the Character panel; Create Swatch Info; Smooth... with an amount; Simplify shows the original outline while previewing.
-- Hand-written descriptions and Use when sentences for agents on the most used commands; `./formpth counts --commands --check`; `./formpth i18n prune` and `untranslated`.
+- Hand-written descriptions and Use when sentences for agents on the most used commands; `./formpath counts --commands --check`; `./formpath i18n prune` and `untranslated`.
 
 ### Fixed
 
@@ -338,7 +338,7 @@ The interface in 26 languages.
 ### Added
 
 - Preferences > Interface > Language: English (the default) and 25 more, from Spanish and Brazilian Portuguese to Japanese, Chinese, Korean, Thai and Vietnamese, using Illustrator's localized terms. The window reloads in the chosen language and shows it from the first frame; document content, layer names, the terminal and chat replies stay as typed.
-- `./formpth i18n extract|check|missing|export|import` to harvest the interface's strings, check every language and review one through CSV.
+- `./formpath i18n extract|check|missing|export|import` to harvest the interface's strings, check every language and review one through CSV.
 
 ## 0.26.0 · 2026-10-15
 
@@ -346,9 +346,9 @@ The agent inside the window, the command catalogue, a one-run desktop build and 
 
 ### Added
 
-- Terminal dock (Window > Terminal): real shells over engine PTYs, a Claude Code button that runs the person's own `claude` connected to formpth's tools without the outside-agent question, a Chat tab that answers through Claude Code in plain words, Restart, Hide and an ask bar that adds the document and selection as context.
-- `./formpth claude` and `formpth.bat claude`: Claude Code in the current terminal with formpth's MCP server attached.
-- The command catalogue: 649 menu commands and tools with group, menu path, description, parameters, risky and enabled state, mirrored to the engine. MCP `describe_command` and `run_commands` (one undo step); `list_commands` filters by group and word; `run_command` takes parameters. `GET` and `POST /api/commands`, and `./formpth cli list|describe|run`.
+- Terminal dock (Window > Terminal): real shells over engine PTYs, a Claude Code button that runs the person's own `claude` connected to formpath's tools without the outside-agent question, a Chat tab that answers through Claude Code in plain words, Restart, Hide and an ask bar that adds the document and selection as context.
+- `./formpath claude` and `formpath.bat claude`: Claude Code in the current terminal with formpath's MCP server attached.
+- The command catalogue: 649 menu commands and tools with group, menu path, description, parameters, risky and enabled state, mirrored to the engine. MCP `describe_command` and `run_commands` (one undo step); `list_commands` filters by group and word; `run_command` takes parameters. `GET` and `POST /api/commands`, and `./formpath cli list|describe|run`.
 - `build_app` and `build_app.bat`: install, build the window, freeze the engine and bundle the desktop app in one run; DMG and Applications install on macOS, a `.deb` on Linux.
 - Live Corners on any path: per-point Round, Inverted Round or Chamfer corners with absolute or relative radius, Direct Selection widgets with drag, Alt-click and double-click, a red limit preview, Object > Path > Corners... and Expand Corners; drawn the same on the canvas, in SVG and in PDF.
 
@@ -363,7 +363,7 @@ Files and generation. Every one of the 76 parity rows is built; an independent a
 ### Added
 
 - DXF: open, place and drop ASCII DXF from R12 to 2018 (lines, polylines with arcs, circles, ellipses, splines, text and MTEXT, hatches, solids, dimensions, blocks and attributes, layers with colours and lineweights) with DXF Import Options; export AutoCAD 2000 or R12 with units, scale and type as text or outlines.
-- EPS: Level 3 export per artboard in RGB or CMYK with real gradient shadings; formpth's own EPS reopens editable, and other EPS opens through a PostScript path reader. DWG is refused with a message to convert to DXF.
+- EPS: Level 3 export per artboard in RGB or CMYK with real gradient shadings; formpath's own EPS reopens editable, and other EPS opens through a PostScript path reader. DWG is refused with a message to convert to DXF.
 - Generative Shape Fill, Generate Patterns and Retype panels, running only on the model set for the Assistant and disabled until one is set. Model SVG is cleaned of scripts, images, event handlers and links before import.
 - Retype matches outlined type to installed fonts by letter shape without a model, and reads text in images with a model that reads images; Preferences > Plugins has "The model reads images".
 - MCP tools `generative_shape_fill`, `generate_patterns` and `retype`; EPS and DXF in open, place and export. 84 tools.
@@ -420,7 +420,7 @@ Data: graphs, variables and data merge, and Actions with Batch. Parity is 65 of 
 
 - Nine graph tools (Shift+G): column, stacked column, bar, stacked bar, line, area, scatter, pie and radar, as live graphs. The Graph Data window takes typing, pasting from a spreadsheet and CSV, with transpose and Switch X/Y. Graph Type covers the options and combined graphs; column and marker designs; series styles survive data edits; scaling redraws the graph.
 - Window > Variables: text, image, visibility and graph variables bound to objects; data sets captured, updated and stepped through live; CSV and JSON import; Export Variations as PNG, SVG, PDF or `.fpth` per data set.
-- Actions record dialog values, transforms including tool drags, drawn shapes, fills, strokes, opacity and graphic styles; per-step and modal toggles, stops, editing, reordering and duplicating; sets saved as `.fpaction` files in `~/Formpth/Actions`, with a Default Actions set.
+- Actions record dialog values, transforms including tool drags, drawn shapes, fills, strokes, opacity and graphic styles; per-step and modal toggles, stops, editing, reordering and duplicating; sets saved as `.fpaction` files in `~/Formpath/Actions`, with a Default Actions set.
 - File > Automate > Batch: run an action over a folder of `.fpth`, SVG and PDF files or over the document's data sets, with a log.
 - History: New Document from State and History Options with the undo limit.
 - MCP tools `graph`, `variables` and `actions`. 75 tools.
@@ -489,7 +489,7 @@ Honest parity and the first gap release. Parity is now graded on the full 76-row
 
 ### Fixed
 
-- The agent bridge accepts calls only from the formpth window that holds its session secret, on the app's own origin; a missing consent answer counts as not allowed.
+- The agent bridge accepts calls only from the formpath window that holds its session secret, on the app's own origin; a missing consent answer counts as not allowed.
 - Plugin frames have no network access, and the app embeds no other frames.
 - Knockout Group, the Within, Along and Across stroke gradient buttons, Vertical Type and Type on a Path Flip no longer only store a value.
 
@@ -630,7 +630,7 @@ The application and the harness.
 ### Added
 
 - The application controller: native and in-window menus, the command palette, keyboard shortcuts, workspaces (Essentials, Essentials Classic, Painting, Typography, Layout, Web) and document tabs wiring every subsystem together.
-- The `formpth-harness` skill pack for agents drawing through MCP, and `formpth-skillset` for agents changing formpth's code; `.mcp.json`, Codex and Cursor configs, `CLAUDE.md` and `AGENTS.md`.
+- The `formpath-harness` skill pack for agents drawing through MCP, and `formpath-skillset` for agents changing formpath's code; `.mcp.json`, Codex and Cursor configs, `CLAUDE.md` and `AGENTS.md`.
 - CI: typecheck and build, the engine self-check and boot probe, the skill sync check, and desktop builds for macOS (Apple silicon and Intel), Windows and Linux.
 - README, the parity scorecard in `docs/PARITY.md`, the wiki under `.docs/wiki`, and the living HASHOUT logs.
 
@@ -652,7 +652,7 @@ Files.
 ### Added
 
 - `.fpth` projects: a versioned manifest with the document and its images, saved to the engine's library with conflict copies, or to disk.
-- SVG import and export with gradients, clipping, masks, text and symbols; PDF export with a formpth stream so a saved PDF opens back as live artwork.
+- SVG import and export with gradients, clipping, masks, text and symbols; PDF export with a formpath stream so a saved PDF opens back as live artwork.
 - PNG, JPEG and WebP export at any scale; Export for Screens across artboards and assets with suffixes and formats; image trace with presets, thresholds and colour counts.
 - The home screen with recent projects, Preferences, and the New Document, Open, Export, Settings, Shortcuts and About dialogs.
 
@@ -716,7 +716,7 @@ Scaffold.
 
 ### Added
 
-- The `formpth` and `formpth.bat` dispatchers, one-command installs, and one setup script per task with a `.bat` twin, including `./formpth mcp` and `./formpth agents install|sync`.
+- The `formpath` and `formpath.bat` dispatchers, one-command installs, and one setup script per task with a `.bat` twin, including `./formpath mcp` and `./formpath agents install|sync`.
 - The engine service on 127.0.0.1:8230: the `.fpth` project library with conflict copies, the installed-fonts service, file writes for agents, the MCP endpoint with its tool catalogue and the bridge to the window, the assistant's language model, plugins and sending to NodeMode.
 - The frontend toolchain (TypeScript 7, Vite 8 on port 5230 bound to localhost) and the formvis shell base renamed: tokens and component styles, themes, dialogs, menus with native menus on macOS, the dock and panel groups, icons, toasts and the error log.
 - The Tauri 2 desktop shell: splash, the engine sidecar on a free loopback port, `.fpth` association, the updater, and the app icon.

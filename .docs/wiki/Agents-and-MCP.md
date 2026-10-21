@@ -1,20 +1,20 @@
 # Agents and MCP
 
-formpth's engine serves an MCP endpoint at `POST /mcp` (stateless JSON-RPC). `./formpth mcp` is a stdio bridge to it for Claude Code, Codex, Cursor and other clients, and starts the engine when it is not running.
+formpath's engine serves an MCP endpoint at `POST /mcp` (stateless JSON-RPC). `./formpath mcp` is a stdio bridge to it for Claude Code, Codex, Cursor and other clients, and starts the engine when it is not running.
 
 ```text
-agent -> ./formpth mcp (stdio) -> POST /mcp -> window long-poll POST /api/mcp/bridge/next -> AgentBridge.run() -> engine
+agent -> ./formpath mcp (stdio) -> POST /mcp -> window long-poll POST /api/mcp/bridge/next -> AgentBridge.run() -> engine
 ```
 
-The tool runs in the open formpth window, against the same engine a person uses, so every change is one undo step and shows on the canvas. The first call asks the person once, in the window, to allow outside agents (Preferences > Plugins keeps the choice).
+The tool runs in the open formpath window, against the same engine a person uses, so every change is one undo step and shows on the canvas. The first call asks the person once, in the window, to allow outside agents (Preferences > Plugins keeps the choice).
 
-The window side of the bridge is private to the formpth window. On load the window asks `POST /api/mcp/bridge/session` for a secret, which the engine gives only to a request whose Origin is formpth's own page (the Vite dev and preview origins on 5230 and 5231, or the engine's own loopback origin, which is also the desktop app's main window). Every bridge call (`next`, `result`, `stop`) is a POST carrying the secret in `X-Formpth-Bridge` from that Origin; anything else is refused with 403, a GET of `next` with 405. Only the window holding the newest secret receives queued calls, and a result is accepted only from the window the call was handed to. `POST /mcp` itself is unchanged and needs no secret.
+The window side of the bridge is private to the formpath window. On load the window asks `POST /api/mcp/bridge/session` for a secret, which the engine gives only to a request whose Origin is formpath's own page (the Vite dev and preview origins on 5230 and 5231, or the engine's own loopback origin, which is also the desktop app's main window). Every bridge call (`next`, `result`, `stop`) is a POST carrying the secret in `X-Formpath-Bridge` from that Origin; anything else is refused with 403, a GET of `next` with 405. Only the window holding the newest secret receives queued calls, and a result is accepted only from the window the call was handed to. `POST /mcp` itself is unchanged and needs no secret.
 
 ## Setup
 
-- In this repository, `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` already point at `./formpth mcp`.
-- From anywhere else: `./formpth agents install` adds the server and the `formpth-harness` skill for Claude Code, Codex and Cursor.
-- After changing `backend/app/routers/mcp.py`: `./formpth agents sync` regenerates the skill's `references/tools.md` and mirrors it to `.agents/skills`.
+- In this repository, `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` already point at `./formpath mcp`.
+- From anywhere else: `./formpath agents install` adds the server and the `formpath-harness` skill for Claude Code, Codex and Cursor.
+- After changing `backend/app/routers/mcp.py`: `./formpath agents sync` regenerates the skill's `references/tools.md` and mirrors it to `.agents/skills`.
 
 ## Tools
 

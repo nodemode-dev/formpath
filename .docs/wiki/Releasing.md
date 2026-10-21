@@ -22,7 +22,7 @@ Builds work without them (unsigned, no updater artifacts); each group switches o
 Generate it on your own machine and keep the private key out of the repository:
 
 ```bash
-cd frontend && npx tauri signer generate -w ~/.tauri/formpth.key
+cd frontend && npx tauri signer generate -w ~/.tauri/formpath.key
 ```
 
 Put the private key in `TAURI_SIGNING_PRIVATE_KEY` and the printed public key in `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`. Until the public key is there, the app skips update checks.

@@ -1,6 +1,6 @@
 # Third-party notices
 
-formpth is licensed under the Apache License 2.0 (see `LICENSE`). It includes or depends on the following works.
+formpath is licensed under the Apache License 2.0 (see `LICENSE`). It includes or depends on the following works.
 
 ## Included in this repository
 
@@ -13,7 +13,7 @@ formpth is licensed under the Apache License 2.0 (see `LICENSE`). It includes or
 | `link`, `unlink`, `pilcrow`, `moveSel`, `maximize` and `smartObject` icons from Lucide (its `link`, `pilcrow`, `move`, `maximize-2` and `square-square`; `unlink` is `link` with a slash added), Copyright (c) Lucide Contributors 2022, portions Copyright (c) Cole Bemis 2013-2022 as part of Feather (MIT) | ISC, text below | `frontend/src/ui/icons.ts` |
 | Tauri sidecar shell template (tauri-compiler-skill) | MIT | `src-tauri/src/main.rs` |
 
-The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app icon (`assets/formpth_icon.svg`) and the brand mark are drawn for this project.
+The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app icon (`assets/formpath_icon.svg`) and the brand mark are drawn for this project.
 
 ## Distributed with the app
 
@@ -57,4 +57,4 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ## Trademarks
 
-Adobe and Illustrator are trademarks of Adobe Inc. formpth is not affiliated with or endorsed by Adobe. The names are used only to describe compatibility and the parity measurement; no Adobe asset, preset, icon or file format specification is included.
+Adobe and Illustrator are trademarks of Adobe Inc. formpath is not affiliated with or endorsed by Adobe. The names are used only to describe compatibility and the parity measurement; no Adobe asset, preset, icon or file format specification is included.

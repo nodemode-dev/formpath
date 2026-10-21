@@ -13,4 +13,4 @@
 | `plugins` | installed plugin scripts |
 | `nodemode` | sending artwork to a NodeMode canvas |
 
-`backend/.env` (never committed; `.env.example` is the template) sets `FORMPTH_HOST`, `FORMPTH_PORT`, `FORMPTH_DATA_DIR`, `FORMPTH_CORS_ORIGINS` and `FORMPTH_DIST`.
+`backend/.env` (never committed; `.env.example` is the template) sets `FORMPATH_HOST`, `FORMPATH_PORT`, `FORMPATH_DATA_DIR`, `FORMPATH_CORS_ORIGINS` and `FORMPATH_DIST`.

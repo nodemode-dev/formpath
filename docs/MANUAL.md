@@ -1,9 +1,9 @@
-# formpth manual
+# formpath manual
 
-formpth is a vector illustration editor: artboards, layers, paths, live shapes, type, gradients, effects and
+formpath is a vector illustration editor: artboards, layers, paths, live shapes, type, gradients, effects and
 export for print and screens. It runs in the browser or as a desktop app, with an engine on your computer for the
 work a browser cannot do alone (the project library, fonts installed on the system, sending to other apps, the
-assistant and the agent server). This manual is also in the app: Help > formpth Help (F1), where you can search it and
+assistant and the agent server). This manual is also in the app: Help > formpath Help (F1), where you can search it and
 ask it questions.
 
 ## Getting started
@@ -11,13 +11,13 @@ ask it questions.
 - New document: File > New (Ctrl+N) picks a preset (Letter, A4, A3, Tabloid, Web, Mobile, Post, Story, Icon and
   more) or a custom size in points, pixels, millimetres, centimetres, inches or picas, with any number of artboards
   and RGB or CMYK colour.
-- Open: File > Open lists the projects saved in the library; Open File opens formpth projects (.fpth), SVG and SVGZ,
+- Open: File > Open lists the projects saved in the library; Open File opens formpath projects (.fpth), SVG and SVGZ,
   any PDF and PDF-compatible .ai file, and images (PNG, JPEG, WebP, GIF) as a new document. Dropping files on the
   stage opens them; dropping them while a document is open places them.
 - Save: File > Save (Ctrl+S) keeps everything editable in the library as a .fpth project; Save As names a copy;
   Download Project writes the .fpth to your downloads.
-- The documents open when formpth closes reopen at the next start (Preferences > File Handling). With that off, only
-  unsaved work is kept, and formpth offers to recover it after a crash.
+- The documents open when formpath closes reopen at the next start (Preferences > File Handling). With that off, only
+  unsaved work is kept, and formpath offers to recover it after a crash.
 - Canvas: an artboard can be up to 163,440 pt (2,270 inches) on each side. Raster export above 16,384 pixels a side
   offers tiles; PDF pages that large are written with a scale (UserUnit) that PDF readers understand.
 - Helpers: View > Help Bar shows the active tool, its shortcut and a hint under the canvas; Window > Contextual Task
@@ -25,9 +25,9 @@ ask it questions.
   Group, Align and Unite for several objects). Preferences > Selection & Snapping sets the anchor point and handle size
   and the Smart Guides angles; Preferences > General has Show generative features, which hides every generative
   command and panel when off.
-- Language: Preferences > Interface > Language switches the interface to one of 26 languages; formpth reloads in it.
+- Language: Preferences > Interface > Language switches the interface to one of 26 languages; formpath reloads in it.
   Your documents, layer names and typed text are never translated.
-- The engine: if a message says it is offline, start it with `./formpth boot` (or `formpth.bat boot` on Windows).
+- The engine: if a message says it is offline, start it with `./formpath boot` (or `formpath.bat boot` on Windows).
 
 ## The workspace
 
@@ -297,7 +297,7 @@ ask it questions.
   Patterns (Basic Lines, Dots and Grids), Nature (Seasons), Color Books (Spot Inks) and User Defined in the Swatch
   Library panel. Click a swatch to add it to the document and paint with it, a folder to add the group, or the plus
   to add them all. Save Swatch Library as ASE writes an Adobe Swatch Exchange file of the solid colours with their
-  groups and process, global or spot type; Save Swatch Library as formpth writes a .fpth holding every swatch,
+  groups and process, global or spot type; Save Swatch Library as formpath writes a .fpth holding every swatch,
   gradient and pattern. Saved libraries appear under User Defined; Other Library opens any .ase or .fpth (File > Open
   also takes .ase).
 - Spot colours print on their own plate: PDF export writes each spot swatch as a Separation colour space named after
@@ -346,7 +346,7 @@ ask it questions.
 - Generate Patterns (Object > Pattern > Generate Patterns) turns a prompt into pattern swatches with the language
   model set for the Assistant. Choose the colours (a preset such as Warm, Cool, Pastel, Earth, Vivid, Monochrome,
   Forest or Ocean, the document's swatches, the colours of the selection, or up to 12 of your own as hex values),
-  the density (1 very sparse to 5 packed) and how many variations. The model draws a seamless SVG tile; formpth
+  the density (1 very sparse to 5 packed) and how many variations. The model draws a seamless SVG tile; formpath
   imports it as editable paths, snaps every colour to your palette and shows each tile repeated. Click a tile to
   leave it out, then Save to Swatches makes a pattern swatch of each (Fill the selection with the first fills the
   selected objects); edit them like any pattern. One undo step.
@@ -461,7 +461,7 @@ ask it questions.
 - Hyphenation and justification: Hyphenate breaks words at line ends in area type. Paragraph > Hyphenation (or Type >
   Hyphenation) sets Words longer than, After first, Before last, Hyphen limit (lines in a row, 0 for no limit),
   Hyphenation zone (for unjustified type, the gap at a line's end below which no word is broken) and Hyphenate
-  capitalized words. formpth breaks English words with its own syllable rules (prefixes and suffixes, consonant
+  capitalized words. formpath breaks English words with its own syllable rules (prefixes and suffixes, consonant
   clusters, double letters), not a dictionary, so unusual words can break in places a dictionary would not.
   Justification sets word spacing, letter spacing and glyph scaling as minimum, desired and maximum percentages
   and how a line holding a single word is set. Desired values apply to every alignment; justified lines may
@@ -504,9 +504,9 @@ ask it questions.
   the type that uses one, and replaces a family and style everywhere.
 - Retype (Type > Retype) finds the font of outlined type or of text in a placed image and makes it live type again.
   Select the outlines (or an image, plus a rectangle over it to read only that region) and click Find Fonts. If your
-  language model reads images, it reads the words and describes the typeface first; without it, formpth reads
+  language model reads images, it reads the words and describes the typeface first; without it, formpath reads
   outlined letters by comparing each letter's shape with the letters of every installed font, and for an image you
-  type the words in the panel. formpth then sets the text in each installed font, compares the shapes with the
+  type the words in the panel. formpath then sets the text in each installed font, compares the shapes with the
   original and lists the ten closest with a score. Pick one and Apply (or double-click it): the outlines become live
   type in that font, sized, tracked and placed over the original; for an image the type goes on top, and Keep the
   image decides whether the image stays. One undo step.
@@ -584,7 +584,7 @@ ask it questions.
   the result with outlines, outlines, outlines over the image and the image. Expand makes ordinary paths; Release
   brings the image back.
 - Links: File > Place Linked keeps a placed image linked to its file instead of copying it in. With the engine
-  service (the desktop app or ./formpth boot) you choose the file by its path, and formpth stores the path, size and
+  service (the desktop app or ./formpath boot) you choose the file by its path, and formpath stores the path, size and
   time; in a browser without the engine, Chromium browsers link through a file you pick (the browser asks once for
   permission), and other browsers can only embed, which the Links panel says. The Links panel lists every placed
   image as Linked, Modified (the file changed on disk: checked when the window regains focus and every few seconds)
@@ -612,11 +612,11 @@ ask it questions.
   {series, categories, values}). JSON is an array of objects keyed by variable name, or {"dataSets": [...]}.
 - Export Variations writes one PNG, SVG or PDF per data set (optionally a .fpth too), named from the data set or a
   text variable, into a folder through the engine or as a zip download; problems go into
-  formpth-data-merge-errors.txt. Variables and data sets are saved in .fpth files.
+  formpath-data-merge-errors.txt. Variables and data sets are saved in .fpth files.
 
 ## Actions, batch and history
 
-- Actions (Window > Actions) keeps action sets in the engine's library (the Actions folder in your formpth data
+- Actions (Window > Actions) keeps action sets in the engine's library (the Actions folder in your formpath data
   folder), one .fpaction file per set. New Action starts recording; menu commands are recorded with the values you
   give their dialogs (Move, Rotate, Scale, Offset Path, effects and every other dialog), and drags with the
   Selection, Rotate, Reflect, Scale and Shear tools, shapes you draw, fill and stroke changes, opacity and graphic
@@ -630,7 +630,7 @@ ask it questions.
 - Play runs the picked action from the picked step. Transforms play about the centre of whatever is selected.
 - Batch (in the Actions panel or File > Automate) plays an action on every .fpth, SVG and PDF file in a folder, or
   on each data set of the open document, and saves each result (as the source format, .fpth, SVG, PDF or PNG) into a
-  folder through the engine or a zip download, with formpth-batch-log.txt listing what ran and what failed. Choose
+  folder through the engine or a zip download, with formpath-batch-log.txt listing what ran and what failed. Choose
   to stop at the first error or log it and go on.
 - History (Window > History) jumps to any recent state. New Document (the page button, or File > Automate > New
   Document from History State) opens the current state as a new document; History Options sets how many undo steps
@@ -672,11 +672,11 @@ ask it questions.
   suffixes and formats (PNG, JPEG, WebP, SVG, PDF), and Export writes each asset cropped to its art in one ZIP.
 - SVG export keeps gradients, patterns, clipping, masks, symbols (as symbol and use; an instance with overrides or
   9-slice scaling gets its own symbol) and type (as text or outlined), and can embed
-  formpth's editing data so formpth reopens it fully editable. SVG import reads paths, shapes, transforms, CSS
+  formpath's editing data so formpath reopens it fully editable. SVG import reads paths, shapes, transforms, CSS
   classes, gradients, clip paths, use and symbol, text and embedded images, with top-level groups becoming layers.
 - PDF export writes every artboard as a page with real vector paths, gradients as smooth shadings, transparency and
   blend modes, outlined type and images; effects a PDF cannot express are rasterised at the document's resolution.
-  It carries formpth's editing data, so formpth reopens its own PDFs fully editable.
+  It carries formpath's editing data, so formpath reopens its own PDFs fully editable.
 - Opening any other PDF, or an .ai file saved with PDF compatibility, gives one artboard per page with its art as
   editable paths, gradients, clipping groups, images and point type. Type takes the installed font of the same name,
   or the nearest of Helvetica, Times New Roman and Courier New; a message lists the substitutions and anything left
@@ -685,8 +685,8 @@ ask it questions.
   artboards gives a ZIP with one EPS each), in RGB or CMYK. Paths, gradients (as smooth shadings), clipping, type
   (as outlines) and images (with their transparency as a mask) are vector or image data; transparency, blend modes,
   masks, patterns and raster effects are flattened into an image of the object over what lies below it. With
-  Preserve formpth editing on, the EPS carries the document and formpth reopens it fully editable. Opening any other
-  EPS runs its PostScript in formpth's own interpreter and keeps the paths, fills, strokes, clipping, gradients and
+  Preserve formpath editing on, the EPS carries the document and formpath reopens it fully editable. Opening any other
+  EPS runs its PostScript in formpath's own interpreter and keeps the paths, fills, strokes, clipping, gradients and
   simple text; images inside it are left out and the message says so.
 - DXF: File > Open (or Place) reads ASCII DXF from AutoCAD R12 to 2018. The DXF Import Options choose the layout
   (model space or a paper space layout), the scale (the drawing's units, one drawing unit as millimetres, inches and
@@ -701,16 +701,16 @@ ask it questions.
   stays a DXF layer.
 - DWG from AutoCAD 2000 to 2018 (R2000, R2004, R2007, R2010, R2013 and R2018) opens directly. Other releases open
   through a converter installed on your computer: the free ODA File Converter or LibreDWG's dwg2dxf
-  (set FORMPTH_ODA_CONVERTER to the converter's path if it is somewhere unusual). Without one, formpth says where to
+  (set FORMPATH_ODA_CONVERTER to the converter's path if it is somewhere unusual). Without one, formpath says where to
   get it.
 - File > Export > AutoCAD Drawing (DWG) writes an AutoCAD 2000 binary drawing (layers, lines, arcs, circles, ellipses,
   polylines, splines, text and hatches) with the same units, scale, text and lineweight choices as DXF.
 - PDF export writes type as live, searchable text with the fonts embedded (Preserve text as live text); type with
-  gradients, effects or a font formpth cannot read is outlined. Standard: PDF/X-1a, X-3 and X-4 embed the document's CMYK
+  gradients, effects or a font formpath cannot read is outlined. Standard: PDF/X-1a, X-3 and X-4 embed the document's CMYK
   profile as the output intent (X-1a and X-3 flatten transparency), PDF/A-2b embeds sRGB. The PDF options sit in four
   tabs: General (standard and Create Acrobat Layers), Marks and Bleeds, Compression (line art, ZIP or JPEG images,
   downsampling) and Security (AES-256 open and permissions passwords, printing, changes, copying, accessibility);
-  the standards cannot be combined with passwords. Illustrator (.ai) writes a PDF-compatible .ai that reopens fully editable in formpth, and also carries Illustrator's own data (layers, sublayers, groups, clipping, gradients, spot colours, symbols, artboards and images, with type as outlines) for Illustrator to read.
+  the standards cannot be combined with passwords. Illustrator (.ai) writes a PDF-compatible .ai that reopens fully editable in formpath, and also carries Illustrator's own data (layers, sublayers, groups, clipping, gradients, spot colours, symbols, artboards and images, with type as outlines) for Illustrator to read.
 - Edit > Color Settings picks the RGB and CMYK working profiles (installed, system or loaded .icc files), the
   rendering intent and black point compensation; Edit > Assign Profile and Convert to Profile change the document's
   profile; View > Proof Setup and Proof Colors preview the art on the chosen press profile.
@@ -723,7 +723,7 @@ ask it questions.
 - In Chrome or Edge, File > Place keeps a link to the file, so placed images, PDFs, Photoshop and TIFF files can stay
   linked; other browsers embed them, and the Place dialog says so first.
 - File > Print (Ctrl+P) sets paper, orientation, scaling (fit, percent or tiled pages), printer's marks and bleed,
-  composite or separations, and whether formpth or the printer manages colour; the printer itself is chosen in the
+  composite or separations, and whether formpath or the printer manages colour; the printer itself is chosen in the
   system print dialog that opens next. Proof Setup shows the display profile proofing uses; Preserve CMYK Numbers
   shows CMYK colours as the press would print their numbers.
 - Opening files: encrypted PDFs ask for their password; `.ai` files saved without PDF compatibility (Illustrator 3
@@ -731,7 +731,7 @@ ask it questions.
   effects are named in the message as left out.
 - A PDF-compatible .ai from a modern Illustrator opens through Illustrator's own data: its layers and sublayers,
   object names, every artboard, images, gradients and graphic styles, with objects that wear a drop shadow, outer
-  glow, feather, round corners, offset path or transform effect kept editable with the effect live. formpth compares
+  glow, feather, round corners, offset path or transform effect kept editable with the effect live. formpath compares
   the result with the file's PDF page first; when they do not match, the file opens through its PDF page and the
   message says so. Placing an .ai embedded uses the same data.
 - File > Send to NodeMode sends the active artboard as an image to a NodeMode canvas (Preferences > Plugins sets its
@@ -741,22 +741,22 @@ ask it questions.
 
 - Window > Terminal (Alt+Shift+Ctrl+T, Opt+Shift+Cmd+T on a Mac) opens the dock at the bottom of the window: real
   shells on this computer, one tab each. The agent button (Alt+Shift+Ctrl+C) starts Claude Code, your own sign-in,
-  in a tab already connected to formpth's tools, so it can draw in the open document without asking you first. The
+  in a tab already connected to formpath's tools, so it can draw in the open document without asking you first. The
   speech bubble (Alt+Shift+Ctrl+H) opens Chat, which runs Claude Code behind a plain conversation; From Claude
   Code... brings a tab's conversation into Chat and Open in Claude Code moves a Chat conversation to a tab. The line
   under the dock sends a message to the active Chat or Claude Code tab with the document name and selection added.
   Claude Code must be installed (https://claude.com/claude-code) and signed in once.
-- `./formpth cli list [word] [--group Object]`, `./formpth cli describe <id>` and `./formpth cli run <id> key=value`
+- `./formpath cli list [word] [--group Object]`, `./formpath cli describe <id>` and `./formpath cli run <id> key=value`
   read and run the command catalogue (every menu command and tool) on the open window; agents use the same catalogue
   through `list_commands`, `describe_command`, `run_command` and `run_commands`.
 
-- formpth runs an MCP server so agents (Claude Code, Claude Desktop, Codex, Cursor and others) can draw in the open
+- formpath runs an MCP server so agents (Claude Code, Claude Desktop, Codex, Cursor and others) can draw in the open
   window. Turn it on in Preferences > Plugins (Allow agents); the first call asks your permission. Connect with
-  `./formpth mcp` (a stdio bridge) or the HTTP endpoint the engine prints at boot.
-- Only the formpth window hands agent requests to your document. When it opens it gets a private session from the
-  engine, which gives one only to formpth's own page, and every exchange between the window and the engine carries
+  `./formpath mcp` (a stdio bridge) or the HTTP endpoint the engine prints at boot.
+- Only the formpath window hands agent requests to your document. When it opens it gets a private session from the
+  engine, which gives one only to formpath's own page, and every exchange between the window and the engine carries
   it; a web page or another program cannot pose as the window, answer the permission question or read the requests.
-  If you open formpth in a second window or tab, the newest one takes the agents' requests; click back into an
+  If you open formpath in a second window or tab, the newest one takes the agents' requests; click back into an
   earlier one to hand them back to it.
 - The tools cover everything here: reading the document (get_document, get_image, get_svg, get_object), drawing
   (draw_shape, draw_path, add_text, edit_anchors), paint (set_paint, set_stroke, set_appearance, add_swatch,
@@ -777,7 +777,7 @@ ask it questions.
   repeats motifs crossing the tile edge and checks the edges. Generative Recolor (in Edit > Edit Colors > Recolor Artwork): describe a mood such as sunset over the
   ocean and pick one of the palettes to recolour the selection.
 - Generative Shape Fill (Object > Generative > Shape Fill), Generate Patterns (Object > Pattern), Retype
-  (Type > Retype), Text to Vector Graphic and Generative Recolor run on that same model; formpth calls no other service. When no model is set, their panels say so
+  (Type > Retype), Text to Vector Graphic and Generative Recolor run on that same model; formpath calls no other service. When no model is set, their panels say so
   and the Generate buttons stay off. Turn on The model reads images in Preferences > Plugins when your model accepts
   images (Retype then reads text in pictures). The tools generative_shape_fill, generate_patterns and retype give
   agents the same features.
@@ -799,7 +799,7 @@ ask it questions.
 
 ## Troubleshooting
 
-- The engine is offline: run `./formpth boot`, or `./formpth doctor` to see what is missing.
-- A font is missing: formpth draws the type with Inter until the font is available; install it, then restart the
+- The engine is offline: run `./formpath boot`, or `./formpath doctor` to see what is missing.
+- A font is missing: formpath draws the type with Inter until the font is available; install it, then restart the
   engine so it finds the new font.
 - Something broke: Help > Copy Error Log copies the recent errors to paste into a report.
