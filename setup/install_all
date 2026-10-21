@@ -2,7 +2,7 @@
 set -e
 source "$(dirname "$0")/lib.sh"
 fp_say "installing the engine service"
-( cd "$FORMPTH_ROOT/backend" && ./oc_install )
+( cd "$FORMPATH_ROOT/backend" && ./oc_install )
 fp_say "installing the frontend"
-( cd "$FORMPTH_ROOT/frontend" && ./oc_install )
-fp_say "done. Boot with ./formpth"
+( cd "$FORMPATH_ROOT/frontend" && ./oc_install )
+fp_say "done. Boot with ./formpath"

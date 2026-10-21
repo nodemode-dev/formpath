@@ -18,7 +18,7 @@ def selfcheck() -> int:
     from app import __version__
     from app.routers.mcp import TOOLS
 
-    info["formpth"] = __version__
+    info["formpath"] = __version__
     info["mcp_tools"] = len(TOOLS)
     info["dist_bundled"] = os.path.isdir(os.path.join(resource_dir(), "frontend_dist"))
     print(json.dumps(info))
@@ -31,13 +31,13 @@ def main() -> int:
         return selfcheck()
     bundled = os.path.join(resource_dir(), "frontend_dist")
     if os.path.isdir(bundled):
-        os.environ.setdefault("FORMPTH_DIST", bundled)
-    os.environ.setdefault("FORMPTH_DESKTOP", "1")
+        os.environ.setdefault("FORMPATH_DIST", bundled)
+    os.environ.setdefault("FORMPATH_DESKTOP", "1")
     import uvicorn
 
     from app.main import app as fastapi_app
 
-    port = int(os.environ.get("FORMPTH_PORT", "0") or 0)
+    port = int(os.environ.get("FORMPATH_PORT", "0") or 0)
     uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
     return 0
 

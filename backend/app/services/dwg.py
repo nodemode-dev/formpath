@@ -20,7 +20,7 @@ class DwgError(Exception):
 
 
 def _oda() -> str | None:
-    env = os.environ.get("FORMPTH_ODA_CONVERTER", "").strip()
+    env = os.environ.get("FORMPATH_ODA_CONVERTER", "").strip()
     if env and Path(env).is_file():
         return env
     found = shutil.which("ODAFileConverter")
@@ -60,10 +60,10 @@ def to_dxf(data: bytes) -> tuple[str, str]:
         raise DwgError(
             "Opening DWG needs a DWG converter on this computer: the free ODA File Converter "
             "(opendesign.com/guestfiles/oda_file_converter) or LibreDWG's dwg2dxf. Install either, "
-            "or set FORMPTH_ODA_CONVERTER to the converter's path, then open the drawing again."
+            "or set FORMPATH_ODA_CONVERTER to the converter's path, then open the drawing again."
         )
     errors = []
-    with tempfile.TemporaryDirectory(prefix="formpth-dwg-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="formpath-dwg-") as tmp:
         src_dir, out_dir = Path(tmp, "in"), Path(tmp, "out")
         src_dir.mkdir()
         out_dir.mkdir()

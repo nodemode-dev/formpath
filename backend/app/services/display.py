@@ -133,7 +133,7 @@ def _windows() -> tuple[bytes | None, str]:
 
 
 def _detect() -> tuple[bytes | None, str]:
-    forced = os.environ.get("FORMPTH_DISPLAY_PROFILE", "").strip()
+    forced = os.environ.get("FORMPATH_DISPLAY_PROFILE", "").strip()
     if forced:
         data = _read(forced)
         return (data, "env") if data else (None, "")
@@ -148,7 +148,7 @@ def _detect() -> tuple[bytes | None, str]:
 def detect(refresh: bool = False) -> tuple[bytes | None, str]:
     global _cache
     now = time.monotonic()
-    forced = os.environ.get("FORMPTH_DISPLAY_PROFILE", "")
+    forced = os.environ.get("FORMPATH_DISPLAY_PROFILE", "")
     if _cache and not refresh and now - _cache[0] < TTL and _cache[2] == forced:
         return _cache[3], _cache[1] or ""
     data, via = _detect()

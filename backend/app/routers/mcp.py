@@ -16,11 +16,11 @@ from app import __version__
 from app.core import config
 from app.services import claude_code
 
-_inapp: contextvars.ContextVar[bool] = contextvars.ContextVar("formpth_inapp", default=False)
+_inapp: contextvars.ContextVar[bool] = contextvars.ContextVar("formpath_inapp", default=False)
 
 router = APIRouter()
 VERSIONS = ["2026-07-28", "2025-11-25"]
-INSTRUCTIONS = ("formpth is a vector illustration editor (an Illustrator alternative) running on this computer; these tools draw "
+INSTRUCTIONS = ("formpath is a vector illustration editor (an Illustrator alternative) running on this computer; these tools draw "
                 "and edit what is open in its window. Coordinates are document points (1/72 inch), x to the right and y down, "
                 "origin at the first artboard's top-left corner. Start with get_document (artboards, layers, object ids) and "
                 "get_image (to see the art); check your work with get_image after each change. Every change is one undoable step. "
@@ -28,7 +28,7 @@ INSTRUCTIONS = ("formpth is a vector illustration editor (an Illustrator alterna
                 "take absolute paths. run_command reaches any menu command by id (list_commands lists them). "
                 "For the decision tree, get the draw_strategy prompt.")
 
-STRATEGY = """How to make vector art in formpth with these tools.
+STRATEGY = """How to make vector art in formpath with these tools.
 
 1. Look first. get_document gives the artboards (their x, y, width, height in points), the layers and every object with its id, kind, bounds and paint. get_image shows the art; call it after each change to check before going on.
 2. Plan in points. A US Letter artboard is 612 by 792, A4 is 595 by 842, a 1080 px square is 1080 by 1080 when the document's units are px. Place things relative to the artboard's x and y.
@@ -41,7 +41,7 @@ STRATEGY = """How to make vector art in formpth with these tools.
 9. Deliver: save_project writes a .fpth that keeps everything editable; export_file writes SVG, PDF, EPS, DXF, DWG, PNG, GIF, BMP, PSD, TIFF, JPEG or WebP of an artboard, the whole document or the selection. Paths are absolute and the folder must exist.
 10. Mistakes: undo steps back one change at a time. If a tool fails, its message says what to do next: follow it and retry.
 """
-PROMPTS = [{"name": "draw_strategy", "title": "How to draw in formpth", "description": "The decision tree for formpth's tools: looking, planning in points, shapes and curves, paint, Pathfinder, type, arranging, live effects and delivery.", "arguments": []}]
+PROMPTS = [{"name": "draw_strategy", "title": "How to draw in formpath", "description": "The decision tree for formpath's tools: looking, planning in points, shapes and curves, paint, Pathfinder, type, arranging, live effects and delivery.", "arguments": []}]
 
 
 def _tool(name: str, description: str, props: dict, required: list[str] | None = None, **hints: bool) -> dict:
@@ -74,15 +74,15 @@ TOOLS = [
     _tool("get_object", "One object in full: its kind, geometry (anchors with their handles for paths), appearance stack (fills, strokes, effects), transform, text and children.", {"id": _ID}, ["id"], read=True, idempotent=True),
     _tool("new_document", "Opens a new document with one or more artboards.", {"width": {"type": "number", "minimum": 1}, "height": {"type": "number", "minimum": 1}, "units": {"type": "string", "enum": ["pt", "px", "mm", "cm", "in", "pc"], "default": "pt"},
           "name": {"type": "string", "maxLength": 120}, "color_mode": {"type": "string", "enum": ["rgb", "cmyk"], "default": "rgb"}, "artboards": {"type": "integer", "minimum": 1, "maximum": 100, "default": 1}}, ["width", "height"]),
-    _tool("open_file", "Opens a file at an absolute path: a formpth project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpth EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF, TIFF, or a Photoshop PSD with its layers as objects) as a new document sized from the image at its resolution, or a 3D model (.obj with its .mtl and textures from the same folder, .glb or .gltf) as a new document holding an editable 3D object (see three_d). DWG (R2000, R2004, R2010, R2013 and R2018) is read by formpth itself; other DWG versions open through a DWG converter on this computer (ODA File Converter or LibreDWG dwg2dxf), and without one the call says how to get it.",
+    _tool("open_file", "Opens a file at an absolute path: a formpath project (.fpth), SVG, PDF or a PDF-compatible .ai, EPS (formpath EPS reopens fully editable; other EPS is read by running its PostScript paths), an AutoCAD DXF (ASCII, R12 to 2018), or an image (PNG, JPEG, WebP, GIF, TIFF, or a Photoshop PSD with its layers as objects) as a new document sized from the image at its resolution, or a 3D model (.obj with its .mtl and textures from the same folder, .glb or .gltf) as a new document holding an editable 3D object (see three_d). DWG (R2000, R2004, R2010, R2013 and R2018) is read by formpath itself; other DWG versions open through a DWG converter on this computer (ODA File Converter or LibreDWG dwg2dxf), and without one the call says how to get it.",
           {"path": {"type": "string"}, "units": {"type": "string", "enum": ["mm", "cm", "m", "km", "in", "ft", "yd", "mi", "pt", "px"], "description": "DXF only: what one drawing unit is; default the file's own units, else mm for metric drawings and in otherwise."},
            "drawing_scale": {"type": "number", "exclusiveMinimum": 0, "default": 1, "description": "DXF only: multiplies the drawing (0.01 opens a 1:100 plan at one hundredth size)."}, "layout": {"type": "string", "default": "Model", "description": "DXF only: Model, or the name of a paper space layout."},
            "merge_layers": {"type": "boolean", "default": False, "description": "DXF only: put every DXF layer into one layer."}, "fit_artboard": {"type": "boolean", "default": False, "description": "DXF only: scale the drawing to fit a Letter artboard instead of using its units."},
            "password": {"type": "string", "description": "PDF only: the password of an encrypted PDF. The empty user password is tried automatically; without a password the window asks for one."}}, ["path"]),
-    _tool("save_project", "Saves the document as a formpth project (.fpth) at an absolute path; everything stays editable.", {"path": {"type": "string"}}, ["path"]),
-    _tool("export_file", "Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpth), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .dwg (AutoCAD 2000 binary drawing, layers kept, written natively), .png (with colors it writes an indexed PNG-8), .jpg, .webp, .gif (2 to 256 colors, transparency with a matte, optional interlace), .bmp (24-bit or 32-bit with alpha), .psd (flattened composite plus layers, RGB or CMYK: with psd_edit, layers and groups become Photoshop groups, point and area type become editable type layers and filled paths become shape layers; otherwise one pixel layer per top-level layer) or .tiff. Every raster format takes ppi (any resolution) and anti_aliasing.", {"path": {"type": "string"}, "scope": {"type": "string", "enum": ["artboard", "document", "selection", "all_artboards"], "default": "artboard"},
+    _tool("save_project", "Saves the document as a formpath project (.fpth) at an absolute path; everything stays editable.", {"path": {"type": "string"}}, ["path"]),
+    _tool("export_file", "Exports the art to an absolute path; the extension chooses the format: .svg, .pdf (every artboard a page), .ai (PDF-compatible Illustrator file, every artboard a page, reopens fully editable in formpath), .eps (Level 3 PostScript; all_artboards gives a zip of one EPS per artboard), .dxf (AutoCAD 2000 or R12, layers kept), .dwg (AutoCAD 2000 binary drawing, layers kept, written natively), .png (with colors it writes an indexed PNG-8), .jpg, .webp, .gif (2 to 256 colors, transparency with a matte, optional interlace), .bmp (24-bit or 32-bit with alpha), .psd (flattened composite plus layers, RGB or CMYK: with psd_edit, layers and groups become Photoshop groups, point and area type become editable type layers and filled paths become shape layers; otherwise one pixel layer per top-level layer) or .tiff. Every raster format takes ppi (any resolution) and anti_aliasing.", {"path": {"type": "string"}, "scope": {"type": "string", "enum": ["artboard", "document", "selection", "all_artboards"], "default": "artboard"},
           "artboard": {"type": "integer", "minimum": 0, "default": 0}, "scale": {"type": "number", "minimum": 0.1, "maximum": 16, "default": 1}, "quality": {"type": "number", "minimum": 0.1, "maximum": 1, "default": 0.92}, "transparent": {"type": "boolean", "default": False}, "outline_text": {"type": "boolean", "default": False, "description": "SVG, DXF and DWG: type as outlines (DXF and DWG write TEXT otherwise)."}, "live_text": {"type": "boolean", "default": True, "description": "PDF only: write type as selectable, searchable text with the fonts embedded (default). Type with gradients, effects, 3D or an unavailable font is outlined either way; false outlines all type."},
-          "pdf_standard": {"type": "string", "enum": ["none", "x1a", "x3", "x4", "a2b"], "default": "none", "description": "PDF only: x4 writes PDF/X-4 with the document CMYK profile (set_color_settings) as the output intent, XMP metadata and a document ID, and leaves out formpth editing data. x1a writes PDF/X-1a:2001 (version 1.3, CMYK and spot colours only, transparency flattened into pictures) and x3 writes PDF/X-3:2002 (version 1.3, flattened, RGB stays tagged); both fail with a message naming what could not be flattened. a2b writes PDF/A-2b (sRGB output intent, fonts embedded, XMP identification). The standards cannot be combined with passwords or permissions, and x1a and x3 cannot have layers."},
+          "pdf_standard": {"type": "string", "enum": ["none", "x1a", "x3", "x4", "a2b"], "default": "none", "description": "PDF only: x4 writes PDF/X-4 with the document CMYK profile (set_color_settings) as the output intent, XMP metadata and a document ID, and leaves out formpath editing data. x1a writes PDF/X-1a:2001 (version 1.3, CMYK and spot colours only, transparency flattened into pictures) and x3 writes PDF/X-3:2002 (version 1.3, flattened, RGB stays tagged); both fail with a message naming what could not be flattened. a2b writes PDF/A-2b (sRGB output intent, fonts embedded, XMP identification). The standards cannot be combined with passwords or permissions, and x1a and x3 cannot have layers."},
           "pdf_layers": {"type": "boolean", "default": False, "description": "PDF only: Create Acrobat Layers from Top-Level Layers. Each layer becomes an optional content group in the Layers panel (hidden layers start off); needs pdf_standard none, x4 or a2b."},
           "open_password": {"type": "string", "description": "PDF only: password asked when the file is opened (AES-256, revision 6). Cannot be combined with a PDF/X or PDF/A standard."},
           "permissions_password": {"type": "string", "description": "PDF only: password that unlocks the permissions; required when permissions restricts anything. The file also opens with it."},
@@ -107,7 +107,7 @@ TOOLS = [
           "psd_layers": {"type": "boolean", "default": True, "description": "PSD only: write one pixel layer per top-level layer (name, visibility and opacity kept) under the flattened composite; false writes the composite only. The color parameter (rgb or cmyk) chooses 8-bit RGB or CMYK."},
           "psd_edit": {"type": "boolean", "default": True, "description": "PSD only, with psd_layers: maximum editability. Sublayers and groups become Photoshop layer groups, point and area type become editable type layers, filled paths become shape layers (solid or gradient fill, vector mask, vector stroke); anything Photoshop cannot hold that way (effects, type on a path, patterns, images) stays a pixel layer. false writes one pixel layer per top-level layer."}}, ["path"]),
     _tool("switch_document", "Makes another open document the active one, by its index or name from get_document.", {"index": {"type": "integer", "minimum": 0}, "name": {"type": "string"}}),
-    _tool("place_image", "Places an image file (absolute path: PNG, JPEG, WebP, GIF, or SVG, EPS and DXF as editable vector groups) into the document at x, y, embedded; width scales it in proportion. A 3D model (.obj, with the .mtl and texture images beside it, .glb or .gltf) is placed as a live 3D object, width points across, that three_d turns, lights and ray traces and that exports to SVG and PDF as vector faces. A PDF or an Illustrator file (.pdf, .ai) places one page (page, 1-based, default 1) cropped to the crop box (bounding, art, crop, trim, bleed or media; default bounding, the bounds of the page's art): embedded it becomes an editable group of paths, type and images, width points across; with link true it stays a linked high-resolution picture of the page, not vector. A Photoshop file (.psd) places flattened (psd_import flatten) or with each pixel layer as an image object in groups (psd_import objects, the default, with names, opacity, visibility and blend modes); a TIFF (.tif, .tiff; page picks one of several) is placed at its resolution. With link true (raster images, PDF, AI, PSD and TIFF) the image stays linked to its file: formpth reads it again when it changes (see the links tool).", {"path": {"type": "string"}, "x": _NUM, "y": _NUM, "width": {"type": "number", "minimum": 1}, "link": {"type": "boolean", "default": False}, "page": {"type": "integer", "minimum": 1, "description": "PDF, AI or TIFF page, 1-based."}, "crop": {"type": "string", "enum": ["bounding", "art", "crop", "trim", "bleed", "media"], "description": "PDF or AI Crop To box; default bounding."}, "psd_import": {"type": "string", "enum": ["objects", "flatten"], "description": "PSD: layers as objects (default) or one flattened image."}}, ["path"]),
+    _tool("place_image", "Places an image file (absolute path: PNG, JPEG, WebP, GIF, or SVG, EPS and DXF as editable vector groups) into the document at x, y, embedded; width scales it in proportion. A 3D model (.obj, with the .mtl and texture images beside it, .glb or .gltf) is placed as a live 3D object, width points across, that three_d turns, lights and ray traces and that exports to SVG and PDF as vector faces. A PDF or an Illustrator file (.pdf, .ai) places one page (page, 1-based, default 1) cropped to the crop box (bounding, art, crop, trim, bleed or media; default bounding, the bounds of the page's art): embedded it becomes an editable group of paths, type and images, width points across; with link true it stays a linked high-resolution picture of the page, not vector. A Photoshop file (.psd) places flattened (psd_import flatten) or with each pixel layer as an image object in groups (psd_import objects, the default, with names, opacity, visibility and blend modes); a TIFF (.tif, .tiff; page picks one of several) is placed at its resolution. With link true (raster images, PDF, AI, PSD and TIFF) the image stays linked to its file: formpath reads it again when it changes (see the links tool).", {"path": {"type": "string"}, "x": _NUM, "y": _NUM, "width": {"type": "number", "minimum": 1}, "link": {"type": "boolean", "default": False}, "page": {"type": "integer", "minimum": 1, "description": "PDF, AI or TIFF page, 1-based."}, "crop": {"type": "string", "enum": ["bounding", "art", "crop", "trim", "bleed", "media"], "description": "PDF or AI Crop To box; default bounding."}, "psd_import": {"type": "string", "enum": ["objects", "flatten"], "description": "PSD: layers as objects (default) or one flattened image."}}, ["path"]),
     _tool("links", "Placed images and their files, as in the Links panel. list gives every placed image with its state (linked, modified when the file changed on disk, missing, embedded) and path. relink points the image in id at another file (path; all true relinks every image sharing its link); relink_folder relinks every missing link to the file of the same name in folder; update reads a modified file again (id, or all true); embed copies a linked image into the document; unembed writes an embedded image to a file next to the project and links it.", {
           "action": {"type": "string", "enum": ["list", "relink", "relink_folder", "update", "embed", "unembed"], "default": "list"}, "id": {"type": "string", "description": "A placed image."}, "path": {"type": "string", "description": "Absolute path of an image file (relink)."},
           "folder": {"type": "string", "description": "Absolute folder path (relink_folder)."}, "all": {"type": "boolean", "default": False}}),
@@ -271,7 +271,7 @@ TOOLS = [
     _tool("generative_shape_fill", "Generative Shape Fill: asks the language model set for the Assistant (Preferences > Plugins) for vector art that fills a closed path, imports it as editable paths, fits it to the shape and clips it there. The result is a clipping group whose last child is the original shape, placed as one undo step. The model's SVG is validated and repaired like text_to_vector and the result lists what was dropped. shape_strength, detail, style_preset, style_reference, effects, color_tone and palette steer it; the palette is enforced after generation. Fails with a clear message when no model is set.",
           {"id": {"type": "string", "description": "A closed path or compound path; the selection when left out."}, "prompt": {"type": "string", "maxLength": 2000, "description": "What to draw; optional."}, "shape_strength": {"type": "number", "minimum": 0, "maximum": 100, "default": 50, "description": "Shape Strength, how strictly the art follows the outline: 0 asks the model to compose freely and the shape only clips it (clip only); 34 to 66 follows the outline loosely; 67 to 100 asks the model to fit the silhouette, stretches the art onto the shape's bounds and then clips. The result is always a clip group."},
            "detail": _GEN_DETAIL, "variations": {"type": "integer", "minimum": 1, "maximum": 3, "default": 1, "description": "How many to ask for; one is applied."}, "pick": {"type": "integer", "minimum": 0, "maximum": 2, "description": "Which variation to apply; default the first that worked."}, **_GEN}, open=True),
-    _tool("generate_patterns", "Text to Pattern: asks the language model set for the Assistant for seamless vector pattern tiles from a prompt and saves each as a pattern swatch made by formpth's pattern engine (editable with edit_pattern). tile_size sets the tile, seamless repeats motifs that cross a tile edge and checks the edges, layout, h_spacing and v_spacing go to the pattern swatch, and detail, style_preset, style_reference, effects, color_tone and palette steer the art (the palette is enforced afterwards; colors and preset still work). Fails with a clear message when no model is set.",
+    _tool("generate_patterns", "Text to Pattern: asks the language model set for the Assistant for seamless vector pattern tiles from a prompt and saves each as a pattern swatch made by formpath's pattern engine (editable with edit_pattern). tile_size sets the tile, seamless repeats motifs that cross a tile edge and checks the edges, layout, h_spacing and v_spacing go to the pattern swatch, and detail, style_preset, style_reference, effects, color_tone and palette steer the art (the palette is enforced afterwards; colors and preset still work). Fails with a clear message when no model is set.",
           {"prompt": {"type": "string", "maxLength": 2000}, "colors": {"type": "array", "items": {"type": "string"}, "maxItems": 12, "description": "Up to 12 colours (#rrggbb and the like); the tiles use only these."}, "preset": {"type": "string", "enum": ["any", "warm", "cool", "pastel", "earth", "vivid", "mono", "forest", "ocean", "document"], "description": "A colour preset when colors is left out; document takes the document's colour swatches."},
            "density": {"type": "integer", "minimum": 1, "maximum": 5, "default": 3, "description": "1 very sparse to 5 packed."}, "variations": {"type": "integer", "minimum": 1, "maximum": 4, "default": 2}, "tile_size": {"type": "number", "minimum": 12, "maximum": 720, "default": 96, "description": "Tile width and height in points."},
            "name": {"type": "string", "maxLength": 60, "description": "Base name of the swatches."}, "fill_selection": {"type": "boolean", "default": False, "description": "Fill the objects in ids (or the selection) with the first pattern."}, "ids": _IDS,
@@ -287,7 +287,7 @@ TOOLS = [
     _tool("retype", "Retype: identifies the font of outlined type or of text in a placed image and lists the 10 closest installed fonts, compared by rendering the text in each and measuring shape overlap. A model that reads images (set in Preferences > Plugins) reads the text first; without one, outlined type is read by matching letter shapes and for images text must be given. apply true replaces the outlines (or covers the image) with live text in the chosen font, sized and placed to match.",
           {"ids": _IDS, "text": {"type": "string", "maxLength": 500, "description": "The words, when known; skips reading them."}, "region": {"type": "object", "properties": {"x": _NUM, "y": _NUM, "width": _NUM, "height": _NUM}, "description": "Images only: the part to read, in document points."},
            "apply": {"type": "boolean", "default": False}, "pick": {"type": "integer", "minimum": 0, "maximum": 9, "default": 0, "description": "Which listed match to apply."}, "font": {"type": "string", "description": "Apply this installed family instead of a listed match."}, "style": {"type": "string"}, "keep_image": {"type": "boolean", "default": True, "description": "Images: keep the image under the new text."}}, open=True),
-    _tool("list_color_profiles", "Lists the ICC colour profiles formpth can use (the built-in sRGB, the generated formpth Generic CMYK, profiles loaded in Color Settings and those installed on this computer) with name, colour space (RGB, CMYK, GRAY), class and id, and the colour settings of the open document: working spaces, rendering intent, black point compensation and whether Proof Colors is on, plus the display profile Proof Colors uses as the monitor when this computer reports one. Call this before set_color_settings or convert_to_profile to get the exact names.", {}, read=True, idempotent=True),
+    _tool("list_color_profiles", "Lists the ICC colour profiles formpath can use (the built-in sRGB, the generated formpath Generic CMYK, profiles loaded in Color Settings and those installed on this computer) with name, colour space (RGB, CMYK, GRAY), class and id, and the colour settings of the open document: working spaces, rendering intent, black point compensation and whether Proof Colors is on, plus the display profile Proof Colors uses as the monitor when this computer reports one. Call this before set_color_settings or convert_to_profile to get the exact names.", {}, read=True, idempotent=True),
     _tool("set_color_settings", "Color Settings for the open document, like Edit > Color Settings: the RGB working space, the CMYK working space (CMYK colours then display and convert through that ICC profile; none returns to the simple formula), the rendering intent and black point compensation. Colour numbers do not change; only how they are interpreted. One undo step. Only the fields given change.",
           {"rgb_profile": {"type": "string", "description": "A name or id from list_color_profiles."}, "cmyk_profile": {"type": "string", "description": "A name or id from list_color_profiles, or none for the formula."},
            "intent": {"type": "string", "enum": ["perceptual", "relative_colorimetric", "saturation", "absolute_colorimetric"], "description": "Default relative_colorimetric."}, "bpc": {"type": "boolean", "description": "Black point compensation; default true."}}, idempotent=True),
@@ -374,11 +374,11 @@ TOOLS = [
            "plane": {"type": "string", "enum": ["left", "right", "horizontal"], "description": "draw, place and attach: the plane (default the active plane)."}, "shape": {"type": "string", "enum": ["rectangle", "rounded_rectangle", "ellipse", "polygon", "star", "line", "rectangular_grid", "polar_grid"], "default": "rectangle"},
            "x": _NUM, "y": _NUM, "width": {"type": "number", "minimum": 0.01}, "height": {"type": "number", "minimum": 0.01}, "scale": {"type": "number", "minimum": 0.001, "default": 1}, "offset": {"type": "number", "description": "place and draw: the plane's offset (default the grid plane's)."},
            "dx": _NUM, "dy": _NUM, "dn": _NUM, "sx": {"type": "number", "description": "Scale factor, 1 keeps the size."}, "sy": _NUM, "copy": {"type": "boolean", "default": False}}),
-    _tool("actions", "Actions: list the action sets and their recorded steps (menu commands with their dialog values, transforms, drawing and paint), play one on the open document, or batch it over every .fpth, SVG and PDF file in a folder (or over the document's data sets), saving each result into out with a log file formpth-batch-log.txt.",
+    _tool("actions", "Actions: list the action sets and their recorded steps (menu commands with their dialog values, transforms, drawing and paint), play one on the open document, or batch it over every .fpth, SVG and PDF file in a folder (or over the document's data sets), saving each result into out with a log file formpath-batch-log.txt.",
           {"action": {"type": "string", "enum": ["list", "play", "batch"], "default": "list"}, "set": {"type": "string", "description": "The action set's name, when two sets have an action with the same name."}, "name": {"type": "string", "description": "The action's name."},
            "source": {"type": "string", "enum": ["folder", "data_sets"], "default": "folder"}, "folder": {"type": "string", "description": "batch: absolute path of the folder of files to process."}, "kinds": {"type": "array", "items": {"type": "string", "enum": ["fpth", "svg", "pdf", "ai"]}, "description": "batch: which files to take (default fpth, svg and pdf)."},
            "out": {"type": "string", "description": "batch: absolute path of the folder for the results and the log (created if missing)."}, "format": {"type": "string", "enum": ["same", "fpth", "svg", "pdf", "png"], "default": "same"}, "name_variable": {"type": "string", "description": "batch over data sets: a text variable that names each file."}, "stop_on_error": {"type": "boolean", "default": False}}),
-    _tool("list_commands", "The command catalogue: every menu command and tool formpth has, with its id, menu path, shortcut, parameters, whether Undo can reverse it and whether it can run now. Filter by group (a menu name such as Object or Effect, or Tools) and by a word.",
+    _tool("list_commands", "The command catalogue: every menu command and tool formpath has, with its id, menu path, shortcut, parameters, whether Undo can reverse it and whether it can run now. Filter by group (a menu name such as Object or Effect, or Tools) and by a word.",
           {"filter": {"type": "string", "description": "a word in the id, label or menu path"}, "group": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 400}}, read=True, idempotent=True),
     _tool("describe_command", "One catalogue entry in full: menu path, description, parameters and whether it can run now; suggests close ids when the id is unknown.", {"id": {"type": "string"}}, ["id"], read=True, idempotent=True),
     _tool("run_command", "Runs any menu command or tool by its id (see list_commands), on the selection, as the menu would. Ids starting tool. make that tool active.",
@@ -402,7 +402,7 @@ _opened_at = 0.0
 _secret: str | None = None
 _superseded: collections.deque = collections.deque(maxlen=64)
 _delivered: dict[str, str] = {}
-BRIDGE_HEADER = "x-formpth-bridge"
+BRIDGE_HEADER = "x-formpath-bridge"
 
 
 def _event() -> asyncio.Event:
@@ -449,12 +449,12 @@ def _refuse(status: int, text: str) -> Response:
 
 def _bridge_refusal(request: Request, current: bool = True) -> Response | None:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can use the agent bridge.")
+        return _refuse(403, "Only the formpath window can use the agent bridge.")
     held = request.headers.get(BRIDGE_HEADER) or ""
     if not held or not _secret:
-        return _refuse(403, "The agent bridge needs the window's session: reload the formpth window.")
+        return _refuse(403, "The agent bridge needs the window's session: reload the formpath window.")
     if current and not secrets.compare_digest(held, _secret):
-        return _refuse(409 if held in _superseded else 403, "Another formpth window took over the agent bridge.")
+        return _refuse(409 if held in _superseded else 403, "Another formpath window took over the agent bridge.")
     return None
 
 
@@ -476,7 +476,7 @@ def _fail(text: str) -> dict:
 
 def _open_window() -> bool:
     global _opened_at
-    if os.environ.get("FORMPTH_OPEN_WINDOW", "1") == "0" or config.is_desktop() or time.monotonic() - _opened_at < 60:
+    if os.environ.get("FORMPATH_OPEN_WINDOW", "1") == "0" or config.is_desktop() or time.monotonic() - _opened_at < 60:
         return False
     _opened_at = time.monotonic()
     import webbrowser
@@ -514,7 +514,7 @@ def _path(raw, kinds: set, reading: bool) -> Path:
     if not str(raw or "").strip() or not path.is_absolute():
         raise ValueError("Give an absolute path, for example /Users/you/Documents/poster.svg (~ works too).")
     if path.suffix.lower() not in kinds:
-        raise ValueError(f"{path.name}: formpth takes {', '.join(sorted(kinds))} here.")
+        raise ValueError(f"{path.name}: formpath takes {', '.join(sorted(kinds))} here.")
     if reading and not path.is_file():
         raise ValueError(f"There is no file at {path}.")
     if not reading and not path.parent.is_dir():
@@ -525,7 +525,7 @@ def _path(raw, kinds: set, reading: bool) -> Path:
 async def _write(path: Path, out: dict) -> dict:
     data = (out.get("structuredContent") or {}).get("data") if not out.get("isError") else None
     if not data:
-        return out if out.get("isError") else _fail("formpth gave nothing to write.")
+        return out if out.get("isError") else _fail("formpath gave nothing to write.")
     blob = base64.b64decode(data)
     await asyncio.to_thread(path.write_bytes, blob)
     return {"content": [{"type": "text", "text": f"Wrote {path} ({len(blob):,} bytes)."}], "structuredContent": {"path": str(path), "bytes": len(blob)}}
@@ -614,17 +614,17 @@ async def _call(name: str, args: dict) -> dict:
                 if _live():
                     break
         if not _live():
-            return _fail("formpth is not open. Start it with ./formpth boot (or open the formpth app), then retry.")
+            return _fail("formpath is not open. Start it with ./formpath boot (or open the formpath app), then retry.")
     if not _allowed and not _inapp.get():
         if time.monotonic() < _declined_until:
-            return _fail("The person chose not to allow outside agents in formpth just now. Ask them to turn on Allow outside agents (Preferences > Plugins), then retry.")
+            return _fail("The person chose not to allow outside agents in formpath just now. Ask them to turn on Allow outside agents (Preferences > Plugins), then retry.")
         answer = await _ask("__consent__", {}, 180)
         if not (answer or {}).get("allowed"):
             _declined_until = time.monotonic() + 600
-            return _fail("The person did not allow outside agents in formpth. Ask them to allow it (the question in the formpth window, or Preferences > Plugins), then retry.")
+            return _fail("The person did not allow outside agents in formpath. Ask them to allow it (the question in the formpath window, or Preferences > Plugins), then retry.")
         _allowed = True
     out = await _ask(name, args, 600)
-    return out if out is not None else _fail("formpth did not answer in time: it may be busy with a long task. Check the formpth window, then retry.")
+    return out if out is not None else _fail("formpath did not answer in time: it may be busy with a long task. Check the formpath window, then retry.")
 
 
 @router.post("/mcp")
@@ -643,7 +643,7 @@ async def mcp(request: Request) -> Response:
     meta = params.get("_meta") or {}
     version = meta.get("io.modelcontextprotocol/protocolVersion") or request.headers.get("mcp-protocol-version") or "2025-11-25"
     modern = version == "2026-07-28"
-    server = {"name": "formpth", "version": __version__}
+    server = {"name": "formpath", "version": __version__}
     if version not in VERSIONS and method != "initialize":
         out = _err(req_id, -32602, f"Unsupported protocol version {version}; supported: {', '.join(VERSIONS)}")
     elif method == "server/discover":
@@ -672,7 +672,7 @@ async def mcp(request: Request) -> Response:
 async def bridge_session(request: Request) -> Response:
     global _secret
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can open the agent bridge.")
+        return _refuse(403, "Only the formpath window can open the agent bridge.")
     if _secret:
         _superseded.append(_secret)
     _secret = secrets.token_urlsafe(32)
@@ -681,7 +681,7 @@ async def bridge_session(request: Request) -> Response:
 
 @router.get("/api/mcp/bridge/next")
 async def bridge_next_get() -> Response:
-    return _refuse(405, "The agent bridge takes POST requests from the formpth window only.")
+    return _refuse(405, "The agent bridge takes POST requests from the formpath window only.")
 
 
 async def _body(request: Request) -> dict:
@@ -744,7 +744,7 @@ async def bridge_result(request: Request) -> Response:
     _delivered.pop(rid, None)
     fut = _waiting.get(rid)
     if fut and not fut.done():
-        fut.set_result(body.get("result") or {"content": [{"type": "text", "text": "formpth gave no result."}], "isError": True})
+        fut.set_result(body.get("result") or {"content": [{"type": "text", "text": "formpath gave no result."}], "isError": True})
     return Response(content=json.dumps({"ok": True}), media_type="application/json")
 
 
@@ -765,7 +765,7 @@ def _stop() -> None:
         item = _pending.popleft()
         fut = _waiting.get(item["id"])
         if fut and not fut.done():
-            fut.set_result(_fail("Outside agents were turned off in formpth. Ask the person to turn on Allow outside agents (Preferences > Plugins), then retry."))
+            fut.set_result(_fail("Outside agents were turned off in formpath. Ask the person to turn on Allow outside agents (Preferences > Plugins), then retry."))
 
 
 @router.get("/api/mcp/status")

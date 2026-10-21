@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""./formpth agents: drawing in formpth from Claude Code, Codex and Cursor.
+"""./formpath agents: drawing in formpath from Claude Code, Codex and Cursor.
 
   sync [--check]            generate the harness skill's tool reference from the engine's MCP catalogue and mirror the
                             skill from .claude/skills to .agents/skills (Codex, Cursor); --check: exit 1 if drifted
   install [--dry-run] [claude|codex|cursor ...]
-                            set the three up for this user account (all by default): the MCP server (./formpth mcp at
+                            set the three up for this user account (all by default): the MCP server (./formpath mcp at
                             this folder's absolute path) and the harness skill; files backed up before changing;
                             running it again changes nothing
 """
@@ -19,10 +19,10 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-NAME = "formpth-harness"
+NAME = "formpath-harness"
 SKILL = ROOT / ".claude" / "skills" / NAME
 MIRROR = ROOT / ".agents" / "skills" / NAME
-LAUNCH = str(ROOT / ("formpth.bat" if os.name == "nt" else "formpth"))
+LAUNCH = str(ROOT / ("formpath.bat" if os.name == "nt" else "formpath"))
 GROUPS = [
     ("Look", {"get_document", "get_image", "get_svg", "get_object"}),
     ("Files and documents", {"new_document", "open_file", "save_project", "export_file", "switch_document", "place_image", "links", "document_setup"}),
@@ -46,7 +46,7 @@ GROUPS = [
 def tools_reference() -> str:
     sys.path.insert(0, str(ROOT / "backend"))
     from app.routers.mcp import TOOLS
-    out = ["# formpth tools", "", "Generated from the engine's catalogue by `./formpth agents sync`; do not edit by hand.", "", "## Contents", ""]
+    out = ["# formpath tools", "", "Generated from the engine's catalogue by `./formpath agents sync`; do not edit by hand.", "", "## Contents", ""]
     listed = set()
     for title, names in GROUPS:
         here = [t["name"] for t in TOOLS if t["name"] in names]
@@ -78,12 +78,12 @@ def tools_reference() -> str:
 
 
 def commands_reference() -> str | None:
-    path = Path(os.environ.get("FORMPTH_DATA", str(Path.home() / "Formpth"))) / "commands-catalogue.json"
+    path = Path(os.environ.get("FORMPATH_DATA", str(Path.home() / "Formpath"))) / "commands-catalogue.json"
     if not path.exists():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
     entries = data if isinstance(data, list) else data.get("commands", [])
-    out = ["# formpth commands", "", "Generated from the engine's stored catalogue by `./formpth agents sync`; do not edit by hand.", ""]
+    out = ["# formpath commands", "", "Generated from the engine's stored catalogue by `./formpath agents sync`; do not edit by hand.", ""]
     groups: dict = {}
     for e in entries:
         if e.get("kind", "command") == "command":
@@ -125,7 +125,7 @@ def sync(check: bool) -> int:
             shutil.rmtree(MIRROR, ignore_errors=True)
             shutil.copytree(SKILL, MIRROR)
     if check:
-        print("agents: in step" if not drift else "agents: drifted: " + ", ".join(drift) + " (run ./formpth agents sync)")
+        print("agents: in step" if not drift else "agents: drifted: " + ", ".join(drift) + " (run ./formpath agents sync)")
         return 1 if drift else 0
     print("agents: " + ("updated " + ", ".join(drift) if drift else "already in step"))
     return 0
@@ -151,17 +151,17 @@ def install_claude(home: Path, dry: bool, said: list) -> None:
     said.append("Claude Code:")
     claude = shutil.which("claude")
     if claude:
-        have = subprocess.run([claude, "mcp", "get", "formpth"], capture_output=True, text=True)
+        have = subprocess.run([claude, "mcp", "get", "formpath"], capture_output=True, text=True)
         if have.returncode == 0 and LAUNCH in have.stdout:
-            said.append("  MCP server formpth already set (user scope)")
+            said.append("  MCP server formpath already set (user scope)")
         else:
-            said.append(f"  claude mcp add --scope user formpth -- {LAUNCH} mcp")
+            said.append(f"  claude mcp add --scope user formpath -- {LAUNCH} mcp")
             if not dry:
                 if have.returncode == 0:
-                    subprocess.run([claude, "mcp", "remove", "formpth", "--scope", "user"], capture_output=True)
-                subprocess.run([claude, "mcp", "add", "--scope", "user", "formpth", "--", LAUNCH, "mcp"], check=True, capture_output=True)
+                    subprocess.run([claude, "mcp", "remove", "formpath", "--scope", "user"], capture_output=True)
+                subprocess.run([claude, "mcp", "add", "--scope", "user", "formpath", "--", LAUNCH, "mcp"], check=True, capture_output=True)
     else:
-        said.append(f"  the claude command is not installed here; once it is, run: claude mcp add --scope user formpth -- {LAUNCH} mcp")
+        said.append(f"  the claude command is not installed here; once it is, run: claude mcp add --scope user formpath -- {LAUNCH} mcp")
     _copy_skill(home / ".claude" / "skills" / NAME, dry, said)
 
 
@@ -169,13 +169,13 @@ def install_codex(home: Path, dry: bool, said: list) -> None:
     said.append("Codex:")
     cfg = Path(os.environ.get("CODEX_HOME", home / ".codex")) / "config.toml"
     launch = LAUNCH.replace("\\", "\\\\")
-    block = f'[mcp_servers.formpth]\ncommand = "{launch}"\nargs = ["mcp"]\nstartup_timeout_sec = 90\ntool_timeout_sec = 600\n'
+    block = f'[mcp_servers.formpath]\ncommand = "{launch}"\nargs = ["mcp"]\nstartup_timeout_sec = 90\ntool_timeout_sec = 600\n'
     text = cfg.read_text(encoding="utf-8") if cfg.exists() else ""
-    found = re.search(r"(?ms)^\[mcp_servers\.formpth\]\n.*?(?=^\[|\Z)", text)
+    found = re.search(r"(?ms)^\[mcp_servers\.formpath\]\n.*?(?=^\[|\Z)", text)
     if found and found.group(0).strip() == block.strip():
-        said.append(f"  MCP server formpth already in {cfg}")
+        said.append(f"  MCP server formpath already in {cfg}")
     else:
-        said.append(f"  MCP server formpth -> {cfg}")
+        said.append(f"  MCP server formpath -> {cfg}")
         if not dry:
             _backup(cfg, dry)
             cfg.parent.mkdir(parents=True, exist_ok=True)
@@ -189,13 +189,13 @@ def install_cursor(home: Path, dry: bool, said: list) -> None:
     cfg = home / ".cursor" / "mcp.json"
     data = json.loads(cfg.read_text(encoding="utf-8")) if cfg.exists() and cfg.read_text(encoding="utf-8").strip() else {}
     entry = {"command": LAUNCH, "args": ["mcp"]}
-    if data.get("mcpServers", {}).get("formpth") == entry:
-        said.append(f"  MCP server formpth already in {cfg}")
+    if data.get("mcpServers", {}).get("formpath") == entry:
+        said.append(f"  MCP server formpath already in {cfg}")
     else:
-        said.append(f"  MCP server formpth -> {cfg}")
+        said.append(f"  MCP server formpath -> {cfg}")
         if not dry:
             _backup(cfg, dry)
-            data.setdefault("mcpServers", {})["formpth"] = entry
+            data.setdefault("mcpServers", {})["formpath"] = entry
             cfg.parent.mkdir(parents=True, exist_ok=True)
             cfg.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     _copy_skill(home / ".agents" / "skills" / NAME, dry, said)
@@ -218,7 +218,7 @@ def main(argv: list[str]) -> int:
             {"claude": install_claude, "codex": install_codex, "cursor": install_cursor}[w](home, dry, said)
         print(("Would do (dry run):\n" if dry else "") + "\n".join(said))
         if not dry:
-            print("\nRestart the clients. The first drawing asks you once, in the formpth window, to allow outside agents.")
+            print("\nRestart the clients. The first drawing asks you once, in the formpath window, to allow outside agents.")
         return 0
     print(__doc__)
     return 2

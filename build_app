@@ -5,7 +5,7 @@ source setup/lib.sh
 
 usage() {
   cat <<'EOF'
-./build_app            build formpth's desktop app from this folder, start to finish
+./build_app            build formpath's desktop app from this folder, start to finish
   --no-install         macOS: leave the built app where it is instead of copying it to Applications
   --install            Linux: install the built .deb with apt (asks for your password)
   --open               open the app when the build is done
@@ -26,13 +26,13 @@ for arg in "$@"; do
   esac
 done
 
-log="$FORMPTH_ROOT/build_app.log"
+log="$FORMPATH_ROOT/build_app.log"
 : > "$log"
 exec > >(tee -a "$log") 2>&1
-trap 'status=$?; [ $status -eq 0 ] || printf "\n[formpth] the build stopped (exit %s). The full log is %s\n" "$status" "$log"' EXIT
+trap 'status=$?; [ $status -eq 0 ] || printf "\n[formpath] the build stopped (exit %s). The full log is %s\n" "$status" "$log"' EXIT
 
 os="$(fp_os)"
-step() { printf '\n[formpth] == %s\n' "$*"; }
+step() { printf '\n[formpath] == %s\n' "$*"; }
 
 step "checking the tools"
 [ "$os" = macos ] || [ "$os" = linux ] || fp_die "build_app runs on macOS and Linux; on Windows run build_app.bat"
@@ -68,7 +68,7 @@ setup/install_desktop
 if [ "$clean" = 1 ]; then
   step "cleaning earlier builds"
   ( cd src-tauri && cargo clean )
-  rm -rf backend/build/pyinstaller backend/dist-engine src-tauri/binaries/formpth-engine-*
+  rm -rf backend/build/pyinstaller backend/dist-engine src-tauri/binaries/formpath-engine-*
 fi
 fp_rust_fresh
 
@@ -76,7 +76,7 @@ step "building the window"
 setup/build_frontend
 step "freezing the engine into the app's sidecar"
 setup/freeze_backend
-[ -f src-tauri/icons/icon.icns ] || frontend/node_modules/.bin/tauri icon assets/formpth_icon.png -o src-tauri/icons
+[ -f src-tauri/icons/icon.icns ] || frontend/node_modules/.bin/tauri icon assets/formpath_icon.png -o src-tauri/icons
 
 tauri_args=(build)
 case "$os" in
@@ -84,7 +84,7 @@ case "$os" in
     tauri_args+=(--bundles app)
     [ -n "${APPLE_SIGNING_IDENTITY:-}" ] || tauri_args+=(--config '{"bundle":{"macOS":{"signingIdentity":"-"}}}')
     ;;
-  linux) tauri_args+=(--bundles "${FORMPTH_BUNDLES:-deb}") ;;
+  linux) tauri_args+=(--bundles "${FORMPATH_BUNDLES:-deb}") ;;
 esac
 
 step "building the desktop app (the first build compiles several hundred Rust crates)"
@@ -98,21 +98,21 @@ if ! frontend/node_modules/.bin/tauri "${tauri_args[@]}" 2>&1 | tee "$tlog"; the
 fi
 rm -f "$tlog"
 
-bundle="$FORMPTH_ROOT/src-tauri/target/release/bundle"
+bundle="$FORMPATH_ROOT/src-tauri/target/release/bundle"
 version="$("$py" -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' src-tauri/tauri.conf.json)"
 
 if [ "$os" = macos ]; then
-  app="$bundle/macos/formpth.app"
+  app="$bundle/macos/formpath.app"
   [ -d "$app" ] || fp_die "the build finished but $app is missing"
   codesign --verify --deep --strict "$app" 2>/dev/null || fp_say "codesign could not verify the app; it is ad-hoc signed, so macOS may ask once before it opens"
   step "packing the disk image"
   mkdir -p "$bundle/dmg"
-  dmg="$bundle/dmg/formpth_${version}_$(uname -m).dmg"
+  dmg="$bundle/dmg/formpath_${version}_$(uname -m).dmg"
   stage="$(mktemp -d)"
-  ditto "$app" "$stage/formpth.app"
+  ditto "$app" "$stage/formpath.app"
   ln -s /Applications "$stage/Applications"
   rm -f "$dmg"
-  hdiutil create -quiet -volname formpth -srcfolder "$stage" -ov -format UDZO "$dmg"
+  hdiutil create -quiet -volname formpath -srcfolder "$stage" -ov -format UDZO "$dmg"
   rm -rf "$stage"
   fp_say "app: $app"
   fp_say "disk image: $dmg"
@@ -120,14 +120,14 @@ if [ "$os" = macos ]; then
   if [ "$install_app" != no ]; then
     dest=/Applications
     [ -w "$dest" ] || { dest="$HOME/Applications"; mkdir -p "$dest"; }
-    if pgrep -x formpth >/dev/null 2>&1; then
-      osascript -e 'tell application "formpth" to quit' >/dev/null 2>&1 || true
+    if pgrep -x formpath >/dev/null 2>&1; then
+      osascript -e 'tell application "formpath" to quit' >/dev/null 2>&1 || true
       sleep 2
     fi
-    rm -rf "$dest/formpth.app"
-    ditto "$app" "$dest/formpth.app"
-    xattr -dr com.apple.quarantine "$dest/formpth.app" 2>/dev/null || true
-    target_app="$dest/formpth.app"
+    rm -rf "$dest/formpath.app"
+    ditto "$app" "$dest/formpath.app"
+    xattr -dr com.apple.quarantine "$dest/formpath.app" 2>/dev/null || true
+    target_app="$dest/formpath.app"
     fp_say "installed: $target_app"
   fi
   if [ "$open_app" = 1 ]; then open "${target_app:-$app}"; fi
@@ -141,7 +141,7 @@ else
     fp_say "install it with: sudo apt install $deb   (or run ./build_app --install)"
   fi
   if [ "$open_app" = 1 ]; then
-    if [ "$(command -v formpth 2>/dev/null)" = /usr/bin/formpth ]; then nohup /usr/bin/formpth >/dev/null 2>&1 & else "$FORMPTH_ROOT/src-tauri/target/release/formpth" >/dev/null 2>&1 & fi
+    if [ "$(command -v formpath 2>/dev/null)" = /usr/bin/formpath ]; then nohup /usr/bin/formpath >/dev/null 2>&1 & else "$FORMPATH_ROOT/src-tauri/target/release/formpath" >/dev/null 2>&1 & fi
   fi
 fi
 fp_say "done in ${SECONDS}s"

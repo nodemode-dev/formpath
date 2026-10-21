@@ -6,8 +6,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE = os.environ.get("FORMPTH_URL", "http://127.0.0.1:8230").rstrip("/")
-USAGE = """./formpth cli <command>
+BASE = os.environ.get("FORMPATH_URL", "http://127.0.0.1:8230").rstrip("/")
+USAGE = """./formpath cli <command>
 
   list [text] [--group NAME] [--json]   the command catalogue (menu commands and tools), filtered
   describe <id>                          one entry in full: menu path, parameters, whether it can run now
@@ -16,16 +16,16 @@ USAGE = """./formpth cli <command>
   <id> [key=value ...]                   the same as run
 
 Values are read as JSON when they parse (12, true, [1,2], "text") and as text otherwise.
-The formpth window must be open; the first run asks the person to allow outside agents,
-unless this runs in formpth's own terminal dock."""
+The formpath window must be open; the first run asks the person to allow outside agents,
+unless this runs in formpath's own terminal dock."""
 
 
 def call(method: str, path: str, body: dict | None = None) -> dict:
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(BASE + path, data=data, method=method, headers={"Content-Type": "application/json"})
-    token = os.environ.get("FORMPTH_INAPP_TOKEN")
+    token = os.environ.get("FORMPATH_INAPP_TOKEN")
     if token:
-        req.add_header("x-formpth-inapp", token)
+        req.add_header("x-formpath-inapp", token)
     try:
         with urllib.request.urlopen(req, timeout=900) as res:
             return json.loads(res.read() or b"{}")
@@ -37,9 +37,9 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
         if isinstance(detail, dict):
             sugg = detail.get("suggestions") or []
             detail = detail.get("error", "") + (f" Did you mean {', '.join(sugg)}?" if sugg else "")
-        raise SystemExit(f"[formpth] {detail}")
+        raise SystemExit(f"[formpath] {detail}")
     except urllib.error.URLError:
-        raise SystemExit(f"[formpth] the engine at {BASE} is not running; start formpth with ./formpth boot")
+        raise SystemExit(f"[formpath] the engine at {BASE} is not running; start formpath with ./formpath boot")
 
 
 def value(raw: str):
@@ -59,7 +59,7 @@ def params(args: list[str]) -> dict:
             i += 2
             continue
         if "=" not in a:
-            raise SystemExit(f"[formpth] {a} is not key=value")
+            raise SystemExit(f"[formpath] {a} is not key=value")
         k, v = a.split("=", 1)
         out[k] = value(v)
         i += 1
@@ -97,12 +97,12 @@ def main(argv: list[str]) -> int:
         return 0
     if cmd == "describe":
         if not rest:
-            raise SystemExit("[formpth] describe needs an id")
+            raise SystemExit("[formpath] describe needs an id")
         print(json.dumps(call("GET", f"/api/commands/{urllib.parse.quote(rest[0])}"), indent=2))
         return 0
     if cmd == "run":
         if not rest:
-            raise SystemExit("[formpth] run needs an id")
+            raise SystemExit("[formpath] run needs an id")
         cmd, rest = rest[0], rest[1:]
     r = call("POST", f"/api/commands/{urllib.parse.quote(cmd)}", params(rest))
     print(r.get("message") or "done")

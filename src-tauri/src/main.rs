@@ -43,7 +43,7 @@ fn check_for_updates(handle: tauri::AppHandle) {
         let Ok(Some(update)) = updater.check().await else { return };
         let install = handle
             .dialog()
-            .message(format!("formpth {} is available. Install it and restart?", update.version))
+            .message(format!("formpath {} is available. Install it and restart?", update.version))
             .title("Update available")
             .buttons(MessageDialogButtons::OkCancel)
             .blocking_show();
@@ -64,11 +64,11 @@ fn main() {
             let handle = app.handle().clone();
             let (mut rx, child) = app
                 .shell()
-                .sidecar("formpth-engine")
+                .sidecar("formpath-engine")
                 .expect("sidecar binary is bundled")
-                .env("FORMPTH_PORT", "0")
+                .env("FORMPATH_PORT", "0")
                 .spawn()
-                .expect("the formpth engine failed to spawn");
+                .expect("the formpath engine failed to spawn");
             app.state::<Backend>().0.lock().unwrap().replace(child);
 
             tauri::async_runtime::spawn(async move {
@@ -108,7 +108,7 @@ fn main() {
                             })
                             .unwrap_or(FALLBACK_LOGICAL);
                         let _ = WebviewWindowBuilder::new(&handle, "main", WebviewUrl::External(url))
-                            .title("formpth")
+                            .title("formpath")
                             .inner_size(width, height)
                             .min_inner_size(MIN_LOGICAL.0, MIN_LOGICAL.1)
                             .center()
@@ -120,7 +120,7 @@ fn main() {
                         close_splash(&handle);
                         handle
                             .dialog()
-                            .message("The formpth engine failed to start. Please relaunch the app.")
+                            .message("The formpath engine failed to start. Please relaunch the app.")
                             .blocking_show();
                         kill_backend(&handle);
                         std::process::exit(1);

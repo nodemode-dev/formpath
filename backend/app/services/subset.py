@@ -35,7 +35,7 @@ def build(data: bytes, gids: list[int], axes: dict[str, float]) -> tuple[bytes, 
         font = TTFont(io.BytesIO(data), lazy=True)
         count = len(font.getGlyphOrder())
     except Exception as exc:
-        raise SubsetError("That file is not a font formpth can read.") from exc
+        raise SubsetError("That file is not a font formpath can read.") from exc
     keep = sorted({g for g in gids if 0 <= g < count} | {0})
     opts = subset.Options()
     opts.retain_gids = True

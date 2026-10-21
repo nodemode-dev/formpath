@@ -15,18 +15,18 @@ from typing import Any
 from app.core import config
 from app.services import terminal
 
-INAPP_HEADER = "x-formpth-inapp"
+INAPP_HEADER = "x-formpath-inapp"
 INAPP_TOKEN = secrets.token_urlsafe(32)
 KEEP_ENV = {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CONFIG_DIR"}
 CANDIDATES = (".claude/local/claude", ".local/bin/claude", ".npm-global/bin/claude", ".bun/bin/claude", ".volta/bin/claude")
 SYSTEM_PATHS = ("/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude")
 INSTALL_CMD = "irm https://claude.ai/install.ps1 | iex" if os.name == "nt" else "curl -fsSL https://claude.ai/install.sh | bash"
 INSTALL = f"Claude Code is not installed. Install it ({INSTALL_CMD}, or from https://claude.com/claude-code), run claude once in a terminal to sign in, then open it here again."
-NOTE = ("You are Claude Code running inside formpth, the vector illustration editor open on this computer. "
-        "Draw and edit the open document with the formpth MCP server's tools: start with get_document, look with get_image before and after a change, "
+NOTE = ("You are Claude Code running inside formpath, the vector illustration editor open on this computer. "
+        "Draw and edit the open document with the formpath MCP server's tools: start with get_document, look with get_image before and after a change, "
         "and use list_commands, describe_command and run_command to reach any menu command. "
-        "Every change happens live in the window the person is watching and is one undo step. Use the formpth-harness skill when it is available.")
-CHAT_NOTE = (NOTE + " You are answering in formpth's Chat tab, which shows Markdown to people who may never have used a terminal: "
+        "Every change happens live in the window the person is watching and is one undo step. Use the formpath-harness skill when it is available.")
+CHAT_NOTE = (NOTE + " You are answering in formpath's Chat tab, which shows Markdown to people who may never have used a terminal: "
              "write short paragraphs, use **bold** for panel and setting names and a bulleted list when you changed several things, "
              "avoid tables and code blocks, say what you changed in an illustrator's words, and keep tool calls few by batching.")
 MAX_MESSAGES = 200
@@ -86,7 +86,7 @@ def cli() -> str | None:
     chosen = _pref("claudeBin")
     if chosen and _runnable(chosen):
         return str(Path(chosen).expanduser())
-    found = os.environ.get("FORMPTH_CLAUDE_BIN") or shutil.which("claude")
+    found = os.environ.get("FORMPATH_CLAUDE_BIN") or shutil.which("claude")
     if found:
         return found
     home = Path.home()
@@ -111,7 +111,7 @@ def info(fresh: bool = False) -> dict:
 
 
 def mcp_config() -> str:
-    return json.dumps({"mcpServers": {"formpth": {"type": "http", "url": terminal.engine_url() + "/mcp", "headers": {INAPP_HEADER: INAPP_TOKEN}}}})
+    return json.dumps({"mcpServers": {"formpath": {"type": "http", "url": terminal.engine_url() + "/mcp", "headers": {INAPP_HEADER: INAPP_TOKEN}}}})
 
 
 def is_inapp(value: str | None) -> bool:
@@ -119,7 +119,7 @@ def is_inapp(value: str | None) -> bool:
 
 
 def workdir() -> Path:
-    raw = _pref("claudeFolder") or os.environ.get("FORMPTH_AGENT_DIR", "").strip()
+    raw = _pref("claudeFolder") or os.environ.get("FORMPATH_AGENT_DIR", "").strip()
     folder = Path(raw).expanduser() if raw else config.data_dir() / "Agent"
     try:
         folder.mkdir(parents=True, exist_ok=True)
@@ -133,7 +133,7 @@ def _wrap(cmd: list[str]) -> list[str]:
 
 
 def argv(path: str, prompt: str | None, resume: str | None = None) -> list[str]:
-    cmd = [path, "--mcp-config", mcp_config(), "--allowedTools", "mcp__formpth", "--append-system-prompt", NOTE]
+    cmd = [path, "--mcp-config", mcp_config(), "--allowedTools", "mcp__formpath", "--append-system-prompt", NOTE]
     if resume:
         cmd += ["--resume", resume]
     if prompt:
@@ -144,7 +144,7 @@ def argv(path: str, prompt: str | None, resume: str | None = None) -> list[str]:
 def status() -> dict:
     tab = next((s.describe() for s in terminal.SESSIONS.values() if s.kind == "claude"), None)
     chosen = _pref("claudeBin")
-    note = f"{chosen} is not a program formpth can run, so it uses the one found on this computer." if chosen and not _runnable(chosen) else ""
+    note = f"{chosen} is not a program formpath can run, so it uses the one found on this computer." if chosen and not _runnable(chosen) else ""
     try:
         folder = str(workdir())
     except ValueError as exc:
@@ -218,7 +218,7 @@ def chat_image(name: str) -> Path | None:
 
 def _chat_argv(path: str, text: str, session: str | None) -> list[str]:
     cmd = [path, "-p", text, "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-           "--mcp-config", mcp_config(), "--allowedTools", "mcp__formpth", "--append-system-prompt", CHAT_NOTE]
+           "--mcp-config", mcp_config(), "--allowedTools", "mcp__formpath", "--append-system-prompt", CHAT_NOTE]
     if session:
         cmd += ["--resume", session]
     return _wrap(cmd)
@@ -411,7 +411,7 @@ def chat_adopt(session: str = "") -> dict:
     listed = chat_sessions()["sessions"]
     pick = next((s for s in listed if s["id"] == session), None) if session else (listed[0] if listed else None)
     if pick is None:
-        raise LookupError("No Claude Code conversation was found in formpth's agent folder yet.")
+        raise LookupError("No Claude Code conversation was found in formpath's agent folder yet.")
     messages = _transcript(_project_dir(str(workdir())) / f"{pick['id']}.jsonl")
     with _lock:
         CHAT["session"] = pick["id"]

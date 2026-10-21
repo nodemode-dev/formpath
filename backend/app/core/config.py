@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app import __version__
 
-APP_NAME = "formpth"
+APP_NAME = "formpath"
 VERSION = __version__
 FRONTEND_PORT = 5230
 BACKEND_PORT = 8230
@@ -41,8 +41,8 @@ def _ensure(path: Path) -> Path:
 
 
 def data_dir() -> Path:
-    raw = os.environ.get("FORMPTH_DATA_DIR")
-    return _ensure(Path(raw).expanduser() if raw else Path.home() / "Formpth")
+    raw = os.environ.get("FORMPATH_DATA_DIR")
+    return _ensure(Path(raw).expanduser() if raw else Path.home() / "Formpath")
 
 
 def default_projects_dir() -> Path:
@@ -50,7 +50,7 @@ def default_projects_dir() -> Path:
 
 
 def projects_dir() -> Path:
-    raw = os.environ.get("FORMPTH_LIBRARY_DIR", "").strip()
+    raw = os.environ.get("FORMPATH_LIBRARY_DIR", "").strip()
     if not raw:
         try:
             raw = str(json.loads((data_dir() / "library.json").read_text()).get("folder", "")).strip()
@@ -69,28 +69,28 @@ def exports_dir() -> Path:
 
 
 def sessions_dir() -> Path:
-    return _ensure(Path(tempfile.gettempdir()) / "formpth-sessions")
+    return _ensure(Path(tempfile.gettempdir()) / "formpath-sessions")
 
 
 def dist_dir() -> Path | None:
-    raw = os.environ.get("FORMPTH_DIST")
+    raw = os.environ.get("FORMPATH_DIST")
     candidate = Path(raw) if raw else REPO_DIR / "frontend" / "dist"
     return candidate if (candidate / "index.html").is_file() else None
 
 
 def is_desktop() -> bool:
-    return os.environ.get("FORMPTH_DESKTOP") == "1"
+    return os.environ.get("FORMPATH_DESKTOP") == "1"
 
 
 def port() -> int:
     try:
-        return int(os.environ.get("FORMPTH_PORT", "") or BACKEND_PORT)
+        return int(os.environ.get("FORMPATH_PORT", "") or BACKEND_PORT)
     except ValueError:
         return BACKEND_PORT
 
 
 def cors_origins() -> list[str]:
-    raw = os.environ.get("FORMPTH_CORS_ORIGINS")
+    raw = os.environ.get("FORMPATH_CORS_ORIGINS")
     if raw:
         return [origin.strip() for origin in raw.split(",") if origin.strip()]
     return [f"http://localhost:{FRONTEND_PORT}", f"http://127.0.0.1:{FRONTEND_PORT}"]

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-FORMPTH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export FORMPTH_ROOT
-fp_say() { printf '[formpth] %s\n' "$*"; }
-fp_die() { printf '[formpth] error: %s\n' "$*" >&2; exit 1; }
+FORMPATH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export FORMPATH_ROOT
+fp_say() { printf '[formpath] %s\n' "$*"; }
+fp_die() { printf '[formpath] error: %s\n' "$*" >&2; exit 1; }
 fp_os() {
   case "$(uname -s 2>/dev/null)" in
     Darwin) echo macos ;;
@@ -22,16 +22,16 @@ fp_python() {
   return 1
 }
 fp_venv() {
-  if [ -f "$FORMPTH_ROOT/backend/venv/bin/activate" ]; then
-    source "$FORMPTH_ROOT/backend/venv/bin/activate"
-  elif [ -f "$FORMPTH_ROOT/backend/venv/Scripts/activate" ]; then
-    source "$FORMPTH_ROOT/backend/venv/Scripts/activate"
+  if [ -f "$FORMPATH_ROOT/backend/venv/bin/activate" ]; then
+    source "$FORMPATH_ROOT/backend/venv/bin/activate"
+  elif [ -f "$FORMPATH_ROOT/backend/venv/Scripts/activate" ]; then
+    source "$FORMPATH_ROOT/backend/venv/Scripts/activate"
   else
-    fp_die "engine venv missing, run ./formpth install"
+    fp_die "engine venv missing, run ./formpath install"
   fi
 }
 fp_target_triple() {
-  if [ -n "${FORMPTH_TARGET:-}" ]; then echo "$FORMPTH_TARGET"; return 0; fi
+  if [ -n "${FORMPATH_TARGET:-}" ]; then echo "$FORMPATH_TARGET"; return 0; fi
   command -v rustc >/dev/null 2>&1 || return 1
   rustc -vV | awk '/^host:/ {print $2}'
 }
@@ -42,16 +42,16 @@ fp_rust_env() {
   unset RUSTC RUSTC_WORKSPACE_WRAPPER RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_BUILD_TARGET CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR CARGO_BUILD_RUSTC
   export RUSTC_WRAPPER="" CARGO_BUILD_RUSTC_WRAPPER=""
   if command -v rustup >/dev/null 2>&1 && rustup toolchain list 2>/dev/null | grep -q '^stable'; then
-    export RUSTUP_TOOLCHAIN="${FORMPTH_RUST_TOOLCHAIN:-stable}"
+    export RUSTUP_TOOLCHAIN="${FORMPATH_RUST_TOOLCHAIN:-stable}"
   fi
 }
 fp_rust_fresh() {
-  local target="$FORMPTH_ROOT/src-tauri/target" now
+  local target="$FORMPATH_ROOT/src-tauri/target" now
   now="$(rustc -vV 2>/dev/null | tr '\n' ' ')"
-  if [ -d "$target/release" ] && [ "$(cat "$target/.formpth-rustc" 2>/dev/null)" != "$now" ]; then
+  if [ -d "$target/release" ] && [ "$(cat "$target/.formpath-rustc" 2>/dev/null)" != "$now" ]; then
     fp_say "the Rust compiler differs from the one that built src-tauri/target; cleaning it"
-    ( cd "$FORMPTH_ROOT/src-tauri" && cargo clean )
+    ( cd "$FORMPATH_ROOT/src-tauri" && cargo clean )
   fi
   mkdir -p "$target"
-  printf '%s' "$now" > "$target/.formpth-rustc"
+  printf '%s' "$now" > "$target/.formpath-rustc"
 }

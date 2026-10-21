@@ -80,12 +80,12 @@ def base_env() -> dict:
     env = dict(os.environ)
     env["TERM"] = "xterm-256color"
     env["COLORTERM"] = "truecolor"
-    env["FORMPTH_TERMINAL"] = "1"
-    env["FORMPTH_ENGINE_URL"] = engine_url()
-    env["FORMPTH_MCP_URL"] = engine_url() + "/mcp"
-    env["FORMPTH_URL"] = engine_url()
+    env["FORMPATH_TERMINAL"] = "1"
+    env["FORMPATH_ENGINE_URL"] = engine_url()
+    env["FORMPATH_MCP_URL"] = engine_url() + "/mcp"
+    env["FORMPATH_URL"] = engine_url()
     from app.services import claude_code
-    env["FORMPTH_INAPP_TOKEN"] = claude_code.INAPP_TOKEN
+    env["FORMPATH_INAPP_TOKEN"] = claude_code.INAPP_TOKEN
     if not getattr(sys, "frozen", False):
         env["PATH"] = str(config.REPO_DIR) + os.pathsep + env.get("PATH", "")
     return env

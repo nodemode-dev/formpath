@@ -28,7 +28,7 @@ def _catalogue() -> list[dict]:
 
 
 def _missing() -> HTTPException:
-    return HTTPException(status_code=503, detail="The command catalogue arrives when the formpth window opens; open formpth (./formpth boot) and retry.")
+    return HTTPException(status_code=503, detail="The command catalogue arrives when the formpath window opens; open formpath (./formpath boot) and retry.")
 
 
 @router.post("/catalogue")

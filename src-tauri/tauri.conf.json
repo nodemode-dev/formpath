@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "formpth",
+  "productName": "formpath",
   "version": "0.47.0",
-  "identifier": "ai.nodemode.formpth",
+  "identifier": "ai.nodemode.formpath",
   "build": {
     "frontendDist": "../frontend/dist"
   },
@@ -10,7 +10,7 @@
     "windows": [
       {
         "label": "splash",
-        "title": "formpth",
+        "title": "formpath",
         "url": "splash.html",
         "width": 360,
         "height": 180,
@@ -28,9 +28,9 @@
     "targets": "all",
     "category": "GraphicsAndDesign",
     "shortDescription": "Vector illustration editor",
-    "longDescription": "formpth is a vector illustration editor in the NodeMode design system: artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, appearance and effects, type with outlines, symbols, blends, image trace, SVG and PDF in and out, and its own .fpth project files.",
+    "longDescription": "formpath is a vector illustration editor in the NodeMode design system: artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, appearance and effects, type with outlines, symbols, blends, image trace, SVG and PDF in and out, and its own .fpth project files.",
     "copyright": "Copyright 2026 nodemode-ai.",
-    "externalBin": ["binaries/formpth-engine"],
+    "externalBin": ["binaries/formpath-engine"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "macOS": {
       "minimumSystemVersion": "12.0",
@@ -38,14 +38,14 @@
       "entitlements": "entitlements.plist"
     },
     "fileAssociations": [
-      { "ext": ["fpth"], "name": "formpth Project", "description": "formpth vector illustration project", "role": "Editor", "mimeType": "application/x-formpth" }
+      { "ext": ["fpth"], "name": "formpath Project", "description": "formpath vector illustration project", "role": "Editor", "mimeType": "application/x-formpath" }
     ],
     "createUpdaterArtifacts": false
   },
   "plugins": {
     "updater": {
       "pubkey": "",
-      "endpoints": ["https://github.com/nodemode-ai/formpth/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/nodemode-ai/formpath/releases/latest/download/latest.json"]
     }
   }
 }

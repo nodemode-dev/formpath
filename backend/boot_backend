@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -e
 cd "$(dirname "$0")"
-if [ -f venv/bin/activate ]; then source venv/bin/activate; elif [ -f venv/Scripts/activate ]; then source venv/Scripts/activate; else echo "[formpth] engine venv missing, run ./formpth install" >&2; exit 1; fi
-exec uvicorn app.main:app --reload --host "${FORMPTH_HOST:-127.0.0.1}" --port "${FORMPTH_PORT:-8230}"
+if [ -f venv/bin/activate ]; then source venv/bin/activate; elif [ -f venv/Scripts/activate ]; then source venv/Scripts/activate; else echo "[formpath] engine venv missing, run ./formpath install" >&2; exit 1; fi
+exec uvicorn app.main:app --reload --host "${FORMPATH_HOST:-127.0.0.1}" --port "${FORMPATH_PORT:-8230}"

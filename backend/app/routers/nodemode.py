@@ -56,7 +56,7 @@ def _upload(base: str, name: str, blob: bytes) -> str:
 
 
 @router.post("/send")
-async def send(target: str = Form(...), title: str = Form("formpth"), items: str = Form(...), files: list[UploadFile] = File(...)) -> dict:
+async def send(target: str = Form(...), title: str = Form("formpath"), items: str = Form(...), files: list[UploadFile] = File(...)) -> dict:
     base = _base(target)
     try:
         meta = json.loads(items)
@@ -74,7 +74,7 @@ async def send(target: str = Form(...), title: str = Form("formpth"), items: str
         raise HTTPException(status_code=502, detail=f"NodeMode refused the upload ({exc.code}).")
     except (urllib.error.URLError, OSError) as exc:
         raise _unreachable(base, exc)
-    announce = json.dumps({"source": "formpth", "title": title[:120], "files": sent}).encode()
+    announce = json.dumps({"source": "formpath", "title": title[:120], "files": sent}).encode()
     try:
         with _request(base + "/api/formvis/receive", announce, {"Content-Type": "application/json"}, "POST"):
             placed = True

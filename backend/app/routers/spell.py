@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/spell", tags=["spell"])
 
 def require_local(request: Request) -> None:
     if not origin_ok(request.headers.get("origin"), request.headers.get("host")):
-        raise HTTPException(status_code=403, detail="Only the formpth window on this computer may use spell checking.")
+        raise HTTPException(status_code=403, detail="Only the formpath window on this computer may use spell checking.")
 
 
 class CheckBody(BaseModel):

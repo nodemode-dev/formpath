@@ -31,11 +31,11 @@ if /i "%CMD%"=="claude" ( call setup\python.bat setup\claude_launch.py %REST% & 
 if /i "%CMD%"=="agents" ( call setup\python.bat setup\agents.py %REST% & goto :eof )
 if /i "%CMD%"=="clean" ( call setup\clean.bat %REST% & goto :eof )
 if /i "%CMD%"=="help" ( call :usage & exit /b 0 )
-echo [formpth] unknown command: %CMD%
+echo [formpath] unknown command: %CMD%
 call :usage
 exit /b 2
 :usage
-echo formpth.bat [command]
+echo formpath.bat [command]
 echo   boot ^| install ^| install-desktop ^| backend ^| frontend ^| build ^| serve ^| freeze
 echo   desktop dev ^| desktop build ^| doctor ^| check ^| counts [--check] ^| mcp ^| cli list^|describe^|run ^| claude [args] ^| agents install^|sync ^| clean [--all] ^| help
 exit /b 0

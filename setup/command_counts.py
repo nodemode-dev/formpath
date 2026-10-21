@@ -10,14 +10,14 @@ FALLBACK = (", from a panel menu or shortcut.",)
 
 
 def load() -> list | None:
-    port = os.environ.get("FORMPTH_PORT", "8230")
+    port = os.environ.get("FORMPATH_PORT", "8230")
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/commands", timeout=2) as r:
             data = json.load(r)
     except Exception:
         data = None
     if data is None:
-        path = Path(os.environ.get("FORMPTH_DATA", str(Path.home() / "Formpth"))) / "commands-catalogue.json"
+        path = Path(os.environ.get("FORMPATH_DATA", str(Path.home() / "Formpath"))) / "commands-catalogue.json"
         if not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))

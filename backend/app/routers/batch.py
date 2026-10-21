@@ -54,7 +54,7 @@ def _actions_dir() -> Path:
 @router.post("/api/actions/list")
 async def actions_list(request: Request) -> Response:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can read the action library.")
+        return _refuse(403, "Only the formpath window can read the action library.")
     out = []
     for p in sorted(_actions_dir().glob("*.fpaction")):
         try:
@@ -69,7 +69,7 @@ async def actions_list(request: Request) -> Response:
 @router.post("/api/actions/save")
 async def actions_save(request: Request) -> Response:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can write the action library.")
+        return _refuse(403, "Only the formpath window can write the action library.")
     body = await _body(request)
     name, data = str(body.get("name") or "").strip(), body.get("set")
     if not SET_NAME.match(name) or not isinstance(data, dict):
@@ -85,7 +85,7 @@ async def actions_save(request: Request) -> Response:
 @router.post("/api/actions/delete")
 async def actions_delete(request: Request) -> Response:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can change the action library.")
+        return _refuse(403, "Only the formpath window can change the action library.")
     name = str((await _body(request)).get("name") or "").strip()
     if not SET_NAME.match(name):
         return _refuse(422, "Give the action set's name.")
@@ -98,7 +98,7 @@ async def actions_delete(request: Request) -> Response:
 @router.post("/api/files/list")
 async def files_list(request: Request) -> Response:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can list folders.")
+        return _refuse(403, "Only the formpath window can list folders.")
     body = await _body(request)
     kinds = {str(k).lower() for k in (body.get("kinds") or [".fpth", ".svg", ".pdf"]) if str(k).lower() in READABLE}
     try:
@@ -114,7 +114,7 @@ async def files_list(request: Request) -> Response:
 @router.post("/api/files/stat")
 async def files_stat(request: Request) -> Response:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can check files.")
+        return _refuse(403, "Only the formpath window can check files.")
     raw = (await _body(request)).get("paths")
     if not isinstance(raw, list) or len(raw) > 2000:
         return _refuse(422, "Give up to 2000 absolute paths.")
@@ -132,28 +132,28 @@ async def files_stat(request: Request) -> Response:
 @router.post("/api/files/read")
 async def files_read(request: Request) -> Response:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can read files.")
+        return _refuse(403, "Only the formpath window can read files.")
     raw = str((await _body(request)).get("path") or "").strip()
     path = Path(os.path.expanduser(raw))
     if not raw or not path.is_absolute():
         return _refuse(422, "Give an absolute path (~ works too).")
     if path.suffix.lower() not in READABLE:
-        return _refuse(422, f"{path.name}: formpth reads {', '.join(sorted(READABLE))} here.")
+        return _refuse(422, f"{path.name}: formpath reads {', '.join(sorted(READABLE))} here.")
     if not path.is_file():
         return _refuse(404, f"There is no file at {path}.")
     st = path.stat()
     if st.st_size > MAX:
         return _refuse(413, f"{path.name} is larger than 512 MiB.")
-    return Response(content=path.read_bytes(), media_type="application/octet-stream", headers={"Cache-Control": "no-store", "X-Formpth-Name": quote(path.name), "X-Formpth-Path": quote(str(path)), "X-Formpth-Size": str(st.st_size), "X-Formpth-Mtime": str(int(st.st_mtime * 1000))})
+    return Response(content=path.read_bytes(), media_type="application/octet-stream", headers={"Cache-Control": "no-store", "X-Formpath-Name": quote(path.name), "X-Formpath-Path": quote(str(path)), "X-Formpath-Size": str(st.st_size), "X-Formpath-Mtime": str(int(st.st_mtime * 1000))})
 
 
 @router.post("/api/files/write")
 async def files_write(request: Request, folder: str = Form(...), name: str = Form(...), file: UploadFile = File(...)) -> Response:
     if not _app_origin(request):
-        return _refuse(403, "Only the formpth window can write files.")
+        return _refuse(403, "Only the formpath window can write files.")
     clean = SAFE.sub("_", Path(name).name).strip(" .") or "output"
     if Path(clean).suffix.lower() not in WRITABLE:
-        return _refuse(422, f"{clean}: formpth writes {', '.join(sorted(WRITABLE))} here.")
+        return _refuse(422, f"{clean}: formpath writes {', '.join(sorted(WRITABLE))} here.")
     try:
         target_dir = _folder(folder, True)
     except ValueError as exc:

@@ -1,5 +1,5 @@
 
-SERVICE = "formpth"
+SERVICE = "formpath"
 
 
 def _store():

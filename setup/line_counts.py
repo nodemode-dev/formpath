@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 KINDS = (("TypeScript", ("frontend/src/",), ".ts"), ("CSS", ("frontend/src/",), ".css"),
-         ("Python", ("backend/app/", "backend/formpth_engine.py", "setup/"), ".py"), ("Rust", ("src-tauri/src/",), ".rs"))
+         ("Python", ("backend/app/", "backend/formpath_engine.py", "setup/"), ".py"), ("Rust", ("src-tauri/src/",), ".rs"))
 
 
 def counts(root: Path = ROOT) -> dict[str, int]:

@@ -2,10 +2,10 @@
 set -e
 cd "$(dirname "$0")"
 usage() {
-  printf 'formpth %s · vector illustration editor\n' "$(sed -n "s/^export const VERSION = '\(.*\)';$/\1/p" frontend/src/version.ts 2>/dev/null)"
+  printf 'formpath %s · vector illustration editor\n' "$(sed -n "s/^export const VERSION = '\(.*\)';$/\1/p" frontend/src/version.ts 2>/dev/null)"
   cat << 'EOF'
 
-usage: ./formpth [command] [options]
+usage: ./formpath [command] [options]
 
   (none) | boot       boot the engine (8230) and the frontend (5230) together
   install             install the engine service and the frontend
@@ -19,11 +19,11 @@ usage: ./formpth [command] [options]
   doctor              check the toolchain, installs and ports
   check               typecheck and build the frontend, compile and self-check the engine
   counts [--check]    the README's code sizes (--check: exit 1 if README.md has drifted)
-  mcp                 formpth over MCP's stdio transport, for Claude Code, Codex, Cursor and other MCP clients
+  mcp                 formpath over MCP's stdio transport, for Claude Code, Codex, Cursor and other MCP clients
   cli list|describe|run   the command catalogue from a terminal: list it, describe one, run one on the open window
   i18n extract|check|missing|export|import   the interface's languages: harvest strings, check every language, review as CSV
-  claude [args]       Claude Code in this terminal with formpth's MCP tools attached (the app's dock has a Claude Code button too)
-  agents install|sync set up Claude Code, Codex and Cursor to draw in formpth (install), or refresh the harness skill (sync)
+  claude [args]       Claude Code in this terminal with formpath's MCP tools attached (the app's dock has a Claude Code button too)
+  agents install|sync set up Claude Code, Codex and Cursor to draw in formpath (install), or refresh the harness skill (sync)
   clean [--all]       remove build output (--all also venv and node_modules)
   help                this text
 EOF
@@ -54,10 +54,10 @@ case "$cmd" in
   cli) exec python3 setup/cli.py "$@" ;;
   i18n) exec python3 setup/i18n.py "$@" ;;
   claude)
-    command -v claude >/dev/null 2>&1 || { printf '[formpth] Claude Code is not installed: https://claude.com/claude-code\n' >&2; exit 1; }
-    exec claude --mcp-config "{\"mcpServers\":{\"formpth\":{\"type\":\"stdio\",\"command\":\"$PWD/formpth\",\"args\":[\"mcp\"]}}}" --allowedTools mcp__formpth "$@" ;;
+    command -v claude >/dev/null 2>&1 || { printf '[formpath] Claude Code is not installed: https://claude.com/claude-code\n' >&2; exit 1; }
+    exec claude --mcp-config "{\"mcpServers\":{\"formpath\":{\"type\":\"stdio\",\"command\":\"$PWD/formpath\",\"args\":[\"mcp\"]}}}" --allowedTools mcp__formpath "$@" ;;
   agents) py=python3; [ -x backend/venv/bin/python ] && py=backend/venv/bin/python; exec "$py" setup/agents.py "$@" ;;
   clean) exec setup/clean "$@" ;;
   help|-h|--help) usage ;;
-  *) printf '[formpth] unknown command: %s\n\n' "$cmd"; usage; exit 2 ;;
+  *) printf '[formpath] unknown command: %s\n\n' "$cmd"; usage; exit 2 ;;
 esac

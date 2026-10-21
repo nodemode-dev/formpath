@@ -9,7 +9,7 @@ from pathlib import Path
 from app.core import config
 from app.services import display, rgb_profiles
 
-GENERIC_CMYK = "formpth Generic CMYK"
+GENERIC_CMYK = "formpath Generic CMYK"
 SRGB_NAME = "sRGB (built-in)"
 MAX_PROFILE_BYTES = 64 * 1024 * 1024
 MAX_SCAN = 4000
@@ -28,7 +28,7 @@ def _cms():
     try:
         from PIL import ImageCms
     except ImportError as exc:
-        raise RuntimeError("Colour management needs Pillow with LittleCMS. Run ./formpth install to add it.") from exc
+        raise RuntimeError("Colour management needs Pillow with LittleCMS. Run ./formpath install to add it.") from exc
     return ImageCms
 
 
@@ -225,7 +225,7 @@ def build_generic_cmyk() -> bytes:
                 b2a.extend(_u16(v * 65535) for v in _solve(L, a, b))
     lut_a, lut_b = _pad(_lut16(4, 3, ga, a2b)), _pad(_lut16(3, 4, gb, b2a))
     desc = _pad(_desc(GENERIC_CMYK))
-    cprt = _pad(b"text" + b"\0\0\0\0" + b"Generic coated press model by formpth. Not a FOGRA, SWOP or other characterised printing condition.\0")
+    cprt = _pad(b"text" + b"\0\0\0\0" + b"Generic coated press model by formpath. Not a FOGRA, SWOP or other characterised printing condition.\0")
     wtpt = b"XYZ " + b"\0\0\0\0" + b"".join(_fix(v) for v in _PAPER)
     blobs = {b"desc": desc, b"cprt": cprt, b"wtpt": wtpt, b"A2B0": lut_a, b"B2A0": lut_b}
     tags = [(b"desc", b"desc"), (b"cprt", b"cprt"), (b"wtpt", b"wtpt"), (b"A2B0", b"A2B0"), (b"A2B1", b"A2B0"), (b"A2B2", b"A2B0"), (b"B2A0", b"B2A0"), (b"B2A1", b"B2A0"), (b"B2A2", b"B2A0")]
@@ -248,7 +248,7 @@ def generic_cmyk_bytes() -> bytes:
     with _lock:
         if _generic is not None:
             return _generic
-        path = _builtin_dir() / "formpth-generic-cmyk-v1.icc"
+        path = _builtin_dir() / "formpath-generic-cmyk-v1.icc"
         try:
             cached = path.read_bytes()
             _cms().ImageCmsProfile(io.BytesIO(cached))

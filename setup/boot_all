@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -e
 source "$(dirname "$0")/lib.sh"
-cd "$FORMPTH_ROOT"
+cd "$FORMPATH_ROOT"
 pids=()
 ( cd backend && ./boot_backend ) &
 pids+=($!)
 ( cd frontend && ./boot_frontend ) &
 pids+=($!)
 trap 'kill "${pids[@]}" 2>/dev/null' EXIT INT TERM
-fp_say "frontend http://localhost:5230 · engine http://127.0.0.1:${FORMPTH_PORT:-8230}"
+fp_say "frontend http://localhost:5230 · engine http://127.0.0.1:${FORMPATH_PORT:-8230}"
 wait

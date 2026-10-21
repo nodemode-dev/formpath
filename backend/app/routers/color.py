@@ -12,7 +12,7 @@ MAX_UPLOAD = 64 * 1024 * 1024
 
 def require_local(request: Request) -> None:
     if not origin_ok(request.headers.get("origin"), request.headers.get("host")):
-        raise HTTPException(status_code=403, detail="Only the formpth window on this computer may manage colour profiles.")
+        raise HTTPException(status_code=403, detail="Only the formpath window on this computer may manage colour profiles.")
 
 
 class RgbToCmyk(BaseModel):
@@ -53,7 +53,7 @@ class Preserve(BaseModel):
 
 
 def _lut(data: bytes, grid: int, channels: int) -> Response:
-    return Response(data, media_type="application/octet-stream", headers={"X-Formpth-Grid": str(grid), "X-Formpth-Channels": str(channels), "Cache-Control": "no-store"})
+    return Response(data, media_type="application/octet-stream", headers={"X-Formpath-Grid": str(grid), "X-Formpath-Channels": str(channels), "Cache-Control": "no-store"})
 
 
 async def _run(fn, *args):

@@ -107,14 +107,14 @@ def _synced() -> list[dict]:
             cands.append((label, d / "My Drive" if (d / "My Drive").is_dir() else d))
     for label, path in cands:
         if path.is_dir() and not any(f["base"] == str(path) for f in found):
-            found.append({"label": label, "base": str(path), "suggested": str(path / "Formpth")})
+            found.append({"label": label, "base": str(path), "suggested": str(path / "Formpath")})
     return found
 
 
 @router.get("/folder")
 def folder() -> dict:
     current, default = config.projects_dir(), config.default_projects_dir()
-    return {"folder": str(current), "default": str(default), "custom": current.resolve() != default.resolve(), "fixed": bool(os.environ.get("FORMPTH_LIBRARY_DIR", "").strip()), "synced": _synced()}
+    return {"folder": str(current), "default": str(default), "custom": current.resolve() != default.resolve(), "fixed": bool(os.environ.get("FORMPATH_LIBRARY_DIR", "").strip()), "synced": _synced()}
 
 
 class FolderBody(BaseModel):
@@ -124,8 +124,8 @@ class FolderBody(BaseModel):
 
 @router.put("/folder")
 def set_folder(body: FolderBody) -> dict:
-    if os.environ.get("FORMPTH_LIBRARY_DIR", "").strip():
-        raise HTTPException(status_code=409, detail="The library folder is set by FORMPTH_LIBRARY_DIR for this engine.")
+    if os.environ.get("FORMPATH_LIBRARY_DIR", "").strip():
+        raise HTTPException(status_code=409, detail="The library folder is set by FORMPATH_LIBRARY_DIR for this engine.")
     old = config.projects_dir()
     new = Path(body.folder).expanduser() if body.folder.strip() else config.default_projects_dir()
     if not new.is_absolute():
@@ -136,7 +136,7 @@ def set_folder(body: FolderBody) -> dict:
         os.close(fd)
         os.unlink(probe)
     except OSError as exc:
-        raise HTTPException(status_code=400, detail=f"formpth cannot write in that folder: {exc.strerror or exc}.") from exc
+        raise HTTPException(status_code=400, detail=f"formpath cannot write in that folder: {exc.strerror or exc}.") from exc
     moved = 0
     if body.move and new.resolve() != old.resolve():
         import shutil
@@ -223,7 +223,7 @@ def package_full(
     try:
         blob, summary = pkg.build(stem, data, assets, [str(x) for x in _json_list(links, "links")], [x for x in _json_list(fonts, "fonts") if isinstance(x, dict)], report, copy_links, copy_fonts, separate_links, relink_copies, destination, bundled)
     except OSError as exc:
-        raise HTTPException(status_code=400, detail=f"formpth could not write the package: {exc.strerror or exc}. Choose a folder you can write to.") from exc
+        raise HTTPException(status_code=400, detail=f"formpath could not write the package: {exc.strerror or exc}. Choose a folder you can write to.") from exc
     if blob is not None:
         return Response(blob, media_type="application/zip", headers={"X-Package-Summary": json.dumps({k: v for k, v in summary.items() if k != "files"})[:4000]})
     return Response(json.dumps(summary), media_type="application/json")

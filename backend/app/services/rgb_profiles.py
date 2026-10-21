@@ -6,8 +6,8 @@ D65_XY = (0.3127, 0.3290)
 BRADFORD = ((0.8951, 0.2664, -0.1614), (-0.7502, 1.7135, 0.0367), (0.0389, -0.0685, 1.0296))
 
 SPACES = {
-    "Adobe RGB (1998) compatible": {"r": (0.6400, 0.3300), "g": (0.2100, 0.7100), "b": (0.1500, 0.0600), "white": D65_XY, "trc": ("gamma", 563 / 256), "note": "Working space from the published Adobe RGB (1998) primaries, D65 white point and 563/256 gamma. Built by formpth."},
-    "Display P3": {"r": (0.680, 0.320), "g": (0.265, 0.690), "b": (0.150, 0.060), "white": D65_XY, "trc": ("srgb", 0), "note": "Display P3 primaries, D65 white point and the sRGB transfer curve. Built by formpth."},
+    "Adobe RGB (1998) compatible": {"r": (0.6400, 0.3300), "g": (0.2100, 0.7100), "b": (0.1500, 0.0600), "white": D65_XY, "trc": ("gamma", 563 / 256), "note": "Working space from the published Adobe RGB (1998) primaries, D65 white point and 563/256 gamma. Built by formpath."},
+    "Display P3": {"r": (0.680, 0.320), "g": (0.265, 0.690), "b": (0.150, 0.060), "white": D65_XY, "trc": ("srgb", 0), "note": "Display P3 primaries, D65 white point and the sRGB transfer curve. Built by formpath."},
 }
 
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -e
 source "$(dirname "$0")/lib.sh"
-[ -f "$FORMPTH_ROOT/frontend/dist/index.html" ] || "$FORMPTH_ROOT/setup/build_frontend"
+[ -f "$FORMPATH_ROOT/frontend/dist/index.html" ] || "$FORMPATH_ROOT/setup/build_frontend"
 fp_venv
-cd "$FORMPTH_ROOT/backend"
-export FORMPTH_DIST="$FORMPTH_ROOT/frontend/dist"
-fp_say "serving http://127.0.0.1:${FORMPTH_PORT:-8230}"
-exec uvicorn app.main:app --host "${FORMPTH_HOST:-127.0.0.1}" --port "${FORMPTH_PORT:-8230}"
+cd "$FORMPATH_ROOT/backend"
+export FORMPATH_DIST="$FORMPATH_ROOT/frontend/dist"
+fp_say "serving http://127.0.0.1:${FORMPATH_PORT:-8230}"
+exec uvicorn app.main:app --host "${FORMPATH_HOST:-127.0.0.1}" --port "${FORMPATH_PORT:-8230}"

@@ -6,7 +6,7 @@ Living context log for `backend/`. In-code comments are near zero; the explanati
 
 ```text
 backend/
-├── formpth_engine.py           PyInstaller entry for the desktop sidecar, --selfcheck
+├── formpath_engine.py           PyInstaller entry for the desktop sidecar, --selfcheck
 ├── boot_backend(.bat)          dev launcher: uvicorn with reload on 127.0.0.1:8230
 ├── oc_install(.bat)            venv and requirements
 ├── requirements.txt            engine dependencies (pinned)
@@ -42,7 +42,7 @@ backend/
 
 Scripts with entries, in folder order. Every other script is in the map above with its role and has no entries yet.
 
-- formpth_engine.py
+- formpath_engine.py
 - app/core/config.py
 - app/routers/mcp.py
 - app/services/llm.py
@@ -51,14 +51,14 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - app/routers/fonts.py
 - app/services/fonts.py
 
-## formpth_engine.py
+## formpath_engine.py
 
-### formpth_engine.py · main
-- refers-to: formpth_engine.py :: main, selfcheck
+### formpath_engine.py · main
+- refers-to: formpath_engine.py :: main, selfcheck
 - kind: explainer
 - logged: v0.9.0 · 2026-10-07
 
-The desktop shell starts this with `FORMPTH_PORT=0`; Uvicorn binds a free loopback port and prints `http://127.0.0.1:[port]`, which the shell reads from stdout. A bundled `frontend_dist` folder is served when present. `--selfcheck` prints the Python and package versions, the formpth version and the MCP tool count as JSON, and is run by `setup/freeze_backend` and CI.
+The desktop shell starts this with `FORMPATH_PORT=0`; Uvicorn binds a free loopback port and prints `http://127.0.0.1:[port]`, which the shell reads from stdout. A bundled `frontend_dist` folder is served when present. `--selfcheck` prints the Python and package versions, the formpath version and the MCP tool count as JSON, and is run by `setup/freeze_backend` and CI.
 
 ## app/core/config.py
 
@@ -67,7 +67,7 @@ The desktop shell starts this with `FORMPTH_PORT=0`; Uvicorn binds a free loopba
 - kind: rationale
 - logged: v0.9.0 · 2026-10-07
 
-8230 so formpth runs beside formvis (8190). Data lives in `~/Formpth` unless `FORMPTH_DATA_DIR` is set; the library folder can be moved (`FORMPTH_LIBRARY_DIR`, or `library.json` written by the app), including into a synced folder.
+8230 so formpath runs beside formvis (8190). Data lives in `~/Formpath` unless `FORMPATH_DATA_DIR` is set; the library folder can be moved (`FORMPATH_LIBRARY_DIR`, or `library.json` written by the app), including into a synced folder.
 
 ## app/routers/mcp.py
 
@@ -97,7 +97,7 @@ Paths are checked here, not in the window: absolute, an allowed extension, the f
 - kind: explainer
 - logged: v0.9.0 · 2026-10-07
 
-States that type is black unless `color` is given, matching the bridge's default. After changing any entry in `TOOLS`, run `./formpth agents sync`; CI checks it.
+States that type is black unless `color` is given, matching the bridge's default. After changing any entry in `TOOLS`, run `./formpath agents sync`; CI checks it.
 
 ### app/routers/mcp.py · type tools
 - refers-to: app/routers/mcp.py :: TOOLS, set_text, text_flow, text_style, find_font
@@ -139,7 +139,7 @@ States that type is black unless `color` is given, matching the bridge's default
 - kind: rationale
 - logged: v0.17.0 · 2026-10-08
 
-An audit found that `GET /api/mcp/bridge/next?allowed=1` set the consent flag for any caller (a missing `allowed` counted as yes, and a cross-site image could fire it), and that any local client could pose as the window: take queued calls (including the file bytes `open_file` reads here), answer `__consent__` itself, drain the queue, or post results through `/api/mcp/bridge/result`. The window now opens a session with `POST /api/mcp/bridge/session`, which issues a fresh `secrets.token_urlsafe(32)` only when the request's Origin is formpth's own page: the CORS origins (the Vite dev server on 5230), the Vite preview on 5231, and `http://localhost`, `127.0.0.1` or `[::1]` on the port this server is actually listening on (`request.scope["server"]`, so the desktop sidecar's random port works). It is a POST because browsers send Origin on every POST, while a same-origin GET carries none. Every bridge call is a POST from that Origin with the secret in `X-Formpth-Bridge`; anything else gets 403 and changes nothing, and `GET /api/mcp/bridge/next` answers 405 without touching state. `allowed` now comes from the JSON body and only `true` allows; a missing value means not allowed. A new session supersedes the last: only the newest secret receives queued calls, a window still polling with an older one gets 205 (a success status, so the browser logs no error) and waits for focus before taking the bridge back. Each delivered call remembers which secret took it (`_delivered`), and its result is accepted only from that secret, so a window that is superseded mid-call can still finish it while nobody else can answer for it. `POST /mcp` is unchanged (agents' clients send no Origin, and a foreign Origin is still refused there); the stdio bridge in `setup/mcp_stdio.py` only talks to it. Origin is a browser guarantee: a local program can forge it, but a local program already has the person's files, and the point is that no web page can drive or read the bridge.
+An audit found that `GET /api/mcp/bridge/next?allowed=1` set the consent flag for any caller (a missing `allowed` counted as yes, and a cross-site image could fire it), and that any local client could pose as the window: take queued calls (including the file bytes `open_file` reads here), answer `__consent__` itself, drain the queue, or post results through `/api/mcp/bridge/result`. The window now opens a session with `POST /api/mcp/bridge/session`, which issues a fresh `secrets.token_urlsafe(32)` only when the request's Origin is formpath's own page: the CORS origins (the Vite dev server on 5230), the Vite preview on 5231, and `http://localhost`, `127.0.0.1` or `[::1]` on the port this server is actually listening on (`request.scope["server"]`, so the desktop sidecar's random port works). It is a POST because browsers send Origin on every POST, while a same-origin GET carries none. Every bridge call is a POST from that Origin with the secret in `X-Formpath-Bridge`; anything else gets 403 and changes nothing, and `GET /api/mcp/bridge/next` answers 405 without touching state. `allowed` now comes from the JSON body and only `true` allows; a missing value means not allowed. A new session supersedes the last: only the newest secret receives queued calls, a window still polling with an older one gets 205 (a success status, so the browser logs no error) and waits for focus before taking the bridge back. Each delivered call remembers which secret took it (`_delivered`), and its result is accepted only from that secret, so a window that is superseded mid-call can still finish it while nobody else can answer for it. `POST /mcp` is unchanged (agents' clients send no Origin, and a foreign Origin is still refused there); the stdio bridge in `setup/mcp_stdio.py` only talks to it. Origin is a browser guarantee: a local program can forge it, but a local program already has the person's files, and the point is that no web page can drive or read the bridge.
 
 ### app/routers/mcp.py · tauri origins left out of the bridge
 - refers-to: app/routers/mcp.py :: _app_origin; src-tauri/src/main.rs :: WebviewUrl::External; src-tauri/tauri.conf.json :: app.security.csp
@@ -192,14 +192,14 @@ One tool covers the perspective grid with an action: get, grid (preset or type p
 - kind: rationale
 - logged: v0.20.0 · 2026-10-10
 
-Action sets are .fpaction JSON files in the data folder's Actions directory, one per set named after it (no slashes or control characters, 16 MiB cap). Batch and data merge need to list a folder, read the files in it and write results to another; those endpoints read and write any absolute path, so every one is a POST that refuses requests without formpth's own Origin (mcp._app_origin, the same check that guards the agent bridge): a web page cannot call them, and a page that sends no Origin is refused too. Reads are limited to the formats formpth opens plus CSV, TSV, text, JSON, XML and .fpaction; writes to the formats it exports plus text, CSV, JSON, .fpaction and zip, with the file name reduced to a plain name and the destination folder created when missing. 512 MiB caps both directions.
+Action sets are .fpaction JSON files in the data folder's Actions directory, one per set named after it (no slashes or control characters, 16 MiB cap). Batch and data merge need to list a folder, read the files in it and write results to another; those endpoints read and write any absolute path, so every one is a POST that refuses requests without formpath's own Origin (mcp._app_origin, the same check that guards the agent bridge): a web page cannot call them, and a page that sends no Origin is refused too. Reads are limited to the formats formpath opens plus CSV, TSV, text, JSON, XML and .fpaction; writes to the formats it exports plus text, CSV, JSON, .fpaction and zip, with the file name reduced to a plain name and the destination folder created when missing. 512 MiB caps both directions.
 
 ### app/routers/batch.py · stat, read headers and folders for linked images
 - refers-to: app/routers/batch.py :: files_stat, files_read, files_list; app/services/project_format.py :: _walk; app/routers/mcp.py :: place_image, links, _run
 - kind: rationale
 - logged: v0.22.0 · 2026-10-10
 
-Linked images need the size and modified time of their files: files_stat answers up to 2000 paths in one POST (missing or non-file paths answer exists false, never an error) so the window can poll every few seconds cheaply, and files_read now sends X-Formpth-Size, X-Formpth-Mtime and X-Formpth-Path with the bytes so the values match the pixels read. The name and path headers are percent-encoded because response headers are Latin-1 and a file name may not be. files_list takes dirs true to also return the subfolder names and the parent folder, for the window's file chooser; without it the answer is as before. The same Origin rule guards all three. The project validator accepts an image node whose asset is absent when it carries linked (the person chose not to keep previews of linked images). place_image with link true hands the window the path instead of the bytes, and the links tool runs in the window, which reads files through these endpoints.
+Linked images need the size and modified time of their files: files_stat answers up to 2000 paths in one POST (missing or non-file paths answer exists false, never an error) so the window can poll every few seconds cheaply, and files_read now sends X-Formpath-Size, X-Formpath-Mtime and X-Formpath-Path with the bytes so the values match the pixels read. The name and path headers are percent-encoded because response headers are Latin-1 and a file name may not be. files_list takes dirs true to also return the subfolder names and the parent folder, for the window's file chooser; without it the answer is as before. The same Origin rule guards all three. The project validator accepts an image node whose asset is absent when it carries linked (the person chose not to keep previews of linked images). place_image with link true hands the window the path instead of the bytes, and the links tool runs in the window, which reads files through these endpoints.
 
 ## app/routers/projects.py
 
@@ -249,7 +249,7 @@ Each listed face now carries `variable`, true when its table directory has an `f
 - kind: explainer
 - logged: v0.24.0 · 2026-10-15
 
-The terminal dock's shells are engine-owned PTYs, as formlit and formvis keep them: `ptyprocess` on macOS and Linux, `pywinpty` on Windows. A session holds its argv, environment and kind (`shell` or `claude`), a 256 KB scrollback ring and a set of subscriber queues; a reader thread per process pushes output to the queues through the event loop bound at startup (`main.lifespan` calls `bind`), so a WebSocket that attaches later gets the scrollback and then the live text. `restart` bumps a generation number so the old reader thread stops delivering, clears the scrollback and sends `ESC c` so xterm resets. The shell starts in the repository when the engine runs from a checkout (so `./formpth cli` and `formpth claude` work inside it) and in the home folder in the frozen desktop build. `base_env` sets `FORMPTH_TERMINAL`, `FORMPTH_ENGINE_URL`, `FORMPTH_MCP_URL` and `FORMPTH_URL`, and puts the repository on `PATH` outside the frozen build.
+The terminal dock's shells are engine-owned PTYs, as formlit and formvis keep them: `ptyprocess` on macOS and Linux, `pywinpty` on Windows. A session holds its argv, environment and kind (`shell` or `claude`), a 256 KB scrollback ring and a set of subscriber queues; a reader thread per process pushes output to the queues through the event loop bound at startup (`main.lifespan` calls `bind`), so a WebSocket that attaches later gets the scrollback and then the live text. `restart` bumps a generation number so the old reader thread stops delivering, clears the scrollback and sends `ESC c` so xterm resets. The shell starts in the repository when the engine runs from a checkout (so `./formpath cli` and `formpath claude` work inside it) and in the home folder in the frozen desktop build. `base_env` sets `FORMPATH_TERMINAL`, `FORMPATH_ENGINE_URL`, `FORMPATH_MCP_URL` and `FORMPATH_URL`, and puts the repository on `PATH` outside the frozen build.
 
 ## app/routers/terminal.py
 
@@ -267,7 +267,7 @@ A terminal is a shell on this computer, so every route and the WebSocket refuse 
 - kind: explainer
 - logged: v0.24.0 · 2026-10-15
 
-Follows formlit's design. The Claude Code button runs the person's own `claude` (Preferences path, `FORMPTH_CLAUDE_BIN`, `PATH`, the usual install folders, then a login shell's `command -v`) in a PTY tab of kind `claude`, started through the login shell so the person's `PATH` and Node are found, with `--mcp-config` naming formpth's `/mcp` over HTTP plus the `x-formpth-inapp` header, `--allowedTools mcp__formpth` and a note appended to the system prompt. The token is minted per engine start and never written to disk, so only programs the engine starts carry it. The Chat tab runs `claude -p ... --output-format stream-json --include-partial-messages` per message, resuming the same session id, and publishes start, delta, tool, toolDone, usage, done, reset and adopted events to the chat WebSocket; tool result pictures are saved under the data folder's `Chat` and served by name only. Sign-in stays Claude Code's own: nothing here reads or stores a credential. `chat_sessions` reads Claude Code's own transcripts for the agent folder so a conversation started in a tab can be continued in Chat, and Open in Claude Code resumes a Chat conversation in a tab.
+Follows formlit's design. The Claude Code button runs the person's own `claude` (Preferences path, `FORMPATH_CLAUDE_BIN`, `PATH`, the usual install folders, then a login shell's `command -v`) in a PTY tab of kind `claude`, started through the login shell so the person's `PATH` and Node are found, with `--mcp-config` naming formpath's `/mcp` over HTTP plus the `x-formpath-inapp` header, `--allowedTools mcp__formpath` and a note appended to the system prompt. The token is minted per engine start and never written to disk, so only programs the engine starts carry it. The Chat tab runs `claude -p ... --output-format stream-json --include-partial-messages` per message, resuming the same session id, and publishes start, delta, tool, toolDone, usage, done, reset and adopted events to the chat WebSocket; tool result pictures are saved under the data folder's `Chat` and served by name only. Sign-in stays Claude Code's own: nothing here reads or stores a credential. `chat_sessions` reads Claude Code's own transcripts for the agent folder so a conversation started in a tab can be continued in Chat, and Open in Claude Code resumes a Chat conversation in a tab.
 
 ### app/routers/mcp.py · in-app token
 - refers-to: app/routers/mcp.py :: _inapp, _call, _ask, bridge_next (eligible)
@@ -283,14 +283,14 @@ A `tools/call` carrying the engine's in-app token sets the `_inapp` context vari
 - kind: explainer
 - logged: v0.25.0 · 2026-10-15
 
-The window mirrors its command catalogue here (`POST /api/commands/catalogue`) and the engine keeps it in memory and in the data folder's `commands-catalogue.json`, so `GET /api/commands?group=&text=` and `GET /api/commands/{id}` (with close-match suggestions on a miss) answer even when the window was opened in an earlier run. `POST /api/commands/{id}` takes the parameters as the JSON body and runs the command through the MCP router's `_call("run_command")`, which means the window must be open and the outside-agent question applies, exactly as for MCP clients; a request carrying the in-app token (the terminal dock's shells have it in `FORMPTH_INAPP_TOKEN`, which `setup/cli.py` sends) skips the question. All routes are local only.
+The window mirrors its command catalogue here (`POST /api/commands/catalogue`) and the engine keeps it in memory and in the data folder's `commands-catalogue.json`, so `GET /api/commands?group=&text=` and `GET /api/commands/{id}` (with close-match suggestions on a miss) answer even when the window was opened in an earlier run. `POST /api/commands/{id}` takes the parameters as the JSON body and runs the command through the MCP router's `_call("run_command")`, which means the window must be open and the outside-agent question applies, exactly as for MCP clients; a request carrying the in-app token (the terminal dock's shells have it in `FORMPATH_INAPP_TOKEN`, which `setup/cli.py` sends) skips the question. All routes are local only.
 
 ### app/services/terminal.py · the dock's shells carry the in-app token
 - refers-to: app/services/terminal.py :: base_env
 - kind: rationale
 - logged: v0.25.0 · 2026-10-15
 
-A shell in the dock is the person's own terminal inside the window they are using, so `./formpth cli run ...` typed there should not ask them whether an outside agent may act. The token is per engine start and lives only in the environment of programs the engine starts.
+A shell in the dock is the person's own terminal inside the window they are using, so `./formpath cli run ...` typed there should not ask them whether an outside agent may act. The token is per engine start and lives only in the environment of programs the engine starts.
 
 ## app/services/spell.py
 
@@ -360,7 +360,7 @@ POST /api/fonts/subset takes gids (JSON list), optional axes (JSON tag to number
 - kind: rationale
 - logged: v0.32.0 · 2026-10-15
 
-Pillow 12.3.0 (LittleCMS 2) is a new dependency, pinned in requirements.txt and requirements_macos.txt and listed in NOTICE.md; it is imported lazily so the engine still starts without it and the routes answer with what to run. Profile ids are the sha1 of the bytes. lcms writes the creation time into its built-in sRGB, so its bytes (and id) changed every second; both built-ins are therefore cached under `profiles/.builtin/` on first use and the folder scan skips dot folders. formpth Generic CMYK is written in Python with struct: an ICC v2 output profile (prtr, CMYK, Lab PCS) with A2B0 to A2B2 sharing one 11 point lut16 and B2A0 to B2A2 sharing one 17 point lut16. The forward model is a Neugebauer model with Yule-Nielsen n 2.0 over 16 primaries given as Lab values of a generic coated press, dot gain of 15 percent (17 for black) at 50 percent, relative to its own paper, with the paper as the media white point. The separation table solves Lab to CMYK per node by Gauss-Newton on CMY with black fixed from lightness and chroma (a medium GCR), then limits total ink to 300 percent. It takes about 2 seconds to build once. It is a generic model, not a characterisation of FOGRA, SWOP or any press, and its copyright tag says so.
+Pillow 12.3.0 (LittleCMS 2) is a new dependency, pinned in requirements.txt and requirements_macos.txt and listed in NOTICE.md; it is imported lazily so the engine still starts without it and the routes answer with what to run. Profile ids are the sha1 of the bytes. lcms writes the creation time into its built-in sRGB, so its bytes (and id) changed every second; both built-ins are therefore cached under `profiles/.builtin/` on first use and the folder scan skips dot folders. formpath Generic CMYK is written in Python with struct: an ICC v2 output profile (prtr, CMYK, Lab PCS) with A2B0 to A2B2 sharing one 11 point lut16 and B2A0 to B2A2 sharing one 17 point lut16. The forward model is a Neugebauer model with Yule-Nielsen n 2.0 over 16 primaries given as Lab values of a generic coated press, dot gain of 15 percent (17 for black) at 50 percent, relative to its own paper, with the paper as the media white point. The separation table solves Lab to CMYK per node by Gauss-Newton on CMY with black fixed from lightness and chroma (a medium GCR), then limits total ink to 300 percent. It takes about 2 seconds to build once. It is a generic model, not a characterisation of FOGRA, SWOP or any press, and its copyright tag says so.
 
 ### app/routers/color.py · loopback only, table layouts
 - refers-to: app/routers/color.py :: lut_rgb_to_cmyk, lut_cmyk_to_rgb, lut_proof; app/services/color.py :: rgb_to_cmyk, cmyk_to_rgb, proof
@@ -374,7 +374,7 @@ Every route uses origin_ok from terminal.py because uploads write to the data fo
 - kind: rationale
 - logged: v0.32.0 · 2026-10-15
 
-DWG is read by converting it to DXF with a program already on the computer, then through the existing DXF reader, bc no DWG library is under a licence formpth can ship (LibreDWG is GPL 3, the ODA SDK is commercial), and running either as a separate program keeps formpth Apache 2.0. The ODA File Converter is tried first (free, reads every DWG release, found on PATH, at FORMPTH_ODA_CONVERTER or at its default install folder per OS), then LibreDWG's dwg2dxf. Qt's offscreen platform is set on Linux without a display bc the ODA converter is a Qt program. Without a converter the call answers 422 with where to get one. Since v0.35.0 the window reads DWG itself (frontend src/io/dwg.ts) and only calls this route for a version the native reader does not cover (R2007 and older); the MCP open_file and place_image tools no longer convert in the engine, they hand the window the .dwg bytes like any other file and the window falls back to this route.
+DWG is read by converting it to DXF with a program already on the computer, then through the existing DXF reader, bc no DWG library is under a licence formpath can ship (LibreDWG is GPL 3, the ODA SDK is commercial), and running either as a separate program keeps formpath Apache 2.0. The ODA File Converter is tried first (free, reads every DWG release, found on PATH, at FORMPATH_ODA_CONVERTER or at its default install folder per OS), then LibreDWG's dwg2dxf. Qt's offscreen platform is set on Linux without a display bc the ODA converter is a Qt program. Without a converter the call answers 422 with where to get one. Since v0.35.0 the window reads DWG itself (frontend src/io/dwg.ts) and only calls this route for a version the native reader does not cover (R2007 and older); the MCP open_file and place_image tools no longer convert in the engine, they hand the window the .dwg bytes like any other file and the window falls back to this route.
 
 
 ## app/services/display.py
@@ -384,7 +384,7 @@ DWG is read by converting it to DXF with a program already on the computer, then
 - kind: rationale
 - logged: v0.34.0 · 2026-10-15
 
-Order: FORMPTH_DISPLAY_PROFILE (a path, for people whose desktop does not report one), then the platform. Windows asks GetICMProfileW for the primary display through ctypes. macOS asks CoreGraphics for the main display's colour space and its ICC data (ColorSync). Linux asks colord first (`colormgr get-devices-by-kind display`, then the first device's profile file) and falls back to the `_ICC_PROFILE` X11 root atom through xprop. All of them are wrapped, return None on any failure, and the answer is cached for 30 s because the route is hit when proofing starts. GET /api/color/display-profile returns `{"profile": null}` when nothing was found and the proof then uses the built-in sRGB monitor. Verified here: the env path, and the colord and X11 parsers against stand-in colormgr and xprop scripts; no real colord, ColorSync or Windows display was available, so the macOS and Windows paths and the real colormgr output format are untested.
+Order: FORMPATH_DISPLAY_PROFILE (a path, for people whose desktop does not report one), then the platform. Windows asks GetICMProfileW for the primary display through ctypes. macOS asks CoreGraphics for the main display's colour space and its ICC data (ColorSync). Linux asks colord first (`colormgr get-devices-by-kind display`, then the first device's profile file) and falls back to the `_ICC_PROFILE` X11 root atom through xprop. All of them are wrapped, return None on any failure, and the answer is cached for 30 s because the route is hit when proofing starts. GET /api/color/display-profile returns `{"profile": null}` when nothing was found and the proof then uses the built-in sRGB monitor. Verified here: the env path, and the colord and X11 parsers against stand-in colormgr and xprop scripts; no real colord, ColorSync or Windows display was available, so the macOS and Windows paths and the real colormgr output format are untested.
 
 ### app/services/color.py · the preserve table
 - refers-to: app/services/color.py :: preserve; app/routers/color.py :: lut_preserve
@@ -398,14 +398,14 @@ POST /api/color/lut/preserve returns a CMYK grid (grid^4 by 3, cyan slowest) of 
 - kind: rationale
 - logged: v0.37.0 · 2026-10-16
 
-Decision: formpth still ships only the built-in sRGB and the synthetic formpth Generic CMYK; no press profile (FOGRA, SWOP, GRACoL, Japan Color, PSO) is added to the tree. What was checked: pip has no package carrying ICC press profiles under any name tried (icc-profiles, iccprofiles, icc_profiles, colour-icc-profiles and similar all return no distribution); on npm the transicc package (MIT code, 1.2.1) bundles 27 CMYK profiles and the imprint-pdf print package (Apache 2.0) carries none. The licence of the code does not cover the profiles inside transicc. The Adobe ones (SWOP v2 and 2006, FOGRA27, 28, 29 and 39, GRACoL 2006, the Japan Color set) carry only the line Copyright Adobe Systems and one of them points to Adobe's EULA, which restricts redistribution, so they are out. The ECI ones from 2008 on (PSO Coated v3 style NPscreen, PSO Uncoated, LWC, MFC, SNP) carry the text: made available by ECI with permission of Heidelberger Druckmaschinen AG, may be used, embedded, exchanged and shared without restriction, may not be altered or sold without written permission of ECI. That is a real grant of redistribution, but the no-sale and no-alteration conditions are field of use limits that Apache 2.0 does not let formpth pass on (anyone may sell an Apache licensed build), and the older ISO Coated v2 and Uncoated Yellowish files carry only a Heidelberger copyright line with no grant at all, so no profile is clearly under terms compatible with Apache 2.0 and none is bundled. Ghostscript's default_cmyk.icc is AGPL and stays out. People who need a press condition load the file with Edit > Color Settings > Load Profile (the engine stores it under the data folder, ECI offers the ISO Coated and PSO profiles at eci.org for free download). The verification here used FOGRA39L Coated, already loaded in this machine's data folder, and nothing from it was copied into the repo. If ECI publishes the profiles under a licence without the sale and alteration clauses, or the project accepts third party assets under their own terms listed in NOTICE.md, bundling PSO Coated NPscreen (1.8 MB) is the first candidate; the listing, upload and LUT code need no change for it.
+Decision: formpath still ships only the built-in sRGB and the synthetic formpath Generic CMYK; no press profile (FOGRA, SWOP, GRACoL, Japan Color, PSO) is added to the tree. What was checked: pip has no package carrying ICC press profiles under any name tried (icc-profiles, iccprofiles, icc_profiles, colour-icc-profiles and similar all return no distribution); on npm the transicc package (MIT code, 1.2.1) bundles 27 CMYK profiles and the imprint-pdf print package (Apache 2.0) carries none. The licence of the code does not cover the profiles inside transicc. The Adobe ones (SWOP v2 and 2006, FOGRA27, 28, 29 and 39, GRACoL 2006, the Japan Color set) carry only the line Copyright Adobe Systems and one of them points to Adobe's EULA, which restricts redistribution, so they are out. The ECI ones from 2008 on (PSO Coated v3 style NPscreen, PSO Uncoated, LWC, MFC, SNP) carry the text: made available by ECI with permission of Heidelberger Druckmaschinen AG, may be used, embedded, exchanged and shared without restriction, may not be altered or sold without written permission of ECI. That is a real grant of redistribution, but the no-sale and no-alteration conditions are field of use limits that Apache 2.0 does not let formpath pass on (anyone may sell an Apache licensed build), and the older ISO Coated v2 and Uncoated Yellowish files carry only a Heidelberger copyright line with no grant at all, so no profile is clearly under terms compatible with Apache 2.0 and none is bundled. Ghostscript's default_cmyk.icc is AGPL and stays out. People who need a press condition load the file with Edit > Color Settings > Load Profile (the engine stores it under the data folder, ECI offers the ISO Coated and PSO profiles at eci.org for free download). The verification here used FOGRA39L Coated, already loaded in this machine's data folder, and nothing from it was copied into the repo. If ECI publishes the profiles under a licence without the sale and alteration clauses, or the project accepts third party assets under their own terms listed in NOTICE.md, bundling PSO Coated NPscreen (1.8 MB) is the first candidate; the listing, upload and LUT code need no change for it.
 
 ### app/routers/mcp.py · export_file writes .dwg
 - refers-to: app/routers/mcp.py :: TOOLS, export_file; frontend/src/automation/agent-bridge.ts :: export_file
 - kind: decision
 - logged: v0.38.0 · 2026-10-16
 
-export_file accepts a .dwg path next to .dxf: the extension list, the description and the dxf_version text now say that .dwg is written as AutoCAD 2000 and that R12 is refused for it. The writing itself happens in the window (frontend/src/io/dwg-write.ts), so the engine only passes the format through; `./formpth agents sync` regenerated the tool reference and the .agents mirror. The DWG writer was built clean room: spec as remembered, byte-level study of samples, LibreDWG only as a black box (dwgread and dwg2dxf output), no GPL code read or copied.
+export_file accepts a .dwg path next to .dxf: the extension list, the description and the dxf_version text now say that .dwg is written as AutoCAD 2000 and that R12 is refused for it. The writing itself happens in the window (frontend/src/io/dwg-write.ts), so the engine only passes the format through; `./formpath agents sync` regenerated the tool reference and the .agents mirror. The DWG writer was built clean room: spec as remembered, byte-level study of samples, LibreDWG only as a black box (dwgread and dwg2dxf output), no GPL code read or copied.
 
 ### app/routers/mcp.py · gradient method in set_paint
 
@@ -413,14 +413,14 @@ export_file accepts a .dwg path next to .dxf: the extension list, the descriptio
 - kind: decision
 - logged: v0.43.0 · 2026-10-16
 
-The shared colour description for set_paint and the other paint parameters now documents `method: classic|perceptual` on a linear or radial gradient. It is a description change only (no new parameter on the schema level, the paint is a free object), and ./formpth agents sync regenerated the tool reference.
+The shared colour description for set_paint and the other paint parameters now documents `method: classic|perceptual` on a linear or radial gradient. It is a description change only (no new parameter on the schema level, the paint is a free object), and ./formpath agents sync regenerated the tool reference.
 
 ### app/services/rgb_profiles.py · built-in Adobe RGB (1998) compatible and Display P3
 - refers-to: app/services/rgb_profiles.py :: build, SPACES; app/services/color.py :: _entries, profile_bytes
 - kind: decision
 - logged: v0.47.0 · 2026-10-16
 
-formpth writes both RGB working spaces itself as ICC v2.4 matrix/TRC profiles from the published primaries (Adobe RGB: 0.64/0.33, 0.21/0.71, 0.15/0.06, D65, gamma 563/256; Display P3: 0.680/0.320, 0.265/0.690, 0.150/0.060, D65, sRGB curve as a 1024 point table). The colorants are the D65 matrix Bradford-adapted to the D50 PCS and a chad tag records the adaptation; no vendor file is copied. They are named "Adobe RGB (1998) compatible" and "Display P3", listed as builtin, and found by name in profile_bytes. Checked with PIL.ImageCms as a black box: both parse, colorants match the known D50 values (Adobe R 0.6097 0.3111 0.0195, P3 R 0.5151 0.2412 -0.0011) and white, mid grey and primaries convert to sRGB as expected.
+formpath writes both RGB working spaces itself as ICC v2.4 matrix/TRC profiles from the published primaries (Adobe RGB: 0.64/0.33, 0.21/0.71, 0.15/0.06, D65, gamma 563/256; Display P3: 0.680/0.320, 0.265/0.690, 0.150/0.060, D65, sRGB curve as a 1024 point table). The colorants are the D65 matrix Bradford-adapted to the D50 PCS and a chad tag records the adaptation; no vendor file is copied. They are named "Adobe RGB (1998) compatible" and "Display P3", listed as builtin, and found by name in profile_bytes. Checked with PIL.ImageCms as a black box: both parse, colorants match the known D50 values (Adobe R 0.6097 0.3111 0.0195, P3 R 0.5151 0.2412 -0.0011) and white, mid grey and primaries convert to sRGB as expected.
 
 ### app/services/color.py · lists and serves the new RGB profiles
 - refers-to: app/services/color.py :: _entries, profile_bytes
@@ -434,4 +434,4 @@ _entries adds the two profiles after the generic CMYK so the first builtin RGB s
 - kind: decision
 - logged: v0.44.0 · 2026-10-16
 
-The bridge already read `psd_edit` (default true) after the editable PSD writer landed, but the catalogue did not declare it, so agents could not discover it. export_file now declares `psd_edit` beside `psd_layers`, and its description says what a .psd holds with and without it: Photoshop groups, editable type layers and shape layers, or one pixel layer per top-level layer. ./formpth agents sync regenerated the tool reference.
+The bridge already read `psd_edit` (default true) after the editable PSD writer landed, but the catalogue did not declare it, so agents could not discover it. export_file now declares `psd_edit` beside `psd_layers`, and its description says what a .psd holds with and without it: Photoshop groups, editable type layers and shape layers, or one pixel layer per top-level layer. ./formpath agents sync regenerated the tool reference.

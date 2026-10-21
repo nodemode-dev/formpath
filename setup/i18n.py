@@ -12,7 +12,7 @@ KEYS = I18N / "keys.json"
 LOCALES = I18N / "locales"
 LANGS = ["es", "es-MX", "pt-BR", "fr", "fr-CA", "de", "it", "nl", "da", "fi", "nb", "sv", "ru", "pl", "cs", "hu", "uk", "tr",
          "zh-Hans", "zh-Hant", "ja", "ko", "id", "th", "vi"]
-USAGE = """./formpth i18n <command>
+USAGE = """./formpath i18n <command>
 
   extract              harvest the interface's English strings from frontend/src into frontend/src/i18n/keys.json
   check [LANG]         every language has every key, with the same {0} placeholders; exit 1 otherwise
