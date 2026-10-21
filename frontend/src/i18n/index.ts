@@ -4,7 +4,7 @@ export const LANGUAGES: Array<[string, string]> = [
   ['sv', 'Svenska'], ['ru', 'Русский'], ['pl', 'Polski'], ['cs', 'Čeština'], ['hu', 'Magyar'], ['uk', 'Українська'], ['tr', 'Türkçe'],
   ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ja', '日本語'], ['ko', '한국어'], ['id', 'Bahasa Indonesia'], ['th', 'ไทย'], ['vi', 'Tiếng Việt'],
 ];
-const STORE = 'formpth.lang';
+const STORE = 'formpath.lang';
 const ATTRS = ['title', 'placeholder', 'aria-label', 'alt'];
 const SKIP = [
   'script', 'style', 'textarea', 'code', 'pre', 'canvas', '[translate="no"]', '[contenteditable="true"]', '.xterm', '.ft-chat-msg', '.ft-md',
