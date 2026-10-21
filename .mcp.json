@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "formpth": {
+    "formpath": {
       "type": "stdio",
-      "command": "${CLAUDE_PROJECT_DIR:-.}/formpth",
+      "command": "${CLAUDE_PROJECT_DIR:-.}/formpath",
       "args": ["mcp"]
     }
   }

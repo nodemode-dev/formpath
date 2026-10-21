@@ -1,0 +1,63 @@
+{
+  "skill_name": "formpath-harness",
+  "notes": "Run each prompt with formpath booted (./formpath boot), a window open at http://localhost:5230 and agents allowed in Preferences > Plugins. Grade the transcript and the files written.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "poster-from-brief",
+      "prompt": "Make me an A4 poster for the Northside Community Garden open day on Saturday 14 June: a soft green to cream gradient background, a simple sun made of a circle and rays, the title OPEN DAY in big bold type, the date and 'Free entry, bring the kids' underneath. Save it editable and export a PDF and a PNG to /tmp/garden.",
+      "files": [],
+      "expected_behavior": [
+        "The transcript calls get_document or new_document with 595 by 842 before any drawing call",
+        "The rays use repeat radial, duplicate_objects with transform, or a star shape, not dozens of hand-placed lines",
+        "add_text is used for the title with a bold style and a size of at least 48",
+        "get_image is called after the drawing and before export_file",
+        "save_project writes a .fpth and export_file writes a .pdf and a .png under /tmp/garden, and the reply lists all three paths"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "logo-with-pathfinder-and-outlines",
+      "prompt": "design a logo for 'Pebble Labs', a rounded pebble shape with a bite taken out of the top right, the name next to it, outlined so it works without the font, svg please to /tmp/pebble/logo.svg",
+      "files": [],
+      "expected_behavior": [
+        "The bite is made with pathfinder minus_front (or shape_builder delete), not by drawing an irregular path freehand",
+        "create_outlines is called on the name, after save_project wrote an editable copy",
+        "get_document is called again after pathfinder or create_outlines before the new ids are used",
+        "export_file writes /tmp/pebble/logo.svg"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "recover-from-stale-ids",
+      "prompt": "In the open formpath document, unite the two circles, then make the result blue and give it a drop shadow.",
+      "files": [],
+      "expected_behavior": [
+        "get_document is called first to find the two circles' ids",
+        "After pathfinder unite, the agent uses the id reported by the tool or re-reads get_document, never the old circle ids",
+        "set_paint and apply_effect stylize.drop_shadow target the united shape",
+        "If a tool error says no object has an id, the agent re-reads get_document and retries instead of giving up"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "not-a-formpath-task",
+      "prompt": "Retouch the skin in this portrait photo and remove the red eye.",
+      "files": [],
+      "expected_behavior": [
+        "The agent does not start a formpath drawing session; pixel retouching belongs to a raster editor such as formvis"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "make a poster for our bake sale with a big title and some cupcake shapes", "should_trigger": true },
+    { "query": "can u draw me a simple logo, like a fox head from triangles, export svg", "should_trigger": true },
+    { "query": "Please produce a vector badge for the 2026 Hackathon and save it as a PDF.", "should_trigger": true },
+    { "query": "turn this list of steps into a flow diagram with boxes and arrows I can put in slides", "should_trigger": true },
+    { "query": "open ~/Desktop/icon.svg in formpath, make the strokes thicker and recolour it teal", "should_trigger": true },
+    { "query": "remove the background from this product photo", "should_trigger": false },
+    { "query": "write the CSS for a gradient button on my website", "should_trigger": false },
+    { "query": "add a new Pathfinder operation to formpath's engine code", "should_trigger": false },
+    { "query": "make a bar chart of these sales numbers in a spreadsheet", "should_trigger": false }
+  ]
+}
