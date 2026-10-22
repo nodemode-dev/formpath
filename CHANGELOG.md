@@ -2,6 +2,13 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.50.0 · 2026-10-22
+
+- The title row follows the Form family: on macOS it leaves room for the traffic lights and drags the window; on Windows and Linux, View > Custom Title Bar draws Minimize, Maximize and Close in it. The row shows the document name and the window title follows it.
+- macOS menu bar: Undo, Redo, Cut, Copy, Paste and Select All work inside text fields, check items show their state, and View > Menus in Window keeps the menus in the window.
+- A new Home screen: navigation (Start, Recent, Projects), a greeting, a start card, recent files with filter, sort and grid or list, and the document presets; a preference brings Home back when the last document closes.
+- All 28 Form family themes, so a theme picked in another form app shows the same here.
+
 ## 0.49.0 · 2026-10-22
 
 - The desktop app starts like the rest of the Form family: a rounded splash card with the formpath icon, Starting formpath and a loading bar; the main window stays hidden until its page has painted, then appears whole at least 2.6 s after launch. On macOS the title bar is an overlay with the traffic lights centred in a 38 px row.
