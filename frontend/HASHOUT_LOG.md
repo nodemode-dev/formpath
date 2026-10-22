@@ -4126,3 +4126,10 @@ Home is now a navigation column (Start, Recent, Projects with count pills, Creat
 - logged: v0.50.0 · 2026-10-22
 
 The theme choice is shared across the Form family (`nodemode_ui_settings`) and formvis offers 28 themes; formpath had 15, so a theme picked in formvis such as Pro Dark or Soft Light fell back to Studio. The 13 missing profiles are added with formvis's values to THEMES and to the boot script's PROFILES and LIGHT map, which must stay equal. Checked in headless Chromium with the store set to pro-dark, soft-light and nineties: the right `--bg-primary` at the first script turn and after start, `theme-light` on the light ones.
+
+### src/ui/app-dialogs.ts · Preferences as formvis: floating rail, stacked cards, scroll spy, wire
+- refers-to: SettingsDialog
+- kind: decision
+- logged: v0.51.0 · 2026-10-22
+
+The dialog keeps its prefs, stored keys and value labels and takes formvis's shell: a floating rail of icon tabs left of the frame (`formpath.prefsRailCollapsed` remembers the collapsed state), one scrolling pane of foldable section cards with titled group cards, a scroll spy that picks the current card, an SVG wire from the active tab to a port on the header divider, a head icon, a bordered close button and the Done footer. It is built once; `show()` only patches values and the wire path is written only when it changes. Sections follow formvis's names and order: General, Interface, Workspace, Tools (was Selection & Snapping), File Handling, History & Cache (holds Undo steps kept, moved out of File Handling), Units & Rulers (was Units), Guides & Grid, Plugins (was Plugins & Agents). `data-section` is the English name and `add()` order is the display order. Transparency grid rows stay in Guides & Grid because formpath has no Gamut section. Reset All Preferences already clears every `formpath.` key. New pf icons are in the 24-unit stroke style. New strings (group names, Tools, History & Cache, Units & Rulers, Plugins, Collapse tabs, Expand tabs) are not in the locale tables yet and show in English.

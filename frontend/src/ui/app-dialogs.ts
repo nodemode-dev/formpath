@@ -3,7 +3,7 @@ import type { Engine, Units } from '../engine';
 import { api, type Capabilities, type LibraryItem } from '../io/api';
 import { comboOf, formatKeys, type Commands } from './commands';
 import { confirmAction, Dialog } from './dialogs';
-import { el, escapeHtml, patchList, q, setClass, setDisabled, setHidden, setText, setValue } from './dom';
+import { el, escapeHtml, patchList, q, setChecked, setClass, setDisabled, setHidden, setStyleVar, setText, setValue } from './dom';
 import { LANGUAGES, language, setLanguage, t } from '../i18n';
 import { icon } from './icons';
 import { brandMark } from './brand';
@@ -159,6 +159,14 @@ export class SettingsDialog extends Dialog {
   private readonly intensity = el<HTMLInputElement>('<input class="cv-slider" type="range" min="0" max="150" step="5" aria-label="Accent intensity">');
   private readonly nav = el('<div class="cv-prefs-nav" role="tablist"></div>');
   private readonly sections = new Map<string, HTMLElement>();
+  private pagesEl: HTMLElement | null = null;
+  private shell: { frame: HTMLElement; rail: HTMLElement; port: HTMLElement; shade: SVGPathElement; line: SVGPathElement } | null = null;
+  private current = '';
+  private spyRaf = 0;
+  private wireRaf = 0;
+  private spyMuted = 0;
+  private wireD = '';
+  private portY = -1;
   private prefs: Prefs = loadPrefs();
   private readonly ctl: Record<string, HTMLInputElement | HTMLSelectElement> = {};
   private readonly libNow = el('<p class="cv-note" role="status"></p>');
@@ -175,17 +183,30 @@ export class SettingsDialog extends Dialog {
 
   constructor(private readonly onPrefs: (p: Prefs) => void) {
     super('Preferences', 640);
-    const t = document.createElement('template');
-    t.innerHTML = themeSwatchesHtml();
-    this.grid.append(t.content);
+    const swatches = document.createElement('template');
+    swatches.innerHTML = themeSwatchesHtml();
+    this.grid.append(swatches.content);
     const pages = el('<div class="cv-prefs-pages"></div>');
+    const railIcons: Record<string, string> = { General: 'pfGeneral', Interface: 'pfInterface', Workspace: 'pfWorkspace', Tools: 'pfTools', 'File Handling': 'pfFile', 'History & Cache': 'pfHistory', 'Units & Rulers': 'pfUnits', 'Guides & Grid': 'pfGuides', Plugins: 'pfPlugins' };
+    const grp = (label: string, ...content: HTMLElement[]): HTMLElement => {
+      const g = el('<section class="cv-prefs-group"><h3 class="cv-prefs-label"></h3></section>');
+      setText(q(g, '.cv-prefs-label'), label);
+      g.append(...content);
+      return g;
+    };
+    const nt = (text: string): HTMLElement => { const n = el('<p class="cv-note"></p>'); setText(n, text); return n; };
     const add = (name: string, ...content: HTMLElement[]): void => {
-      const tab = el<HTMLButtonElement>('<button class="cv-prefs-tab" type="button" role="tab"></button>');
-      tab.textContent = name;
-      tab.addEventListener('click', () => this.showSection(name));
+      const tab = el<HTMLButtonElement>(`<button class="cv-prefs-railtab" type="button" role="tab"><span class="cv-prefs-tabicon">${icon(railIcons[name] ?? 'pfGeneral', 18)}</span><span class="cv-prefs-tablabel"></span></button>`);
+      tab.dataset.section = name;
+      setText(q(tab, '.cv-prefs-tablabel'), name);
+      tab.title = name;
+      tab.addEventListener('click', () => this.showSection(name, 'smooth'));
       this.nav.appendChild(tab);
-      const pg = el('<div class="cv-prefs-page" role="tabpanel"></div>');
-      pg.append(...content);
+      const pg = el(`<section class="cv-prefs-page cv-prefs-sec" role="tabpanel"><button class="cv-prefs-sechead" type="button" aria-expanded="true"><span class="cv-prefs-secicon">${icon(railIcons[name] ?? 'pfGeneral', 16)}</span><span class="cv-prefs-seclabel"></span><span class="cv-prefs-chev">${icon('chevronDown', 16)}</span></button><div class="cv-prefs-secbody"></div></section>`);
+      pg.dataset.section = name;
+      setText(q(pg, '.cv-prefs-seclabel'), name);
+      q(pg, '.cv-prefs-sechead').addEventListener('click', () => this.foldSection(name));
+      q(pg, '.cv-prefs-secbody').append(...content);
       pages.appendChild(pg);
       this.sections.set(name, pg);
     };
@@ -193,24 +214,38 @@ export class SettingsDialog extends Dialog {
     const num = (key: keyof Prefs, label: string, min: number, max: number, step = 1): HTMLElement => { const c = numberInput(min, max, step); c.setAttribute('aria-label', label); c.addEventListener('change', () => { const v = Number(c.value); if (Number.isFinite(v)) this.change({ [key]: Math.min(max, Math.max(min, v)) } as Partial<Prefs>); }); c.addEventListener('keydown', (e) => e.stopPropagation()); this.ctl[key] = c; return row(label, c); };
     const sel = (key: keyof Prefs, label: string, choices: ReadonlyArray<readonly [string, string]>): HTMLElement => { const s = selectOf(choices); s.setAttribute('aria-label', label); s.addEventListener('change', () => this.change({ [key]: key === 'recoverySeconds' ? Number(s.value) : s.value } as Partial<Prefs>)); this.ctl[key] = s; return row(label, s); };
     const color = (key: 'guideColor' | 'gridColor', label: string): HTMLElement => { const c = el<HTMLInputElement>('<input class="cv-input" type="color">'); c.setAttribute('aria-label', label); c.addEventListener('input', () => this.change({ [key]: c.value } as Partial<Prefs>)); const b = el<HTMLButtonElement>('<button class="cv-btn" type="button">Theme colour</button>'); b.addEventListener('click', () => this.change({ [key]: '' } as Partial<Prefs>)); this.ctl[key] = c; return row(label, c, b); };
-    const reset = el<HTMLButtonElement>('<button class="cv-btn" type="button">Reset All Preferences...</button>');
+    const reset = el<HTMLButtonElement>('<button class="cv-btn cv-btn-danger" type="button">Reset All Preferences...</button>');
     reset.addEventListener('click', () => { void confirmAction('Reset all preferences?', 'Every preference, the panel arrangement and the tools shown go back to how formpath comes; your documents and library are kept. formpath reloads.', 'Reset').then((ok) => { if (!ok) return; for (const k of Object.keys(localStorage)) if (k.startsWith('formpath.') || k === 'nodemode_ui_settings') localStorage.removeItem(k); location.reload(); }); });
-    add('General', check('autoShowHome', 'Show the Home screen at launch'), check('homeOnLastClose', 'Show the Home screen when the last document closes'),num('keyIncrement', 'Keyboard increment (pt)', 0.01, 1000, 0.1), check('scaleStrokes', 'Scale strokes and effects'), check('scaleCorners', 'Scale corners'), check('previewBounds', 'Use preview bounds'), check('showGenerative', 'Show generative features'), reset);
-    this.intensity.addEventListener('input', () => setIntensity(Number(this.intensity.value) / 100));
+    add('General',
+      grp('Startup', check('autoShowHome', 'Show the Home screen at launch'), check('homeOnLastClose', 'Show the Home screen when the last document closes')),
+      grp('Transform', num('keyIncrement', 'Keyboard increment (pt)', 0.01, 1000, 0.1), check('scaleStrokes', 'Scale strokes and effects'), check('scaleCorners', 'Scale corners'), check('previewBounds', 'Use preview bounds')),
+      grp('Features', check('showGenerative', 'Show generative features')),
+      grp('Reset', reset));
+    this.intensity.addEventListener('input', () => { setIntensity(Number(this.intensity.value) / 100); this.paintRange(); });
     const lang = el<HTMLSelectElement>(`<select class="cv-select" translate="no" aria-label="Language">${LANGUAGES.map(([c, n]) => `<option value="${c}">${escapeHtml(n)}</option>`).join('')}</select>`);
     lang.value = language();
     lang.addEventListener('change', () => setLanguage(lang.value));
-    add('Interface', row('Language', lang), el('<p class="cv-note">formpath reloads in the chosen language.</p>'), row('Theme', this.grid), row('Accent', this.accent), row('Accent intensity', this.intensity), el('<p class="cv-note">Theme and accent are shared with NodeMode and formvis on this device.</p>'));
+    add('Interface',
+      grp('Theme', this.grid, row('Accent', this.accent), row('Accent intensity', this.intensity), nt('Theme and accent are shared with NodeMode and formvis on this device.')),
+      grp('Language', row('Language', lang), nt('formpath reloads in the chosen language.')));
     const lock = el<HTMLInputElement>('<input type="checkbox" aria-label="Lock workspace">');
     lock.addEventListener('change', () => this.workspaceLock?.set(lock.checked));
     this.ctl.lock = lock;
-    add('Workspace', row('Lock workspace', lock), check('narrowCollapse', 'Show the side column as icons in a narrow window'));
-    add('Selection & Snapping', num('snapTolerance', 'Snapping tolerance (screen px)', 1, 20), sel('snapAngleSet', 'Smart Guides construction angles', SNAP_ANGLE_SETS), check('smartLabels', 'Anchor/Path Labels'), check('smartMeasure', 'Measurement Labels'), check('smartHighlight', 'Object Highlighting'), check('smartSpacing', 'Spacing Guides'), sel('anchorSize', 'Anchor point and handle display size', ANCHOR_SIZES), check('zoomWheel', 'Zoom with the scroll wheel'), el('<p class="cv-note">On, the wheel zooms about the pointer and Ctrl, Cmd or Alt with the wheel scrolls; off, the other way round.</p>'));
-    add('Units', sel('units', 'Default units for new documents', UNIT_CHOICES), el('<p class="cv-note">A document keeps its own units, set in File > Document Setup; rulers and fields show them.</p>'));
-    add('Guides & Grid', color('guideColor', 'Guides'), color('gridColor', 'Grid'), num('gridSpacing', 'Gridline every (pt)', 1, 5000), num('gridSubdivisions', 'Subdivisions', 1, 64), check('gridInBack', 'Grids in back'), sel('checkerSize', 'Transparency grid size', CHECKER_SIZES), sel('checkerColors', 'Transparency grid colours', CHECKER_COLORS));
+    add('Workspace', grp('Panels', row('Lock workspace', lock), check('narrowCollapse', 'Show the side column as icons in a narrow window')));
+    add('Tools',
+      grp('Selection and Snapping', num('snapTolerance', 'Snapping tolerance (screen px)', 1, 20), sel('snapAngleSet', 'Smart Guides construction angles', SNAP_ANGLE_SETS), check('smartLabels', 'Anchor/Path Labels'), check('smartMeasure', 'Measurement Labels'), check('smartHighlight', 'Object Highlighting'), check('smartSpacing', 'Spacing Guides'), sel('anchorSize', 'Anchor point and handle display size', ANCHOR_SIZES)),
+      grp('Zoom and Scroll', check('zoomWheel', 'Zoom with the scroll wheel'), nt('On, the wheel zooms about the pointer and Ctrl, Cmd or Alt with the wheel scrolls; off, the other way round.')));
     const libApply = el<HTMLButtonElement>('<button class="cv-btn" type="button">Use this folder</button>');
     libApply.addEventListener('click', () => void this.applyLibrary());
-    add('File Handling', this.libNow, row('Library folder', this.libPath), row('Move my projects there', this.libMove), libApply, check('restoreSession', 'Reopen the documents that were open when formpath closed'), sel('recoverySeconds', 'Keep recovery data, within', RECOVERY_CHOICES), num('historyStates', 'Undo steps kept', 10, 1000));
+    add('File Handling',
+      grp('Opening and Recovery', check('restoreSession', 'Reopen the documents that were open when formpath closed'), sel('recoverySeconds', 'Keep recovery data, within', RECOVERY_CHOICES)),
+      grp('Library', this.libNow, row('Library folder', this.libPath), row('Move my projects there', this.libMove), libApply));
+    add('History & Cache', grp('History', num('historyStates', 'Undo steps kept', 10, 1000)));
+    add('Units & Rulers', grp('Rulers', sel('units', 'Default units for new documents', UNIT_CHOICES), nt('A document keeps its own units, set in File > Document Setup; rulers and fields show them.')));
+    add('Guides & Grid',
+      grp('Guides', color('guideColor', 'Guides')),
+      grp('Grid', color('gridColor', 'Grid'), num('gridSpacing', 'Gridline every (pt)', 1, 5000), num('gridSubdivisions', 'Subdivisions', 1, 64), check('gridInBack', 'Grids in back')),
+      grp('Transparency', sel('checkerSize', 'Transparency grid size', CHECKER_SIZES), sel('checkerColors', 'Transparency grid colours', CHECKER_COLORS)));
     const agents = el<HTMLInputElement>('<input type="checkbox" aria-label="Allow outside agents">');
     agents.addEventListener('change', () => { this.change({ agentsAllowed: agents.checked }); window.dispatchEvent(new CustomEvent('formpath:agents', { detail: agents.checked })); });
     this.ctl.agentsAllowed = agents;
@@ -223,34 +258,73 @@ export class SettingsDialog extends Dialog {
     const nm = el<HTMLInputElement>('<input class="cv-input" type="url" spellcheck="false" aria-label="NodeMode address">');
     nm.addEventListener('change', () => { if (/^https?:\/\/./.test(nm.value.trim())) this.change({ nodemodeUrl: nm.value.trim() }); });
     this.ctl.nodemodeUrl = nm;
-    add('Plugins & Agents', row('Allow outside agents (MCP)', agents), this.mcpNote,
-      el('<h3 class="cv-prefs-sub">Language model (Assistant)</h3>'), row('Address', this.llmUrl), row('Model', this.llmModel, this.llmModels), row('API key', this.llmKey), row('The model reads images', this.llmVision), llmButtons, this.llmNote,
-      el('<h3 class="cv-prefs-sub">NodeMode</h3>'), row('NodeMode address', nm));
+    add('Plugins',
+      grp('Connected Apps', row('NodeMode address', nm)),
+      grp('Prompts', row('Address', this.llmUrl), row('Model', this.llmModel, this.llmModels), row('API key', this.llmKey), row('The model reads images', this.llmVision), llmButtons, this.llmNote),
+      grp('Outside Agents', row('Allow outside agents (MCP)', agents), this.mcpNote));
     const wrap = el('<div class="cv-prefs"></div>');
-    wrap.append(this.nav, pages);
+    wrap.append(pages);
     this.body.appendChild(wrap);
+    this.pagesEl = pages;
+    const frame = q<HTMLElement>(this.scrim, '.cv-dialog');
+    frame.classList.add('cv-prefs-dlg');
+    q(this.scrim, '.cv-dialog-head').prepend(el(`<span class="cv-prefs-headicon">${icon('settings', 16)}</span>`));
+    const railKey = 'formpath.prefsRailCollapsed';
+    let collapsed = false;
+    try { collapsed = localStorage.getItem(railKey) === '1'; } catch { collapsed = false; }
+    const fold = el<HTMLButtonElement>(`<button class="cv-prefs-fold" type="button">${icon('pfFold', 16)}</button>`);
+    const paintRail = (): void => {
+      setClass(frame, 'is-rail-collapsed', collapsed);
+      fold.title = t(collapsed ? 'Expand tabs' : 'Collapse tabs');
+      fold.setAttribute('aria-label', fold.title);
+      fold.setAttribute('aria-expanded', String(!collapsed));
+    };
+    fold.addEventListener('click', () => {
+      collapsed = !collapsed;
+      try { localStorage.setItem(railKey, collapsed ? '1' : '0'); } catch { paintRail(); }
+      paintRail();
+      this.queueWire();
+    });
+    paintRail();
+    const rail = el('<div class="cv-prefs-rail"></div>');
+    rail.append(this.nav, fold);
+    const wire = el<HTMLElement>('<svg class="cv-prefs-wire" aria-hidden="true"><path class="cv-prefs-wire-shade"></path><path class="cv-prefs-wire-line"></path></svg>') as unknown as SVGSVGElement;
+    const port = el('<span class="cv-prefs-port" aria-hidden="true"></span>');
+    frame.append(rail, wire, port);
+    this.shell = { frame, rail, port, shade: q<SVGPathElement>(wire, '.cv-prefs-wire-shade'), line: q<SVGPathElement>(wire, '.cv-prefs-wire-line') };
+    pages.addEventListener('scroll', () => this.queueSpy(), { passive: true });
+    new ResizeObserver(() => this.queueWire()).observe(frame);
+    window.addEventListener('resize', () => this.queueWire());
     this.button('Done', 'primary', () => this.close());
     this.grid.addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-theme-id]'); if (!b?.dataset.themeId) return; setTheme(b.dataset.themeId); this.syncTheme(); });
     this.accent.addEventListener('input', () => { setAccent(this.accent.value); this.syncTheme(); });
     this.scrim.addEventListener('keydown', (e) => e.stopPropagation());
-    this.showSection('General');
+    this.markSection('General');
   }
 
   show(section?: string): void {
     this.prefs = loadPrefs();
     for (const [k, c] of Object.entries(this.ctl)) {
       const v = k === 'lock' ? this.workspaceLock?.get() ?? false : (this.prefs as unknown as Record<string, unknown>)[k];
-      if (c instanceof HTMLInputElement && c.type === 'checkbox') c.checked = !!v;
-      else if (c instanceof HTMLInputElement && c.type === 'color') c.value = String(v || (k === 'guideColor' ? '#4fdfff' : '#808080'));
+      if (c instanceof HTMLInputElement && c.type === 'checkbox') setChecked(c, !!v);
+      else if (c instanceof HTMLInputElement && c.type === 'color') setValue(c, String(v || (k === 'guideColor' ? '#4fdfff' : '#808080')));
       else setValue(c, String(v ?? ''));
     }
-    this.intensity.value = String(Math.round((readChoice().intensity ?? 1) * 100));
+    setValue(this.intensity, String(Math.round((readChoice().intensity ?? 1) * 100)));
+    this.paintRange();
     void this.refreshLibrary();
     void this.loadLlm();
     void api.mcpStatus().then((s) => setText(this.mcpNote, s ? `Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: ${s.endpoint} (${s.tools} tools). Claude Code: claude mcp add --transport http formpath ${s.endpoint}, or the stdio bridge ./formpath mcp.` : 'The engine is offline: start it with ./formpath boot to connect agents.'));
     if (section && this.sections.has(section)) this.showSection(section);
     this.syncTheme();
     this.open();
+    if (section && this.sections.has(section)) this.scrollToSection(section, 'auto');
+    this.queueWire();
+  }
+
+  private paintRange(): void {
+    const min = Number(this.intensity.min), max = Number(this.intensity.max);
+    setStyleVar(this.intensity, '--pct', `${((Number(this.intensity.value) - min) / (max - min)) * 100}%`);
   }
 
   private syncTheme(): void {
@@ -264,9 +338,82 @@ export class SettingsDialog extends Dialog {
     }
   }
 
-  private showSection(name: string): void {
-    for (const [n, pg] of this.sections) setHidden(pg, n !== name);
-    for (const tab of Array.from(this.nav.children) as HTMLElement[]) { const on = tab.textContent === name; setClass(tab, 'is-active', on); tab.setAttribute('aria-selected', String(on)); }
+  private showSection(name: string, scroll: ScrollBehavior | null = null): void {
+    if (!this.sections.has(name)) return;
+    this.markSection(name);
+    if (scroll) this.scrollToSection(name, scroll);
+  }
+
+  private markSection(name: string): void {
+    if (this.current === name) return;
+    this.current = name;
+    for (const [n, page] of this.sections) setClass(page, 'is-current', n === name);
+    for (const tab of Array.from(this.nav.children) as HTMLElement[]) { const on = tab.dataset.section === name; setClass(tab, 'is-active', on); tab.setAttribute('aria-selected', String(on)); }
+    this.queueWire();
+  }
+
+  private scrollToSection(name: string, behavior: ScrollBehavior): void {
+    const sec = this.sections.get(name), pages = this.pagesEl;
+    if (!sec || !pages) return;
+    if (sec.classList.contains('is-folded')) this.foldSection(name);
+    const top = sec.getBoundingClientRect().top - pages.getBoundingClientRect().top + pages.scrollTop - 12;
+    this.spyMuted = performance.now() + 700;
+    pages.scrollTo({ top, behavior });
+  }
+
+  private foldSection(name: string): void {
+    const sec = this.sections.get(name);
+    if (!sec) return;
+    const folded = !sec.classList.contains('is-folded');
+    setClass(sec, 'is-folded', folded);
+    setHidden(q(sec, '.cv-prefs-secbody'), folded);
+    q(sec, '.cv-prefs-sechead').setAttribute('aria-expanded', String(!folded));
+    this.queueWire();
+    this.queueSpy();
+  }
+
+  private queueSpy(): void {
+    if (this.spyRaf) return;
+    this.spyRaf = requestAnimationFrame(() => {
+      this.spyRaf = 0;
+      const pages = this.pagesEl;
+      if (!pages || !pages.clientHeight || performance.now() < this.spyMuted) return;
+      const edge = pages.getBoundingClientRect().top + 24;
+      const names = Array.from(this.sections.keys());
+      let best = '', bestD = Infinity;
+      if (pages.scrollHeight > pages.clientHeight + 4 && pages.scrollTop + pages.clientHeight >= pages.scrollHeight - 2) best = names[names.length - 1] ?? '';
+      else for (const [n, sec] of this.sections) {
+        const top = sec.getBoundingClientRect().top, d = top <= edge ? edge - top : top - edge + 100000;
+        if (d < bestD) { bestD = d; best = n; }
+      }
+      if (best) this.markSection(best);
+    });
+  }
+
+  private queueWire(): void {
+    if (this.wireRaf) return;
+    this.wireRaf = requestAnimationFrame(() => { this.wireRaf = 0; this.drawWire(); });
+  }
+
+  private drawWire(): void {
+    const s = this.shell;
+    if (!s || this.scrim.hidden) return;
+    const F = s.frame.getBoundingClientRect();
+    const tab = this.nav.querySelector<HTMLElement>('.cv-prefs-railtab.is-active');
+    const head = s.frame.querySelector<HTMLElement>('.cv-dialog-head');
+    if (!F.width || !tab || !head) return;
+    const N = this.nav.getBoundingClientRect();
+    let T = tab.getBoundingClientRect();
+    if (T.top < N.top || T.bottom > N.bottom) {
+      this.nav.scrollTop += T.top < N.top ? T.top - N.top - 6 : T.bottom - N.bottom + 6;
+      T = tab.getBoundingClientRect();
+    }
+    const R = s.rail.getBoundingClientRect(), H = head.getBoundingClientRect();
+    const portY = Math.round(H.bottom - F.top), sx = Math.round(T.right - F.left), ty = Math.round(T.top - F.top + T.height / 2);
+    const rr = R.right - F.left, trunk = Math.round(rr - rr * 0.45), dy = portY - ty, r = 10, dir = dy > 0 ? 1 : -1;
+    const d = Math.abs(dy) < 2 * r ? `M ${sx} ${ty} H ${trunk} V ${portY} H -7` : `M ${sx} ${ty} H ${trunk - r} a ${r} ${r} 0 0 ${dir > 0 ? 1 : 0} ${r} ${dir * r} V ${portY - dir * r} a ${r} ${r} 0 0 ${dir > 0 ? 0 : 1} ${r} ${dir * r} H -7`;
+    if (d !== this.wireD) { this.wireD = d; s.shade.setAttribute('d', d); s.line.setAttribute('d', d); }
+    if (portY !== this.portY) { this.portY = portY; s.port.style.transform = `translateY(${portY}px)`; }
   }
 
   private change(patch: Partial<Prefs>): void { this.prefs = { ...this.prefs, ...patch }; savePrefs(this.prefs); this.onPrefs(this.prefs); }
