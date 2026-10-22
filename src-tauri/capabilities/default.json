@@ -4,5 +4,17 @@
   "description": "The app talks HTTP to its engine on a loopback port; through Tauri it asks the shell for the installed fonts and, on macOS, sets its menus in the system menu bar.",
   "windows": ["splash", "main"],
   "remote": { "urls": ["http://127.0.0.1:*"] },
-  "permissions": ["core:default", "allow-set-window-title", "allow-app-ready"]
+  "permissions": [
+    "core:default",
+    "allow-set-window-title",
+    "allow-app-ready",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-decorations"
+  ]
 }

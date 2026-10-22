@@ -6,7 +6,9 @@ export class Tabs {
   private frame = 0;
   private activeId: string | null = null;
 
-  constructor(private readonly strip: HTMLElement, private readonly engine: Engine, requestClose: (id: string) => void) {
+  private windowTitle: string | null = null;
+
+  constructor(private readonly strip: HTMLElement, private readonly engine: Engine, requestClose: (id: string) => void, private readonly docTitle?: HTMLElement) {
     for (const k of ['projects', 'history', 'doc'] as const) engine.on(k, () => this.queue());
     strip.addEventListener('pointerdown', (e) => {
       const tab = (e.target as HTMLElement).closest<HTMLElement>('.cv-tab');
@@ -51,6 +53,14 @@ export class Tabs {
         moved.push(n);
       }
       if (moved.length) requestAnimationFrame(() => { for (const n of moved) { setClass(n, 'is-settling', true); setStyleVar(n, '--flip-x', '0px'); } });
+    }
+    const shown = current ? `${current.modified ? '• ' : ''}${current.name}` : '';
+    setText(this.docTitle ?? null, shown);
+    const title = current ? `${shown} - formpath` : 'formpath';
+    if (this.windowTitle !== title) {
+      this.windowTitle = title;
+      document.title = title;
+      if ('__TAURI_INTERNALS__' in window) void import('@tauri-apps/api/core').then((m) => m.invoke('set_window_title', { title })).catch(() => undefined);
     }
     const id = current?.id ?? null;
     if (id !== this.activeId) {

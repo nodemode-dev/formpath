@@ -122,6 +122,7 @@ import { packageProject } from './io/package';
 import { SpellMarks } from './ui/spell-marks';
 import { ThreeDWidget } from './ui/three-d-widget';
 import { Tabs } from './ui/tabs';
+import { CaptionButtons, wantsCustomTitleBar } from './ui/caption-buttons';
 import { TextEditor, typing as typingRef } from './ui/text-editor';
 import { TitleTools } from './ui/titlebar-tools';
 import { toast } from './ui/toast';
@@ -134,6 +135,7 @@ import { Viewport } from './engine/viewport';
 import { VERSION } from './version';
 
 const LAYERS_W_KEY = 'formpath.layersW';
+const CUSTOM_TITLE_BAR_KEY = 'formpath.customTitleBar';
 const message = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 function stored(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
 function store(key: string, value: string): void { try { localStorage.setItem(key, value); } catch { } }
@@ -142,6 +144,8 @@ const SHELL = `<div class="cv-app">
 <header class="cv-titlebar">
 <div class="cv-brand">${brandMark(18)}<span class="cv-brand-name">formpath</span></div>
 <nav class="cv-menubar" aria-label="Main menu"></nav>
+<div class="cv-tb-doc"></div>
+<div class="cv-tb-app">formpath</div>
 <div class="cv-zoom">
 <button class="cv-icon-btn" type="button" data-cmd="undo">${icon('undo', 16)}</button>
 <button class="cv-icon-btn" type="button" data-cmd="redo">${icon('redo', 16)}</button>
@@ -317,6 +321,7 @@ export function startApp(): void {
     locked: () => dock.locked,
     setLocked: (on) => { dock.locked = on; },
   });
+  const captionButtons = new CaptionButtons(q(root, '.cv-titlebar'), () => stored(CUSTOM_TITLE_BAR_KEY) === '1');
   dock.locked = dock.locked;
   const narrow = window.matchMedia('(max-width: 1099px)');
   let autoCollapsed = false;
@@ -1609,6 +1614,7 @@ export function startApp(): void {
     { id: 'transform-each', label: 'Transform Each...', keys: ['Alt+Shift+Mod+D'], group: 'Object', description: 'Transforms each selected object about its own centre; absolute mode takes target sizes in document units, relative mode percentages.', enabled: sel, mutates: true, params: { mode: { type: 'string', enum: ['relative', 'absolute'], description: 'Scale as percent of each object, or to a target size in document units (0 keeps the size)' }, sh: { type: 'number', min: 0, description: 'Scale horizontal: percent, or target width when absolute' }, sv: { type: 'number', min: 0, description: 'Scale vertical: percent, or target height when absolute' }, dx: { type: 'number', description: 'Move horizontal in points' }, dy: { type: 'number', description: 'Move vertical in points' }, angle: { type: 'number', min: -360, max: 360, description: 'Rotate in degrees' }, rx: { type: 'boolean', description: 'Reflect X' }, ry: { type: 'boolean', description: 'Reflect Y' }, random: { type: 'boolean', description: 'Randomise the amounts' } }, run: (params) => void transformEachDialog(params) },
     { id: 'toggle-scale-corners', label: 'Scale Corners', group: 'Object', description: 'Toggles whether scaling a live rectangle or a path with corner radii scales the radii; off keeps them.', enabled: has, mutates: false, checked: () => engine.view.scaleCorners, run: () => setPref({ scaleCorners: !engine.view.scaleCorners }) },
     { id: 'toggle-generative', label: 'Generative Features', group: 'View', description: 'Shows or hides every generative feature: the Generative menu, Generate Patterns, Retype and their panels.', checked: () => prefs.showGenerative, run: () => setPref({ showGenerative: !prefs.showGenerative }) },
+    { id: 'custom-title-bar', label: 'Custom Title Bar', group: 'View', description: 'Draws the desktop app\'s own title bar with Minimize, Maximize and Close on Windows and Linux.', enabled: wantsCustomTitleBar, checked: () => stored(CUSTOM_TITLE_BAR_KEY) === '1', run: () => { store(CUSTOM_TITLE_BAR_KEY, stored(CUSTOM_TITLE_BAR_KEY) === '1' ? '0' : '1'); captionButtons.sync(); } },
     { id: 'toggle-help-bar', label: 'Help Bar', group: 'View', description: 'Shows or hides the slim bar under the stage that names the active tool, its shortcut and its hint.', checked: () => prefs.helpBar, run: () => setPref({ helpBar: !prefs.helpBar }) },
     { id: 'toggle-task-bar', label: 'Contextual Task Bar', group: 'Window', description: 'Shows or hides the floating bar of next-step buttons below the selection.', checked: () => prefs.taskBar, run: () => setPref({ taskBar: !prefs.taskBar }) },
     { id: 'paste-on-selected-artboards', label: 'Paste on Selected Artboards', group: 'Edit', description: 'When on, Paste places a copy on every artboard at the same relative position; artboards have no multi-selection, so all artboards are used.', checked: () => prefs.pasteOnArtboards, run: () => setPref({ pasteOnArtboards: !prefs.pasteOnArtboards }) },
@@ -1955,7 +1961,7 @@ export function startApp(): void {
     { label: 'Type', items: () => ['panel-character', 'panel-paragraph', 'panel-character-styles', 'panel-paragraph-styles', 'panel-glyphs', 'panel-tabs', '-', 'hyphenation-options', 'justification-options', 'area-type-options', { label: 'Type on a Path', items: ['type-path-rainbow', 'type-path-skew', 'type-path-ribbon', 'type-path-stair', 'type-path-gravity', '-', 'type-on-path-options'] }, { label: 'Threaded Text', items: ['thread-create', 'thread-release', 'thread-remove'] }, 'toggle-area-type', { label: 'Type Orientation', items: ['type-orientation-horizontal', 'type-orientation-vertical'] }, '-', 'create-outlines', 'edit-text', 'find-replace', 'find-font', ...(prefs.showGenerative ? ['retype'] : []), '-', { label: 'Change Case', items: ['case-upper', 'case-lower', 'case-title', 'case-sentence'] }] },
     { label: 'Select', items: ['select-all', 'select-artboard', 'deselect', 'inverse', '-', 'select-above', 'select-below', '-', { label: 'Same', items: SAME.map(([k]) => `same-${k}`) }, { label: 'Object', items: OBJ.map(([k]) => `select-${k}`) }] },
     { label: 'Effect', items: () => ['apply-last-effect', 'last-effect', '-', 'raster-settings', '-', ...effectItems()] },
-    { label: 'View', items: () => ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', { label: 'Proof Setup', items: ['proof-setup', '-', 'proof-working-cmyk', ...profileList().filter((p) => p.space === 'CMYK').slice(0, 12).map((_, i) => `proof-profile-${i}`), 'proof-monitor-rgb'] }, 'proof-colors', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
+    { label: 'View', items: () => ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', { label: 'Proof Setup', items: ['proof-setup', '-', 'proof-working-cmyk', ...profileList().filter((p) => p.space === 'CMYK').slice(0, 12).map((_, i) => `proof-profile-${i}`), 'proof-monitor-rgb'] }, 'proof-colors', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', 'custom-title-bar', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
     { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'ink-manager', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype', 'text-to-vector'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
     { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
@@ -1980,7 +1986,7 @@ export function startApp(): void {
     if (h) { const id = engine.selectableFor(h.id); if (!p.selection.has(id)) engine.select([id]); }
     contextMenu.openAt(e.clientX, e.clientY);
   });
-  new Tabs(q(root, '.cv-tab-strip'), engine, (id) => void requestClose(id));
+  new Tabs(q(root, '.cv-tab-strip'), engine, (id) => void requestClose(id), q(root, '.cv-tb-doc'));
 
   async function requestClose(id: string): Promise<void> {
     const p = engine.projects.find((x) => x.id === id);
