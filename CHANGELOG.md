@@ -2,6 +2,11 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.49.0 · 2026-10-22
+
+- The desktop app starts like the rest of the Form family: a rounded splash card with the formpath icon, Starting formpath and a loading bar; the main window stays hidden until its page has painted, then appears whole at least 2.6 s after launch. On macOS the title bar is an overlay with the traffic lights centred in a 38 px row.
+- The owner's icon is the master (`assets/formpath_icon_macos.png`); the macOS `icon.icns` now keeps its margin and shadow, so it no longer sits larger than the rest of the family in the Dock.
+
 ## 0.48.0 · 2026-10-21
 
 The project is renamed from formpth to formpath.
