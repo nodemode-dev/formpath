@@ -1,10 +1,10 @@
 # Releasing
 
-Desktop releases build in GitHub Actions (`.github/workflows/desktop.yml`) on every `v*.*.*` tag: macOS (Apple silicon and Intel), Linux (AppImage, deb, rpm) and Windows (MSI, NSIS). The release job collects the bundles into a draft GitHub release; publishing the draft makes it the one the updater feed points at.
+formpath's own repository builds no release; its GitHub Actions only run the checks. Desktop releases are built by formcompiler (`nodemode-ai/formcompiler`), the release pipeline for every form* app: macOS (Apple silicon and Intel), Linux (AppImage, deb, rpm) and Windows (MSI, NSIS). formcompiler collects the bundles into a draft release named `formpath-vX.Y.Z` on its own release page. Publishing the draft there makes it the one the updater feed (`formpath-updates/latest.json` on formcompiler) points at.
 
-## One-time setup: repository secrets
+## One-time setup: signing secrets in formcompiler
 
-Builds work without them (unsigned, no updater artifacts); each group switches on its feature when present.
+These secrets are set in formcompiler's repository, never in formpath's. Builds work without them (unsigned, no updater artifacts); each group switches on its feature when present.
 
 | Secret | What it is |
 | --- | --- |
@@ -25,10 +25,11 @@ Generate it on your own machine and keep the private key out of the repository:
 cd frontend && npx tauri signer generate -w ~/.tauri/formpath.key
 ```
 
-Put the private key in `TAURI_SIGNING_PRIVATE_KEY` and the printed public key in `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`. Until the public key is there, the app skips update checks.
+Put the private key in formcompiler's `TAURI_SIGNING_PRIVATE_KEY` secret and the printed public key in `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`. Until the public key is there, the app skips update checks.
 
 ## Cutting a release
 
-1. Bump the version in `frontend/package.json` (and its lock file), `frontend/src/version.ts`, `backend/app/__init__.py`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` and the README badge; commit; tag `vX.Y.Z`.
-2. Push the tag. The workflow builds the four targets and writes `latest.json` from the updater signatures.
-3. Check the draft release's assets, then publish it.
+1. Bump the version in `frontend/package.json` (and its lock file), `frontend/src/version.ts`, `backend/app/__init__.py`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` and the README badge; commit on main.
+2. Push a branch named `compile_vX.Y.Z` from that commit, for example `git push origin HEAD:compile_v0.51.1`. CI runs on it. The name must match the version in `src-tauri/tauri.conf.json`, or formcompiler refuses it and says why.
+3. formcompiler finds the branch on its next watch run (every 8 hours), or at once when its watch is run by hand. Once CI has passed on that commit, it builds the four targets and writes `latest.json` from the updater signatures.
+4. Check the draft release's assets on formcompiler's release page, then publish it there.

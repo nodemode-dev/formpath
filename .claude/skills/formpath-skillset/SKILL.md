@@ -17,7 +17,7 @@ Route every formpath code task through this file first. It maps the subsystems, 
 | File formats | `frontend/src/io/` (project, SVG, PDF, raster, trace, fonts) | `sub-skills/file-formats/SUB-SKILL.md` |
 | Engine service | `backend/app/`, `backend/formpath_engine.py` | `sub-skills/engine-service/SUB-SKILL.md` |
 | Agent harness | `backend/app/routers/mcp.py`, `frontend/src/automation/agent-bridge.ts`, `setup/agents.py`, `setup/mcp_stdio.py` | `sub-skills/agent-harness/SUB-SKILL.md` |
-| Desktop | `src-tauri/`, `setup/freeze_backend`, `.github/workflows/desktop.yml` | `sub-skills/desktop-shell/SUB-SKILL.md` |
+| Desktop | `src-tauri/`, `setup/freeze_backend` (releases are built by formcompiler) | `sub-skills/desktop-shell/SUB-SKILL.md` |
 | Verification | a procedure, no repo code | `sub-skills/ui-verification/SUB-SKILL.md` |
 
 ## Dependency graph

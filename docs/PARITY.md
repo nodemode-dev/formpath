@@ -173,7 +173,7 @@ formpath has no generative model of its own. Every row here runs on the language
 
 | Row | State |
 | --- | --- |
-| Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by `desktop.yml` |
+| Desktop app | Tauri 2 shell for macOS (arm64, x64), Windows (x64) and Linux (x64) with the frozen engine, file association and updater; built by formcompiler from a `compile_v*` branch |
 | Web app | The same app in a browser against the local engine |
 | Agents over MCP | 92 tools, a command catalogue with `list_commands`, `describe_command`, `run_command` and `run_commands`, Claude Code and Chat inside the window's terminal dock, one undo step per call, `run_command` over every menu command, consent in the window, a per-window session secret on the bridge, the `formpath-harness` skill pack |
 | Plugins | Sandboxed JavaScript plugins through the same tools, file tools blocked |

@@ -18,7 +18,7 @@ description: The formpath desktop app. Use for the Tauri 2 shell in src-tauri, t
 
 ## Release
 
-`.github/workflows/desktop.yml` builds macOS arm64 and x64, Linux x64 and Windows x64 on a `v*.*.*` tag and drafts a release with `latest.json` when the updater key is set. Secrets and steps are on the wiki's Releasing page.
+formpath's repository builds no release. formcompiler (`nodemode-ai/formcompiler`) builds macOS arm64 and x64, Linux x64 and Windows x64 from a `compile_v*.*.*` branch and drafts the release `formpath-v*.*.*` on its own release page, with `latest.json` when the updater key is set. The signing secrets live in formcompiler. The steps are on the wiki's Releasing page.
 
 ## Rules
 
