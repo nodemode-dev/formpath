@@ -4105,3 +4105,10 @@ After `body.app-ready` is set, one more frame later the desktop shell is told th
 - logged: v0.50.0 · 2026-10-22
 
 `CaptionButtons` is formvis's class: under Tauri on macOS it sets `has-overlay-titlebar` on the root (38 px row, 78 px left padding that clears the traffic lights) and marks the header, brand, `.cv-tb-doc`, `.cv-tb-app`, zoom and tool groups as `data-tauri-drag-region`; on Windows and Linux the View > Custom Title Bar command (`formpath.customTitleBar`) swaps the system frame for Minimize, Maximize and Close. The title row now has five grid columns (brand, menus, document name, zoom, tools) placed explicitly so the hidden document name keeps its flexible column. `Tabs.render` writes the current document into `.cv-tb-doc` and the window title as `• name - formpath` through `set_window_title`. The capabilities file gains the window permissions the buttons call. New strings (Custom Title Bar, Minimize, Maximize, Restore) are not in the locale tables yet.
+
+### src/ui/native-menu.ts · text-field routing, check items, Menus in Window
+- refers-to: NativeMenus
+- kind: decision
+- logged: v0.50.0 · 2026-10-22
+
+The macOS menu bar items for undo, redo, cut, copy, paste and select-all go to the focused text field through the shell's `text_edit` command (the menu's accelerators otherwise take Cmd+Z, X, C, V and A before a field can), and run the command when no field has focus. Commands with `checked` become check items and are refreshed with the enabled state, which also follows pointer, key and focus events. The app menu says "About formpath" and View > Menus in Window (`formpath.menusInWindow`, applies at next start) keeps the in-window bar. `has-native-menus` is now set on the root only after the menu is built, so a failed build leaves the in-window bar. `text_edit` is a new app command: listed in `src-tauri/build.rs`, allowed in the capability file, registered in `main.rs`.

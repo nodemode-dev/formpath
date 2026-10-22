@@ -8,6 +8,7 @@
     "core:default",
     "allow-set-window-title",
     "allow-app-ready",
+    "allow-text-edit",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-maximize",

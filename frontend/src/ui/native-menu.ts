@@ -1,7 +1,14 @@
 import type { Commands } from './commands';
 import type { MenuDef, MenuItem as MenuSpec } from './menu';
 
-export const wantsNativeMenus = (): boolean => '__TAURI_INTERNALS__' in window && /Mac/.test(navigator.platform);
+import { t } from '../i18n';
+
+export const wantsNativeMenus = (): boolean => '__TAURI_INTERNALS__' in window && /Mac/.test(navigator.platform) && !menusInWindow();
+
+export const MENUS_IN_WINDOW_KEY = 'formpath.menusInWindow';
+export function menusInWindow(): boolean {
+  try { return localStorage.getItem(MENUS_IN_WINDOW_KEY) === '1'; } catch { return false; }
+}
 
 export function accelerator(combo: string | undefined): string | null {
   if (!combo) return null;
@@ -19,13 +26,25 @@ export function accelerator(combo: string | undefined): string | null {
 
 type Api = typeof import('@tauri-apps/api/menu');
 
+const TEXT_EDITS = new Set(['undo', 'redo', 'cut', 'copy', 'paste', 'select-all']);
+const NOT_TEXT = new Set(['button', 'checkbox', 'radio', 'range', 'color', 'file', 'submit', 'reset', 'image']);
+
+export function textFieldFocused(): boolean {
+  const a = document.activeElement;
+  if (a instanceof HTMLTextAreaElement) return !a.readOnly && !a.disabled;
+  if (a instanceof HTMLInputElement) return !NOT_TEXT.has(a.type) && !a.readOnly && !a.disabled;
+  return a instanceof HTMLElement && a.isContentEditable;
+}
+
 export class NativeMenus {
-  private items: Array<{ id: string; item: { setEnabled(on: boolean): Promise<void> } }> = [];
+  private items: Array<{ id: string; item: { setEnabled(on: boolean): Promise<void>; setChecked?(on: boolean): Promise<void> } }> = [];
   private building = false;
   private again = false;
   private stateTimer = 0;
 
-  constructor(private readonly commands: Commands, private readonly menus: () => MenuDef[]) {}
+  constructor(private readonly commands: Commands, private readonly menus: () => MenuDef[]) {
+    for (const ev of ['pointerup', 'keyup', 'focusin', 'focusout'] as const) window.addEventListener(ev, () => { if (this.items.length) this.refresh(); }, { passive: true });
+  }
 
   async build(): Promise<void> {
     if (this.building) { this.again = true; return; }
@@ -35,19 +54,28 @@ export class NativeMenus {
       const items: typeof this.items = [];
       const make = async (spec: MenuSpec): Promise<unknown> => {
         if (spec === '-') return api.PredefinedMenuItem.new({ item: 'Separator' });
-        if (typeof spec === 'object') return api.Submenu.new({ text: spec.label, items: (await Promise.all(spec.items.map(make))) as never[] });
+        if (typeof spec === 'object') return api.Submenu.new({ text: t(spec.label), items: (await Promise.all(spec.items.map(make))) as never[] });
         const cmd = this.commands.get(spec);
         if (!cmd) return null;
-        const text = this.commands.label(cmd), acc = accelerator(cmd.keys?.[0]);
-        const opts = { text, enabled: this.commands.enabled(cmd), action: () => { this.commands.run(spec); } };
+        const text = t(this.commands.label(cmd)), acc = accelerator(cmd.keys?.[0]);
+        const opts = { text, enabled: this.enabled(spec), action: () => {
+          if (TEXT_EDITS.has(spec) && textFieldFocused()) void import('@tauri-apps/api/core').then((m) => m.invoke('text_edit', { action: spec })).catch(() => { document.execCommand(spec === 'select-all' ? 'selectAll' : spec); });
+          else this.commands.run(spec);
+          this.refresh();
+        } };
         let item;
-        try { item = await api.MenuItem.new(acc ? { ...opts, accelerator: acc } : opts); } catch { item = await api.MenuItem.new(opts); }
+        if (cmd.checked) {
+          const copts = { ...opts, checked: !!cmd.checked() };
+          try { item = await api.CheckMenuItem.new(acc ? { ...copts, accelerator: acc } : copts); } catch { item = await api.CheckMenuItem.new(copts); }
+        } else {
+          try { item = await api.MenuItem.new(acc ? { ...opts, accelerator: acc } : opts); } catch { item = await api.MenuItem.new(opts); }
+        }
         items.push({ id: spec, item });
         return item;
       };
       const top = [];
       top.push(await api.Submenu.new({ text: 'formpath', items: [
-        await api.PredefinedMenuItem.new({ item: { About: { name: 'formpath' } } }),
+        await api.PredefinedMenuItem.new({ item: { About: { name: 'formpath' } }, text: t('About formpath') }),
         await api.PredefinedMenuItem.new({ item: 'Separator' }),
         ...(this.commands.get('settings') ? [await make('settings')] : []),
         await api.PredefinedMenuItem.new({ item: 'Separator' }),
@@ -56,7 +84,7 @@ export class NativeMenus {
       ] as never[] }));
       for (const def of this.menus()) {
         const list = typeof def.items === 'function' ? def.items() : def.items;
-        top.push(await api.Submenu.new({ text: def.label, items: (await Promise.all(list.map(make))).filter(Boolean) as never[] }));
+        top.push(await api.Submenu.new({ text: t(def.label), items: (await Promise.all(list.map(make))).filter(Boolean) as never[] }));
       }
       const menu = await api.Menu.new({ items: top as never[] });
       await menu.setAsAppMenu();
@@ -68,13 +96,21 @@ export class NativeMenus {
     }
   }
 
+  private enabled(id: string): boolean {
+    if (TEXT_EDITS.has(id) && textFieldFocused()) return true;
+    const cmd = this.commands.get(id);
+    return !!cmd && this.commands.enabled(cmd);
+  }
+
   refresh(): void {
     if (this.stateTimer) return;
     this.stateTimer = window.setTimeout(() => {
       this.stateTimer = 0;
       for (const { id, item } of this.items) {
         const cmd = this.commands.get(id);
-        if (cmd) void item.setEnabled(this.commands.enabled(cmd)).catch(() => undefined);
+        if (!cmd) continue;
+        void item.setEnabled(this.enabled(id)).catch(() => undefined);
+        if (cmd.checked && item.setChecked) void item.setChecked(!!cmd.checked()).catch(() => undefined);
       }
     }, 150);
   }
