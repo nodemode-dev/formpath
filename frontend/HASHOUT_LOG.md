@@ -4112,3 +4112,10 @@ After `body.app-ready` is set, one more frame later the desktop shell is told th
 - logged: v0.50.0 · 2026-10-22
 
 The macOS menu bar items for undo, redo, cut, copy, paste and select-all go to the focused text field through the shell's `text_edit` command (the menu's accelerators otherwise take Cmd+Z, X, C, V and A before a field can), and run the command when no field has focus. Commands with `checked` become check items and are refreshed with the enabled state, which also follows pointer, key and focus events. The app menu says "About formpath" and View > Menus in Window (`formpath.menusInWindow`, applies at next start) keeps the in-window bar. `has-native-menus` is now set on the root only after the menu is built, so a failed build leaves the in-window bar. `text_edit` is a new app command: listed in `src-tauri/build.rs`, allowed in the capability file, registered in `main.rs`.
+
+### src/ui/home.ts · Home as formvis: nav, pages, hero, sections, files browser
+- refers-to: HomeScreen
+- kind: decision
+- logged: v0.50.0 · 2026-10-22
+
+Home is now a navigation column (Start, Recent, Projects with count pills, Create, Back to Canvas, Preferences, Help) beside a main area of pages built once and toggled with `hidden`. Start has the greeting written into an empty h1, a hero for vector art (formats FPTH, SVG, PDF, PNG, JPEG, WEBP), a short Recent grid, and formpath's own six document presets as outline tiles (applied through `newDoc.createPreset`). `HomeFiles` in `ui/home-files.ts` is the grid or list browser patched in place by key; its prefs are under `formpath.home`. Outputs is left out because the engine API has no exports listing, and rows show a glyph instead of a thumbnail for the same reason. The new pref `homeOnLastClose` (off by default) decides whether Home returns when the last document closes; `autoShowHome` now reads "Show the Home screen at launch". The old centred layout and its preset-card styles were removed from `shell.css` and `formpath.css`.

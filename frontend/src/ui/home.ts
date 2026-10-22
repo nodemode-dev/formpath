@@ -1,93 +1,125 @@
 import type { Engine } from '../engine';
-import { api } from '../io/api';
-import { el, setHidden, setText } from './dom';
+import { el, setClass, setHidden, setText } from './dom';
+import { HomeFiles } from './home-files';
 import { icon } from './icons';
 
 export interface HomeDeps {
   engine: Engine;
   autoShow: () => boolean;
+  afterClose: () => boolean;
   recent: () => string[];
   openRecent: (name: string) => void;
   run: (command: string) => void;
   preset: (id: string) => void;
 }
 
-const QUICK: ReadonlyArray<readonly [string, string, string]> = [['letter', 'Letter', '612 × 792 pt'], ['a4', 'A4', '595 × 842 pt'], ['web', 'Web', '1920 × 1080 px'], ['mobile', 'Mobile', '390 × 844 px'], ['square', 'Post', '1080 × 1080 px'], ['icon', 'Icon', '512 × 512 px']];
+type Page = 'start' | 'recent' | 'projects';
+
+const PRESETS: ReadonlyArray<{ id: string; name: string; w: number; h: number; unit: string }> = [
+  { id: 'letter', name: 'Letter', w: 612, h: 792, unit: 'pt' },
+  { id: 'a4', name: 'A4', w: 595, h: 842, unit: 'pt' },
+  { id: 'web', name: 'Web', w: 1920, h: 1080, unit: 'px' },
+  { id: 'mobile', name: 'Mobile', w: 390, h: 844, unit: 'px' },
+  { id: 'square', name: 'Post', w: 1080, h: 1080, unit: 'px' },
+  { id: 'icon', name: 'Icon', w: 512, h: 512, unit: 'px' },
+];
+
+const FORMATS = ['FPTH', 'SVG', 'PDF', 'PNG', 'JPEG', 'WEBP'];
 
 export class HomeScreen {
   readonly root = el('<section class="cv-home" aria-label="Home" hidden></section>');
-  private readonly list = el('<div class="cv-home-list"></div>');
-  private readonly recentBox = el('<div class="cv-home-main" hidden><h2 class="cv-home-title">Recent</h2></div>');
+  private readonly pages = new Map<Page, HomeFiles>();
+  private page: Page = 'start';
   private forced = false;
   private lastCount = 0;
-  private listKey = '';
+  private hadDocument = false;
+  private back!: HTMLElement;
 
   constructor(host: HTMLElement, private readonly d: HomeDeps) {
     const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
-    const center = el(`<div class="cv-home-center">
-      <h1 class="cv-home-brand">formpath<span class="cv-home-by">by NodeMode</span></h1>
-      <p class="cv-home-sub">Vector illustration for print, screens and agents. Start a document, pick a size, or open a file.</p>
-      <div class="cv-home-actions"></div>
-      <div class="cv-home-presets"></div>
-      <p class="cv-home-hint">${icon('image', 14)}<span>Drop an SVG, a PDF made by formpath, a .fpth project or an image anywhere to open or place it.</span></p>
-    </div>`);
-    const actions = center.querySelector('.cv-home-actions') as HTMLElement;
-    for (const [label, cmd, ic, key] of [['New document…', 'new', 'newFile', 'N'], ['Open…', 'open', 'folderOpen', 'O']] as const) {
-      const b = el<HTMLButtonElement>(`<button class="cv-home-action" type="button">${icon(ic, 16)}<span class="cv-home-label"></span><kbd class="cv-key"></kbd><kbd class="cv-key"></kbd></button>`);
-      setText(b.querySelector('.cv-home-label') as HTMLElement, label);
-      const [k1, k2] = Array.from(b.querySelectorAll('kbd'));
-      setText(k1, mod);
-      setText(k2, key);
-      b.addEventListener('click', () => this.d.run(cmd));
-      actions.appendChild(b);
-    }
-    const presets = center.querySelector('.cv-home-presets') as HTMLElement;
-    for (const [id, label, size] of QUICK) {
-      const b = el<HTMLButtonElement>('<button class="cv-home-preset" type="button"><span class="cv-home-preset-card"></span><span class="cv-home-preset-name"></span><span class="cv-home-preset-size"></span></button>');
-      setText(b.querySelector('.cv-home-preset-name') as HTMLElement, label);
-      setText(b.querySelector('.cv-home-preset-size') as HTMLElement, size);
-      b.dataset.preset = id;
-      b.addEventListener('click', () => this.d.preset(id));
-      presets.appendChild(b);
-    }
-    this.recentBox.appendChild(this.list);
-    center.appendChild(this.recentBox);
-    this.root.append(center);
+    const navItem = (v: Page, ic: string, label: string): string => `<button class="cv-home-nav-item" type="button" data-v="${v}">${icon(ic, 16)}<span>${label}</span>${v === 'start' ? '' : '<span class="cv-home-count">0</span>'}</button>`;
+    const cmdItem = (cmd: string, ic: string, label: string): string => `<button class="cv-home-nav-item" type="button" data-cmd="${cmd}">${icon(ic, 16)}<span>${label}</span></button>`;
+    const key = (k: string): string => `<kbd class="cv-key">${mod}</kbd><kbd class="cv-key">${k}</kbd>`;
+    const formats = FORMATS.map((f) => `<span class="cv-home-format">${f}</span>`).join('');
+    const sizes = PRESETS.map((p) => `<button class="cv-home-size" type="button" data-preset="${p.id}"><span class="cv-home-size-box"><span style="aspect-ratio: ${p.w} / ${p.h}"></span></span><span class="cv-home-size-name">${p.name}</span><span class="cv-home-size-meta">${p.w} × ${p.h} ${p.unit}</span></button>`).join('');
+    this.root.innerHTML = `<nav class="cv-home-nav" aria-label="Home">
+      <div class="cv-home-brand">formpath <span>by NodeMode</span></div>
+      ${navItem('start', 'image', 'Start')}${navItem('recent', 'history', 'Recent')}${navItem('projects', 'folder', 'Projects')}
+      <div class="cv-home-nav-sep"></div>
+      <div class="cv-home-nav-title">Create</div>
+      ${cmdItem('new', 'newFile', 'New document')}${cmdItem('open', 'folderOpen', 'Open')}
+      <div class="cv-home-nav-foot"><button class="cv-home-nav-item cv-home-back" type="button" data-back hidden>${icon('chevronLeft', 16)}<span>Back to Canvas</span></button>${cmdItem('settings', 'settings', 'Preferences')}${cmdItem('help', 'info', 'Help')}</div>
+    </nav>
+    <div class="cv-home-main">
+      <div class="cv-home-narrow">${navItem('start', 'image', 'Start')}${navItem('recent', 'history', 'Recent')}${navItem('projects', 'folder', 'Projects')}</div>
+      <div class="cv-home-page" data-page="start">
+        <div class="cv-home-head"><div><h1 class="cv-home-title"></h1><p class="cv-home-sub">Open a drawing or a project, or start a new document.</p></div></div>
+        <div class="cv-home-hero">
+          <span class="cv-home-hero-icon">${icon('image', 26)}</span>
+          <div class="cv-home-hero-text"><div class="cv-home-hero-title">Start from a drawing</div>
+            <div class="cv-home-hero-sub">Drop an SVG, a PDF made by formpath, a .fpth project or an image anywhere in the window to open or place it. Projects open with every path, appearance and effect still editable.</div>
+            <div class="cv-home-formats">${formats}</div></div>
+          <div class="cv-home-hero-actions">
+            <button class="cv-home-action is-primary" type="button" data-cmd="new">${icon('newFile', 16)}<span class="cv-home-label">New document...</span>${key('N')}</button>
+            <button class="cv-home-action" type="button" data-cmd="open">${icon('folderOpen', 16)}<span class="cv-home-label">Open...</span>${key('O')}</button>
+          </div>
+        </div>
+        <section class="cv-home-section"><div class="cv-home-section-head"><h2 class="cv-home-section-title">Recent</h2><button class="cv-btn cv-btn-ghost" type="button" data-v="recent">See all</button></div><div class="cv-home-slot" data-slot="start"></div></section>
+        <section class="cv-home-section"><div class="cv-home-section-head"><h2 class="cv-home-section-title">New document</h2><button class="cv-btn cv-btn-ghost" type="button" data-cmd="new">More sizes...</button></div><div class="cv-home-sizes">${sizes}</div></section>
+      </div>
+      <div class="cv-home-page" data-page="recent" hidden><div class="cv-home-head"><div><h1 class="cv-home-title">Recent</h1><p class="cv-home-sub">Documents you opened or saved, newest first.</p></div></div><div class="cv-home-slot" data-slot="recent"></div></div>
+      <div class="cv-home-page" data-page="projects" hidden><div class="cv-home-head"><div><h1 class="cv-home-title">Projects</h1><p class="cv-home-sub">Everything in the project library folder.</p></div><div class="cv-home-head-actions"><button class="cv-btn" type="button" data-cmd="settings">${icon('folder', 14)}Library folder...</button></div></div><div class="cv-home-slot" data-slot="projects"></div></div>
+    </div>`;
+    this.back = this.root.querySelector('[data-back]') as HTMLElement;
+    const deps = { recent: d.recent, openRecent: d.openRecent };
+    const count = (v: Page) => (n: number): void => { for (const c of Array.from(this.root.querySelectorAll(`[data-v="${v}"] .cv-home-count`))) setText(c, String(n)); };
+    const mount = (slot: Page, files: HomeFiles): void => { (this.root.querySelector(`[data-slot="${slot}"]`) as HTMLElement).appendChild(files.root); this.pages.set(slot, files); };
+    mount('start', new HomeFiles(deps, { tab: 'recent', limit: 8, compact: true, onCount: count('recent') }));
+    mount('recent', new HomeFiles(deps, { tab: 'recent', onCount: count('recent') }));
+    mount('projects', new HomeFiles(deps, { tab: 'projects', onCount: count('projects') }));
+    this.root.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('[data-back]')) { this.forced = false; this.sync(); return; }
+      const v = (t.closest('[data-v]') as HTMLElement | null)?.dataset.v as Page | undefined;
+      if (v) { this.show(v); return; }
+      const preset = (t.closest('[data-preset]') as HTMLElement | null)?.dataset.preset;
+      if (preset) this.d.preset(preset);
+    });
     host.appendChild(this.root);
     d.engine.on('projects', () => this.sync());
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.forced && d.engine.projects.length) { this.forced = false; this.sync(); } });
+    this.paint();
     this.sync();
+  }
+
+  private paint(): void {
+    for (const n of Array.from(this.root.querySelectorAll<HTMLElement>('.cv-home-page'))) setHidden(n, n.dataset.page !== this.page);
+    for (const n of Array.from(this.root.querySelectorAll<HTMLElement>('.cv-home-nav-item[data-v]'))) setClass(n, 'is-active', n.dataset.v === this.page);
+    const h = new Date().getHours();
+    setText(this.root.querySelector('[data-page="start"] .cv-home-title'), h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
+  }
+
+  private fill(): void {
+    void this.pages.get(this.page)?.refresh();
+    for (const [p, f] of this.pages) if (p !== this.page && p !== 'start' && !(p === 'recent' && this.page === 'start')) void f.refresh();
   }
 
   get isShown(): boolean { return !this.root.hidden; }
 
-  show(): void { this.forced = true; this.sync(); }
+  show(page?: Page): void {
+    if (page && page !== this.page) { this.page = page; this.paint(); if (!this.root.hidden) this.fill(); }
+    this.forced = true;
+    this.sync();
+  }
 
   sync(): void {
     const n = this.d.engine.projects.length;
     if (n > this.lastCount) this.forced = false;
     this.lastCount = n;
-    const on = this.forced || (n === 0 && this.d.autoShow());
-    if (on && this.root.hidden) void this.fill();
+    if (n > 0) this.hadDocument = true;
+    const on = this.forced || (n === 0 && (this.hadDocument ? this.d.afterClose() : this.d.autoShow()));
+    if (on && this.root.hidden) { this.paint(); this.fill(); }
     setHidden(this.root, !on);
-  }
-
-  private async fill(): Promise<void> {
-    const names = this.d.recent();
-    let modified = new Map<string, number>();
-    try { modified = new Map((await api.library()).map((i) => [i.name, i.modified])); } catch { }
-    const key = JSON.stringify(names.map((n) => [n, modified.get(n) ?? 0]));
-    setHidden(this.recentBox, names.length === 0);
-    if (key === this.listKey) return;
-    this.listKey = key;
-    this.list.textContent = '';
-    for (const name of names) {
-      const row = el<HTMLButtonElement>(`<button class="cv-home-item" type="button">${icon('pAssets', 18)}<span class="cv-home-name"></span><span class="cv-home-date"></span></button>`);
-      setText(row.querySelector('.cv-home-name') as HTMLElement, name);
-      const t = modified.get(name);
-      setText(row.querySelector('.cv-home-date') as HTMLElement, t ? new Date(t * (t < 1e12 ? 1000 : 1)).toLocaleString() : '');
-      row.addEventListener('click', () => this.d.openRecent(name));
-      this.list.appendChild(row);
-    }
+    setHidden(this.back, n === 0);
   }
 }

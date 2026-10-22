@@ -12,6 +12,7 @@ export interface Prefs {
   historyStates: number;
   recoverySeconds: number;
   autoShowHome: boolean;
+  homeOnLastClose: boolean;
   zoomWheel: boolean;
   keyIncrement: number;
   snapTolerance: number;
@@ -60,7 +61,7 @@ export const CHECKER_PAIR: Record<CheckerColors, readonly [string, string]> = { 
 export const RECOVERY_CHOICES: ReadonlyArray<readonly [string, string]> = [['10', '10 seconds'], ['20', '20 seconds'], ['60', '1 minute'], ['300', '5 minutes']];
 
 export const DEFAULT_PREFS: Prefs = {
-  shortcuts: {}, restoreSession: true, agentsAllowed: false, nodemodeUrl: 'http://localhost:8000', historyStates: 200, recoverySeconds: 20, autoShowHome: true,
+  shortcuts: {}, restoreSession: true, agentsAllowed: false, nodemodeUrl: 'http://localhost:8000', historyStates: 200, recoverySeconds: 20, autoShowHome: true, homeOnLastClose: false,
   zoomWheel: false, keyIncrement: 1, snapTolerance: 4, units: 'pt', scaleStrokes: true, previewBounds: false, gridInBack: true, gridSpacing: 72, gridSubdivisions: 8,
   guideColor: '', gridColor: '', checkerSize: 'medium', checkerColors: 'light', narrowCollapse: true, newMaskClip: true, newMaskInvert: false,
   showGenerative: true, anchorSize: 'small', snapAngleSet: 'a45', smartLabels: true, smartMeasure: true, smartHighlight: true, smartSpacing: true, scaleCorners: true, helpBar: false, taskBar: true, pasteOnArtboards: false, autoSpell: false,
@@ -83,6 +84,7 @@ export function loadPrefs(): Prefs {
       historyStates: Math.round(num(r.historyStates, 10, 1000, DEFAULT_PREFS.historyStates)),
       recoverySeconds: Math.round(num(r.recoverySeconds, 5, 3600, DEFAULT_PREFS.recoverySeconds)),
       autoShowHome: bool(r.autoShowHome, true),
+      homeOnLastClose: bool(r.homeOnLastClose, false),
       zoomWheel: bool(r.zoomWheel, false),
       keyIncrement: num(r.keyIncrement, 0.01, 1000, DEFAULT_PREFS.keyIncrement),
       snapTolerance: num(r.snapTolerance, 1, 20, DEFAULT_PREFS.snapTolerance),
