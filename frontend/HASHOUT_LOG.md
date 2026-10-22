@@ -4119,3 +4119,10 @@ The macOS menu bar items for undo, redo, cut, copy, paste and select-all go to t
 - logged: v0.50.0 · 2026-10-22
 
 Home is now a navigation column (Start, Recent, Projects with count pills, Create, Back to Canvas, Preferences, Help) beside a main area of pages built once and toggled with `hidden`. Start has the greeting written into an empty h1, a hero for vector art (formats FPTH, SVG, PDF, PNG, JPEG, WEBP), a short Recent grid, and formpath's own six document presets as outline tiles (applied through `newDoc.createPreset`). `HomeFiles` in `ui/home-files.ts` is the grid or list browser patched in place by key; its prefs are under `formpath.home`. Outputs is left out because the engine API has no exports listing, and rows show a glyph instead of a thumbnail for the same reason. The new pref `homeOnLastClose` (off by default) decides whether Home returns when the last document closes; `autoShowHome` now reads "Show the Home screen at launch". The old centred layout and its preset-card styles were removed from `shell.css` and `formpath.css`.
+
+### src/ui/themes.ts and index.html · the family's 28 themes
+- refers-to: THEMES; theme-boot PROFILES, LIGHT
+- kind: decision
+- logged: v0.50.0 · 2026-10-22
+
+The theme choice is shared across the Form family (`nodemode_ui_settings`) and formvis offers 28 themes; formpath had 15, so a theme picked in formvis such as Pro Dark or Soft Light fell back to Studio. The 13 missing profiles are added with formvis's values to THEMES and to the boot script's PROFILES and LIGHT map, which must stay equal. Checked in headless Chromium with the store set to pro-dark, soft-light and nineties: the right `--bg-primary` at the first script turn and after start, `theme-light` on the light ones.
