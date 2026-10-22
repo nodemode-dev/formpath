@@ -4084,3 +4084,17 @@ Each asset exports with its own items, falling back to the list passed in only w
 - logged: v0.47.0 · 2026-10-16
 
 The settings rows now show the first picked asset's items and write to every picked asset on change; with nothing picked they are disabled. Driven: edits to one asset left the others at defaults, and a Ctrl-click multi-pick edit changed both picked assets only.
+
+### public/splash.html · the formvis splash card with the logo image
+- refers-to: formpathSplashDone
+- kind: decision
+- logged: v0.48.0 · 2026-10-22
+
+The splash is now formvis's rounded 360 by 200 card with `formpath-logo.png` at 72 px and the gradient bar; the old page drew an inline SVG and the words "Starting the formpath engine". The main window stays at alpha 0 on macOS until the page calls `app_ready`, and the splash closes 2.6 s after launch at the earliest. The in-app `brandMark` in `ui/brand.ts` is a one-colour `currentColor` vector of the same picture, so it stays as is.
+
+### src/ui/dom.ts · revealApp calls app_ready
+- refers-to: revealApp
+- kind: decision
+- logged: v0.48.0 · 2026-10-22
+
+After `body.app-ready` is set, one more frame later the desktop shell is told through `invoke('app_ready')` so the native reveal runs once the first render has painted. The overlay title bar puts the macOS traffic lights over the left of the page's title bar, which has no inset or drag region for them yet.
