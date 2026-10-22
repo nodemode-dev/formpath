@@ -2,6 +2,11 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.51.0 · 2026-10-22
+
+- Preferences follows the Form family: a floating rail of section tabs that folds to icons, every section as a foldable card in one scrolling pane that the rail follows, and a line from the active tab to the pane.
+- The status bar follows the Form family: undo, redo and zoom tools with a typed zoom field, the artboard size, an info readout that cycles with a click, the tool hint, and a Working indicator that never flashes for quick jobs.
+
 ## 0.50.0 · 2026-10-22
 
 - The title row follows the Form family: on macOS it leaves room for the traffic lights and drags the window; on Windows and Linux, View > Custom Title Bar draws Minimize, Maximize and Close in it. The row shows the document name and the window title follows it.
