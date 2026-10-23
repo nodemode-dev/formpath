@@ -28,6 +28,26 @@ The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app ic
 | Pillow 12.3.0, with LittleCMS 2 | MIT-CMU (HPND); LittleCMS is MIT | ICC profile reading and the colour lookup tables for Color Settings and Proof Colors |
 | keyring, with jaraco.classes, jaraco.context, jaraco.functools, more-itertools, jeepney and SecretStorage | MIT (SecretStorage: BSD-3-Clause) | API keys in the system's password store |
 | fonttools 4.67.0 | MIT | font subsets for live text in PDF export |
+| pyspellchecker 0.9.1 (Tyler Barrus) | MIT (code) | spelling in the engine (`backend/app/services/spell.py`) |
+| pyspellchecker's word frequency lists (`spellchecker/resources/*.json.gz`, 12 languages), generated from the OpenSubtitles2018 corpus of OPUS (P. Lison and J. Tiedemann, 2016) | licence to confirm: the package is MIT, but neither it nor OPUS states a licence for the corpus-derived lists | frozen with `--collect-data spellchecker` |
+| xterm.js 6.0.0 and @xterm/addon-fit 0.11.0 | MIT | the Terminal pane |
+| ptyprocess 0.7.0 (macOS and Linux), pywinpty 3.0.5 (Windows) | ISC, MIT | engine terminal sessions |
+| Libraries inside the Pillow wheel | libjpeg, libpng, libtiff, libwebp, libavif, OpenJPEG, Little CMS, HarfBuzz, Brotli, zstd, xz, libxcb: permissive (see the wheel's LICENSE); FreeType 2.14.3 used under the FreeType License | Portions of this software are copyright (c) 2026 The FreeType Project (www.freetype.org). All rights reserved. |
+| certifi | MPL-2.0 | engine: its `cacert.pem`, frozen unedited (through httpx) |
+| Other Python packages frozen into the engine | MIT: annotated-doc, annotated-types, anyio, h11, httptools, pydantic, pydantic-core, pyyaml, typing-inspection, watchfiles; MIT-0: cffi; BSD-3-Clause: click, httpcore, idna, pycparser, python-dotenv, starlette, websockets; MIT OR Apache-2.0: uvloop; Apache-2.0 OR BSD-3-Clause: cryptography (its wheel bundles OpenSSL 3, Apache-2.0); PSF-2.0: typing-extensions and the CPython runtime | read from the installed metadata of `backend/requirements.txt`, 2026-10-23 |
+
+## Desktop shell: crates under other licences
+
+Tauri links these crates unedited (no `[patch]` and no vendored copy):
+
+| Crate | Licence | Why it is there |
+| --- | --- | --- |
+| cssparser, selectors, dtoa-short, option-ext | MPL-2.0 | Tauri's HTML handling (tauri-utils); used unmodified, source at crates.io |
+| ring | Apache-2.0 AND ISC | TLS for the updater (rustls) |
+| webpki-root-certs | CDLA-Permissive-2.0 | root certificates for the updater's TLS |
+| r-efi | MIT OR Apache-2.0 OR LGPL-2.1-or-later | used under MIT |
+
+The Linux AppImage also carries the build machine's WebKitGTK, GTK and GLib (LGPL-2.1-or-later) as separate shared libraries. The installers carry this file and `LICENSE`.
 
 ## Build tools, not distributed
 
