@@ -796,7 +796,7 @@ export class Engine extends Emitter<EngineEvents> {
     const label: Record<PathOp, string> = { offset: 'Offset Path', outline_stroke: 'Outline Stroke', simplify: 'Simplify', smooth: 'Smooth', join: 'Join', average: 'Average', reverse: 'Reverse Path Direction', add_anchors: 'Add Anchor Points', remove_anchors: 'Remove Anchor Points', divide_objects_below: 'Divide Objects Below', split_into_grid: 'Split Into Grid', clean_up: 'Clean Up', close: 'Close Path', open: 'Open Path' };
     return this.run(label[op], (d, t) => pathOperation(d, t, op, { anchors: p.anchors, ...args }), ids);
   }
-  shapeBuild(points: Pt[], erase: boolean, ids?: string[]): boolean { return this.run(erase ? 'Shape Builder Delete' : 'Shape Builder', (d, t) => shapeBuild(d, t, points, erase), ids); }
+  shapeBuild(points: Pt[], erase: boolean, ids?: string[]): boolean { return this.run(erase ? 'Shape Crafter Delete' : 'Shape Crafter', (d, t) => shapeBuild(d, t, points, erase), ids); }
   align(action: AlignAction, to: 'selection' | 'artboard' | 'key' = 'selection', key: string | null = null, spacing: number | null = null, ids?: string[]): boolean {
     const p = this.current; if (!p) return false;
     const t = this.targetIds(ids);
@@ -1413,17 +1413,17 @@ export class Engine extends Emitter<EngineEvents> {
   traceTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return n?.kind === 'group' && !!n.trace; }) : []; }
   setTraceView(view: TraceView, ids?: string[]): boolean {
     const t = this.traceTargets(ids);
-    return t.length > 0 && this.applyToSelection('Image Trace View', (n) => (n.kind === 'group' && n.trace ? { ...n, trace: { ...n.trace, view } } : n), t);
+    return t.length > 0 && this.applyToSelection('Trace Image View', (n) => (n.kind === 'group' && n.trace ? { ...n, trace: { ...n.trace, view } } : n), t);
   }
   expandTrace(ids?: string[]): boolean {
     const t = this.traceTargets(ids);
     if (!t.length) return false;
-    return this.applyToSelection('Expand Image Trace', (n) => (n.kind === 'group' && n.trace ? { ...n, trace: undefined, name: n.name === 'Image Tracing' ? 'Image Trace' : n.name } : n), t);
+    return this.applyToSelection('Expand Trace Image', (n) => (n.kind === 'group' && n.trace ? { ...n, trace: undefined, name: n.name === 'Image Tracing' ? 'Trace Image' : n.name } : n), t);
   }
   releaseTrace(ids?: string[]): boolean {
     const t = this.traceTargets(ids);
     if (!t.length) return false;
-    return this.edit('Release Image Trace', (d) => {
+    return this.edit('Release Trace Image', (d) => {
       const out: string[] = [];
       let doc = d;
       for (const id of t) {
@@ -1442,7 +1442,7 @@ export class Engine extends Emitter<EngineEvents> {
     const nodes = topObjects(p.doc, this.targetIds(ids)).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && n.kind !== 'layer');
     const host = nodes.find((n): n is GroupNode => n.kind === 'group' && !!n.livePaint) ?? null;
     const adds = nodes.filter((n) => n !== host && (n.kind === 'path' || n.kind === 'compound' || n.kind === 'group') && edgePaths([n]).length > 0);
-    if (!adds.length) { if (!host) this.notice('Select paths to make a Live Paint group.'); return host?.id ?? null; }
+    if (!adds.length) { if (!host) this.notice('Select paths to make a Fill Regions group.'); return host?.id ?? null; }
     const strip = (n: VNode): VNode => { const base = { ...n, ap: { ...n.ap, items: n.ap.items.filter((i) => i.kind !== 'fill') } } as VNode; const ch = base.kind === 'compound' ? null : childrenOf(base); return ch ? ({ ...base, children: ch.map(strip) } as VNode) : base; };
     const fillAt = (at: Pt): Paint | null => {
       let out: Paint | null = null;
@@ -1457,7 +1457,7 @@ export class Engine extends Emitter<EngineEvents> {
       return out;
     };
     const lp = host?.livePaint ?? { fills: [], gap: 0 };
-    const g: GroupNode = { id: host?.id ?? newId('g'), kind: 'group', clip: false, name: host?.name ?? 'Live Paint', children: [...(host?.children ?? []), ...adds.map(strip)], opacity: host?.opacity ?? 1, blend: host?.blend ?? 'normal', ap: host?.ap ?? emptyAppearance(), livePaint: lp };
+    const g: GroupNode = { id: host?.id ?? newId('g'), kind: 'group', clip: false, name: host?.name ?? 'Fill Regions', children: [...(host?.children ?? []), ...adds.map(strip)], opacity: host?.opacity ?? 1, blend: host?.blend ?? 'normal', ap: host?.ap ?? emptyAppearance(), livePaint: lp };
     const fills = [...lp.fills];
     for (const f of liveFaces(g)) {
       if (lp.fills.some((s) => faceContains(f, s.at))) continue;
@@ -1467,7 +1467,7 @@ export class Engine extends Emitter<EngineEvents> {
     }
     const made: GroupNode = { ...g, livePaint: { ...lp, fills } };
     const order = inDocOrder(p.doc, nodes.map((n) => n.id)), last = order[order.length - 1];
-    this.edit(host ? 'Merge Live Paint' : 'Make Live Paint', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => made), select: [made.id] }));
+    this.edit(host ? 'Merge Fill Regions' : 'Make Fill Regions', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => made), select: [made.id] }));
     return made.id;
   }
   livePaintFill(groupId: string, at: Pt | Pt[], paint: Paint): boolean {
@@ -1475,9 +1475,9 @@ export class Engine extends Emitter<EngineEvents> {
     if (n?.kind !== 'group' || !n.livePaint) return false;
     const faces = liveFaces(n), pts = Array.isArray(at) ? at : [at];
     const hits = pts.map((q) => ({ q, f: faces.find((f) => faceContains(f, q)) })).filter((x): x is { q: Pt; f: LiveFace } => !!x.f);
-    if (!hits.length) { this.notice('Click inside an area closed by the Live Paint paths, or widen Gap Options.'); return false; }
+    if (!hits.length) { this.notice('Click inside an area closed by the Fill Regions paths, or widen Gap Options.'); return false; }
     const fills = [...n.livePaint.fills.filter((s) => !hits.some((h) => faceContains(h.f, s.at))), ...hits.map((h) => ({ at: h.q, paint }))];
-    return this.edit('Live Paint', (d) => updateNodes(d, [groupId], (x) => (x.kind === 'group' && x.livePaint ? { ...x, livePaint: { ...x.livePaint, fills } } : x)));
+    return this.edit('Fill Regions', (d) => updateNodes(d, [groupId], (x) => (x.kind === 'group' && x.livePaint ? { ...x, livePaint: { ...x.livePaint, fills } } : x)));
   }
   private edgePieces(groupId: string, at: Pt, tol: number): { c: PathNode; sub: number; pieces: SubPath[]; near: number } | null {
     const n = this.doc ? findNode(this.doc, groupId) : null;
@@ -1505,7 +1505,7 @@ export class Engine extends Emitter<EngineEvents> {
     const rest = c.d.filter((_, k) => k !== sub);
     const made: VNode[] = pieces.map((p, i) => ({ ...c, id: i === 0 && !rest.length ? c.id : newId('p'), live: undefined, d: [p], ap: i === near ? styled(c.ap) : c.ap }));
     if (rest.length) made.unshift({ ...c, live: undefined, d: rest });
-    return this.edit('Live Paint Edge', (d) => updateNodes(d, [c.id], () => made));
+    return this.edit('Fill Regions Edge', (d) => updateNodes(d, [c.id], () => made));
   }
   livePaintSelection: { group: string; faces: Pt[]; edges: Pt[] } | null = null;
   private livePaintSelected(): { group: string; faces: Pt[]; edges: Pt[] } | null {
@@ -1528,17 +1528,17 @@ export class Engine extends Emitter<EngineEvents> {
   }
   expandLivePaint(ids?: string[]): boolean {
     const t = this.livePaintTargets(ids);
-    return t.length > 0 && this.applyToSelection('Expand Live Paint', (n) => (n.kind === 'group' && n.livePaint ? this.expandedLivePaint(n) : n), t);
+    return t.length > 0 && this.applyToSelection('Expand Fill Regions', (n) => (n.kind === 'group' && n.livePaint ? this.expandedLivePaint(n) : n), t);
   }
   releaseLivePaint(ids?: string[]): boolean {
     const t = this.livePaintTargets(ids);
-    return t.length > 0 && this.applyToSelection('Release Live Paint', (n) => (n.kind === 'group' && n.livePaint ? { ...n, livePaint: undefined, name: undefined } : n), t);
+    return t.length > 0 && this.applyToSelection('Release Fill Regions', (n) => (n.kind === 'group' && n.livePaint ? { ...n, livePaint: undefined, name: undefined } : n), t);
   }
   intertwineTargets(ids?: string[]): string[] { const d = this.doc; return d ? this.targetIds(ids).filter((id) => { const n = findNode(d, id); return n?.kind === 'group' && !!n.intertwine; }) : []; }
   makeIntertwine(ids?: string[]): string | null {
     const p = this.current; if (!p) return null;
     const nodes = topObjects(p.doc, this.targetIds(ids)).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && n.kind !== 'layer');
-    if (nodes.some((n) => n.kind === 'repeat' || (n.kind === 'group' && (n.livePaint || n.intertwine || n.shaper || n.dim)))) { this.notice('Intertwine does not work with Live Paint, Repeat, Shaper, dimension or other Intertwine objects.'); return null; }
+    if (nodes.some((n) => n.kind === 'repeat' || (n.kind === 'group' && (n.livePaint || n.intertwine || n.shaper || n.dim)))) { this.notice('Intertwine does not work with Fill Regions, Repeat, Shaper, dimension or other Intertwine objects.'); return null; }
     if (nodes.length < 2 || !intertwineOverlapping(p.doc, nodes)) { this.notice('Select two or more overlapping objects to intertwine.'); return null; }
     const order = inDocOrder(p.doc, nodes.map((n) => n.id)), last = order[order.length - 1];
     const g = intertwineNode(order.map((id) => findNode(p.doc, id) as VNode));
@@ -1848,7 +1848,7 @@ export class Engine extends Emitter<EngineEvents> {
   puppetWarp(pins: Array<{ from: Pt; to: Pt; rotate?: number }>, opts: { expand?: number } = {}, ids?: string[]): boolean {
     const t = this.targetIds(ids);
     if (!t.length || !pins.length) return false;
-    return this.edit('Puppet Warp', (d) => {
+    return this.edit('Pin Warp', (d) => {
       const rest = t.map((id) => findNode(d, id)).filter((n): n is VNode => !!n && !n.locked);
       const mesh = rest.length ? puppetMesh(d, rest, opts.expand ?? 3) : null;
       if (!mesh) return d;

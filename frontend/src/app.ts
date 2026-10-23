@@ -288,7 +288,7 @@ export function startApp(): void {
   new PanelGroup(dockHost, 'color-group', [{ id: 'color', label: 'Color', body: colorP.body }, { id: 'swatches', label: 'Swatches', body: swatchesP.body }, { id: 'gradient', label: 'Gradient', body: gradientP.body }, { id: 'color-guide', label: 'Color Guide', body: new ColorGuidePanel(engine).body }, { id: 'swatch-library', label: 'Swatch Library', body: swatchLibP.body }], 'Color');
   new PanelGroup(dockHost, 'stroke-group', [{ id: 'stroke', label: 'Stroke', body: strokeP.body }, { id: 'transparency', label: 'Transparency', body: transP.body }, { id: 'brushes', label: 'Brushes', body: brushesP.body }, { id: 'attributes', label: 'Attributes', body: new AttributesPanel(engine).body }, { id: 'brush-library', label: 'Brush Library', body: brushLibP.body }], 'Stroke');
   new PanelGroup(dockHost, 'appearance-group', [{ id: 'appearance', label: 'Appearance', body: appearanceP.body }, { id: 'graphic-styles', label: 'Graphic Styles', body: stylesP.body }, { id: 'three-d', label: '3D and Materials', body: new ThreeDPanel(engine, (c) => { commands.run(c); }).body }], 'Appearance');
-  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Image Trace', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }, { id: 'shape-fill', label: 'Generative Shape Fill', body: shapeFillP.body }, { id: 'generate-patterns', label: 'Generate Patterns', body: patternGenP.body }, { id: 'text-to-vector', label: 'Text to Vector Graphic', body: textToVectorP.body }], 'Symbols');
+  new PanelGroup(dockHost, 'symbols-group', [{ id: 'symbols', label: 'Symbols', body: symbolsP.body }, { id: 'artboards', label: 'Artboards', body: artboardsP.body }, { id: 'links', label: 'Links', body: linksP.body }, { id: 'image-trace', label: 'Trace Image', body: new ImageTracePanel(engine, (id, a) => trace(id, a)).body }, { id: 'symbol-library', label: 'Symbol Library', body: symbolLibP.body }, { id: 'shape-fill', label: 'Generative Shape Fill', body: shapeFillP.body }, { id: 'generate-patterns', label: 'Generate Patterns', body: patternGenP.body }, { id: 'text-to-vector', label: 'Text to Vector Graphic', body: textToVectorP.body }], 'Symbols');
   new PanelGroup(dockHost, 'navigator-group', [{ id: 'navigator', label: 'Navigator', body: navP.body }, { id: 'info', label: 'Info', body: infoP.body }, { id: 'history', label: 'History', body: historyP.body }, { id: 'actions', label: 'Actions', body: actionsP.body }, { id: 'variables', label: 'Variables', body: variablesP.body }, { id: 'asset-export', label: 'Asset Export', body: new AssetExportPanel(engine, (list, items) => exportAssetList(list, items)).body }], 'Navigator');
   new PanelGroup(dockHost, 'layers-panel', [{ id: 'layers', label: 'Layers', body: layersP.body }], 'Layers').setMenu(() => ['new-layer', 'layers-new-sublayer', 'layers-duplicate', 'layers-duplicate-selection', '-', 'layers-options', 'layers-locate', 'collect-layer', '-', 'layers-merge', 'layers-flatten', 'layers-release-sequence', 'layers-release-build', 'layers-reverse']);
   new PanelGroup(sideHost, 'properties-group', [{ id: 'properties', label: 'Properties', body: propsP.body }, { id: 'transform', label: 'Transform', body: xformP.body }, { id: 'align', label: 'Align', body: alignP.body }, { id: 'pathfinder', label: 'Pathfinder', body: pfP.body }, { id: 'pattern-options', label: 'Pattern Options', body: new PatternOptionsPanel(engine, (c) => { commands.run(c); }).body }], 'Properties');
@@ -934,14 +934,14 @@ export function startApp(): void {
     const placeholder = !live;
     if (!live) {
       const ph: VNode = { id: newId('g'), kind: 'group', name: 'Image Tracing', clip: false, children: [{ ...src, id: newId('im') }], opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, trace: { src, opts: { ...o }, view } };
-      if (!engine.edit('Image Trace', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => ph), select: [ph.id] } : d))) return null;
+      if (!engine.edit('Trace Image', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => ph), select: [ph.id] } : d))) return null;
       live = ph as typeof live & object;
       id = ph.id;
     }
     traceRuns.get(id)?.abort();
     const ctl = new AbortController();
     traceRuns.set(id, ctl);
-    const revert = (): void => { if (placeholder) engine.edit('Image Trace', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => src), select: [src.id] } : d), { merge: true }); };
+    const revert = (): void => { if (placeholder) engine.edit('Trace Image', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => src), select: [src.id] } : d), { merge: true }); };
     let res: TraceRun;
     try { res = await engine.task(() => traceImage(blob, src.xf, { w: src.w, h: src.h }, o, library, ctl.signal)); }
     catch (err) { if (err instanceof DOMException && err.name === 'AbortError') return null; traceRuns.delete(id); revert(); throw err; }
@@ -953,7 +953,7 @@ export function startApp(): void {
     if (!cur || cur.kind !== 'group' || !cur.trace) return null;
     const info = { src, opts: { ...o, traced: `${res.w}x${res.h}`, found: res.colors }, view: TRACE_VIEWS.some(([v]) => v === a.view) ? view : cur.trace.view };
     const next: VNode = { ...cur, children: g.children, trace: info };
-    engine.edit(placeholder ? 'Image Trace' : 'Image Trace Options', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => next), select: [next.id] } : d), { merge: true });
+    engine.edit(placeholder ? 'Trace Image' : 'Trace Image Options', (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => next), select: [next.id] } : d), { merge: true });
     if (a.expand === true) engine.expandTrace([next.id]);
     return next.id;
   }
@@ -1706,13 +1706,13 @@ export function startApp(): void {
     { id: 'persp-release', label: 'Release with Perspective', enabled: () => engine.perspTargets().length > 0, run: () => engine.releasePerspective() },
     { id: 'persp-match-plane', label: 'Move Plane to Match Object', enabled: () => engine.perspTargets().length > 0, run: () => engine.movePlaneToObject() },
     { id: 'persp-edit-text', label: 'Edit Text', enabled: () => !!engine.perspTextOf(), run: () => { const id = engine.perspEditText(); if (id) { engine.setTool('type'); typing.begin({ id }); } } },
-    { id: 'image-trace', label: 'Make Image Trace', enabled: () => kindSel('image'), run: () => void makeTrace(false) },
-    { id: 'image-trace-expand', label: 'Make Image Trace and Expand', enabled: () => kindSel('image'), run: () => void makeTrace(true) },
-    { id: 'live-paint-make', label: 'Make Live Paint', keys: ['Mod+Alt+X'], enabled: () => sel() && !engine.livePaintTargets().length, run: () => { if (engine.makeLivePaint()) engine.setTool('livePaint'); } },
-    { id: 'live-paint-merge', label: 'Merge Live Paint', enabled: () => engine.livePaintTargets().length > 0 && engine.selected().length > 1, run: () => engine.makeLivePaint() },
-    { id: 'live-paint-release', label: 'Release Live Paint', enabled: () => engine.livePaintTargets().length > 0, run: () => engine.releaseLivePaint() },
-    { id: 'live-paint-gap', label: 'Live Paint Gap Options...', enabled: () => engine.livePaintTargets().length > 0, run: () => void gapOptions() },
-    { id: 'live-paint-expand', label: 'Expand Live Paint', enabled: () => engine.livePaintTargets().length > 0, run: () => engine.expandLivePaint() },
+    { id: 'image-trace', label: 'Make Trace Image', enabled: () => kindSel('image'), run: () => void makeTrace(false) },
+    { id: 'image-trace-expand', label: 'Make Trace Image and Expand', enabled: () => kindSel('image'), run: () => void makeTrace(true) },
+    { id: 'live-paint-make', label: 'Make Fill Regions', keys: ['Mod+Alt+X'], enabled: () => sel() && !engine.livePaintTargets().length, run: () => { if (engine.makeLivePaint()) engine.setTool('livePaint'); } },
+    { id: 'live-paint-merge', label: 'Merge Fill Regions', enabled: () => engine.livePaintTargets().length > 0 && engine.selected().length > 1, run: () => engine.makeLivePaint() },
+    { id: 'live-paint-release', label: 'Release Fill Regions', enabled: () => engine.livePaintTargets().length > 0, run: () => engine.releaseLivePaint() },
+    { id: 'live-paint-gap', label: 'Fill Regions Gap Options...', enabled: () => engine.livePaintTargets().length > 0, run: () => void gapOptions() },
+    { id: 'live-paint-expand', label: 'Expand Fill Regions', enabled: () => engine.livePaintTargets().length > 0, run: () => engine.expandLivePaint() },
     { id: 'intertwine-make', label: 'Make Intertwine', enabled: () => engine.selected().length > 1 && !engine.intertwineTargets().length, run: () => { if (engine.makeIntertwine()) engine.setTool('intertwine'); } },
     { id: 'intertwine-release', label: 'Release Intertwine', enabled: () => engine.intertwineTargets().length > 0, run: () => engine.releaseIntertwine() },
     { id: 'intertwine-edit', label: 'Edit Intertwine', enabled: () => engine.intertwineTargets().length > 0, run: () => { const t = engine.intertwineTargets()[0]; if (t) { engine.select([t]); engine.setTool('intertwine'); } } },
@@ -1723,8 +1723,8 @@ export function startApp(): void {
     { id: 'graph-column', label: 'Column...', enabled: () => engine.graphTargets().length > 0 && !!engine.doc?.graphDesigns?.length, run: () => void graphColumnDialog(engine) },
     { id: 'graph-marker', label: 'Marker...', enabled: () => engine.graphTargets().length > 0 && !!engine.doc?.graphDesigns?.length, run: () => void graphMarkerDialog(engine) },
     { id: 'graph-size', label: 'Graph Size...', enabled: has, run: () => void graphSizeDialog(engine, pendingGraph.type, pendingGraph.at).then((id) => { if (id) graphData.open(id); }) },
-    { id: 'trace-expand', label: 'Expand Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.expandTrace() },
-    { id: 'trace-release', label: 'Release Image Trace', enabled: () => engine.traceTargets().length > 0, run: () => engine.releaseTrace() },
+    { id: 'trace-expand', label: 'Expand Trace Image', enabled: () => engine.traceTargets().length > 0, run: () => engine.expandTrace() },
+    { id: 'trace-release', label: 'Release Trace Image', enabled: () => engine.traceTargets().length > 0, run: () => engine.releaseTrace() },
     { id: 'embed-image', label: 'Embed Image', enabled: () => engine.selected().some((n) => n.kind === 'image' && !!n.linked), run: () => { embedLinks(engine.selected().filter((n): n is ImageNode => n.kind === 'image')); } },
     { id: 'place-linked', label: 'Place Linked...', enabled: has, run: () => void (async () => { if (!canLink()) { toast('This browser cannot keep links to files, so Place embeds the image instead.'); placeInput.click(); return; } await placeLinked(await chooseLinkFile('Place Linked')); })() },
     { id: 'link-relink', label: 'Relink...', enabled: () => !!pickedImage(), run: () => void (async () => { const n = pickedImage(); if (!n) return; if (!canLink()) { relinkIds = [n.id]; relinkInput.click(); return; } const f = await chooseLinkFile('Relink'); if (f) await linkFileTo([n.id], f, 'Relink'); })() },
@@ -1947,9 +1947,9 @@ export function startApp(): void {
       { label: 'Blend', items: ['blend-make', 'blend-release', '-', 'blend-options', '-', 'blend-expand', 'blend-spine'] },
       { label: 'Envelope Distort', items: ['envelope-warp', 'envelope-mesh', 'envelope-top', '-', 'release-live', 'envelope-options', 'expand-object', '-', 'envelope-edit-contents', 'envelope-edit-envelope', '-', 'envelope-reset-warp', 'envelope-reset-mesh'] },
       { label: 'Perspective', items: ['persp-attach', 'persp-release', '-', 'persp-match-plane', 'persp-edit-text'] },
-      { label: 'Image Trace', items: ['image-trace', 'image-trace-expand', '-', 'trace-release', 'trace-expand', '-', 'embed-image'] },
+      { label: 'Trace Image', items: ['image-trace', 'image-trace-expand', '-', 'trace-release', 'trace-expand', '-', 'embed-image'] },
       { label: 'Links', items: ['link-relink', 'link-relink-all', 'link-relink-folder', '-', 'link-update', 'link-update-all', '-', 'link-embed', 'link-unembed', 'link-info'] },
-      { label: 'Live Paint', items: ['live-paint-make', 'live-paint-merge', 'live-paint-release', 'live-paint-gap', 'live-paint-expand'] },
+      { label: 'Fill Regions', items: ['live-paint-make', 'live-paint-merge', 'live-paint-release', 'live-paint-gap', 'live-paint-expand'] },
       { label: 'Intertwine', items: ['intertwine-make', 'intertwine-release', 'intertwine-edit'] }, '-',
       { label: 'Graph', items: ['graph-type', 'graph-data', '-', 'graph-design', 'graph-column', 'graph-marker'] }, '-',
       { label: 'Text Wrap', items: ['wrap-make', 'wrap-release', '-', 'wrap-options'] },

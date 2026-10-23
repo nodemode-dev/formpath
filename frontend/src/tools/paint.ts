@@ -308,9 +308,9 @@ registerTool({
 
 let lpHover: PathData | null = null;
 registerTool({
-  id: 'livePaint', label: 'Live Paint Bucket', group: 'shapeBuilder', order: 74, shortcut: 'K',
+  id: 'livePaint', label: 'Fill Regions Bucket', group: 'shapeBuilder', order: 74, shortcut: 'K',
   icon: () => 'vLivePaint',
-  hint: () => 'Click an area closed by the selected paths to fill it; they become a Live Paint group and stay editable. Shift-click an edge to paint its stroke.',
+  hint: () => 'Click an area closed by the selected paths to fill it; they become a Fill Regions group and stay editable. Shift-click an edge to paint its stroke.',
   cursor: () => CURSORS.bucket,
   hover: (ctx, p) => {
     const e = ctx.engine, pr = e.current;
@@ -339,9 +339,9 @@ registerTool({
 const LS = { hover: null as PathData | null, pieces: new Map<string, PathData>() };
 const lsKey = (q: Pt): string => `${Math.round(q.x * 100)}:${Math.round(q.y * 100)}`;
 registerTool({
-  id: 'livePaintSelect', label: 'Live Paint Selection Tool', group: 'shapeBuilder', order: 74.5, shortcut: 'Shift+L',
+  id: 'livePaintSelect', label: 'Fill Regions Selection Tool', group: 'shapeBuilder', order: 74.5, shortcut: 'Shift+L',
   icon: () => 'vLivePaintSelect',
-  hint: () => 'Click faces and edges of a Live Paint group to select them, Shift-click to add or remove; the Fill and Stroke colours, the Stroke panel and Delete then change only those.',
+  hint: () => 'Click faces and edges of a Fill Regions group to select them, Shift-click to add or remove; the Fill and Stroke colours, the Stroke panel and Delete then change only those.',
   cursor: () => CURSORS.direct,
   activate: (ctx) => { ctx.engine.livePaintSelection = null; LS.pieces.clear(); },
   deactivate: (ctx) => { ctx.engine.livePaintSelection = null; LS.pieces.clear(); LS.hover = null; ctx.redraw(); },
@@ -418,7 +418,7 @@ function ctxHit(d: PathData, p: Pt): boolean {
 
 const SB = { on: false, pts: [] as Pt[], hover: null as PathData | null, alt: false };
 registerTool({
-  id: 'shapeBuilder', label: 'Shape Builder Tool', group: 'shapeBuilder', order: 73, shortcut: 'Shift+M',
+  id: 'shapeBuilder', label: 'Shape Crafter Tool', group: 'shapeBuilder', order: 73, shortcut: 'Shift+M',
   icon: () => 'vShapeBuilder',
   hint: () => 'With overlapping shapes selected, drag across regions to merge them into one shape; Alt-drag or Alt-click removes regions.',
   cursor: () => CURSORS.cross,

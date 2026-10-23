@@ -71,7 +71,7 @@ function placeDefaults(s: Session): void {
 let lastSelect: string[] | null = null;
 
 registerTool({
-  id: 'puppetWarp', label: 'Puppet Warp Tool', group: 'free', order: 54.5, shortcut: 'J',
+  id: 'puppetWarp', label: 'Pin Warp Tool', group: 'free', order: 54.5, shortcut: 'J',
   icon: () => 'vPuppet',
   hint: () => 'Select art, then click it to place pins (the first click places three). Drag a pin to bend the art, Alt-drag near a selected pin to twist around it, Shift-click to select several, Delete removes pins.',
   cursor: (ctx, p) => {
@@ -81,7 +81,7 @@ registerTool({
     return CURSORS.cross;
   },
   options: (e) => [
-    { kind: 'title', text: 'Puppet Warp' },
+    { kind: 'title', text: 'Pin Warp' },
     { kind: 'range', label: 'Expand', min: 0, max: 100, unit: 'pt', get: () => expandOf(e), set: (v) => { e.update({ puppetExpand: v }); if (S && S.doc === e.doc) rebase(e); e.repaint(); } },
     { kind: 'toggle', label: 'Show Mesh', get: () => e.options.puppetMesh ?? true, set: (v) => { e.update({ puppetMesh: v }); e.repaint(); } },
     { kind: 'button', label: 'Select All Pins', run: () => { const s = session(e); if (s) { s.pins.forEach((q) => { q.sel = true; }); e.update({}); e.repaint(); } } },
@@ -120,7 +120,7 @@ registerTool({
         if (q.angle === null) q.angle = localAngle(s.mesh, s.def, q.at);
         D.mode = 'rotate'; D.pivot = pv; D.start = p.doc; D.cur = p.doc; D.moved = false; D.a0 = Math.atan2(p.doc.y - q.to.y, p.doc.x - q.to.x);
         D.base = s.pins.map((x) => ({ to: x.to, angle: x.angle }));
-        e.beginDrag('Puppet Warp');
+        e.beginDrag('Pin Warp');
         return;
       }
     }
@@ -137,7 +137,7 @@ registerTool({
     }
     D.mode = 'move'; D.start = p.doc; D.cur = p.doc; D.moved = false;
     D.base = s.pins.map((x) => ({ to: x.to, angle: x.angle }));
-    e.beginDrag('Puppet Warp');
+    e.beginDrag('Pin Warp');
     ctx.redraw();
   },
   move: (ctx, p) => {

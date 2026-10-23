@@ -89,7 +89,7 @@ export const COMMAND_META: Readonly<Record<string, readonly [string, string]>> =
   'envelope-warp': ['Makes an envelope from a preset warp shape.', 'Use when bending art into an arc, flag or wave.'],
   'envelope-mesh': ['Makes an envelope from a mesh grid.', 'Use when distorting art by pulling mesh points.'],
   'image-trace': ['Traces a placed image into vector paths.', 'Use when turning a bitmap into editable vectors.'],
-  'live-paint-make': ['Turns the selection into a Live Paint group.', 'Use when colouring the gaps between overlapping paths.'],
+  'live-paint-make': ['Turns the selection into a Fill Regions group.', 'Use when colouring the gaps between overlapping paths.'],
   'object-on-path-attach': ['Attaches objects to a path so they follow it.', 'Use when placing items along a curve.'],
   'offset-path': ['Creates a path offset from the selection by a distance.', 'Use when growing or shrinking a shape evenly.'],
   'outline-stroke': ['Converts a stroke into a filled shape.', 'Use when a line must scale like a shape.'],

@@ -9,13 +9,13 @@ Ctrl stands for Command on a Mac. Help > Keyboard Shortcuts in the app lists eve
 | Pen, Add, Delete Anchor Point, Anchor Point, Curvature | P, =, -, Shift+C, Shift+~ |
 | Rectangle, Ellipse, Line Segment | M, L, \\ |
 | Pencil, Paintbrush, Blob Brush, Eraser, Scissors | N, B, Shift+B, Shift+E, C |
-| Rotate, Reflect, Scale, Free Transform, Puppet Warp, Width, Warp | R, O, S, E, J, Shift+W, Shift+R |
+| Rotate, Reflect, Scale, Free Transform, Pin Warp, Width, Warp | R, O, S, E, J, Shift+W, Shift+R |
 | Dimension | Shift+I |
 | Column Graph (the graph tools' slot) | Shift+G |
 | Shaper, Intertwine | Shift+N, Shift+J |
 | Perspective Grid, Perspective Selection | Shift+P, Shift+V |
 | Left, horizontal, right or no active perspective plane (grid shown) | 1, 2, 3, 4 |
-| Eyedropper, Gradient, Mesh, Live Paint, Live Paint Selection, Shape Builder, Blend | I, G, U, K, Shift+L, Shift+M, W |
+| Eyedropper, Gradient, Mesh, Fill Regions Bucket, Fill Regions Selection, Shape Crafter, Blend | I, G, U, K, Shift+L, Shift+M, W |
 | Symbol Sprayer, Artboard | Shift+S, Shift+O |
 | Type, Touch Type | T, Shift+T |
 | Hand, Rotate View, Zoom | H (or hold Space), Shift+H, Z |

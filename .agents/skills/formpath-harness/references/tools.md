@@ -550,7 +550,7 @@ Aligns or distributes the objects, relative to the selection's bounds, the artbo
 
 ## puppet_warp
 
-Puppet Warp: bends the objects (paths, groups, compound paths; type, images and symbols go into an envelope mesh) as rigidly as possible so each pin lands on its target while the art between the pins bends without shearing. Give at least one pin; a pin with no move holds that spot in place, so pass three or more pins for a bend. rotate twists the art around a pin. The result is ordinary path geometry; get_image shows it.
+Pin Warp: bends the objects (paths, groups, compound paths; type, images and symbols go into an envelope mesh) as rigidly as possible so each pin lands on its target while the art between the pins bends without shearing. Give at least one pin; a pin with no move holds that spot in place, so pass three or more pins for a bend. rotate twists the art around a pin. The result is ordinary path geometry; get_image shows it.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `pins`: array; required; Pins on the art in document points; to_x, to_y is where each pin goes (it stays put when left out).
@@ -583,7 +583,7 @@ Adds a dimension annotation that stays live: linear (two points; horizontal, ver
 
 ## pathfinder
 
-Combines the selected shapes into new curved paths, as Illustrator's Pathfinder: unite, minus_front, intersect, exclude, divide, trim, merge, crop, outline or minus_back. With live true, unite, minus_front, intersect and exclude instead make a live compound shape (Alt-click in the panel): a group whose parts stay editable and whose look is the boolean of the parts, each with its own shape mode, painted like the top part. compound expand turns a live compound shape into a path and compound release returns its parts. shape_mode sets the mode of the selected part (or of all parts of a selected compound shape). precision (points, default 0.028), remove_redundant_points and remove_unpainted (Divide and Outline drop unpainted pieces) set the Pathfinder Options used by every operation, live compound shape and Pathfinder effect (apply_effect pathfinder.add and the other pathfinder.* ids on a group).
+Combines the selected shapes into new curved paths with the Pathfinder operations: unite, minus_front, intersect, exclude, divide, trim, merge, crop, outline or minus_back. With live true, unite, minus_front, intersect and exclude instead make a live compound shape (Alt-click in the panel): a group whose parts stay editable and whose look is the boolean of the parts, each with its own shape mode, painted like the top part. compound expand turns a live compound shape into a path and compound release returns its parts. shape_mode sets the mode of the selected part (or of all parts of a selected compound shape). precision (points, default 0.028), remove_redundant_points and remove_unpainted (Divide and Outline drop unpainted pieces) set the Pathfinder Options used by every operation, live compound shape and Pathfinder effect (apply_effect pathfinder.add and the other pathfinder.* ids on a group).
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `operation`: string (unite | minus_front | intersect | exclude | divide | trim | merge | crop | outline | minus_back)
@@ -611,7 +611,7 @@ A path command on the objects: offset (by offset points, joins), outline_stroke,
 
 ## shape_builder
 
-Shape Builder: merges the regions of the selected shapes under the given points into one shape, or deletes them.
+Shape Crafter: merges the regions of the selected shapes under the given points into one shape, or deletes them.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `points`: array; required
@@ -839,11 +839,11 @@ Traces a placed image into a live tracing object (the paths are its children, th
 
 ## live_paint
 
-Live Paint: make a Live Paint group from paths (their crossings divide the area into faces that keep their colour when the paths move), fill the face at a point, paint the stroke of the edge nearest a point, set gap detection in points (0 turns it off) so small openings still close a face, expand into ordinary filled faces and strokes, or release back to the paths.
+Fill Regions: make a Fill Regions group from paths (their crossings divide the area into faces that keep their colour when the paths move), fill the face at a point, paint the stroke of the edge nearest a point, set gap detection in points (0 turns it off) so small openings still close a face, expand into ordinary filled faces and strokes, or release back to the paths.
 
 - `action`: string (make | fill | edge | gap | expand | release); required
 - `ids`: array; Object ids from get_document; the selection when left out.
-- `id`: string; The Live Paint group for fill, edge and gap.
+- `id`: string; The Fill Regions group for fill, edge and gap.
 - `x`: number
 - `y`: number
 - `color`: string or object; A colour (#rrggbb, rgb(r,g,b), cmyk(c,m,y,k) in percent, gray(k), a swatch name), none, or a gradient {type: linear|radial, angle, method: classic|perceptual, stops: [{offset 0..1, color, opacity}]}. method is the Gradient panel's Method: classic (the default) mixes each stop pair in the colour's own space, perceptual mixes in OKLab for smoother, more natural transitions (exports to SVG, PDF, EPS and .ai approximate it with extra stops).
@@ -1231,7 +1231,7 @@ Variables and data merge: list the variables and data sets; make a variable (tex
 
 ## perspective
 
-Perspective grid and art in perspective, as Illustrator's Perspective Grid and Perspective Selection tools. grid sets up the document's grid: preset one_point, two_point or three_point (laid out on the first artboard) or type 1, 2 or 3, then any of the Define Grid values (cell, viewing angle and distance, horizon height above the ground level, the third vanishing point's distance below the horizon, ground_x and ground_y, station, extents, plane offsets, plane colours and opacity), and show, lock, snap and active_plane; attached art is re-projected whenever the grid changes. Plane coordinates are points on the plane with x along it and y downward (left plane: x up to 0 at the corner; right plane: x from 0; horizontal plane: x up to 0, y up to 0 toward the back), and get reports each plane's extent. draw makes a shape (rectangle, rounded_rectangle, ellipse, polygon, star, line, rectangular_grid, polar_grid) at x, y, width, height in plane coordinates on a plane. place brings existing art onto a plane by a projective transform with its centre at x, y in plane coordinates (default: the plane point under where the art sits) at scale; attach attaches it to a plane where it already looks right; move slides attached art along its plane by dx, dy and dn perpendicular to it (copy duplicates); scale scales it in plane space by sx, sy about its plane-space centre; release keeps the look and detaches it; match_plane moves the grid's plane to the object; get reports the grid, its vanishing points and the attached objects. Type placed on a plane stays editable with set_text and is drawn through the projection.
+Perspective grid and art in perspective, with the Perspective Grid and Perspective Selection tools. grid sets up the document's grid: preset one_point, two_point or three_point (laid out on the first artboard) or type 1, 2 or 3, then any of the Define Grid values (cell, viewing angle and distance, horizon height above the ground level, the third vanishing point's distance below the horizon, ground_x and ground_y, station, extents, plane offsets, plane colours and opacity), and show, lock, snap and active_plane; attached art is re-projected whenever the grid changes. Plane coordinates are points on the plane with x along it and y downward (left plane: x up to 0 at the corner; right plane: x from 0; horizontal plane: x up to 0, y up to 0 toward the back), and get reports each plane's extent. draw makes a shape (rectangle, rounded_rectangle, ellipse, polygon, star, line, rectangular_grid, polar_grid) at x, y, width, height in plane coordinates on a plane. place brings existing art onto a plane by a projective transform with its centre at x, y in plane coordinates (default: the plane point under where the art sits) at scale; attach attaches it to a plane where it already looks right; move slides attached art along its plane by dx, dy and dn perpendicular to it (copy duplicates); scale scales it in plane space by sx, sy about its plane-space centre; release keeps the look and detaches it; match_plane moves the grid's plane to the object; get reports the grid, its vanishing points and the attached objects. Type placed on a plane stays editable with set_text and is drawn through the projection.
 
 - `action`: string (get | grid | draw | place | attach | move | scale | release | match_plane); default "get"
 - `ids`: array; Object ids from get_document; the selection when left out.

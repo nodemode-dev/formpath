@@ -37,7 +37,7 @@ The engine owns the document and every change to it. It has no DOM, so the canva
 
 ## Derived live objects (`livepaint.ts`, `symbolism.ts`, `pattern.ts`)
 
-- A Live Paint group (`GroupNode.livePaint`) stores only edges (its children) and paint seeds (a point and a paint). Faces are derived by `liveFaces`, a planar walk over the flattened edges, cached per children array; `liveFaceNodes` turns painted faces into path nodes that render, hit test, SVG and PDF draw under the edges. Never store faces in the document.
+- A Fill Regions group (`GroupNode.livePaint`) stores only edges (its children) and paint seeds (a point and a paint). Faces are derived by `liveFaces`, a planar walk over the flattened edges, cached per children array; `liveFaceNodes` turns painted faces into path nodes that render, hit test, SVG and PDF draw under the edges. Never store faces in the document.
 - A tracing object (`GroupNode.trace`) keeps its source image; its children are the result. Views other than the result are drawn on screen only (`rc.printing` shows the result).
 - A symbol instance with `tint` is drawn from `instanceArt`, the symbol art with every paint mixed toward the tint; Break Link and Expand use `bakedInstance`.
 - Pattern tiles (`patternLattice`, `latticeCopies`) are shared by the renderer, the SVG writer and pattern editing mode; the editing session lives on the `Project`, not in the document, and squashes into one history step on Done.

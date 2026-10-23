@@ -9,8 +9,8 @@ Tools live in `frontend/src/tools/`, one module per family, and register through
 | `draw.ts` | Rectangle, Rounded Rectangle, Ellipse, Polygon, Star, Flare, Line Segment, Arc, Spiral, Rectangular and Polar Grid |
 | `freehand.ts` | Pencil, Smooth, Path Eraser, Join, Paintbrush, Blob Brush, Eraser, Scissors, Knife |
 | `transform.ts` | Rotate, Reflect, Scale, Shear, Free Transform, Reshape, Width, Warp, Twirl, Pucker, Bloat |
-| `paint.ts` | Eyedropper, Gradient, Mesh, Live Paint Bucket, Live Paint Selection, Shape Builder, Blend, Symbol Sprayer, Measure |
-| `puppet.ts` | Puppet Warp (pins over an as-rigid-as-possible mesh from `engine/puppet.ts`) |
+| `paint.ts` | Eyedropper, Gradient, Mesh, Fill Regions Bucket, Fill Regions Selection, Shape Crafter, Blend, Symbol Sprayer, Measure |
+| `puppet.ts` | Pin Warp (pins over an as-rigid-as-possible mesh from `engine/puppet.ts`) |
 | `shaper.ts` | Shaper (gesture recognition and scribbles into Shaper Groups from `engine/shaper.ts`), Intertwine (the editing mode of intertwine objects from `engine/intertwine.ts`) |
 | `dimension.ts` | Dimension (linear, angular and radial dimension objects from `engine/dimension.ts`) |
 | `perspective.ts` | Perspective Grid (drags the grid's widgets) and Perspective Selection (brings art onto a plane, moves, copies and scales it in plane space); the grid model, projection and attachments are `engine/perspective.ts`, and `draw.ts` draws the shape tools onto the active plane |

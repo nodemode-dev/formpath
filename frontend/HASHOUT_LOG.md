@@ -278,6 +278,14 @@ Ports 5230 (dev) and 5231 (preview) and 8230 (engine) so formpath runs beside fo
 
 ## src/app.ts
 
+### src/app.ts · formpath's own names for four features
+- refers-to: src/app.ts :: commands image-trace, image-trace-expand, trace-expand, trace-release, live-paint-*, the Object > Trace Image and Fill Regions menus, the image-trace panel tab; src/engine/index.ts :: shapeBuild, setTraceView, expandTrace, releaseTrace, makeLivePaint, livePaintFill, the edge, expand and release edits, makeIntertwine, the pin warp edit; src/tools/paint.ts, src/tools/puppet.ts, src/ui/properties.ts, src/io/trace.ts, src/automation/agent-bridge.ts, src/automation/command-meta.ts; src/i18n/keys.json and every locale
+- kind: rationale
+- logged: v0.51.2 · 2026-10-23
+- The labels were another vendor's feature names. They are now Trace Image (was Image Trace), Fill Regions (Live Paint), Shape Crafter (Shape Builder) and Pin Warp (Puppet Warp), as the family IP plan approved on 2026-10-23 set them. Only words changed: command ids (`image-trace`, `live-paint-make`), tool ids (`livePaint`, `shapeBuilder`, `puppetWarp`), MCP tool names (`live_paint`, `shape_builder`, `puppet_warp`), document fields (`livePaint`, `trace`) and icons keep their names, so documents, shortcuts and agent calls are unchanged. A new traced group is named Trace Image and a new fill group Fill Regions; groups already in documents keep the names they were saved with.
+- The 26 English keys were renamed in place in `keys.json` and the translations were written new for each of the 25 languages (CSV per language through `./formpath i18n import`, then `prune`), because the old ones used the other vendor's localized names for these features. `./formpath i18n check` passes. `keys.json` was not re-extracted: `extract` also adds about 60 strings no locale has yet, which is separate work.
+- `.claude/skills/formpath-harness/references/commands.md` still shows the old labels: `agents sync` writes it from a stored command catalogue, and none is stored on this build machine.
+
 ### src/app.ts · opacity mask commands
 - refers-to: src/app.ts :: commands disable-opacity-mask, unlink-opacity-mask, new-mask-clip, new-mask-invert, Object > Opacity Mask; src/ui/prefs.ts :: Prefs.newMaskClip, newMaskInvert, applyPrefs
 - kind: explainer

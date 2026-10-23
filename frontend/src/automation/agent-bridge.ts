@@ -1424,10 +1424,10 @@ export class AgentBridge {
         }
         case 'live_paint': {
           const act = str('action');
-          if (act === 'make') { const id = e.makeLivePaint(this.ids(a)); return id ? text(`Live Paint group ${id} with ${this.livePaintSummary(id)}.`, { id }) : fail('Select or pass paths to make a Live Paint group.'); }
+          if (act === 'make') { const id = e.makeLivePaint(this.ids(a)); return id ? text(`Fill Regions group ${id} with ${this.livePaintSummary(id)}.`, { id }) : fail('Select or pass paths to make a Fill Regions group.'); }
           const id = has('id') ? String(a.id) : e.livePaintTargets()[0];
           const g = id ? this.node(id) : null;
-          if (!g || g.kind !== 'group' || !g.livePaint) return fail('Pass the id of a Live Paint group (live_paint with action make returns one).');
+          if (!g || g.kind !== 'group' || !g.livePaint) return fail('Pass the id of a Fill Regions group (live_paint with action make returns one).');
           if (act === 'fill' || act === 'edge') {
             if (!has('x') || !has('y')) return fail('Give x and y in document points.');
             const paint = has('color') ? this.paint(a.color, 'color') : act === 'fill' ? e.fillPaint : e.strokePaint;
@@ -1442,7 +1442,7 @@ export class AgentBridge {
         }
         case 'intertwine': {
           const act = str('action');
-          if (act === 'make') { const id = e.makeIntertwine(this.ids(a)); return id ? text(`Intertwine ${id} made from ${(() => { const n = this.node(id); return n && n.kind === 'group' ? n.children.length : 0; })()} objects; flip the stacking at a point where they overlap.`, { id }) : fail('Select or pass two or more overlapping objects (not Live Paint, Repeat or Shaper groups).'); }
+          if (act === 'make') { const id = e.makeIntertwine(this.ids(a)); return id ? text(`Intertwine ${id} made from ${(() => { const n = this.node(id); return n && n.kind === 'group' ? n.children.length : 0; })()} objects; flip the stacking at a point where they overlap.`, { id }) : fail('Select or pass two or more overlapping objects (not Fill Regions, Repeat or Shaper groups).'); }
           const id = has('id') ? String(a.id) : e.intertwineTargets()[0];
           const g = id ? this.node(id) : null;
           if (!g || g.kind !== 'group' || !g.intertwine) return fail('Pass the id of an intertwine object (intertwine with action make returns one).');

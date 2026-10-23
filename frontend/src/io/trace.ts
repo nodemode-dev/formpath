@@ -95,6 +95,6 @@ export async function traceImage(blob: Blob, xf: Mat, natural: { w: number; h: n
     const ap = p.stroke > 0 ? { items: [stroke(col, Math.max(0.1, p.stroke * k), { cap: 'round', join: 'round' })], effects: [] } : { items: [fill(col)], effects: [] };
     return { id: newId('p'), kind: 'path', d: transformPath(p.d, toDoc), rule: p.stroke > 0 ? 'nonzero' : 'evenodd', opacity: 1, blend: 'normal', ap };
   });
-  const node: VNode | null = kids.length ? { id: newId('g'), kind: 'group', clip: false, children: kids, opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, name: 'Image Trace' } : null;
+  const node: VNode | null = kids.length ? { id: newId('g'), kind: 'group', clip: false, children: kids, opacity: 1, blend: 'normal', ap: { items: [], effects: [] }, name: 'Trace Image' } : null;
   return { node, w, h, colors: out.colors, ms: Math.round(performance.now() - t0) };
 }

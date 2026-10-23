@@ -161,10 +161,10 @@ export class PropertiesPanel {
     else if (n.kind === 'group' && n.intertwine) out.push(['Edit Intertwine', 'intertwine-edit'], ['Expand', 'expand-object'], ['Release', 'intertwine-release']);
     else if (n.kind === 'group' && n.shaper) out.push(['Edit Faces', 'tool-shaper'], ['Expand', 'shaper-expand'], ['Ungroup', 'ungroup']);
     else if (n.kind === 'group' && n.graph) out.push(['Graph Data', 'graph-data'], ['Graph Type', 'graph-type'], ['Ungroup', 'ungroup']);
-    else if (n.kind === 'group' && n.trace) out.push(['Image Trace Options', 'panel-image-trace'], ['Expand', 'trace-expand'], ['Release', 'trace-release']);
+    else if (n.kind === 'group' && n.trace) out.push(['Trace Image Options', 'panel-image-trace'], ['Expand', 'trace-expand'], ['Release', 'trace-release']);
     else if (n.kind === 'group') out.push(['Ungroup', 'ungroup'], ['Isolate Group', 'isolate'], ...(n.clip ? [['Release Clipping Mask', 'release-clip'] as [string, string]] : []));
     else if (n.kind === 'text') out.push(['Create Outlines', 'create-outlines'], ['Edit Text', 'edit-text'], [n.mode === 'area' ? 'Convert to Point Type' : 'Convert to Area Type', 'toggle-area-type']);
-    else if (n.kind === 'image') out.push(['Image Trace', 'image-trace'], ['Embed', 'embed-image']);
+    else if (n.kind === 'image') out.push(['Trace Image', 'image-trace'], ['Embed', 'embed-image']);
     else if (n.kind === 'path') out.push(['Offset Path', 'offset-path'], ['Outline Stroke', 'outline-stroke'], ['Simplify', 'simplify'], ...(n.live ? [['Expand Shape', 'expand-shape'] as [string, string]] : []));
     else if (n.kind === 'compound') out.push(['Release Compound Path', 'compound-release']);
     else if (n.kind === 'blend' || n.kind === 'repeat' || n.kind === 'envelope') out.push(['Expand', 'expand-object'], ['Release', 'release-live'], ...(n.kind === 'blend' ? [['Blend Options', 'blend-options'] as [string, string]] : []), ...(n.kind === 'envelope' ? [['Edit Contents', 'envelope-edit-contents'], ['Envelope Options', 'envelope-options']] as Array<[string, string]> : []));
