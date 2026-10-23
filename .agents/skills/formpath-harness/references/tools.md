@@ -863,10 +863,11 @@ Interlace: make an interlace object from two or more overlapping objects (paths,
 
 ## shaper
 
-Shaper: turn rough drawn points into a live shape the way the Shaper tool recognises a gesture (rectangle or square, circle, ellipse, triangle, polygon or line; near-orthogonal rectangles snap square to the axes); scribble a zigzag over overlapping shapes to punch out the region it stays in, merge the regions it crosses, or delete a single shape it covers alone (overlapping shapes become an editable Shaper Group that recomputes when its shapes change); fill the face of a Shaper Group at x, y; or expand a Shaper Group into plain paths.
+Shaper: turn rough drawn points into a live shape the way the Shaper tool recognises a gesture (rectangle or square, circle, ellipse, triangle, polygon or line; near-orthogonal rectangles snap square to the axes); scribble a zigzag over shapes with an operation you choose, which is required for scribble: merge joins the regions the zigzag crosses (two or more), punch cuts out the overlap regions (covered by two or more shapes) it passes over, delete removes the shapes it passes over; the zigzag only picks which regions or shapes, never the operation, and an operation that does not fit what was touched changes nothing (overlapping shapes become an editable Shaper Group that recomputes when its shapes change); fill the face of a Shaper Group at x, y; or expand a Shaper Group into plain paths.
 
 - `action`: string (draw | scribble | fill | expand); required
 - `points`: array; draw and scribble: the gesture as [x, y] document points in drawing order.
+- `operation`: string (merge | punch | delete); scribble: required. merge, punch or delete; chosen by you, not inferred from where the points fall.
 - `id`: string; fill and expand: the Shaper Group (defaults to the selected one).
 - `x`: number
 - `y`: number

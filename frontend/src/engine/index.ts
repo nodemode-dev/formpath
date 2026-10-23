@@ -44,7 +44,7 @@ import { quadDistort } from './ops/distort';
 import { puppetApply, puppetMesh, PuppetSolver } from './puppet';
 import { dimensionNode, dimensionSpec } from './dimension';
 import { expandedIntertwine, inArea, intertwineFlip as flipIntertwine, intertwineLasso, intertwineNode, intertwineOverlapping } from './intertwine';
-import { expandedShaper, recognizeShape, samplePolyline, shaperFill, shaperNode, shaperRegionAt, shaperRegions, shaperScribble, type ShapeKind } from './shaper';
+import { expandedShaper, recognizeShape, samplePolyline, shaperFill, shaperNode, shaperRegionAt, shaperRegions, shaperScribble, type ShapeKind, type ShaperOp } from './shaper';
 import type { IntertwineSpec } from './types';
 import { cleanData, graphNode, graphSpec, GRAPH_TYPES, restyleText, seriesOfPart } from './graph';
 import { applyDataSetDoc, captureValues, kindFits, uniqueName, type ResolvedImage } from './variables';
@@ -1580,16 +1580,17 @@ export class Engine extends Emitter<EngineEvents> {
     const [id] = this.addNodes(`Shaper ${r.kind[0].toUpperCase()}${r.kind.slice(1)}`, [node]);
     return id ? { id, kind: r.kind } : null;
   }
-  shaperScribble(points: Pt[]): { action: 'cut' | 'merge' | 'remove'; id: string | null } | null {
+  shaperScribble(points: Pt[], op: ShaperOp): { action: 'cut' | 'merge' | 'remove' | 'none'; id: string | null } | null {
     const p = this.current; if (!p || points.length < 2) return null;
     const doc = p.doc, probe = samplePolyline(points, 3);
     const usable = (n: VNode): boolean => !isLocked(doc, n.id) && isVisible(doc, n.id);
     let host: GroupNode | null = null;
     walk(doc.layers, (n) => { if (n.kind === 'group' && n.shaper) { if (usable(n) && probe.some((q) => shaperRegionAt(n, q))) host = n; return false; } if (n.kind === 'group' && (n.intertwine || n.livePaint || n.dim || n.trace)) return false; });
-    const apply = (g: GroupNode, fresh: string[] | null): { action: 'cut' | 'merge' | 'remove'; id: string | null } | null => {
-      const res = shaperScribble(g, points);
+    const apply = (g: GroupNode, fresh: string[] | null): { action: 'cut' | 'merge' | 'remove' | 'none'; id: string | null } | null => {
+      const res = shaperScribble(g, points, op);
       if (!res) return null;
-      const made: VNode[] = res.kind === 'remove' ? (() => { const kids = g.children.filter((_, i) => i !== res.index); return kids.length >= 2 ? [{ ...g, children: kids }] : kids; })() : [{ ...g, shaper: res.spec }];
+      if (res.kind === 'none') return { action: 'none', id: null };
+      const made: VNode[] = res.kind === 'remove' ? (() => { const kids = g.children.filter((_, i) => !res.indices.includes(i)); return kids.length >= 2 ? [{ ...g, children: kids }] : kids; })() : [{ ...g, shaper: res.spec }];
       const keepId = made.length === 1 ? made[0].id : null;
       const name = res.kind === 'cut' ? 'Shaper Punch' : res.kind === 'merge' ? 'Shaper Merge' : 'Shaper Delete';
       this.edit(name, (d) => {
@@ -1609,8 +1610,17 @@ export class Engine extends Emitter<EngineEvents> {
       return n.kind === 'compound' ? false : undefined;
     });
     if (!cands.length) return null;
-    if (cands.length === 1) { this.edit('Shaper Delete', (d) => ({ doc: removeNodes(d, [cands[0].id]), select: [] })); return { action: 'remove', id: null }; }
     const order = inDocOrder(doc, cands.map((n) => n.id));
+    if (op === 'delete') {
+      if (cands.length === 1) { this.edit('Shaper Delete', (d) => ({ doc: removeNodes(d, [cands[0].id]), select: [] })); return { action: 'remove', id: null }; }
+      const temp = shaperNode(order.map((id) => findNode(doc, id) as VNode)), res = shaperScribble(temp, points, 'delete');
+      if (!res) return null;
+      if (res.kind !== 'remove') return { action: 'none', id: null };
+      const gone = res.indices.map((i) => temp.children[i].id);
+      this.edit('Shaper Delete', (d) => ({ doc: removeNodes(d, gone), select: [] }));
+      return { action: 'remove', id: null };
+    }
+    if (cands.length === 1) return { action: 'none', id: null };
     return apply(shaperNode(order.map((id) => findNode(doc, id) as VNode)), order);
   }
   shaperFill(groupId: string, at: Pt, paint: Paint): boolean {

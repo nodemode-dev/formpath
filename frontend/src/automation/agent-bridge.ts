@@ -1471,8 +1471,11 @@ export class AgentBridge {
             return text(`Recognised a ${r.kind}; drew live shape ${r.id}${n && n.kind === 'path' && n.live ? ` (${n.live.kind})` : ''}.`, { id: r.id, shape: r.kind });
           }
           if (act === 'scribble') {
-            const r = e.shaperScribble(pts);
+            const op = str('operation');
+            if (op !== 'merge' && op !== 'punch' && op !== 'delete') return fail('scribble needs operation: merge, punch or delete. The scribble only picks which regions or shapes; it never decides the operation.');
+            const r = e.shaperScribble(pts, op);
             if (!r) return fail('The scribble touched no shape: zigzag over the shapes or their overlap.');
+            if (r.action === 'none') return fail(op === 'merge' ? 'Nothing merged: the scribble must cross two or more regions.' : op === 'punch' ? 'Nothing punched: the scribble must pass over a region where two or more shapes overlap.' : 'Nothing deleted: scribble over the shape to delete.');
             return text(r.action === 'cut' ? `Punched out the region in Shaper Group ${r.id}.` : r.action === 'merge' ? `Merged the regions in Shaper Group ${r.id}.` : 'Deleted the shape.', { id: r.id, action: r.action });
           }
           const id = has('id') ? String(a.id) : e.shaperTargets()[0];

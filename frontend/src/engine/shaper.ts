@@ -94,8 +94,9 @@ export function samplePolyline(pts: Pt[], step: number): Pt[] {
   return out;
 }
 
-export type ScribbleResult = { kind: 'cut' | 'merge'; spec: ShaperSpec } | { kind: 'remove'; index: number };
-export function shaperScribble(g: GroupNode, stroke: Pt[]): ScribbleResult | null {
+export type ShaperOp = 'merge' | 'punch' | 'delete';
+export type ScribbleResult = { kind: 'cut' | 'merge'; spec: ShaperSpec } | { kind: 'remove'; indices: number[] } | { kind: 'none' };
+export function shaperScribble(g: GroupNode, stroke: Pt[], op: ShaperOp): ScribbleResult | null {
   const spec = g.shaper ?? emptyShaper(), cells = shaperCells(g);
   const cut = cells.map((c) => spec.cuts.some((q) => inArea(c.d, q)));
   const order: number[] = [];
@@ -104,11 +105,12 @@ export function shaperScribble(g: GroupNode, stroke: Pt[]): ScribbleResult | nul
     if (i >= 0 && !order.includes(i)) order.push(i);
   }
   if (!order.length) return null;
-  if (order.length === 1) {
-    const c = cells[order[0]];
-    if (c.members.length >= 2) return { kind: 'cut', spec: { ...spec, cuts: [...spec.cuts, c.ip] } };
-    return { kind: 'remove', index: c.members[0] ?? c.top };
+  if (op === 'delete') return { kind: 'remove', indices: [...new Set(order.map((i) => cells[i].top))] };
+  if (op === 'punch') {
+    const over = order.filter((i) => cells[i].members.length >= 2);
+    return over.length ? { kind: 'cut', spec: { ...spec, cuts: [...spec.cuts, ...over.map((i) => cells[i].ip)] } } : { kind: 'none' };
   }
+  if (order.length < 2) return { kind: 'none' };
   const first = shaperRegions(g).find((r) => r.cells.includes(order[0]));
   const src = g.children[first?.owner ?? cells[order[0]].top]?.id ?? g.children[cells[order[0]].top].id;
   const cuts = spec.cuts.filter((q) => !order.some((i) => inArea(cells[i].d, q)));

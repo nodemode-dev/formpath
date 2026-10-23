@@ -4,14 +4,15 @@ import { inArea, overlapAt } from '../engine/intertwine';
 import { geometryOf } from '../engine/ops/paths';
 import { firstFill, toRgb } from '../engine/paint';
 import { cachedPath } from '../engine/render';
-import { isScribble, shaperRegionAt } from '../engine/shaper';
+import { isScribble, shaperRegionAt, type ShaperOp } from '../engine/shaper';
 import { transformNode } from '../engine/transform';
 import type { Engine, GroupNode, PathData, Pt } from '../engine';
 import { registerTool, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { inView, layerColor, stroke2 } from './util';
 
-const SH = { on: false, pts: [] as Pt[], start: { x: 0, y: 0 } as Pt, move: null as { id: string; from: Pt } | null, hover: null as PathData | null, last: '', mode: 'faces' as 'faces' | 'construction' };
+const SH = { on: false, pts: [] as Pt[], start: { x: 0, y: 0 } as Pt, move: null as { id: string; from: Pt } | null, hover: null as PathData | null, last: '', mode: 'faces' as 'faces' | 'construction', op: 'merge' as ShaperOp, alt: false, shift: false };
+const opFor = (alt: boolean, shift: boolean): ShaperOp => (alt ? 'punch' : shift ? 'delete' : SH.op);
 
 const shaperGroups = (e: Engine): GroupNode[] => e.selected().filter((n): n is GroupNode => n.kind === 'group' && !!n.shaper);
 function hostOf(e: Engine, id: string): GroupNode | null {
@@ -46,13 +47,14 @@ const label = (k: string): string => `${k[0].toUpperCase()}${k.slice(1)}`;
 registerTool({
   id: 'shaper', label: 'Shaper Tool', group: 'pencil', order: 41, shortcut: 'Shift+N',
   icon: () => 'vShaper',
-  hint: () => (SH.mode === 'faces' ? 'Draw a rough rectangle, circle, ellipse, triangle, polygon or line to get a live shape. Scribble over overlapping shapes to punch out or merge regions; click a face of a Shaper Group to select it and change its fill.' : 'Construction: click a shape inside the Shaper Group to select it, drag to move it; the faces recompute.'),
+  hint: () => (SH.mode === 'faces' ? 'Draw a rough rectangle, circle, ellipse, triangle, polygon or line to get a live shape. Scribble over shapes to do the Operation chosen in the options bar (Merge, Punch or Delete); hold Alt to Punch or Shift to Delete. Click a face of a Shaper Group to select it and change its fill.' : 'Construction: click a shape inside the Shaper Group to select it, drag to move it; the faces recompute.'),
   cursor: () => CURSORS.shaper,
   activate: () => { SH.hover = null; },
   deactivate: (ctx) => { ctx.engine.shaperSelection = null; SH.hover = null; SH.on = false; ctx.redraw(); },
   options: (e) => [
     { kind: 'title', text: 'Shaper' },
     { kind: 'segment', label: 'Click selects', choices: [{ id: 'faces', label: 'Faces' }, { id: 'construction', label: 'Shapes' }], get: () => SH.mode, set: (v) => { SH.mode = v === 'construction' ? 'construction' : 'faces'; e.shaperSelection = null; e.emit('options', null); e.emit('overlay', null); } },
+    { kind: 'segment', label: 'Operation', choices: [{ id: 'merge', label: 'Merge' }, { id: 'punch', label: 'Punch' }, { id: 'delete', label: 'Delete' }], get: () => SH.op, set: (v) => { SH.op = v === 'punch' ? 'punch' : v === 'delete' ? 'delete' : 'merge'; e.emit('options', null); } },
     { kind: 'readout', label: 'Last', get: () => SH.last || 'None' },
     { kind: 'color', label: 'Face fill', when: () => !!faceSel(e), get: () => { const g = faceSel(e), s = e.shaperSelection, r = g && s ? shaperRegionAt(g, s.at) : null, f = r ? firstFill(r.node.ap) : null; return f && f.paint.type === 'color' ? toRgb(f.paint.color) : { r: 255, g: 255, b: 255 }; }, set: (c) => { const g = faceSel(e), s = e.shaperSelection; if (g && s) e.shaperFill(g.id, s.at, { type: 'color', color: { kind: 'rgb', r: c.r, g: c.g, b: c.b } }); } },
     { kind: 'button', label: 'Expand', when: () => shaperGroups(e).length > 0, run: () => { e.shaperSelection = null; e.expandShaper(); } },
@@ -70,7 +72,7 @@ registerTool({
   },
   down: (ctx, p) => {
     const e = ctx.engine;
-    SH.on = true; SH.pts = [p.doc]; SH.start = p.doc; SH.move = null;
+    SH.on = true; SH.pts = [p.doc]; SH.start = p.doc; SH.move = null; SH.alt = p.alt; SH.shift = p.shift;
     if (SH.mode === 'construction') {
       const g = shaperAt(e, p.doc), id = g ? sourceAt(g, p.doc) : null;
       if (g && id && e.current?.selection.has(id)) { SH.move = { id, from: p.doc }; e.beginDrag('Move Shape'); }
@@ -97,8 +99,9 @@ registerTool({
     if (span < 5) { click(ctx, p); return; }
     e.shaperSelection = null;
     if (isScribble(pts)) {
-      const r = e.shaperScribble(pts);
-      SH.last = r ? (r.action === 'cut' ? 'Punched out a region' : r.action === 'merge' ? 'Merged regions' : 'Deleted a shape') : 'Scribble missed every shape';
+      const op = opFor(p.alt || SH.alt, p.shift || SH.shift), r = e.shaperScribble(pts, op);
+      const none = op === 'merge' ? 'Nothing merged: scribble across two or more regions' : op === 'punch' ? 'Nothing punched: scribble over a region where two or more shapes overlap' : 'Nothing deleted: scribble over the shape to delete';
+      SH.last = !r ? 'Scribble missed every shape' : r.action === 'none' ? none : r.action === 'cut' ? 'Punched out a region' : r.action === 'merge' ? 'Merged regions' : 'Deleted a shape';
     } else {
       const r = e.addShaperShape(pts);
       SH.last = r ? label(r.kind) : 'Not recognised';
