@@ -1,6 +1,6 @@
 # formpath
 
-A vector illustration editor for the web and the desktop, the Illustrator alternative in the form family: vanilla TypeScript and Vite frontend, Python and FastAPI engine service, Tauri 2 shell. Two kinds of work happen here; pick the one the person asked for.
+A vector illustration editor for the web and the desktop, the vector member of the form family: vanilla TypeScript and Vite frontend, Python and FastAPI engine service, Tauri 2 shell. Two kinds of work happen here; pick the one the person asked for.
 
 ## Drawing (natural language)
 

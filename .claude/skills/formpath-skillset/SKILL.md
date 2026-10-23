@@ -1,6 +1,6 @@
 ---
 name: formpath-skillset
-description: Use when changing formpath's code, the NodeMode-styled vector illustration editor (the Illustrator alternative) for the web and the desktop. Add a tool, fix the Layers panel, change Pathfinder, open or export SVG and PDF, add an MCP tool, build the desktop app. Covers the document engine, paths, anchors, appearance stacks, gradients, effects, type and outlines, the tool registry, the stage, panels, menus, dialogs, themes, zero-flash UI, the .fpth format, the FastAPI engine service, the MCP harness and the Tauri shell.
+description: Use when changing formpath's code, the NodeMode-styled vector illustration editor of the form family for the web and the desktop. Add a tool, fix the Layers panel, change Pathfinder, open or export SVG and PDF, add an MCP tool, build the desktop app. Covers the document engine, paths, anchors, appearance stacks, gradients, effects, type and outlines, the tool registry, the stage, panels, menus, dialogs, themes, zero-flash UI, the .fpth format, the FastAPI engine service, the MCP harness and the Tauri shell.
 ---
 
 # formpath-skillset
