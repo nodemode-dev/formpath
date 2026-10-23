@@ -2,6 +2,10 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.51.4 · 2026-10-23
+
+- NOTICE.md lists pyspellchecker and its word lists, xterm.js, the terminal packages, the Pillow wheel libraries with the FreeType credit, certifi, the frozen Python packages and the desktop shell crates; the installers carry LICENSE and NOTICE.md.
+
 ## 0.51.3 · 2026-10-23
 
 - Eight more features carry formpath's own names, in all 26 languages: AI Shape Fill, AI Vector from Text, AI Patterns, AI Recolor, Glyph Touch, Interlace, Recolor Art and Font Match. Command and MCP tool ids and saved documents are unchanged.
