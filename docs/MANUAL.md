@@ -94,10 +94,13 @@ ask it questions.
 - Shaper (Shift+N, in the Pencil flyout) turns rough gestures into live shapes: draw a rectangle (a square when the
   sides come out about equal; one drawn nearly level snaps square to the axes), a circle, an ellipse, a triangle, a
   polygon of five to eight sides or a straight line, and it becomes the matching live shape in the current fill and
-  stroke. The options bar names what it recognised. Scribble (a zigzag) over shapes to cut and combine them: a
-  scribble that stays inside one overlap punches that region out, a scribble across several regions merges them
-  into one face in the colour of the face where it started, and a scribble over a single shape's area that no other
-  shape overlaps deletes that shape. Overlapping shapes become a Shaper Group that keeps the shapes: with Click
+  stroke. The options bar names what it recognised. Scribble (a zigzag) over shapes to cut and combine them. The
+  Operation choice in the options bar (Merge, Punch or Delete; Merge by default) says what the scribble does, and
+  holding Alt while scribbling punches and holding Shift deletes, as Alt switches Shape Crafter to erasing. The
+  scribble only picks which regions or shapes: Merge joins the regions it crosses (two or more) into one face in the
+  colour of the face where it started, Punch cuts out the overlap regions (covered by two or more shapes) it passes
+  over, and Delete removes the shapes it passes over. If the operation does not fit what the scribble touched, nothing
+  changes and the options bar says so. Overlapping shapes become a Shaper Group that keeps the shapes: with Click
   selects set to Faces, click a face to select it and change its fill (the Color panel, swatches or Face fill in the
   options bar); with Shapes, click a shape inside the group to select it and drag to move it (the Direct Selection
   tool and the Shape section of Properties edit it too), and the faces recompute. Expand (options bar, Properties,

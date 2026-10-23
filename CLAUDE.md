@@ -24,6 +24,12 @@ Always route code work through `.claude/skills/formpath-skillset/SKILL.md` first
 - Translations follow formpath's own English, never another vendor's localized menu names; a renamed English string gets new translations in all 25 languages (`./formpath i18n import`, then `prune` and `check`).
 - Never copy vendor help text, presets, brushes, symbols, swatch libraries or icons; never trace vendor UI art. Every new dependency, font or data file gets a row in `NOTICE.md` before it ships.
 
+## Shaper, Shape Crafter and Trace Image (declined for patent risk, 2026-10-23)
+
+- The operation of the Shaper tool (Merge, Punch or Delete) and of the Shape Crafter tool (merge or erase) always comes from the user's mode or held key (the Operation choice in the options bar, Alt for Punch, Shift for Delete; Alt for erasing in Shape Crafter), or from the `operation` argument of the agent and MCP tools. Never infer the operation from where or how a stroke lands (which cells it touches, how many, whether one shape or several is under it). The stroke only picks which regions or shapes are affected; `shaperScribble` takes the operation as a parameter. If the chosen operation does not fit what was touched, do nothing and say so; never fall back to choosing an operation from location.
+- Trace Image never traces "between two clicked points": no mode where the user clicks two points on an image and the path between them is found and traced.
+- The live re-tracing Trace Image object stays as it is; do not extend or restructure it without counsel.
+
 ## Drawing through formpath
 
 When the person wants artwork made or changed (a poster, an icon, a logo, a diagram, an illustration, a layout, an export), use the `formpath` MCP server's tools with the `formpath-harness` skill (`.claude/skills/formpath-harness`), not formpath's source code. `.mcp.json` starts it (`./formpath mcp`, which starts the engine if it is not running); the first call asks the person once, in the formpath window, to allow outside agents. After changing the MCP tools in `backend/app/routers/mcp.py`, run `./formpath agents sync` so the skill's tool reference and its `.agents/skills` mirror follow (CI fails until you do).

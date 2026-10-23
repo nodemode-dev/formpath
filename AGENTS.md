@@ -8,6 +8,10 @@ When the person wants artwork made or changed (a poster, a logo, an icon, a diag
 
 The MCP server is configured for this repository in `.codex/config.toml` (Codex) and `.cursor/mcp.json` (Cursor); both run `./formpath mcp`, which starts the formpath engine when it is not running. From any other folder, `./formpath agents install` sets Claude Code, Codex and Cursor up for the user account. The first call asks the person once, in the formpath window, to allow outside agents; every tool error says what to do next.
 
+## Declined for patent risk (2026-10-23)
+
+Never add back: a Shaper or Shape Crafter operation inferred from where or how a stroke lands (it always comes from the user's mode or held key, or the `operation` argument; a mismatch does nothing and says so); a Trace Image mode that traces between two clicked points. Leave the live re-tracing Trace Image object as it is.
+
 ## Changing formpath's code
 
 Read `CLAUDE.md` and `.claude/skills/formpath-skillset/SKILL.md` first: they map the subsystems, the laws that apply everywhere, and the specialist sub-skills. After changing the MCP tools in `backend/app/routers/mcp.py`, run `./formpath agents sync` so the harness skill's tool reference and its mirror follow; CI fails until you do.
