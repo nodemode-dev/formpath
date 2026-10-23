@@ -2,6 +2,10 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.51.3 · 2026-10-23
+
+- Eight more features carry formpath's own names, in all 26 languages: AI Shape Fill, AI Vector from Text, AI Patterns, AI Recolor, Glyph Touch, Interlace, Recolor Art and Font Match. Command and MCP tool ids and saved documents are unchanged.
+
 ## 0.51.2 · 2026-10-23
 
 - Four features carry formpath's own names, in all 26 languages: Trace Image, Fill Regions (with its Bucket and Selection tools), Shape Crafter and Pin Warp. Shortcuts, command ids, MCP tool names and saved documents are unchanged.
