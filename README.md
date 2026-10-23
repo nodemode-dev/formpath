@@ -11,7 +11,7 @@
 
 ## What it is
 
-formpath is the vector member of the form family: an Illustrator alternative with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, variable fonts and Touch Type, symbols and the symbolism tools, blends, repeats, Live Paint, gradient meshes, pattern editing, live image trace, the Perspective Grid, Puppet Warp, Shaper, graphs and data merge. It saves its own `.fpth` projects, reads and writes SVG, PDF, EPS and DXF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 92 tools, and Claude Code runs inside its own terminal dock.
+formpath is the vector member of the form family, with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, variable fonts and Touch Type, symbols and the symbolism tools, blends, repeats, Fill Regions, gradient meshes, pattern editing, a live Trace Image, the Perspective Grid, Pin Warp, Shaper, graphs and data merge. It saves its own `.fpth` projects, reads and writes SVG, PDF, EPS and DXF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 92 tools, and Claude Code runs inside its own terminal dock.
 
 **Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 58,500 lines of TypeScript, 2,000 of CSS, 5,400 of Python and 100 of Rust (product code; `./formpath counts` prints this, and `./formpath counts --check` fails when it drifts).
 
@@ -19,19 +19,19 @@ formpath is the vector member of the form family: an Illustrator alternative wit
 
 - **Artboards and layers.** Any number of artboards with the Artboard tool and panel; layers and sublayers with colours, lock, template, print and dim; groups with isolation mode; clipping masks; 16 blend modes and opacity masks.
 - **Drawing.** Pen, Curvature and the anchor tools; Pencil, Smooth, Path Eraser and Join; Rectangle, Rounded Rectangle, Ellipse, Polygon, Star and Flare as live shapes, editable after drawing with corner widgets; Line, Arc, Spiral and grids; Paintbrush and Blob Brush; Eraser, Scissors and Knife. Smart guides with equal spacing, snap to pixel, rulers, guides and grids; Magic Wand tolerances and Ctrl-click to select behind.
-- **Pathfinder on curves.** All ten Pathfinder operations through paper.js, Shape Builder, Live Paint groups with gap detection, per-segment edges and the Live Paint Selection tool, compound paths, Offset Path, Outline Stroke, Simplify, Average, Join, Divide Objects Below, Split into Grid.
+- **Pathfinder on curves.** All ten Pathfinder operations through paper.js, Shape Crafter, Fill Regions groups with gap detection, per-segment edges and the Fill Regions Selection tool, compound paths, Offset Path, Outline Stroke, Simplify, Average, Join, Divide Objects Below, Split into Grid.
 - **Paint.** Colour panel in Grayscale, RGB, HSB, CMYK and Web; swatches with global and spot colours; linear and radial gradients on fills and strokes with the Gradient tool; freeform gradients in points and lines modes; gradient mesh with point handles; patterns with pattern editing mode; Recolor Artwork and the Color Guide's harmony rules; the Stroke panel with dashes, arrowheads and width profiles; the Width tool.
-- **Appearance and effects.** Multiple fills and strokes per object, Graphic Styles, and live effects: fifteen warps, Distort and Transform, Drop Shadow, glows, Feather, Round Corners, Scribble, Offset Path, Rasterize, and the Effect Gallery's 56 Photoshop effects from Watercolor to Stained Glass, all live. 3D Extrude & Bevel, Revolve, Inflate and Plane with materials, lighting, Map Art and shadows, on shapes, type and groups. Envelopes, blends, repeats, symbols with the seven symbolism tools, four brush kinds made from your own art, and Image Trace as a live object with five views.
+- **Appearance and effects.** Multiple fills and strokes per object, Graphic Styles, and live effects: fifteen warps, Distort and Transform, Drop Shadow, glows, Feather, Round Corners, Scribble, Offset Path, Rasterize, and the Effect Gallery's 56 Photoshop effects from Watercolor to Stained Glass, all live. 3D Extrude & Bevel, Revolve, Inflate and Plane with materials, lighting, Map Art and shadows, on shapes, type and groups. Envelopes, blends, repeats, symbols with the seven symbolism tools, four brush kinds made from your own art, and Trace Image as a live object with five views.
 - **Type.** Point, area, vertical and on-path type typed on the canvas, area type inside any shape, threaded frames and text wrap, Character and Paragraph panels with OpenType features shaped from the font's own lookups (contextual alternates included), Character and Paragraph Styles, Glyphs with each character's alternates, Change Case, Find and Replace, Find Font, and Create Outlines through real glyph outlines.
 - **Files.** `.fpth` projects with a library, conflict copies and crash recovery; SVG in and out with exact round trips; PDF out with real vectors, shadings, transparency and CMYK, and in from any PDF or PDF-compatible `.ai` with one artboard per page; PNG, JPEG and WebP; Export for Screens and the Asset Export panel; placed and linked images.
 - **Agents.** `./formpath mcp` gives Claude Code, Codex and Cursor 92 tools, from `get_image` to `pathfinder` to `run_command` and `run_commands` over the whole command catalogue. The window asks the person once. The `formpath-harness` skill pack teaches agents to look, plan, build, check and deliver.
 - **Terminal and Claude Code inside the window.** Window > Terminal opens a dock of real shells; its Claude Code button starts your own `claude` already connected to formpath's tools, and the Chat tab answers in plain words while it draws. `./formpath cli` lists, describes and runs any of the 649 catalogue commands from a terminal.
-- **26 languages.** English by default, with Spanish (Spain and Mexico), Portuguese (Brazil), French (France and Canada), German, Italian, Dutch, Danish, Finnish, Norwegian, Swedish, Russian, Polish, Czech, Hungarian, Ukrainian, Turkish, Chinese (Simplified and Traditional), Japanese, Korean, Indonesian, Thai and Vietnamese in Preferences > Interface, using Illustrator's own terms in each.
+- **26 languages.** English by default, with Spanish (Spain and Mexico), Portuguese (Brazil), French (France and Canada), German, Italian, Dutch, Danish, Finnish, Norwegian, Swedish, Russian, Polish, Czech, Hungarian, Ukrainian, Turkish, Chinese (Simplified and Traditional), Japanese, Korean, Indonesian, Thai and Vietnamese in Preferences > Interface, translated from formpath's own English in each.
 - **Live Corners on any path.** Direct Selection shows a corner widget at every corner point: drag to round, Alt-click for inverted or chamfer, double-click for the Corners dialog.
 - **The assistant and plugins.** Window > Assistant edits through the same tools on the language model you choose; sandboxed JavaScript plugins add commands.
 - **Zero-flash UI.** Keyed DOM patching, guarded writes, a pre-paint theme boot, reveal after fonts; every interface change is checked in a throttled browser.
 
-How close it is to Illustrator, row by row: [docs/PARITY.md](docs/PARITY.md).
+What it covers and what is still partial, row by row: [docs/PARITY.md](docs/PARITY.md).
 
 ## Quick Start
 
@@ -120,7 +120,7 @@ Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. D
 Release history: `CHANGELOG.md`. What is not verified yet:
 
 - **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 65.5 of 76 rows against Illustrator 30 (55 Full, 21 Partial, 0 None), 86.2 percent, from a seventh independent audit of the code at v0.44.0 that drove every row through the interface with real mouse and keyboard input. Every row is built; the Partial rows are interface defects it found by using the app (layer rename, intersection snap in the tools, the Smooth tool, colour fields, swatch editing, gradient mesh, the Effect Gallery, asset export settings, saving after a linked file changed, the print preview and others), listed in `docs/PARITY.md`. Earlier audits read code and graded higher (73 of 76 at v0.41.0). The 12 plan additions grade 11 of 12.
+- **Parity.** 65.5 of 76 capability rows (55 Full, 21 Partial, 0 None), 86.2 percent, from a seventh independent audit of the code at v0.44.0 that drove every row through the interface with real mouse and keyboard input. Every row is built; the Partial rows are interface defects it found by using the app (layer rename, intersection snap in the tools, the Smooth tool, colour fields, swatch editing, gradient mesh, the Effect Gallery, asset export settings, saving after a linked file changed, the print preview and others), listed in `docs/PARITY.md`. Earlier audits read code and graded higher (73 of 76 at v0.41.0). The 12 plan additions grade 11 of 12.
 - **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
 
 ## Contributors
@@ -130,3 +130,7 @@ Release history: `CHANGELOG.md`. What is not verified yet:
 ## Licensing
 
 Apache License 2.0. Copyright 2026 nodemode-ai. See `LICENSE` and `NOTICE.md`.
+
+## Trademarks
+
+Adobe and Illustrator are either registered trademarks or trademarks of Adobe in the United States and/or other countries. formpath is not affiliated with or endorsed by Adobe. The names are used only to describe file compatibility (`.ai`, `.eps`).

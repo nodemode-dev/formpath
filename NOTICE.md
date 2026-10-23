@@ -57,4 +57,4 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ## Trademarks
 
-Adobe and Illustrator are trademarks of Adobe Inc. formpath is not affiliated with or endorsed by Adobe. The names are used only to describe compatibility and the parity measurement; no Adobe asset, preset, icon or file format specification is included.
+Adobe and Illustrator are either registered trademarks or trademarks of Adobe in the United States and/or other countries. formpath is not affiliated with or endorsed by Adobe. The names are used only to describe file compatibility (`.ai`, `.eps`) and, in `docs/PARITY.md`, the capability measurement; formpath's own commands, tools and panels carry their own names; no Adobe asset, preset, icon or file format specification is included.
