@@ -130,7 +130,7 @@ export class ShapeFillPanel extends ModelPanel {
     const r = this.results[this.picked];
     if (!r?.art || !this.targetId) return;
     const art = artParts(r.art);
-    const id = this.engine.replaceWithClip(this.targetId, art, 'Generative Shape Fill', 'Generative Shape Fill');
+    const id = this.engine.replaceWithClip(this.targetId, art, 'AI Shape Fill', 'AI Shape Fill');
     this.note = id ? 'Applied: the art is clipped to the shape and every path stays editable. Release the clipping mask to edit the shape.' : 'The shape is gone; select a shape and generate again.';
     if (id) { this.results = []; this.picked = -1; this.targetId = null; for (const t of this.grid.items) { const g = t.cv.getContext('2d'); g?.clearRect(0, 0, t.cv.width, t.cv.height); } }
     this.sync();
@@ -303,7 +303,7 @@ export class RetypePanel extends ModelPanel {
         this.note = `Asking ${this.state.model} to read the text.`; this.sync();
         try { known = await recognize(src, async (prompt, image) => (await api.llmGenerate('', prompt, { image, temperature: 0, maxTokens: 400 })).text); } catch (err) { this.note = `The model could not read it (${err instanceof Error ? err.message : String(err)}); matching shapes instead.`; }
       }
-      if (!known && src.kind === 'image') throw new Error(this.state.ready && this.state.vision ? 'The model could not read text in the image. Type the text above and try again.' : 'Reading text in an image needs a model that reads images (Preferences > Plugins). Type the text above instead, and Retype matches its shapes.');
+      if (!known && src.kind === 'image') throw new Error(this.state.ready && this.state.vision ? 'The model could not read text in the image. Type the text above and try again.' : 'Reading text in an image needs a model that reads images (Preferences > Plugins). Type the text above instead, and Font Match compares its shapes.');
       const r = await rankFonts(src, known, (done, total) => { const pc = Math.round((done / Math.max(1, total)) * 100); if (`${pc}` !== this.progress) { this.progress = `${pc}`; this.note = `Comparing installed fonts: ${pc}%.`; this.queue(); } }, ctl.signal);
       if (ctl.signal.aborted) return;
       this.matches = r.matches; this.found = r.text; this.picked = r.matches.length ? 0 : -1;
@@ -341,7 +341,7 @@ export class RetypePanel extends ModelPanel {
 
   protected sync(): void {
     const s = this.pick();
-    setText(this.status, this.note || (this.state.ready ? (this.state.vision ? `${this.state.message} It reads the text, then installed fonts are compared by shape.` : `${this.state.message} It does not read images, so Retype matches outlined type by shape; for images, type the text.`) : `${this.state.message} Without one, Retype still matches outlined type by shape.`));
+    setText(this.status, this.note || (this.state.ready ? (this.state.vision ? `${this.state.message} It reads the text, then installed fonts are compared by shape.` : `${this.state.message} It does not read images, so Font Match compares outlined type by shape; for images, type the text.`) : `${this.state.message} Without one, Font Match still compares outlined type by shape.`));
     setText(this.source, s ? (s.kind === 'image' ? `Reads ${s.region ? 'the marked region of ' : ''}the selected image.` : `Reads ${s.nodes.length} outlined object${s.nodes.length === 1 ? '' : 's'}.`) : 'Select outlined type or a placed image.');
     setHidden(this.keep.el, s?.kind !== 'image');
     setDisabled(this.go, this.busy || !s);

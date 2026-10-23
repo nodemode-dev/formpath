@@ -81,7 +81,7 @@ const unionBox = (bs: Rect[]): Rect => { const x0 = Math.min(...bs.map((b) => b.
 
 function finish(kind: RetypeSource['kind'], ids: string[], boxes: Rect[], draw: (gi: number[], g: CanvasRenderingContext2D) => void, color: Color, png: string): RetypeSource {
   const { glyphs: sets, lines } = group(boxes);
-  if (!sets.length) throw new Error('Retype found no letter shapes there.');
+  if (!sets.length) throw new Error('Font Match found no letter shapes there.');
   const gb = sets.map((s) => unionBox(s.map((i) => boxes[i])));
   const heights = gb.map((b) => b.h).sort((a, b) => b - a), ref = heights[Math.floor(heights.length * 0.25)] || heights[0];
   const glyphs: Glyph[] = sets.map((s, k) => {
@@ -156,7 +156,7 @@ export async function sourceFromImage(p: Project, img: VNode, region: Rect | nul
     comps.push({ box: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }, px: pts });
   }
   const keep = comps.filter((q) => q.px.length >= Math.max(4, W * H * 0.00005) && q.box.w < W * 0.9 && q.box.h < H * 0.95);
-  if (!keep.length) throw new Error('Retype found no letters in that part of the image.');
+  if (!keep.length) throw new Error('Font Match found no letters in that part of the image.');
   const toDoc = (b: Rect): Rect => ({ x: r.x + b.x / scale, y: r.y + b.y / scale, w: b.w / scale, h: b.h / scale });
   let cr = 0, cg = 0, cb = 0, cn = 0;
   for (const q of keep) for (const k of q.px) { cr += px[k * 4]; cg += px[k * 4 + 1]; cb += px[k * 4 + 2]; cn++; }

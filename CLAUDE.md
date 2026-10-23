@@ -20,7 +20,7 @@ Always route code work through `.claude/skills/formpath-skillset/SKILL.md` first
 
 ## Trademarks, copyright and licences
 
-- Other vendors' product and feature names appear only to name a file format or compatibility (`.ai`, `.eps`, "PDF-compatible Illustrator file") and in `docs/PARITY.md`. Never as a formpath command, tool, panel, menu or MCP tool description, and never as "as Illustrator's" or "an Illustrator alternative" in UI text, agent text or READMEs. The renamed features are Trace Image, Fill Regions, Shape Crafter and Pin Warp; ids keep their old names. `README.md` and `NOTICE.md` carry the trademark notice.
+- Other vendors' product and feature names appear only to name a file format or compatibility (`.ai`, `.eps`, "PDF-compatible Illustrator file") and in `docs/PARITY.md`. Never as a formpath command, tool, panel, menu or MCP tool description, and never as "as Illustrator's" or "an Illustrator alternative" in UI text, agent text or READMEs. The renamed features are Trace Image, Fill Regions, Shape Crafter, Pin Warp, AI Shape Fill, AI Vector from Text, AI Patterns, AI Recolor, Glyph Touch, Interlace, Recolor Art and Font Match; ids keep their old names. `README.md` and `NOTICE.md` carry the trademark notice.
 - Translations follow formpath's own English, never another vendor's localized menu names; a renamed English string gets new translations in all 25 languages (`./formpath i18n import`, then `prune` and `check`).
 - Never copy vendor help text, presets, brushes, symbols, swatch libraries or icons; never trace vendor UI art. Every new dependency, font or data file gets a row in `NOTICE.md` before it ships.
 

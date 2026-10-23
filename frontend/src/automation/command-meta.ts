@@ -45,7 +45,7 @@ export const COMMAND_META: Readonly<Record<string, readonly [string, string]>> =
   'find-replace': ['Finds text, fonts or colours and replaces them.', 'Use when changing the same thing in many places.'],
   'check-spelling': ['Walks through the text objects and offers corrections for unknown words.', 'Use when proofreading text in the artwork.'],
   'auto-spell-check': ['Underlines misspelled words in view with red waves.', 'Use when proofreading while editing.'],
-  'recolor': ['Opens Recolor Artwork to remap the colours of the selection.', 'Use when changing a palette across several objects.'],
+  'recolor': ['Opens Recolor Art to remap the colours of the selection.', 'Use when changing a palette across several objects.'],
   'colors-invert': ['Inverts the colours of the selection.', 'Use when a negative of the artwork is wanted.'],
   'colors-grayscale': ['Converts the colours of the selection to grays.', 'Use when preparing a one-colour version.'],
   'settings': ['Opens the preferences.', 'Use when changing how the editor behaves.'],

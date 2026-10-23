@@ -996,7 +996,7 @@ export class Engine extends Emitter<EngineEvents> {
     return this.applyToSelection('Character', (n) => (n.kind === 'text' ? { ...n, spans: range ? styleSpans(n.spans, range[0], range[1], patch) : n.spans.map((s) => ({ ...s, style: { ...s.style, ...patch } })) } : n), ids);
   }
   setParaStyle(patch: Partial<ParaStyle>, ids?: string[]): boolean { return this.applyToSelection('Paragraph', (n) => (n.kind === 'text' ? { ...n, para: { ...n.para, ...patch } } : n), ids); }
-  setCharTouch(id: string, index: number, touch: CharTouch | null, name = 'Touch Type'): boolean { return this.edit(name, (d) => updateNodes(d, [id], (n) => (n.kind === 'text' ? { ...n, spans: touchSpans(n.spans, index, touch) } : n)), { keepAnchors: true }); }
+  setCharTouch(id: string, index: number, touch: CharTouch | null, name = 'Glyph Touch'): boolean { return this.edit(name, (d) => updateNodes(d, [id], (n) => (n.kind === 'text' ? { ...n, spans: touchSpans(n.spans, index, touch) } : n)), { keepAnchors: true }); }
   setTextNode(id: string, patch: Partial<TextNode>, name = 'Type Options'): boolean { return this.edit(name, (d) => updateNodes(d, [id], (n) => (n.kind === 'text' ? ({ ...n, ...patch } as TextNode) : n))); }
   setTextOrientation(vertical: boolean, ids?: string[]): boolean {
     const p = this.current; if (!p) return false;
@@ -1538,11 +1538,11 @@ export class Engine extends Emitter<EngineEvents> {
   makeIntertwine(ids?: string[]): string | null {
     const p = this.current; if (!p) return null;
     const nodes = topObjects(p.doc, this.targetIds(ids)).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && n.kind !== 'layer');
-    if (nodes.some((n) => n.kind === 'repeat' || (n.kind === 'group' && (n.livePaint || n.intertwine || n.shaper || n.dim)))) { this.notice('Intertwine does not work with Fill Regions, Repeat, Shaper, dimension or other Intertwine objects.'); return null; }
+    if (nodes.some((n) => n.kind === 'repeat' || (n.kind === 'group' && (n.livePaint || n.intertwine || n.shaper || n.dim)))) { this.notice('Interlace does not work with Fill Regions, Repeat, Shaper, dimension or other Interlace objects.'); return null; }
     if (nodes.length < 2 || !intertwineOverlapping(p.doc, nodes)) { this.notice('Select two or more overlapping objects to intertwine.'); return null; }
     const order = inDocOrder(p.doc, nodes.map((n) => n.id)), last = order[order.length - 1];
     const g = intertwineNode(order.map((id) => findNode(p.doc, id) as VNode));
-    this.edit('Make Intertwine', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => g), select: [g.id] }));
+    this.edit('Make Interlace', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => g), select: [g.id] }));
     return g.id;
   }
   private setIntertwine(name: string, groupId: string, make: (doc: Doc, g: GroupNode) => IntertwineSpec | null): boolean {
@@ -1554,12 +1554,12 @@ export class Engine extends Emitter<EngineEvents> {
     const spec = s;
     return this.edit(name, (d) => updateNodes(d, [groupId], (x) => (x.kind === 'group' && x.intertwine ? { ...x, intertwine: spec } : x)));
   }
-  intertwineFlip(groupId: string, at: Pt): boolean { return this.setIntertwine('Intertwine', groupId, (d, g) => flipIntertwine(d, g, at)); }
-  intertwineZone(groupId: string, loop: Pt[]): boolean { return this.setIntertwine('Intertwine Area', groupId, (d, g) => intertwineLasso(d, g, loop)); }
+  intertwineFlip(groupId: string, at: Pt): boolean { return this.setIntertwine('Interlace', groupId, (d, g) => flipIntertwine(d, g, at)); }
+  intertwineZone(groupId: string, loop: Pt[]): boolean { return this.setIntertwine('Interlace Area', groupId, (d, g) => intertwineLasso(d, g, loop)); }
   releaseIntertwine(ids?: string[]): boolean {
     const t = this.intertwineTargets(ids);
     if (!t.length) return false;
-    return this.edit('Release Intertwine', (d) => {
+    return this.edit('Release Interlace', (d) => {
       let out = d;
       const sel: string[] = [];
       for (const id of t) { const n = findNode(out, id); if (n?.kind !== 'group') continue; sel.push(...n.children.map((c) => c.id)); out = updateNodes(out, [id], () => n.children); }
@@ -2166,7 +2166,7 @@ export class Engine extends Emitter<EngineEvents> {
     return id;
   }
 
-  addPatternSwatches(list: Array<{ name: string; tile: Rect; art: VNode; type?: PatternDef['type']; hs?: number; vs?: number }>, fillIds: string[] = [], step = 'Generate Patterns'): string[] {
+  addPatternSwatches(list: Array<{ name: string; tile: Rect; art: VNode; type?: PatternDef['type']; hs?: number; vs?: number }>, fillIds: string[] = [], step = 'AI Patterns'): string[] {
     if (!this.current || !list.length) return [];
     const defs: PatternDef[] = list.map((x) => ({ id: newId('pt'), name: x.name, tile: { ...x.tile }, art: cloneNode(x.art), type: x.type ?? 'grid', hs: x.hs ?? 0, vs: x.vs ?? 0 }));
     const sw = defs.map((def) => ({ id: newId('s'), name: def.name, paint: { type: 'pattern' as const, pattern: def.id, xf: [1, 0, 0, 1, 0, 0] as Mat }, global: false, spot: false }));
@@ -2185,7 +2185,7 @@ export class Engine extends Emitter<EngineEvents> {
     return this.edit(step, (d) => (findNode(d, id) ? { doc: updateNodes(d, [id], () => g), select: [g.id] } : d)) ? g.id : null;
   }
 
-  replaceWithText(ids: string[], node: TextNode, keep: boolean, step = 'Retype'): string | null {
+  replaceWithText(ids: string[], node: TextNode, keep: boolean, step = 'Font Match'): string | null {
     const p = this.current;
     if (!p || !ids.length) return null;
     const order = inDocOrder(p.doc, ids), last = order[order.length - 1], at = last ? pathOf(p.doc, last) : null;

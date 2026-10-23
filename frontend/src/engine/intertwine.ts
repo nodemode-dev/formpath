@@ -164,7 +164,7 @@ export function intertwineHit(doc: Doc, g: GroupNode, p: Pt): VNode | null {
 }
 
 export function intertwineNode(nodes: VNode[], id = newId('g')): GroupNode {
-  return { id, kind: 'group', name: 'Intertwine', clip: false, children: nodes, opacity: 1, blend: 'normal', ap: emptyAppearance(), intertwine: { zones: [] } };
+  return { id, kind: 'group', name: 'Interlace', clip: false, children: nodes, opacity: 1, blend: 'normal', ap: emptyAppearance(), intertwine: { zones: [] } };
 }
 
 export function intertwineOverlapping(doc: Doc, nodes: VNode[]): boolean {
@@ -179,7 +179,7 @@ export function intertwineOverlapping(doc: Doc, nodes: VNode[]): boolean {
 
 export function expandedIntertwine(g: GroupNode): GroupNode {
   const overlays = intertwineOverlays(g).map((o) => cloneNode(o));
-  return { ...g, intertwine: undefined, name: g.name === 'Intertwine' ? 'Intertwine (expanded)' : g.name, children: [...g.children, ...overlays] };
+  return { ...g, intertwine: undefined, name: g.name === 'Interlace' || g.name === 'Intertwine' ? 'Interlace (expanded)' : g.name, children: [...g.children, ...overlays] };
 }
 
 export function transformIntertwine(s: IntertwineSpec, m: Mat): IntertwineSpec { return { zones: s.zones.map((z) => ({ ...z, d: transformPath(z.d, m) })) }; }

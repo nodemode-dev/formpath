@@ -491,7 +491,7 @@ export class AgentBridge {
     const n = has('id') ? this.node(a.id) : e.selected().find((x) => x.kind === 'path' || x.kind === 'compound');
     if (!n || (n.kind !== 'path' && n.kind !== 'compound')) return fail('Pass id of a closed path or compound path (or select one) to fill.');
     const d = n.kind === 'path' ? n.d : n.children.flatMap((c) => c.d);
-    if (!d.some((s) => s.closed)) return fail('The path is open: Generative Shape Fill fills closed shapes.');
+    if (!d.some((s) => s.closed)) return fail('The path is open: AI Shape Fill fills closed shapes.');
     const fillC = n.ap.items.find((i) => i.kind === 'fill' && i.paint.type === 'color');
     const common = await this.genCommon(a, st.vision);
     if (typeof common === 'string') return fail(common);
@@ -500,7 +500,7 @@ export class AgentBridge {
     if (!ok.length) return fail(`The model gave no usable art: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
     const pick = has('pick') && ok.includes(Math.round(num('pick', 0))) ? Math.round(num('pick', 0)) : ok[0];
     const art = res[pick].art as VNode;
-    const id = e.replaceWithClip(n.id, artParts(art), 'Generative Shape Fill', 'Generative Shape Fill');
+    const id = e.replaceWithClip(n.id, artParts(art), 'AI Shape Fill', 'AI Shape Fill');
     if (!id) return fail('Could not place the art.');
     const rep = reportLines(res[pick].report ?? { dropped: [], fixed: [], notes: [] });
     return text(`Filled ${n.id} with variation ${pick} of ${res.length} (${st.model}); the art is a clipping group ${id} whose last child is the original shape.${rep.length ? ` Repairs: ${rep.join('; ')}.` : ''} get_image shows it.`, { id, shape: n.id, variations: this.genRows(res), picked: pick, report: rep });
@@ -558,7 +558,7 @@ export class AgentBridge {
     if (!collectColors(nodes).length) return fail('Those objects have no colours to recolour: select or pass ids of painted objects.');
     const palettes = await generativePalettes(str('prompt'), Math.round(num('count', 1)));
     const pick = has('pick') && palettes[Math.round(num('pick', 0))] ? Math.round(num('pick', 0)) : 0;
-    e.edit('Generative Recolor', (d) => recolorWithPalette(d, ids, nodes, palettes[pick]));
+    e.edit('AI Recolor', (d) => recolorWithPalette(d, ids, nodes, palettes[pick]));
     return text(`Recolored ${ids.length} object(s) with palette ${pick} of ${palettes.length} (${st.model}).`, { palettes: palettes.map((pl) => pl.map((c) => hex(c))), picked: pick });
   }
 
@@ -1442,7 +1442,7 @@ export class AgentBridge {
         }
         case 'intertwine': {
           const act = str('action');
-          if (act === 'make') { const id = e.makeIntertwine(this.ids(a)); return id ? text(`Intertwine ${id} made from ${(() => { const n = this.node(id); return n && n.kind === 'group' ? n.children.length : 0; })()} objects; flip the stacking at a point where they overlap.`, { id }) : fail('Select or pass two or more overlapping objects (not Fill Regions, Repeat or Shaper groups).'); }
+          if (act === 'make') { const id = e.makeIntertwine(this.ids(a)); return id ? text(`Interlace ${id} made from ${(() => { const n = this.node(id); return n && n.kind === 'group' ? n.children.length : 0; })()} objects; flip the stacking at a point where they overlap.`, { id }) : fail('Select or pass two or more overlapping objects (not Fill Regions, Repeat or Shaper groups).'); }
           const id = has('id') ? String(a.id) : e.intertwineTargets()[0];
           const g = id ? this.node(id) : null;
           if (!g || g.kind !== 'group' || !g.intertwine) return fail('Pass the id of an intertwine object (intertwine with action make returns one).');
@@ -1560,7 +1560,7 @@ export class AgentBridge {
             }
             const preserve = a.preserve_tints !== false && (has('colors') || act !== 'harmony');
             const before = cols.map(hex);
-            e.edit('Recolor Artwork', (d) => recolorDoc(d, ids, rowsFn(rows, preserve)));
+            e.edit('Recolor Art', (d) => recolorDoc(d, ids, rowsFn(rows, preserve)));
             const out = rows.map((r) => ({ from: r.from.map(hex), to: hex(r.to) })).sort((x, y) => oklab(parseColor(y.to) ?? BLACK)[0] - oklab(parseColor(x.to) ?? BLACK)[0]);
             return text(`Recoloured ${before.length} colour${before.length === 1 ? '' : 's'} into ${rows.length}: ${out.map((r) => r.to).join(' ')}.`, { colors_before: before, rows: out });
           }
@@ -1569,7 +1569,7 @@ export class AgentBridge {
           else if (RECOLOR[act]) fn = RECOLOR[act](num('amount', 0));
           else return fail('action must be map, palette, invert, grayscale, cmyk, rgb or saturate.');
           const before = collectColors(ids.map((id) => findNode(p.doc, id) as VNode)).map(hex);
-          e.edit('Recolor Artwork', (d) => recolorDoc(d, ids, fn));
+          e.edit('Recolor Art', (d) => recolorDoc(d, ids, fn));
           return text(`Recoloured ${before.length} colour${before.length === 1 ? '' : 's'}.`, { colors_before: before });
         }
         case 'artboard': {

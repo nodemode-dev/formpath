@@ -278,6 +278,13 @@ Ports 5230 (dev) and 5231 (preview) and 8230 (engine) so formpath runs beside fo
 
 ## src/app.ts
 
+### src/app.ts · formpath's own names for seven more features
+- refers-to: src/app.ts :: the Symbols panel group tabs, recolor, generate-patterns, text-to-vector, generative-recolor, retype, intertwine-*, the Object > Interlace menu; src/engine/index.ts :: setCharTouch, makeIntertwine, setIntertwine, releaseIntertwine, addPatternSwatches, replaceWithText; src/engine/intertwine.ts; src/io/generative.ts, src/io/retype.ts; src/tools/shaper.ts, src/tools/type.ts; src/ui/panels/generative.ts, src/ui/panels/recolor.ts, src/ui/properties.ts; src/automation/agent-bridge.ts, src/automation/command-meta.ts; backend/app/routers/mcp.py; src/i18n/keys.json and every locale
+- kind: rationale
+- logged: v0.51.3 · 2026-10-23
+- The owner's decision of 2026-10-23 (use the recommended names): AI Shape Fill (was Generative Shape Fill), AI Vector from Text (Text to Vector Graphic), AI Patterns (Generate Patterns), AI Recolor (Generative Recolor), Glyph Touch (Touch Type), Interlace (Intertwine), Recolor Art (Recolor Artwork) and Font Match (Retype). Only words changed: command, tool, panel and MCP tool ids (`generate-patterns`, `intertwine-make`, `touchType`, `retype`, `generative_shape_fill`), document fields (`intertwine`) and icons keep their names. New groups are named Interlace, AI Shape Fill and AI Vector from Text; expanding an interlace saved under the old name still gives Interlace (expanded).
+- 27 English keys renamed in place in `keys.json`; new translations for all 25 languages written through `./formpath i18n import` (one CSV per language), the old rows removed with `prune` (27 per table), and `./formpath i18n check` reports 4032 of 4032 in every table. The new words avoid the other vendor's localized names (for example German Verschlingung rather than Verflechten). The Generative menu and the Shape Fill... item keep their generic names.
+
 ### src/app.ts · formpath's own names for four features
 - refers-to: src/app.ts :: commands image-trace, image-trace-expand, trace-expand, trace-release, live-paint-*, the Object > Trace Image and Fill Regions menus, the image-trace panel tab; src/engine/index.ts :: shapeBuild, setTraceView, expandTrace, releaseTrace, makeLivePaint, livePaintFill, the edge, expand and release edits, makeIntertwine, the pin warp edit; src/tools/paint.ts, src/tools/puppet.ts, src/ui/properties.ts, src/io/trace.ts, src/automation/agent-bridge.ts, src/automation/command-meta.ts; src/i18n/keys.json and every locale
 - kind: rationale

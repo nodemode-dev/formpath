@@ -302,7 +302,7 @@ ask it questions.
   also takes .ase).
 - Spot colours print on their own plate: PDF export writes each spot swatch as a Separation colour space named after
   the swatch, with its CMYK values as the alternate, and tints as the separation's tint value.
-- Recolor Artwork (Edit > Edit Colors, or Recolor in Properties): a colour wheel (Smooth or Segmented) with a marker
+- Recolor Art (Edit > Edit Colors, or Recolor in Properties): a colour wheel (Smooth or Segmented) with a marker
   for each new colour; drag a marker to change hue and saturation, and use Brightness for the active row. With the
   link on, the markers move together as a harmony; the starred row is the base colour. Colors reduces the artwork to
   that many colours, clustered by how alike they look (OKLab); Recolor Exact or Preserve tints and shades. The Colors
@@ -343,14 +343,14 @@ ask it questions.
   and how dim. Edit the art as usual, then Done (or Escape) adds the swatch, Save a Copy adds another, Cancel leaves
   nothing behind. Double-click a pattern swatch, or Object > Pattern > Edit Pattern, to change one; every object
   filled with it updates. Patterns fill and stroke like colours.
-- Generate Patterns (Object > Pattern > Generate Patterns) turns a prompt into pattern swatches with the language
+- AI Patterns (Object > Pattern > AI Patterns) turns a prompt into pattern swatches with the language
   model set for the Assistant. Choose the colours (a preset such as Warm, Cool, Pastel, Earth, Vivid, Monochrome,
   Forest or Ocean, the document's swatches, the colours of the selection, or up to 12 of your own as hex values),
   the density (1 very sparse to 5 packed) and how many variations. The model draws a seamless SVG tile; formpath
   imports it as editable paths, snaps every colour to your palette and shows each tile repeated. Click a tile to
   leave it out, then Save to Swatches makes a pattern swatch of each (Fill the selection with the first fills the
   selected objects); edit them like any pattern. One undo step.
-- Generative Shape Fill (Object > Generative > Shape Fill) fills a selected closed path with vector art from an
+- AI Shape Fill (Object > Generative > Shape Fill) fills a selected closed path with vector art from an
   optional prompt. Shape Strength sets how closely the art follows the outline (high takes its silhouette, low
   composes freely and only crops), Detail sets how many shapes, Variations how many to compare. Pick a variation
   and Apply: the art comes in as editable paths, fitted to the shape and clipped by it (the shape is the clipping
@@ -471,7 +471,7 @@ ask it questions.
   that distance from the frame's left edge; drag a stop to move it or down off the ruler to remove it. X, Leader
   (characters repeated across the gap, such as a dot) and Align On (the character a decimal tab lines up) edit the
   picked stop. Without stops, tabs advance to every 36 points.
-- Touch Type (Shift+T, in the Type tool's flyout): click a character to put a box around it. Drag inside the box to
+- Glyph Touch (Shift+T, in the Type tool's flyout): click a character to put a box around it. Drag inside the box to
   move the character, a corner to scale it proportionally, the top or bottom handle to scale it vertically, a side
   handle to scale it horizontally, and the dot above the box to rotate it; arrow keys nudge it (Shift for 10 points).
   The options bar shows and sets its X, Y, H, V and rotation, and Reset clears it. The type stays editable: the
@@ -502,7 +502,7 @@ ask it questions.
 - Type > Create Outlines turns type into paths, letter by letter, in a group. Change Case sets upper, lower, title or
   sentence case. Find and Replace searches every text object. Find Font lists the fonts the document uses, selects
   the type that uses one, and replaces a family and style everywhere.
-- Retype (Type > Retype) finds the font of outlined type or of text in a placed image and makes it live type again.
+- Font Match (Type > Font Match) finds the font of outlined type or of text in a placed image and makes it live type again.
   Select the outlines (or an image, plus a rectangle over it to read only that region) and click Find Fonts. If your
   language model reads images, it reads the words and describes the typeface first; without it, formpath reads
   outlined letters by comparing each letter's shape with the letters of every installed font, and for an image you
@@ -531,11 +531,11 @@ ask it questions.
 - Blends (W or Object > Blend): smooth colour, a number of steps, or a distance, along a straight spine or a path you
   choose with Replace Spine.
 - Repeats: radial, grid and mirror, editable in Repeat Options until released or expanded.
-- Intertwine (Object > Intertwine): Make turns two or more overlapping objects (paths, groups, type) into an
-  intertwine object and starts its editing mode (the Intertwine tool, Shift+J). Overlaps light up under the pointer;
+- Interlace (Object > Interlace): Make turns two or more overlapping objects (paths, groups, type) into an
+  interlace object and starts its editing mode (the Interlace tool, Shift+J). Overlaps light up under the pointer;
   click one and the object below comes to the front inside that overlap, so two rings link like a chain. Where
   three or more objects overlap, each click brings the next one down to the top. Drag (or Alt-drag) a loop around
-  part of an overlap to set the order there freely. Escape, Enter or Done leaves; Edit (or Edit Intertwine in
+  part of an overlap to set the order there freely. Escape, Enter or Done leaves; Edit (or Edit Interlace in
   Properties) comes back. Moving or reshaping one of the objects keeps the areas where they are on the page.
   Release gives back the plain objects in their original order; Object > Expand makes plain objects with clipped
   copies for each area. Live Paint, Repeat and Shaper Groups cannot be intertwined. SVG and PDF export draw the
@@ -766,20 +766,20 @@ ask it questions.
   for any menu command. Every change is one undo step.
 - The assistant (Window > Assistant) uses a language model you set in Preferences > Plugins (a local Ollama model or
   an OpenAI-compatible endpoint) with the same tools, and Undo This Turn reverses all of its changes at once.
-- Text to Vector Graphic (Object > Generative): choose Subject, Scene, Icon or Pattern, a detail level from 1 to 10
+- AI Vector from Text (Object > Generative): choose Subject, Scene, Icon or Pattern, a detail level from 1 to 10
   and up to three variations, describe the art, and place the one you like as editable paths fitted to the selected
-  shape or the artboard. Generative Shape Fill, Text to Vector Graphic and Generate Patterns share the same options:
+  shape or the artboard. AI Shape Fill, AI Vector from Text and AI Patterns share the same options:
   Detail (limits on shapes, gradients, strokes and holes), a Style preset (Flat, Line Art, Isometric, Hand drawn,
   Gradient, Retro, Minimal), a Style reference (select artwork or a placed image and press Use Selection), live
   Effects (Halftone, Grain, Glow, Shadow) and Color and Tone (presets or up to eight document swatches; the result is
   remapped into the palette, so it always honours it). The panel lists what was dropped or repaired in the model's
-  SVG. Generate Patterns adds Tile Size, a Layout and spacing for the pattern swatch, and a Seamless option that
-  repeats motifs crossing the tile edge and checks the edges. Generative Recolor (in Edit > Edit Colors > Recolor Artwork): describe a mood such as sunset over the
+  SVG. AI Patterns adds Tile Size, a Layout and spacing for the pattern swatch, and a Seamless option that
+  repeats motifs crossing the tile edge and checks the edges. AI Recolor (in Edit > Edit Colors > Recolor Art): describe a mood such as sunset over the
   ocean and pick one of the palettes to recolour the selection.
-- Generative Shape Fill (Object > Generative > Shape Fill), Generate Patterns (Object > Pattern), Retype
-  (Type > Retype), Text to Vector Graphic and Generative Recolor run on that same model; formpath calls no other service. When no model is set, their panels say so
+- AI Shape Fill (Object > Generative > Shape Fill), AI Patterns (Object > Pattern), Font Match
+  (Type > Font Match), AI Vector from Text and AI Recolor run on that same model; formpath calls no other service. When no model is set, their panels say so
   and the Generate buttons stay off. Turn on The model reads images in Preferences > Plugins when your model accepts
-  images (Retype then reads text in pictures). The tools generative_shape_fill, generate_patterns and retype give
+  images (Font Match then reads text in pictures). The tools generative_shape_fill, generate_patterns and retype give
   agents the same features.
 
 ## Plugins

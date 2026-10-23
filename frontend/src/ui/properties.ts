@@ -158,7 +158,7 @@ export class PropertiesPanel {
     if (s.length > 1) out.push(['Group', 'group'], ['Make Clipping Mask', 'make-clip'], ['Unite', 'pf-unite'], ['Minus Front', 'pf-minus_front'], ['Intersect', 'pf-intersect'], ['Exclude', 'pf-exclude'], ['Make Blend', 'blend-make'], ['Make Compound Path', 'compound-make']);
     else if (n.kind === 'group' && n.compoundShape) out.push(['Expand', 'compound-shape-expand'], ['Release', 'compound-shape-release'], ['Isolate Group', 'isolate']);
     else if (n.kind === 'group' && n.livePaint) out.push(['Gap Options', 'live-paint-gap'], ['Expand', 'live-paint-expand'], ['Release', 'live-paint-release']);
-    else if (n.kind === 'group' && n.intertwine) out.push(['Edit Intertwine', 'intertwine-edit'], ['Expand', 'expand-object'], ['Release', 'intertwine-release']);
+    else if (n.kind === 'group' && n.intertwine) out.push(['Edit Interlace', 'intertwine-edit'], ['Expand', 'expand-object'], ['Release', 'intertwine-release']);
     else if (n.kind === 'group' && n.shaper) out.push(['Edit Faces', 'tool-shaper'], ['Expand', 'shaper-expand'], ['Ungroup', 'ungroup']);
     else if (n.kind === 'group' && n.graph) out.push(['Graph Data', 'graph-data'], ['Graph Type', 'graph-type'], ['Ungroup', 'ungroup']);
     else if (n.kind === 'group' && n.trace) out.push(['Trace Image Options', 'panel-image-trace'], ['Expand', 'trace-expand'], ['Release', 'trace-release']);

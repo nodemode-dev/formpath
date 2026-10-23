@@ -161,14 +161,14 @@ function intertwineFor(e: Engine, at: Pt | null): GroupNode | null {
 }
 
 registerTool({
-  id: 'intertwine', label: 'Intertwine Tool', group: 'shapeBuilder', order: 74.8, shortcut: 'Shift+J',
+  id: 'intertwine', label: 'Interlace Tool', group: 'shapeBuilder', order: 74.8, shortcut: 'Shift+J',
   icon: () => 'vIntertwine',
   hint: () => 'Click a highlighted overlap to bring the object below to the front there; with three or more objects each click moves the next one down to the top. Drag (or Alt-drag) around an area to define it freely. Escape or Enter leaves.',
   cursor: () => CURSORS.intertwine,
   activate: (ctx) => { IT.hover = null; IT.target = intertwineFor(ctx.engine, null)?.id ?? null; },
   deactivate: (ctx) => { IT.hover = null; IT.on = false; ctx.redraw(); },
   options: (e) => [
-    { kind: 'title', text: 'Intertwine' },
+    { kind: 'title', text: 'Interlace' },
     { kind: 'readout', label: 'Objects', get: () => { const g = intertwineFor(e, null); return g ? String(g.children.length) : 'None selected'; } },
     { kind: 'readout', label: 'Areas', get: () => { const g = intertwineFor(e, null); return g ? String(g.intertwine?.zones.length ?? 0) : '0'; } },
     { kind: 'button', label: 'Make', when: () => !intertwineFor(e, null) && e.selected().length > 1, run: () => { e.makeIntertwine(); } },

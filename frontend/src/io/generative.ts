@@ -102,7 +102,7 @@ export function artParts(art: VNode): VNode[] { return art.kind === 'group' && !
 
 export function clipToShape(art: VNode, shape: VNode): VNode {
   const kids = artParts(art);
-  return { id: newId('g'), kind: 'group', name: 'Generative Shape Fill', clip: true, children: [...kids, shape], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
+  return { id: newId('g'), kind: 'group', name: 'AI Shape Fill', clip: true, children: [...kids, shape], opacity: 1, blend: 'normal', ap: { items: [], effects: [] } };
 }
 
 export const PATTERN_PRESETS: ReadonlyArray<readonly [string, string, string[]]> = [
@@ -183,7 +183,7 @@ export async function textToVectorVariations(o: TextToVectorOptions): Promise<Va
   return Promise.all(Array.from({ length: n }, async (_, i): Promise<Variation> => {
     try {
       const made = await svgNodes(await ask(c, user, i, n, 0.6 + i * 0.25), 1000, 1000, c, kind[0] === 'scene');
-      const art = enforcePalette(wrapGroup(made.nodes, 'Text to Vector Graphic'), c.palette);
+      const art = enforcePalette(wrapGroup(made.nodes, 'AI Vector from Text'), c.palette);
       return { art: applyEffects(art, o.effects ?? [], c.palette), error: null, report: made.report };
     } catch (err) { return { art: null, error: err instanceof Error ? err.message : String(err) }; }
   }));
@@ -205,7 +205,7 @@ export function placeVector(engine: Engine, art: VNode): string | null {
   if (isEmptyRect(ab) || ab.w < 0.01 || ab.h < 0.01) return null;
   const s = Math.min(target.w / ab.w, target.h / ab.h);
   const fitted = moved(fresh, [s, 0, 0, s, target.x + (target.w - ab.w * s) / 2 - ab.x * s, target.y + (target.h - ab.h * s) / 2 - ab.y * s]);
-  return engine.addNodes('Text to Vector Graphic', [fitted])[0] ?? null;
+  return engine.addNodes('AI Vector from Text', [fitted])[0] ?? null;
 }
 
 export const RECOLOR_SAMPLES = ['Sunset over the ocean', 'Autumn forest', 'Neon city at night', 'Pastel spring garden'];

@@ -35,7 +35,7 @@ export class RecolorDialog extends Dialog {
   private readonly lib;
   private readonly shape;
   private readonly gen = el('<div class="cv-rc-gen"></div>');
-  private readonly genPrompt = el<HTMLInputElement>('<input class="cv-input cv-rc-gen-prompt" type="text" spellcheck="false" aria-label="Generative Recolor prompt" placeholder="Describe the mood, such as sunset over the ocean">');
+  private readonly genPrompt = el<HTMLInputElement>('<input class="cv-input cv-rc-gen-prompt" type="text" spellcheck="false" aria-label="AI Recolor prompt" placeholder="Describe the mood, such as sunset over the ocean">');
   private readonly genGo = el<HTMLButtonElement>('<button class="cv-btn cv-btn-primary" type="button">Generate</button>');
   private readonly genNote = el('<p class="cv-note cv-rc-gen-note" role="status"></p>');
   private readonly genStrips: HTMLButtonElement[] = [];
@@ -60,7 +60,7 @@ export class RecolorDialog extends Dialog {
   private picking = false;
 
   constructor(private readonly engine: Engine, private readonly deps: RecolorDeps) {
-    super('Recolor Artwork', 820);
+    super('Recolor Art', 820);
     this.scrim.classList.add('cv-scrim-through', 'cv-rc-scrim');
     q(this.scrim, '.cv-dialog').classList.add('cv-rc-dialog');
     const left = el('<div class="cv-rc-left"></div>'), right = el('<div class="cv-rc-right"></div>');
@@ -100,7 +100,7 @@ export class RecolorDialog extends Dialog {
     this.genGo.addEventListener('click', () => void this.generatePalettes());
     const genRow = el('<div class="cv-rc-gen-row"></div>');
     genRow.append(this.genPrompt, this.genGo);
-    this.gen.append(el('<span class="cv-pf-label">Generative Recolor</span>'), genRow, samples, strips, this.genNote);
+    this.gen.append(el('<span class="cv-pf-label">AI Recolor</span>'), genRow, samples, strips, this.genNote);
     right.append(this.preset.el, this.rule.el, this.count.el, this.lib.el, this.mode.el, this.gen, actions, head, this.list, this.status);
     const grid = el('<div class="cv-rc"></div>');
     grid.append(left, right);
@@ -153,7 +153,7 @@ export class RecolorDialog extends Dialog {
     this.mode.set('exact'); this.preset.set('custom'); this.count.set('auto');
     this.lib.setChoices(this.libraryChoices());
     this.lib.set('');
-    e.beginDrag('Recolor Artwork');
+    e.beginDrag('Recolor Art');
     this.settled = false;
     this.genPalettes = []; this.genMessage = '';
     setHidden(this.gen, !this.deps.generative());

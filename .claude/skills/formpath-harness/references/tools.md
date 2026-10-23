@@ -852,7 +852,7 @@ Fill Regions: make a Fill Regions group from paths (their crossings divide the a
 
 ## intertwine
 
-Intertwine: make an intertwine object from two or more overlapping objects (paths, groups, type) so they can weave over and under each other like chain links; flip the stacking inside the overlap at x, y (with three or more objects each flip brings the next one down to the top there); define an area freely by encircling it with points; release back to plain objects in their base order; or expand into plain clipped groups. get_document lists the intertwine's areas.
+Interlace: make an interlace object from two or more overlapping objects (paths, groups, type) so they can weave over and under each other like chain links; flip the stacking inside the overlap at x, y (with three or more objects each flip brings the next one down to the top there); define an area freely by encircling it with points; release back to plain objects in their base order; or expand into plain clipped groups. get_document lists the interlace's areas.
 
 - `action`: string (make | flip | area | release | expand); required
 - `ids`: array; Object ids from get_document; the selection when left out.
@@ -924,7 +924,7 @@ Makes a pattern swatch from the objects, tiled as a grid, brick or hex, and opti
 
 ## generative_shape_fill
 
-Generative Shape Fill: asks the language model set for the Assistant (Preferences > Plugins) for vector art that fills a closed path, imports it as editable paths, fits it to the shape and clips it there. The result is a clipping group whose last child is the original shape, placed as one undo step. The model's SVG is validated and repaired like text_to_vector and the result lists what was dropped. shape_strength, detail, style_preset, style_reference, effects, color_tone and palette steer it; the palette is enforced after generation. Fails with a clear message when no model is set.
+AI Shape Fill: asks the language model set for the Assistant (Preferences > Plugins) for vector art that fills a closed path, imports it as editable paths, fits it to the shape and clips it there. The result is a clipping group whose last child is the original shape, placed as one undo step. The model's SVG is validated and repaired like text_to_vector and the result lists what was dropped. shape_strength, detail, style_preset, style_reference, effects, color_tone and palette steer it; the palette is enforced after generation. Fails with a clear message when no model is set.
 
 - `id`: string; A closed path or compound path; the selection when left out.
 - `prompt`: string; What to draw; optional.
@@ -968,7 +968,7 @@ Note: reaches outside this computer.
 
 ## text_to_vector
 
-Text to Vector Graphic: asks the language model set for the Assistant (Preferences > Plugins) for clean standalone SVG from a prompt, up to 3 variations, and places the picked one as editable groups and paths (not an image) fitted into the selected object's bounds, or the centre of the active artboard, as one undo step. The model's SVG may carry linear and radial gradients, strokes with caps and joins, evenodd compound paths, named groups, opacity and blend modes; it is validated and repaired (unsupported or broken elements dropped, open filled paths closed, runaway coordinates clamped) and the result lists what was dropped. type scene asks for Background, Midground and Foreground groups. detail, style_preset, style_reference, effects, color_tone and palette shape the prompt, and the palette is enforced afterwards. Fails with a clear message when no model is set or Show generative features is off.
+AI Vector from Text: asks the language model set for the Assistant (Preferences > Plugins) for clean standalone SVG from a prompt, up to 3 variations, and places the picked one as editable groups and paths (not an image) fitted into the selected object's bounds, or the centre of the active artboard, as one undo step. The model's SVG may carry linear and radial gradients, strokes with caps and joins, evenodd compound paths, named groups, opacity and blend modes; it is validated and repaired (unsupported or broken elements dropped, open filled paths closed, runaway coordinates clamped) and the result lists what was dropped. type scene asks for Background, Midground and Foreground groups. detail, style_preset, style_reference, effects, color_tone and palette shape the prompt, and the palette is enforced afterwards. Fails with a clear message when no model is set or Show generative features is off.
 
 - `prompt`: string; required; What to draw.
 - `type`: string (subject | scene | icon | pattern); default "subject"
@@ -985,7 +985,7 @@ Note: reaches outside this computer.
 
 ## generative_recolor
 
-Generative Recolor: asks the language model set for the Assistant for colour palettes that match a prompt such as 'sunset over the ocean' and recolours the objects (or the selection) with one of them, mapping the artwork's colours to the palette by lightness, tints kept, as one undo step. Fails with a clear message when no model is set or Show generative features is off.
+AI Recolor: asks the language model set for the Assistant for colour palettes that match a prompt such as 'sunset over the ocean' and recolours the objects (or the selection) with one of them, mapping the artwork's colours to the palette by lightness, tints kept, as one undo step. Fails with a clear message when no model is set or Show generative features is off.
 
 - `prompt`: string; required; The mood or scene the colours should express.
 - `count`: integer; default 1; How many palettes to ask for; one is applied.
@@ -996,7 +996,7 @@ Note: reaches outside this computer.
 
 ## retype
 
-Retype: identifies the font of outlined type or of text in a placed image and lists the 10 closest installed fonts, compared by rendering the text in each and measuring shape overlap. A model that reads images (set in Preferences > Plugins) reads the text first; without one, outlined type is read by matching letter shapes and for images text must be given. apply true replaces the outlines (or covers the image) with live text in the chosen font, sized and placed to match.
+Font Match: identifies the font of outlined type or of text in a placed image and lists the 10 closest installed fonts, compared by rendering the text in each and measuring shape overlap. A model that reads images (set in Preferences > Plugins) reads the text first; without one, outlined type is read by matching letter shapes and for images text must be given. apply true replaces the outlines (or covers the image) with live text in the chosen font, sized and placed to match.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `text`: string; The words, when known; skips reading them.
@@ -1058,7 +1058,7 @@ Changes a pattern swatch in place, and every object filled with it: name, tile t
 
 ## recolor
 
-Recolours the objects: map colours to new ones, fit them to a palette, or invert, convert to grayscale, CMYK or RGB, or saturate by amount (-100..100). As Recolor Artwork: colors reduces the artwork to that many colours (clustered in OKLab, tints kept), group recolours with a swatch group or library, harmony applies a colour harmony around the base colour.
+Recolours the objects: map colours to new ones, fit them to a palette, or invert, convert to grayscale, CMYK or RGB, or saturate by amount (-100..100). As in Recolor Art: colors reduces the artwork to that many colours (clustered in OKLab, tints kept), group recolours with a swatch group or library, harmony applies a colour harmony around the base colour.
 
 - `ids`: array; Object ids from get_document; the selection when left out.
 - `map`: object; From colour to colour, both #rrggbb.
@@ -1087,7 +1087,7 @@ Artboards: add one, change one (name, x, y, width, height), delete one, fit one 
 
 ## set_text
 
-Changes a type object: its words, and its font, style, size, colour, leading, tracking, kerning, alignment, case, OpenType features, variable font axes and character rotation, for all of it or the characters from start to end; one character's Touch Type transform; paragraph hyphenation, justification, tab stops and bullets or numbering; its orientation (horizontal or vertical); type on a path's effect, flip, alignment, spacing and start and end; and area type's rows, columns, gutters, inset and first baseline.
+Changes a type object: its words, and its font, style, size, colour, leading, tracking, kerning, alignment, case, OpenType features, variable font axes and character rotation, for all of it or the characters from start to end; one character's Glyph Touch transform; paragraph hyphenation, justification, tab stops and bullets or numbering; its orientation (horizontal or vertical); type on a path's effect, flip, alignment, spacing and start and end; and area type's rows, columns, gutters, inset and first baseline.
 
 - `id`: string; required; An object id from get_document.
 - `text`: string
@@ -1121,7 +1121,7 @@ Changes a type object: its words, and its font, style, size, colour, leading, tr
 - `kerning`: string (auto | optical | none); Kerning: auto uses the font's kerning pairs, optical spaces each pair from the glyph outlines, none turns kerning off.
 - `axes`: object; Variable font axis values by tag for the characters from start to end, for example {"wght": 650, "wdth": 85, "slnt": -8}. Values clamp to the font's ranges; axes the font lacks do nothing; {} returns to the font's default instance. find_font lists the fonts in use.
 - `rotation`: number; Character rotation in degrees counter-clockwise, each character turned about its own centre (for the characters from start to end, or all).
-- `touch`: object; Touch Type: transform one character on its own while the type stays editable. index is the character's position in the text; x and y move it in points (y down); h_scale and v_scale are percent; rotate is degrees counter-clockwise about its centre; reset true clears it.
+- `touch`: object; Glyph Touch: transform one character on its own while the type stays editable. index is the character's position in the text; x and y move it in points (y down); h_scale and v_scale are percent; rotate is degrees counter-clockwise about its centre; reset true clears it.
 - `hyphenate`: boolean; Hyphenate words at line ends in area type (English rules).
 - `hyphenation`: object; Hyphenation settings: min_word (words longer than, letters, default 6), after_first and before_last (letters, default 2), limit (hyphens in a row, 0 for no limit, default 2), zone (points, unjustified type only, default 0), capitalized (hyphenate capitalized words, default true). Setting this turns hyphenation on unless hyphenate is false.
 - `justification`: object; Justification settings used by justified alignments: word_spacing, letter_spacing and glyph_scaling as [min, desired, max] percentages (defaults [80, 100, 133], [0, 0, 0], [100, 100, 100]; desired values apply to every alignment), and single_word for a line holding one word.
