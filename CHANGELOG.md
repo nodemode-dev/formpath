@@ -2,6 +2,12 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.51.2 · 2026-10-23
+
+- Four features carry formpath's own names, in all 26 languages: Trace Image, Fill Regions (with its Bucket and Selection tools), Shape Crafter and Pin Warp. Shortcuts, command ids, MCP tool names and saved documents are unchanged.
+- The translations of those features were written new; they no longer follow another product's localized names.
+- NOTICE.md and the README carry the trademark notice; the README and the agent instructions no longer compare formpath with another product.
+
 ## 0.51.1 · 2026-10-22
 
 - Releases are built by formcompiler (`nodemode-ai/formcompiler`), the release pipeline for every form* app, and published on its release page as `formpath-vX.Y.Z`. formpath's own GitHub Actions now only run the checks, on main, on pull requests and on `compile_vX.Y.Z` branches. A release starts when a `compile_vX.Y.Z` branch is pushed. The steps are on the wiki's Releasing page.
