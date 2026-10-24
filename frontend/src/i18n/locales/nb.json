@@ -3951,7 +3951,7 @@
 "ai guard {0}:": "ai guard {0}:",
 "and {0} more": "og {0} til",
 "at most {0} gradient{1} (linearGradient or radialGradient in defs, two or more stops with offsets from 0 to 1)": "at most {0} gradient{1} (linearGradient or radialGradient in defs, two or more stops with offsets from 0 to 1)",
-"by NodeMode": "av NodeMode",
+"by nodemode.ai": "av nodemode.ai",
 "color-mix(in srgb, {0} 82%, #ffffff)": "color-mix(in srgb, {0} 82%, #ffffff)",
 "compression {0} is not supported": "compression {0} is not supported",
 "corrupt ZStandard block": "skadet ZStandard-blokk",
