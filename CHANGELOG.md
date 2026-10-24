@@ -2,6 +2,11 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.52.1 · 2026-10-24
+
+- The copyright holder in LICENSE and the README is NodeAgentc, Inc.
+- The Home screen credit reads "by nodemode.ai" in every language.
+
 ## 0.52.0 · 2026-10-23
 
 - The Shaper tool's scribble does the operation you choose: an Operation choice in the options bar (Merge, Punch or Delete; Merge by default), with Alt held for Punch and Shift for Delete. The scribble only picks which regions or shapes are affected; a choice that does not fit what was touched changes nothing and the status line says so.
