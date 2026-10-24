@@ -129,7 +129,7 @@ Release history: `CHANGELOG.md`. What is not verified yet:
 
 ## Licensing
 
-Apache License 2.0. Copyright 2026 nodemode-ai. See `LICENSE` and `NOTICE.md`.
+Apache License 2.0. Copyright 2026 NodeAgentc, Inc. See `LICENSE` and `NOTICE.md`.
 
 ## Trademarks
 
