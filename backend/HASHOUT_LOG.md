@@ -18,7 +18,8 @@ backend/
     ├── __init__.py             __version__
     ├── main.py                 FastAPI app, routers, CORS, the built frontend mount
     ├── core/
-    │   └── config.py           ports, limits, data and library folders, .env loading
+    │   ├── config.py           ports, limits, data and library folders, .env loading
+    │   └── local_guard.py      middleware: loopback Host and window Origin only
     ├── routers/
     │   ├── system.py           health, version, capabilities
     │   ├── projects.py         .fpth library: list, save with conflict copies, package, import, folder
@@ -44,6 +45,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 
 - formpath_engine.py
 - app/core/config.py
+- app/core/local_guard.py
 - app/routers/mcp.py
 - app/services/llm.py
 - app/routers/batch.py
@@ -68,6 +70,21 @@ The desktop shell starts this with `FORMPATH_PORT=0`; Uvicorn binds a free loopb
 - logged: v0.9.0 · 2026-10-07
 
 8230 so formpath runs beside formvis (8190). Data lives in `~/Formpath` unless `FORMPATH_DATA_DIR` is set; the library folder can be moved (`FORMPATH_LIBRARY_DIR`, or `library.json` written by the app), including into a synced folder.
+
+## app/core/local_guard.py
+
+### app/core/local_guard.py · only this computer's own window and agents reach the engine
+- refers-to: app/core/local_guard.py :: LocalGuard; app/core/config.py :: window_origins; app/main.py :: add_middleware
+- kind: decision
+- logged: v0.52.2 · 2026-10-25
+
+Family stabilization plan Phase 3a (`FAMILY_DEV_PLAN.md` v0.4.2, formai_dev sidecar; ledger FB-032). The engine checked Host and Origin only inside a few routes (`require_local` and `origin_ok` for the terminals, spell checking and colour profiles, and the two websockets), and nothing for the rest. `curl -H 'Host: evil.example:8230' http://127.0.0.1:8230/api/health` answered 200, so a DNS-rebinding page (a hostile name that resolves to 127.0.0.1) reached every route as if it were the window: the project library and its saves, file import and export, `/mcp` and the MCP bridge (run any drawing tool), the Claude Code chat and the terminals' open route, plugins and the NodeMode routes. CORS decides whether a page may read a response, not whether the request runs. The route-level `origin_ok` also accepts any loopback Origin on any port, which another local web server could use.
+
+LocalGuard is a pure ASGI middleware added in `main.py` after the CORS middleware, so it runs first on every http and websocket request; the route checks stay as a second line. It refuses a Host that is not 127.0.0.1, localhost or ::1. When an Origin header is present it must be one of `config.window_origins()` (the dev window on 5230, the preview on 5231, `tauri://localhost`, `http://tauri.localhost`, plus whatever `FORMPATH_CORS_ORIGINS` lists) or exactly the engine's own origin, compared on parsed scheme, host and port, never by prefix, so `http://localhost.evil.com` and `null` fail. `window_origins()` is new because `cors_origins()` lists only the dev port and the preview window posts from 5231. The desktop window loads from the engine's own `http://127.0.0.1:<port>` with a port picked at launch, so "own origin" is the request's Host and needs no list entry. Requests with no Origin (the CLI, `setup/mcp_stdio.py`, the `.mcp.json` client) pass once the Host is local. HTTP refusals answer 403 with a JSON detail naming formpath; websocket refusals close with 4403 before accept.
+
+Left for the family standard: a per-launch token on routes that write files, run processes or answer consent, and a review of GET routes with side effects, which a cross-site page can still trigger without an Origin.
+
+Checked against the running engine (built window served through `FORMPATH_DIST`): 403 for `Host: evil.example:8230`, `Origin: http://evil.example`, `Origin: http://localhost.evil.com`, `Origin: null` on `/api/health`, and for a rebound-Host `POST /mcp`; 200 for no Origin, `Origin: http://127.0.0.1:8230`, `http://localhost:5230`, `http://localhost:5231` and `tauri://localhost`. `/api/claude/chat/stream`: foreign Origin and rebound Host refused with 403, own origin, dev origin and no Origin open. `setup/mcp_stdio.py` initialize with no Origin answers with serverInfo formpath. Built window in Chromium under 4x CPU and network throttling: no errors, no 403 from the window (the 7 lines of 403 in the log are the probes). Layout shift is 0.0054 with one shift (`SECTION.cv-home-section` at 2.1 s), and the same 0.0054 on the engine as it was before the guard, so the guard did not cause it; it is a Home screen shift that predates this change and is left alone.
 
 ## app/routers/mcp.py
 
