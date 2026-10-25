@@ -2,6 +2,10 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.52.2 · 2026-10-25
+
+- The engine answers only this computer's own window and agents.
+
 ## 0.52.1 · 2026-10-24
 
 - The copyright holder in LICENSE and the README is NodeAgentc, Inc.
