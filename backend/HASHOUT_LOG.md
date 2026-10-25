@@ -86,6 +86,17 @@ Left for the family standard: a per-launch token on routes that write files, run
 
 Checked against the running engine (built window served through `FORMPATH_DIST`): 403 for `Host: evil.example:8230`, `Origin: http://evil.example`, `Origin: http://localhost.evil.com`, `Origin: null` on `/api/health`, and for a rebound-Host `POST /mcp`; 200 for no Origin, `Origin: http://127.0.0.1:8230`, `http://localhost:5230`, `http://localhost:5231` and `tauri://localhost`. `/api/claude/chat/stream`: foreign Origin and rebound Host refused with 403, own origin, dev origin and no Origin open. `setup/mcp_stdio.py` initialize with no Origin answers with serverInfo formpath. Built window in Chromium under 4x CPU and network throttling: no errors, no 403 from the window (the 7 lines of 403 in the log are the probes). Layout shift is 0.0054 with one shift (`SECTION.cv-home-section` at 2.1 s), and the same 0.0054 on the engine as it was before the guard, so the guard did not cause it; it is a Home screen shift that predates this change and is left alone.
 
+### app/core/local_guard.py · refuses cross-site requests that carry no Origin
+- refers-to: app/core/local_guard.py :: LocalGuard._permitted
+- kind: decision
+- logged: v0.52.3 · 2026-10-25
+
+The family agent-stack standard, rule G4 (`AGENT_STACK_STANDARD.md` v0.2.0, owner decision D4, ledger FB-035, formai_dev sidecar). The entry above let a request with no Origin through once its Host was local, so a web page could still make the engine answer a GET by pointing an `<img>` or a link at `http://127.0.0.1:<port>/...`: browsers send no Origin on those, and any GET route with a side effect would run. Proven on formsculpt 1.18.6, where such a GET answered 200 and its side effect ran.
+
+Browsers label every request with `Sec-Fetch-Site`, and only a page on another site gets `cross-site`. So a request with no Origin is now refused when that header says `cross-site` (trimmed, case-insensitive). A request that carries an Origin is still decided by the Origin rule alone, and `same-site` is kept on purpose: a dev window on `localhost:5230` loading straight from `localhost:8230` is same-site, and no outside page can be same-site with localhost. The CLI, `setup/mcp_stdio.py` and Claude Code's MCP client send neither header and pass as before.
+
+Checked against the running engine (built window served through `FORMPATH_DIST`): no Origin with `cross-site` 403 (also ` Cross-Site ` padded); `same-site`, `same-origin`, `none`, no header at all, and `cross-site` with the allowed Origin `http://localhost:5230` 200; `Host: evil.example` and `Origin: http://evil.example` still 403. In Chromium, a page served from `http://127.0.0.2:9902` with an `<img>` and a clicked link pointing at `/api/health` got 403 for both, shown in the engine log. The built window served by the engine in Chromium under 4x CPU and network throttling, two shift runs and one throttle run: layout shift 0.0054 (the Home screen shift recorded above, unchanged), no errors, no 403 line produced by the window. `setup/mcp_stdio.py` initializes (formpath 0.52.2) and lists 93 tools.
+
 ## app/routers/mcp.py
 
 ### app/routers/mcp.py · transport
