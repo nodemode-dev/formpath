@@ -2,6 +2,10 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.52.3 · 2026-10-25
+
+- A web page can no longer reach the engine through an image or a link.
+
 ## 0.52.2 · 2026-10-25
 
 - The engine answers only this computer's own window and agents.
