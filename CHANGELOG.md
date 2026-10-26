@@ -2,6 +2,11 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.52.5 · 2026-10-26
+
+- Letters turned into outlines are closed paths, so a stroke no longer shows a gap at the seam of each letter.
+- The repository gains its automated tests (engine guard, outside-agent consent, MCP, project files, Pathfinder, SVG, PDF and type outlines), which CI runs on every push.
+
 ## 0.52.4 · 2026-10-26
 
 - The desktop release build keeps its symbols, since macOS builds fail on a stripped binary.
