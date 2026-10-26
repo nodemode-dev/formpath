@@ -40,7 +40,7 @@ The engine imports nothing from `ui`, `io`, `tools` or `automation`. Tools impor
 3. Colours and z-index come from tokens in `styles/tokens.css`; icons come from `ui/icons.ts` and `ui/icons-vector.ts` as hand-drawn `currentColor` SVG; no icon libraries.
 4. No emoji, no U+2014 em dash (use the interpunct), near-zero comments. Decisions and removed code go in `frontend/HASHOUT_LOG.md` or `backend/HASHOUT_LOG.md` in the same turn.
 5. Versions are `v*.*.*` with dots and are bumped together, see `.docs/BRANCHING.md`. Commits are Conventional Commits as `nodemode-ai`.
-6. No self-authored tests. Behaviour to test goes in the planning sidecar's `TEST_PLAN.md`.
+6. Tests only as the family plan names them. `backend/tests` (pytest) and `frontend/tests` (vitest, pure logic) hold the suite FAMILY_TEST_PLAN names, and CI runs it; add no other test code. `TEST_PLAN.md` in the planning sidecar says what is covered and what is manual.
 7. Compatibility: never rename a manifest field, an MCP tool name or parameter, or a command id; add new ones beside them.
 
 ## Routing table

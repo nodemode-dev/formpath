@@ -9,6 +9,7 @@ Vector illustration editor for the web and the desktop in the NodeMode design sy
 - `frontend/src/automation/agent-bridge.ts` runs every MCP tool against the engine; `backend/app/routers/mcp.py` holds the tool catalogue (`TOOLS`).
 - `backend/formpath_engine.py` is the PyInstaller entry for the desktop sidecar, not a dev server. Use `./formpath backend` or `./formpath boot` for development.
 - `src-tauri/binaries/` receives the frozen engine from `setup/freeze_backend`; git ignores it.
+- Tests live in `tests/` folders and run in CI; write only tests this plan or its successor names (`FAMILY_TEST_PLAN.md` in the formai_dev sidecar): `backend/tests` (pytest) and `frontend/tests` (vitest, pure logic).
 - Planning documents (DEV_PLAN, BUILD_NOTES, TEST_PLAN, the root HASHOUT_LOG) ship in the planning sidecar zip, not in this tree. The living logs `frontend/HASHOUT_LOG.md` and `backend/HASHOUT_LOG.md` are in the tree: read them before editing.
 
 ## Skills

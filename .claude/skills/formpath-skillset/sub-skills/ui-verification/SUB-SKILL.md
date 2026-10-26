@@ -19,6 +19,6 @@ Report exactly one of: verified under throttling, verified without throttling (w
 
 ## Keep in mind
 
-- The harness is scratch code outside the repository: the repository carries no self-authored tests.
+- The harness is scratch code outside the repository: the repository's tests are only the ones FAMILY_TEST_PLAN names, in `backend/tests` and `frontend/tests`.
 - `networkidle` never settles while the agent bridge long-polls; wait for `load` and the reveal instead.
 - A dialog left open darkens a stage sample; close dialogs before trusting frame checks.
