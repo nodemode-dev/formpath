@@ -2,6 +2,11 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.52.6 · 2026-10-26
+
+- The home screen no longer jumps down by 40 px when the empty Recent line appears, and the desktop splash holds its logo, line and bar in a fixed box so the logo does not move while the page loads.
+- The repository gains a window smoke test (the built window under a slow CPU and network: no layout shift, no console error, no failed or refused request), which CI runs on every push.
+
 ## 0.52.5 · 2026-10-26
 
 - Letters turned into outlines are closed paths, so a stroke no longer shows a gap at the seam of each letter.
