@@ -4121,6 +4121,13 @@ The settings rows now show the first picked asset's items and write to every pic
 
 The splash is now formvis's rounded 360 by 200 card with `formpath-logo.png` at 72 px and the gradient bar; the old page drew an inline SVG and the words "Starting the formpath engine". The main window stays at alpha 0 on macOS until the page calls `app_ready`, and the splash closes 2.6 s after launch at the earliest. The in-app `brandMark` in `ui/brand.ts` is a one-colour `currentColor` vector of the same picture, so it stays as is.
 
+### public/splash.html · the splash content has a fixed box
+- refers-to: public/splash.html :: .box
+- kind: fix
+- logged: v0.52.6 · 2026-10-26 · FB-108
+
+The logo, the line and the bar sat directly in a centring body, so when the browser painted after the logo and before the rest was parsed (slow CPU), the logo then moved up 27.5 px and the group widened from 72 to 180 px: an intermittent layout shift of 0.0001 that failed the window smoke (F7) once in about six runs. The three now live in `.box`, 180 by 127 px (72 + 18 + 16 + 18 + 3), and the line has a fixed 16 px height, so the box is centred the same before and after the parse. Reproduced on demand by writing the page in two parts 700 ms apart: shift 0.000105 before, 0 after.
+
 ### src/ui/dom.ts · revealApp calls app_ready
 - refers-to: revealApp
 - kind: decision
