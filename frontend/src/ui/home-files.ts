@@ -106,7 +106,7 @@ export class HomeFiles {
       },
       update: (n, i) => this.update(n, i),
     });
-    const text = !this.loaded ? '' : this.all.length === 0
+    const text = !this.loaded ? ' ' : this.all.length === 0
       ? (this.o.tab === 'recent' ? 'Documents you open or save appear here.' : 'No projects in the library yet. Save a document to add it.')
       : shown.length === 0 ? 'No files match the filter.' : '';
     setText(this.empty, text);

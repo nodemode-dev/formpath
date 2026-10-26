@@ -2758,6 +2758,13 @@ Ranking runs in the engine service, which already reads the font files; the fron
 
 The Properties column, panel tabs and Layers list drew on top of the home screen. The home screen is `position: fixed` and asked for a high layer, but it was mounted inside `.cv-stage-col`, which is `position: relative; z-index: var(--z-base)` and therefore a stacking context at layer 0: nothing inside it can rise above the stage column's siblings, and the Properties column at a higher layer won. A bigger number could not fix it. The home screen now mounts on `.cv-app`, which creates no stacking context, at the named layer `--z-home-screen` (150): above the workspace chrome (`--z-chrome`, 100) so it covers every panel, below menus (`--z-menu`, the overlay root) and dialogs (`--z-modal`) so the File menu and New Document open over it, and below the task bar and floating windows, which the person opens. The stage column keeps its own context, which is what keeps the canvas overlays inside the stage.
 
+### src/ui/home-files.ts · the empty line is reserved before the library answers
+- refers-to: src/ui/home-files.ts :: HomeFiles.render (empty)
+- kind: fix
+- logged: v0.52.6 · 2026-10-26 · FB-107
+
+`render` hid the empty line until the first `refresh` finished, then showed "Documents you open or save appear here." with margins, about 40 px, so with no recent file the New document section under Recent moved down once, a layout shift of 0.0054 at 4x CPU slowdown that the window smoke (F7) measured. Before the library answers the line now holds a no-break space, so it takes the same line and the later text changes only its words. With files, the grid still replaces the line; that case is unchanged.
+
 ### src/styles/panels.css · the last raw z-index values
 - refers-to: src/styles/panels.css :: .cv-dock-split, .cv-props-col:not(.is-collapsed), .cv-props-resize
 - kind: rationale
