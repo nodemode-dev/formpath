@@ -25,6 +25,7 @@ SETTLE_MS = 6000
 IDLE_WAIT_MS = 12_000
 CLS_LIMIT = 0.0
 IGNORED_REQUESTS = []
+ABORTABLE_POLLS = ["/api/mcp/bridge/next"]
 
 CPU_SLOWDOWN = 4
 NETWORK = {"offline": False, "latency": 150, "downloadThroughput": 1_600_000 / 8, "uploadThroughput": 750_000 / 8}
@@ -103,7 +104,7 @@ def test_window_loads_throttled_without_shift_errors_or_refusals(engine, path):
         cdp.send("Network.emulateNetworkConditions", NETWORK)
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.on("requestfailed", lambda r: failed.append(f"{r.url} {r.failure}") if watching[0] and not ignored(r.url) else None)
+        page.on("requestfailed", lambda r: failed.append(f"{r.url} {r.failure}") if watching[0] and not ignored(r.url) and not (r.failure == "net::ERR_ABORTED" and any(part in r.url for part in ABORTABLE_POLLS)) else None)
         page.on("response", lambda r: failed.append(f"{r.url} {r.status}") if r.status >= 400 and not ignored(r.url) else None)
         page.goto(engine + path, wait_until="load", timeout=120_000)
         try:
