@@ -13,6 +13,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -26,7 +27,9 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.1",
+    "linkedom": "0.18.14",
     "typescript": "7.0.2",
-    "vite": "8.3.3"
+    "vite": "8.3.3",
+    "vitest": "5.0.5"
   }
 }

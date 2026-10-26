@@ -51,6 +51,8 @@ The Linux AppImage also carries the build machine's WebKitGTK, GTK and GLib (LGP
 
 ## Build tools, not distributed
 
+Test tools, development only (run by CI, never installed in or shipped with the app): pytest 9.1.1 with iniconfig, packaging, pluggy and pygments (MIT for pytest, iniconfig and pluggy; Apache-2.0 OR BSD-2-Clause for packaging; BSD-2-Clause for pygments), which run `backend/tests` (`backend/requirements-test.txt`); vitest 5.0.5 (MIT) and linkedom 0.18.14 (ISC), which run `frontend/tests`, with their npm dependencies (MIT, ISC, BSD-2-Clause and Apache-2.0 for expect-type), all in `frontend/package.json` devDependencies.
+
 Vite (MIT), TypeScript (Apache-2.0), @tauri-apps/cli (Apache-2.0 or MIT), PyInstaller (GPL-2.0-or-later with the bootloader exception, which permits distributing the frozen engine under this project's license).
 
 ## Lucide license
