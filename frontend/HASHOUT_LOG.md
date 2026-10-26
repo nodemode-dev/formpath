@@ -1837,6 +1837,13 @@ opentype.js reads GSUB but applies only single, alternate and ligature lookups, 
 
 Canvas 2D cannot set font variations (`ctx.font` has no font-variation-settings and the browser ignores them for local fonts), so a span with `CharStyle.axes` goes through the shaping path like a span with OpenType features and draws each glyph's own outline. opentype.js 2.0 applies gvar and CFF2 blends through `font.variation.getTransform(gid, coords)`, which returns the varied glyph in font units with y up (hence the flip and 1/unitsPerEm) and its HVAR advance; it also writes the varied advance back onto the shared default glyph, so `variedGlyph` restores `advanceWidth` and `leftSideBearing` from the `_` copies opentype keeps. Varied outlines and advances are cached per font, glyph and `axesKey`, the same PathData the canvas, `textOutline`, `outlineText` (Create Outlines, PDF) and SVG outlines use, so all of them match. A font without HVAR keeps its default advances (gvar phantom points are not read). Glyph positioning (GPOS kerning) is not varied. `variationOf` reads fvar: axes with their ranges and names (registered tags by their English names, custom axes as name and tag) and named instances, whose names join `stylesOf` for the family once its file is parsed; a picked instance sets its coordinates as the span's axes. The fonts service marks variable files (an fvar table), the Character panel labels and filters them, and `fontFor` shares one parse per font file because every instance style of a variable family resolves to the same file. No variable face ships with formpath (the @fontsource packages here are static builds); installed variable fonts come through the fonts service.
 
+### src/io/fonts.ts · glyph contours are closed
+- refers-to: src/io/fonts.ts :: commandsToPath, variedGlyph, outlineText
+- kind: fix
+- logged: v0.52.5 · 2026-10-26 · FB-060
+
+opentype.js 2.0 `Glyph.getPath` copies a `Z` command only when the glyph path has a stroke and a stroke width, so a fill-only glyph arrives as `M L L ...` with no `Z`, the last point repeating the first. `commandsToPath` closed a contour only on `Z`, so every outlined letter (Create Outlines, SVG and PDF outlines, `textOutline`) came out as open subpaths with a doubled end point: strokes showed a gap at the seam, a join was missing there and the path reported itself as open. Glyph contours are always closed, so a contour now closes at the next `M` and at the end of the commands as well as at `Z`, which also drops the repeated end point.
+
 ## src/io/trace.ts
 
 ### src/io/trace.ts · pipeline

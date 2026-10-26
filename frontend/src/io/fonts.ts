@@ -171,7 +171,7 @@ function commandsToPath(cmds: PathCommand[], m: Mat): PathData {
     cur = [];
   };
   for (const c of cmds) {
-    if (c.type === 'M') { flush(false); last = { x: c.x ?? 0, y: c.y ?? 0 }; cur.push(anchor(last.x, last.y)); }
+    if (c.type === 'M') { flush(true); last = { x: c.x ?? 0, y: c.y ?? 0 }; cur.push(anchor(last.x, last.y)); }
     else if (c.type === 'L') { last = { x: c.x ?? 0, y: c.y ?? 0 }; cur.push(anchor(last.x, last.y)); }
     else if (c.type === 'C') {
       const prev = cur[cur.length - 1];
@@ -185,7 +185,7 @@ function commandsToPath(cmds: PathCommand[], m: Mat): PathData {
       last = { x, y };
     } else if (c.type === 'Z') flush(true);
   }
-  flush(false);
+  flush(true);
   return transformPath(out, m);
 }
 
