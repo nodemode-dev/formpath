@@ -92,7 +92,7 @@ def test_window_loads_throttled_without_shift_errors_or_refusals(engine, path):
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
     from playwright.sync_api import sync_playwright
 
-    errors, failed = [], []
+    errors, failed, watching = [], [], [True]
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 900})
@@ -103,7 +103,7 @@ def test_window_loads_throttled_without_shift_errors_or_refusals(engine, path):
         cdp.send("Network.emulateNetworkConditions", NETWORK)
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.on("requestfailed", lambda r: failed.append(f"{r.url} {r.failure}") if not ignored(r.url) else None)
+        page.on("requestfailed", lambda r: failed.append(f"{r.url} {r.failure}") if watching[0] and not ignored(r.url) else None)
         page.on("response", lambda r: failed.append(f"{r.url} {r.status}") if r.status >= 400 and not ignored(r.url) else None)
         page.goto(engine + path, wait_until="load", timeout=120_000)
         try:
@@ -114,6 +114,7 @@ def test_window_loads_throttled_without_shift_errors_or_refusals(engine, path):
         cls = page.evaluate("window.__cls")
         shifts = page.evaluate("window.__shifts")
         title = page.title()
+        watching[0] = False
         browser.close()
     assert title, "the window has a title"
     assert not [f for f in failed if " 403" in f], f"requests refused by the guard: {failed}"
