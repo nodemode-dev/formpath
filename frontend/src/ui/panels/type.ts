@@ -20,7 +20,7 @@ const FIG_TAGS = new Set(['tnum', 'pnum', 'lnum', 'onum']);
 const OT_POS: ReadonlyArray<readonly [string, string]> = [['', 'Default Position'], ['sups', 'Superior'], ['subs', 'Inferior'], ['numr', 'Numerator'], ['dnom', 'Denominator']];
 const POS_TAGS = new Set(['sups', 'subs', 'numr', 'dnom']);
 const SETS: ReadonlyArray<readonly [string, string]> = [['', 'No Stylistic Set'], ...Array.from({ length: 20 }, (_, i) => [`ss${String(i + 1).padStart(2, '0')}`, `Stylistic Set ${i + 1}`] as const)];
-const BULLETS: ReadonlyArray<readonly [string, string]> = [['•', '•'], ['◦', '◦'], ['▪', '▪'], ['–', '–'], ['›', '›'], ['✓', '✓'], ['*', '*']];
+const BULLETS: ReadonlyArray<readonly [string, string]> = [['•', '•'], ['◦', '◦'], ['▪', '▪'], ['–', '–'], ['›', '›'], ['\u2713', '\u2713'], ['*', '*']];
 const NUMBER_FORMATS: ReadonlyArray<readonly [string, string]> = [['1', '1, 2, 3'], ['01', '01, 02, 03'], ['a', 'a, b, c'], ['A', 'A, B, C'], ['i', 'i, ii, iii'], ['I', 'I, II, III']];
 
 function paraTargets(e: Engine): TextNode[] { const n = typing.editor?.node(); return n ? [n] : texts(e); }
