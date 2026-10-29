@@ -37,6 +37,11 @@ const faces = new Set<string>();
 let onFace: (() => void) | null = null;
 export function onFontsLoaded(fn: () => void): void { onFace = fn; }
 
+function declaredFace(family: string, weight: string, style: string): boolean {
+  for (const f of document.fonts) if (f.family.replace(/^["']|["']$/g, '') === family && f.weight === weight && f.style === style) return true;
+  return false;
+}
+
 export async function ensureFace(family: string, style: string): Promise<void> {
   const key = `${family}|${style}`;
   if (faces.has(key)) return;
@@ -44,10 +49,13 @@ export async function ensureFace(family: string, style: string): Promise<void> {
   const load = bundledLoader(family, style);
   if (!load) return;
   try {
-    const url = await load(), { weight, italic } = weightOf(style);
-    const face = new FontFace(family, `url(${url})`, { weight: String(weight), style: italic ? 'italic' : 'normal' });
-    await face.load();
-    document.fonts.add(face);
+    const { weight, italic } = weightOf(style), slant = italic ? 'italic' : 'normal';
+    if (declaredFace(family, String(weight), slant)) await document.fonts.load(`${slant} ${weight} 16px "${family}"`);
+    else {
+      const face = new FontFace(family, `url(${await load()})`, { weight: String(weight), style: slant });
+      await face.load();
+      document.fonts.add(face);
+    }
     fontsChanged();
     onFace?.();
   } catch { faces.delete(key); }
