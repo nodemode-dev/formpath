@@ -7,14 +7,18 @@ triple="$(fp_target_triple)" || fp_die "rustc not found; install Rust or set FOR
 [ -f "$FORMPATH_ROOT/frontend/dist/index.html" ] || "$FORMPATH_ROOT/setup/build_frontend"
 cd "$FORMPATH_ROOT/backend"
 sep=":"
-[ "$(fp_os)" = windows ] && sep=";"
+root="$FORMPATH_ROOT"
+if [ "$(fp_os)" = windows ]; then
+  sep=";"
+  root="$(cygpath -w "$FORMPATH_ROOT")"
+fi
 ext="$(fp_exe)"
 rm -rf build/pyinstaller dist-engine
 pyinstaller --noconfirm --clean --onefile --name formpath-engine \
   --distpath dist-engine --workpath build/pyinstaller --specpath build/pyinstaller \
-  --add-data "$FORMPATH_ROOT/frontend/dist${sep}frontend_dist" \
+  --add-data "$root/frontend/dist${sep}frontend_dist" \
   --collect-submodules app --collect-submodules uvicorn --collect-submodules keyring --collect-data spellchecker --collect-submodules fontTools \
-  "$FORMPATH_ROOT/backend/formpath_engine.py"
+  "$root/backend/formpath_engine.py"
 mkdir -p "$FORMPATH_ROOT/src-tauri/binaries"
 out="$FORMPATH_ROOT/src-tauri/binaries/formpath-engine-${triple}${ext}"
 cp "dist-engine/formpath-engine${ext}" "$out"

@@ -63,6 +63,13 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 
 The desktop shell starts this with `FORMPATH_PORT=0`; Uvicorn binds a free loopback port and prints `http://127.0.0.1:[port]`, which the shell reads from stdout. A bundled `frontend_dist` folder is served when present. `--selfcheck` prints the Python and package versions, the formpath version and the MCP tool count as JSON, and is run by `setup/freeze_backend` and CI.
 
+### formpath_engine.py · frozen on Windows with Windows paths
+- refers-to: setup/freeze_backend :: root, --add-data, the entry script
+- kind: decision
+- logged: v0.52.7 · 2026-10-30
+
+formcompiler runs `./formpath desktop build` in Git Bash on Windows. `--add-data` took `$FORMPATH_ROOT/frontend/dist;frontend_dist`, an MSYS path such as `/d/a/formpath/formpath/frontend/dist` joined to its destination by `;` inside one argument, which Git Bash may not convert to a Windows path before it reaches PyInstaller, so the build could fail to find the frontend or freeze an engine without it. On Windows the script now takes `root` from `cygpath -w "$FORMPATH_ROOT"` and uses it for the `--add-data` source and the entry script; macOS and Linux keep `$FORMPATH_ROOT`. The paths stay absolute because `--specpath build/pyinstaller` makes relative ones resolve against the spec folder. There is no `--add-binary`. Found by the family builds audit of 2026-10-30.
+
 ## oc_install
 
 ### oc_install · Python on Windows and the venv layout
