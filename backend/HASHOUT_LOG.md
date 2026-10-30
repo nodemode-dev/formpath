@@ -44,6 +44,7 @@ backend/
 Scripts with entries, in folder order. Every other script is in the map above with its role and has no entries yet.
 
 - formpath_engine.py
+- oc_install
 - app/core/config.py
 - app/core/local_guard.py
 - app/routers/mcp.py
@@ -61,6 +62,15 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - logged: v0.9.0 · 2026-10-07
 
 The desktop shell starts this with `FORMPATH_PORT=0`; Uvicorn binds a free loopback port and prints `http://127.0.0.1:[port]`, which the shell reads from stdout. A bundled `frontend_dist` folder is served when present. `--selfcheck` prints the Python and package versions, the formpath version and the MCP tool count as JSON, and is run by `setup/freeze_backend` and CI.
+
+## oc_install
+
+### oc_install · Python on Windows and the venv layout
+- refers-to: oc_install :: PY, act
+- kind: decision
+- logged: v0.52.7 · 2026-10-30
+
+formcompiler runs `./formpath install` in Git Bash on its Windows runner, where setup-python provides `python` (and `py`) and `python3` may not exist, so the candidate list tried only python3.14 to python3 and stopped with "Python 3.12 or newer is required". `python` is now the last candidate, the same list as `setup/lib.sh :: fp_python` and formpdf and formtxt; the version check still refuses an older one. The activate script is `venv/bin/activate` on macOS and Linux and `venv/Scripts/activate` on Windows; the script now picks whichever exists and stops with a message when neither does (a half-made venv), instead of a bare `source` error. Found by the family builds audit of 2026-10-30.
 
 ## app/core/config.py
 
