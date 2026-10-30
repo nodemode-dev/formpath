@@ -2,6 +2,11 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.52.7 · 2026-10-30
+
+- The engine installs on Windows, where Python is named `python`, and the Windows desktop build packs the frontend into the engine with Windows paths.
+- Scripts keep LF line endings on every checkout, and the `.bat` files keep CRLF.
+
 ## 0.52.6 · 2026-10-26
 
 - The home screen no longer jumps down by 40 px when the empty Recent line appears, and the desktop splash holds its logo, line and bar in a fixed box so the logo does not move while the page loads.
