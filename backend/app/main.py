@@ -1,3 +1,4 @@
+import mimetypes
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +12,10 @@ import asyncio
 from app.routers import batch, claude_code, color, commands, fonts, io, llm, mcp, nodemode, plugins, projects, spell, system, terminal
 from app.services import sessions
 from app.services import terminal as terminals
+
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
 
 
 @asynccontextmanager

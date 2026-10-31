@@ -53,6 +53,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - app/routers/projects.py
 - app/routers/fonts.py
 - app/services/fonts.py
+- app/main.py
 
 ## formpath_engine.py
 
@@ -480,3 +481,12 @@ _entries adds the two profiles after the generic CMYK so the first builtin RGB s
 - logged: v0.44.0 · 2026-10-16
 
 The bridge already read `psd_edit` (default true) after the editable PSD writer landed, but the catalogue did not declare it, so agents could not discover it. export_file now declares `psd_edit` beside `psd_layers`, and its description says what a .psd holds with and without it: Photoshop groups, editable type layers and shape layers, or one pixel layer per top-level layer. ./formpath agents sync regenerated the tool reference.
+
+## app/main.py
+
+### app/main.py · .js, .mjs and .css keep their types on Windows
+- refers-to: app/main.py :: the three mimetypes.add_type calls after the last import
+- kind: rationale
+- logged: v0.52.8 · 2026-10-31
+
+Python's `mimetypes` takes file types from the Windows registry (`HKEY_CLASSES_ROOT\.js`, value `Content Type`) over its own table, and some installers and editors set `.js` to `text/plain`. On those PCs the engine served the built window's scripts as `text/plain`, WebView2 refused every module script under strict MIME checking, and the desktop window stayed blank; macOS, Linux, dev mode (Vite serves the page) and Windows PCs with the default value never showed it. The three calls pin `.js` and `.mjs` to `text/javascript` and `.css` to `text/css`, which covers `StaticFiles`, `FileResponse` and any direct `guess_type`. They sit after the last import, not above the imports: a module that re-reads the registry while importing cannot undo them, and no import follows a statement (E402). They look redundant off Windows; keep them. Repro on a Windows PC: `reg add "HKCU\Software\Classes\.js" /v "Content Type" /d "text/plain" /f`, then launch the rebuilt app; restore with `/d "text/javascript"`. Checked here: with the table poisoned to `text/plain` for js, mjs and css through `mimetypes.init(files=...)`, the three calls return `text/javascript`, `text/javascript` and `text/css`; `py_compile` passes. Not yet run on a Windows PC.
