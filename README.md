@@ -1,136 +1,175 @@
-<p align="center"><img src="assets/formpath_icon.png" width="112" alt="formpath"></p>
-<h1 align="center">formpath</h1>
-<p align="center"><b>Vector illustration for the web and the desktop, in the NodeMode design system.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-0.52.8-f97316" alt="version 0.52.8">
-<img src="https://img.shields.io/badge/node-22-339933" alt="node 22">
-<img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
-<img src="https://img.shields.io/badge/tauri-2-24C8DB" alt="tauri 2">
-<img src="https://img.shields.io/badge/license-Apache--2.0-lightgrey" alt="Apache 2.0 license">
+  <img src="assets/app-icon/formpath-256.png" width="128" height="128" alt="FormPath icon">
 </p>
 
-## What it is
+<h1 align="center">FormPath</h1>
 
-formpath is the vector member of the form family, with artboards, layers, live shapes, the Pen and Curvature tools, Pathfinder, gradients, an appearance stack with live effects, variable fonts and Glyph Touch, symbols and the symbolism tools, blends, repeats, Fill Regions, gradient meshes, pattern editing, a live Trace Image, the Perspective Grid, Pin Warp, Shaper, graphs and data merge. It saves its own `.fpth` projects, reads and writes SVG, PDF, EPS and DXF (any PDF or PDF-compatible `.ai` opens as editable art), writes PNG, JPEG and WebP, and runs in a browser or as a desktop app on macOS, Windows and Linux. Agents draw in it through an MCP server with 92 tools, and Claude Code runs inside its own terminal dock.
+<p align="center">
+  <b>Vector illustration; artboards, pen tools and live effects in one window.</b><br>
+  Pen and Curvature tools, Pathfinder, gradients, live effects and 3D type,<br>
+  with SVG, PDF, EPS and DXF. Local-first, no account, and agents can draw in it.
+</p>
 
-**Stack.** Vanilla TypeScript 7 and Vite 8 · Python 3.12 and FastAPI · Tauri 2 · about 58,500 lines of TypeScript, 2,000 of CSS, 5,400 of Python and 100 of Rust (product code; `./formpath counts` prints this, and `./formpath counts --check` fails when it drifts).
+<p align="center">
+  <img alt="version 0.53.0" src="https://img.shields.io/badge/version-0.53.0-eef0f4?style=flat-square">
+  <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript%20%2B%20Vite-vanilla-3178c6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python%20%2B%20FastAPI-engine-009688?style=flat-square">
+  <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
+  <img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache--2.0-3a3a3a?style=flat-square">
+  <img alt="Status: pre-release" src="https://img.shields.io/badge/status-pre--release-d69e2e?style=flat-square">
+</p>
 
-## Highlights
+<p align="center">
+  <a href="https://formpath.formai.studio/"><b>Download FormPath on formai.studio</b></a> ·
+  <a href="#run-it-from-source">Run it from source</a>
+</p>
 
-- **Artboards and layers.** Any number of artboards with the Artboard tool and panel; layers and sublayers with colours, lock, template, print and dim; groups with isolation mode; clipping masks; 16 blend modes and opacity masks.
-- **Drawing.** Pen, Curvature and the anchor tools; Pencil, Smooth, Path Eraser and Join; Rectangle, Rounded Rectangle, Ellipse, Polygon, Star and Flare as live shapes, editable after drawing with corner widgets; Line, Arc, Spiral and grids; Paintbrush and Blob Brush; Eraser, Scissors and Knife. Smart guides with equal spacing, snap to pixel, rulers, guides and grids; Magic Wand tolerances and Ctrl-click to select behind.
-- **Pathfinder on curves.** All ten Pathfinder operations through paper.js, Shape Crafter, Fill Regions groups with gap detection, per-segment edges and the Fill Regions Selection tool, compound paths, Offset Path, Outline Stroke, Simplify, Average, Join, Divide Objects Below, Split into Grid.
-- **Paint.** Colour panel in Grayscale, RGB, HSB, CMYK and Web; swatches with global and spot colours; linear and radial gradients on fills and strokes with the Gradient tool; freeform gradients in points and lines modes; gradient mesh with point handles; patterns with pattern editing mode; Recolor Art and the Color Guide's harmony rules; the Stroke panel with dashes, arrowheads and width profiles; the Width tool.
-- **Appearance and effects.** Multiple fills and strokes per object, Graphic Styles, and live effects: fifteen warps, Distort and Transform, Drop Shadow, glows, Feather, Round Corners, Scribble, Offset Path, Rasterize, and the Effect Gallery's 56 Photoshop effects from Watercolor to Stained Glass, all live. 3D Extrude & Bevel, Revolve, Inflate and Plane with materials, lighting, Map Art and shadows, on shapes, type and groups. Envelopes, blends, repeats, symbols with the seven symbolism tools, four brush kinds made from your own art, and Trace Image as a live object with five views.
-- **Type.** Point, area, vertical and on-path type typed on the canvas, area type inside any shape, threaded frames and text wrap, Character and Paragraph panels with OpenType features shaped from the font's own lookups (contextual alternates included), Character and Paragraph Styles, Glyphs with each character's alternates, Change Case, Find and Replace, Find Font, and Create Outlines through real glyph outlines.
-- **Files.** `.fpth` projects with a library, conflict copies and crash recovery; SVG in and out with exact round trips; PDF out with real vectors, shadings, transparency and CMYK, and in from any PDF or PDF-compatible `.ai` with one artboard per page; PNG, JPEG and WebP; Export for Screens and the Asset Export panel; placed and linked images.
-- **Agents.** `./formpath mcp` gives Claude Code, Codex and Cursor 92 tools, from `get_image` to `pathfinder` to `run_command` and `run_commands` over the whole command catalogue. The window asks the person once. The `formpath-harness` skill pack teaches agents to look, plan, build, check and deliver.
-- **Terminal and Claude Code inside the window.** Window > Terminal opens a dock of real shells; its Claude Code button starts your own `claude` already connected to formpath's tools, and the Chat tab answers in plain words while it draws. `./formpath cli` lists, describes and runs any of the 649 catalogue commands from a terminal.
-- **26 languages.** English by default, with Spanish (Spain and Mexico), Portuguese (Brazil), French (France and Canada), German, Italian, Dutch, Danish, Finnish, Norwegian, Swedish, Russian, Polish, Czech, Hungarian, Ukrainian, Turkish, Chinese (Simplified and Traditional), Japanese, Korean, Indonesian, Thai and Vietnamese in Preferences > Interface, translated from formpath's own English in each.
-- **Live Corners on any path.** Direct Selection shows a corner widget at every corner point: drag to round, Alt-click for inverted or chamfer, double-click for the Corners dialog.
-- **The assistant and plugins.** Window > Assistant edits through the same tools on the language model you choose; sandboxed JavaScript plugins add commands.
-- **Zero-flash UI.** Keyed DOM patching, guarded writes, a pre-paint theme boot, reveal after fonts; every interface change is checked in a throttled browser.
+<br>
 
-What it covers and what is still partial, row by row: [docs/PARITY.md](docs/PARITY.md).
+<p align="center">
+  <img src="docs/images/formpath-hero.jpg" alt="FormPath with the word FORMPATH set as gold 3D extruded type over a purple artboard with orbit rings, the Properties panel and the 3D and Materials panel showing Extrude settings" width="100%">
+  <br>
+  <sub>Live 3D extrude on editable type, with the Properties, Color and 3D and Materials panels open.</sub>
+</p>
 
-## Quick Start
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#everything-in-the-box">In the box</a> ·
+  <a href="#built-for-agents">Agents</a> ·
+  <a href="#under-the-hood">Under the hood</a> ·
+  <a href="#download">Download</a> ·
+  <a href="#run-it-from-source">Run from source</a>
+</p>
 
-Requirements: Node 20.19 or newer (22 recommended), Python 3.12 or newer, git. The desktop build also needs Rust stable and the Tauri 2 system packages for your OS.
+<br>
 
-### macOS and Linux
+<table>
+  <tr>
+    <td width="25%" valign="top"><h3>Live everything</h3>Shapes, corners, effects, Trace Image and 3D stay editable after you draw them.</td>
+    <td width="25%" valign="top"><h3>Real file formats</h3>Opens and writes SVG, PDF, EPS and DXF, and opens any PDF or PDF-compatible <code>.ai</code> as editable art.</td>
+    <td width="25%" valign="top"><h3>Local-first</h3>Projects save as <code>.fpth</code> on your computer, with a library, conflict copies and crash recovery. No account.</td>
+    <td width="25%" valign="top"><h3>Agent-ready</h3>The same commands from the window, the terminal and an MCP server for Claude Code, Codex and Cursor.</td>
+  </tr>
+</table>
 
-```bash
-git clone git@github.com:nodemode-ai/formpath.git
+<br>
+
+## Features
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/formpath-properties.webp" alt="FormPath with the sun circle selected over a sunset landscape, showing its transform, fill and quick actions in the Properties panel" width="100%">
+      <br><sub>A selected shape with its Properties, Color, Appearance and Layers panels.</sub>
+      <h3>Panels that follow the selection</h3>
+      Transform, fill, stroke and opacity sit next to quick actions such as Offset Path and Outline Stroke. Every object keeps its own appearance stack.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/formpath-effects.webp" alt="FormPath with the Effect menu open over a sunset landscape, listing Warp, Distort and Transform, Pathfinder, 3D and Materials, Effect Gallery and raster effect groups" width="100%">
+      <br><sub>The Effect menu over a full artboard.</sub>
+      <h3>Live effects</h3>
+      Warps, Pathfinder, 3D and Materials and the Effect Gallery apply as live effects. Change or remove them later without redrawing.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/formpath-outline.webp" alt="FormPath in Outline view with every path of a sunset landscape selected and the Pathfinder quick actions in the Properties panel" width="100%">
+      <br><sub>Outline view with all eleven objects selected.</sub>
+      <h3>Paths you can reach</h3>
+      Outline view shows every anchor and curve. With several objects selected, Unite, Minus Front, Intersect, Exclude and Make Compound Path are one click away.
+    </td>
+    <td width="50%" valign="top">
+      <h3>Type that stays type</h3>
+      Point, area, vertical and on-path type with OpenType features, variable fonts, Glyphs and Create Outlines through real glyph outlines.
+    </td>
+  </tr>
+</table>
+
+## Everything in the box
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h4>Drawing and layout</h4>
+      Artboards · Layers and sublayers · Pen · Curvature · Pencil · Paintbrush · Blob Brush · Live shapes · Knife · Smart guides · Rulers and grids</td>
+    <td width="33%" valign="top"><h4>Paint, effects and type</h4>Gradients · Gradient mesh · Patterns · Recolor Art · Pathfinder · Blends · Symbols · Envelopes · Trace Image · 3D Extrude, Revolve, Inflate, Plane · Effect Gallery · Variable fonts</td>
+    <td width="33%" valign="top"><h4>Formats</h4>Opens: <code>.fpth</code>, SVG, PDF, <code>.ai</code>, EPS, DXF, PNG, JPEG, WebP · Saves: <code>.fpth</code>, SVG, PDF, EPS, DXF, PNG, JPEG, WebP · Native: <code>.fpth</code></td>
+  </tr>
+</table>
+
+Interface in 26 languages, chosen in Preferences, Interface. What is covered and what is still partial, row by row: [`docs/PARITY.md`](docs/PARITY.md).
+
+## Built for agents
+
+The window, the terminal and the MCP server run the same command catalogue; the MCP server lists 93 tools.
+
+```sh
+./formpath cli list                  # list the command catalogue from a terminal
+./formpath cli describe <command>    # show one command and its arguments
+./formpath claude                    # Claude Code with FormPath's tools attached
+./formpath mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
+```
+
+`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. `./formpath agents install` sets them up for your user account. See [`AGENTS.md`](AGENTS.md).
+
+## Under the hood
+
+- **Engine:** a document engine in TypeScript with no DOM, rendered by the stage and driven by tools registered in one registry.
+- **Service:** a FastAPI engine for projects, fonts, file import and export, and the MCP endpoint at `/mcp`.
+- **Desktop:** a Tauri 2 shell that starts the engine as a sidecar.
+- **UI:** keyed DOM patching and a pre-paint theme boot, so changes do not flash or re-render.
+- **Tested:** Vitest suites for `.fpth`, SVG, PDF, Pathfinder and type outlines, plus pytest suites for the engine guard, consent, MCP, versions and project files.
+
+## Download
+
+| Platform | Download | Release |
+|---|---|---|
+| macOS | [Download FormPath for macOS](https://formai.studio/get/formpath/macos) | [FormPath releases on FormCompiler](https://github.com/nodemode-dev/formcompiler/releases?q=formpath-v&expanded=true) |
+| Windows | [Download FormPath for Windows](https://formai.studio/get/formpath/windows) | [FormPath releases on FormCompiler](https://github.com/nodemode-dev/formcompiler/releases?q=formpath-v&expanded=true) |
+| Linux | [Download FormPath for Linux](https://formai.studio/get/formpath/linux) | [FormPath releases on FormCompiler](https://github.com/nodemode-dev/formcompiler/releases?q=formpath-v&expanded=true) |
+
+All FormPath builds are compiled and released from [FormCompiler](https://github.com/nodemode-dev/formcompiler); this repo holds the source.
+
+## Run it from source
+
+Prefer it in your browser, or want to contribute? Run the web UI straight from this repo.
+
+**Requires:** Node 20.19 or newer (22 recommended), Python 3.12 or newer, git. The desktop window also needs Rust stable and the Tauri 2 system packages.
+
+```sh
+git clone git@github.com:nodemode-dev/formpath.git
 cd formpath
-./formpath install
-./formpath boot
+./formpath install    # installs the engine service and the frontend
+./formpath boot       # engine and web UI, UI at http://localhost:5230
 ```
 
-To build and install the desktop app in one run: `./build_app` (macOS and Linux, logged to `build_app.log`) or `build_app.bat` (Windows). `./formpath claude` starts Claude Code in your terminal with formpath's tools attached.
+`./formpath desktop dev` opens the desktop window instead, and `./build_app` builds and installs it.
+On Windows use `formpath.bat install` and `formpath.bat boot`. The engine listens on `127.0.0.1:8230` (API under `/api`, MCP at `/mcp`) and reads `backend/.env`, never committed (`backend/.env.example` is the template). Settings are `FORMPATH_HOST`, `FORMPATH_PORT`, `FORMPATH_DATA_DIR`, `FORMPATH_CORS_ORIGINS`, `FORMPATH_DIST` and `FORMPATH_TARGET`.
 
-### Windows
+> [!IMPORTANT]
+> **Status:** pre-release. The macOS and Windows desktop bundles, signing and the updater are not verified yet, and some parity rows are partial, listed in [`docs/PARITY.md`](docs/PARITY.md). PDF import skips encrypted files, `.ai` files saved without PDF compatibility and some scanned images, and reports what it left out.
 
-```bat
-git clone git@github.com:nodemode-ai/formpath.git
-cd formpath
-formpath.bat install
-formpath.bat boot
-```
+**Contributing:** branch from `main`, keep changes to source here, and leave packaging and releases to FormCompiler. See [`.docs/BRANCHING.md`](.docs/BRANCHING.md) and [`AGENTS.md`](AGENTS.md).
 
-| Service | URL | Notes |
-| --- | --- | --- |
-| Frontend (dev) | http://localhost:5230 | Vite, bound to localhost only, strict port |
-| Engine | http://127.0.0.1:8230 | FastAPI; API under `/api`, MCP at `/mcp`; serves the built app in `./formpath serve` |
-| Preview | http://localhost:5231 | `vite preview` of the production build |
-| Desktop engine | random loopback port | picked by the OS, read by the Tauri shell from the startup line |
+## Repository
 
-### Drawing with an agent
+`frontend/` (Vite, vanilla TypeScript) · `backend/` (FastAPI engine) · `src-tauri/` (desktop shell) · `setup/` (one script per task) · `docs/` (manual and parity)
 
-```bash
-./formpath agents install     # Claude Code, Codex and Cursor, for your user account
-```
+Docs: [`.docs/wiki`](.docs/wiki) · Agents: [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) · Contributing: [`.docs/BRANCHING.md`](.docs/BRANCHING.md)
 
-In this repository `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` already point at `./formpath mcp`.
+---
 
-## Configuration
+## Maintainers
 
-The engine reads `backend/.env`, which is never committed; `backend/.env.example` is the template.
+| Maintainer | Role |
+|---|---|
+| [@nodemode-ai](https://github.com/nodemode-ai) | Owner |
+| [@gbarnai](https://github.com/gbarnai) | Co-owner |
 
-| Variable | Purpose |
-| --- | --- |
-| `FORMPATH_HOST` | Engine bind address |
-| `FORMPATH_PORT` | Engine port; `0` picks a free port (desktop) |
-| `FORMPATH_DATA_DIR` | Project library and exports root (default `~/Formpath`) |
-| `FORMPATH_CORS_ORIGINS` | Allowed browser origins for the dev frontend |
-| `FORMPATH_DIST` | Built frontend folder the engine serves |
-| `FORMPATH_TARGET` | Target triple override for the frozen sidecar |
+Code owners are set in [`.github/CODEOWNERS`](.github/CODEOWNERS).
 
-## Architecture
+## License
 
-```text
-formpath/
-├── formpath, formpath.bat           root dispatcher: install, boot, build, serve, desktop, doctor, mcp, agents
-├── formpath_oc_install(.bat)        one-command install
-├── setup/                          one script per task, each with a .bat twin; lib.sh holds shared helpers
-├── assets/                         repo art (README logo, desktop icon source), not app runtime files
-├── backend/                        FastAPI engine service
-│   ├── app/routers/                system, projects, fonts, io, mcp, llm, plugins, nodemode
-│   ├── app/services/               project_format, sessions, fonts, llm, secrets, outbound
-│   └── formpath_engine.py           PyInstaller entry for the desktop sidecar
-├── frontend/                       Vite app, vanilla TypeScript
-│   ├── src/engine/                 document engine, no DOM: nodes, history, render, geometry, kernel, effects
-│   ├── src/tools/                  tool modules registered through src/extensions/registry.ts
-│   ├── src/io/                     .fpth, SVG, PDF, raster, trace, fonts, the engine client
-│   ├── src/automation/             the agent bridge that runs every MCP tool
-│   ├── src/ui/                     shell, stage, panels, menus, dialogs, icons, themes
-│   └── src/styles/                 NodeMode tokens and component sheets
-├── src-tauri/                      Tauri 2 shell: sidecar spawn, port handshake, window sizing, updater
-├── docs/                           MANUAL.md (also the in-app Help), PARITY.md
-├── .docs/                          BRANCHING.md and the wiki source
-├── .github/workflows/              ci, wiki publish, desktop release matrix
-└── .claude/skills/                 formpath-skillset (code) and formpath-harness (drawing over MCP)
-```
+FormPath is licensed under the Apache License 2.0 ([`LICENSE`](LICENSE), SPDX `Apache-2.0`). Copyright 2026 NodeAgentc, Inc. Third-party notices: [`NOTICE.md`](NOTICE.md).
 
-## Development
-
-Branch model: `main` plus short-lived work branches, see `.docs/BRANCHING.md`. Docs live in `.docs/wiki/` and publish to the GitHub wiki on merge. Contributions follow the dev-rules laws: single-region hand edits, zero DOM flash or re-render, no emoji, no em dashes, near-zero comments with decisions in `frontend/HASHOUT_LOG.md` and `backend/HASHOUT_LOG.md`. `./formpath check` typechecks and builds the frontend and self-checks the engine.
-
-## Status
-
-Release history: `CHANGELOG.md`. What is not verified yet:
-
-- **Desktop bundles.** The Tauri shell compiles against the Linux webview packages; the macOS and Windows bundles, signing and the updater have not been built yet. The first `v0.9.0` tag runs the release workflow.
-- **Parity.** 65.5 of 76 capability rows (55 Full, 21 Partial, 0 None), 86.2 percent, from a seventh independent audit of the code at v0.44.0 that drove every row through the interface with real mouse and keyboard input. Every row is built; the Partial rows are interface defects it found by using the app (layer rename, intersection snap in the tools, the Smooth tool, colour fields, swatch editing, gradient mesh, the Effect Gallery, asset export settings, saving after a linked file changed, the print preview and others), listed in `docs/PARITY.md`. Earlier audits read code and graded higher (73 of 76 at v0.41.0). The 12 plan additions grade 11 of 12.
-- **PDF import.** Encrypted PDFs, `.ai` files saved without PDF compatibility, CCITT and JBIG2 scanned images, mesh shadings and tiling patterns do not come in; the open reports what it left out.
-
-## Contributors
-
-- **nodemode-ai** · owner and build
-
-## Licensing
-
-Apache License 2.0. Copyright 2026 NodeAgentc, Inc. See `LICENSE` and `NOTICE.md`.
-
-## Trademarks
-
-Adobe and Illustrator are either registered trademarks or trademarks of Adobe in the United States and/or other countries. formpath is not affiliated with or endorsed by Adobe. The names are used only to describe file compatibility (`.ai`, `.eps`).
+<sub>Adobe and Illustrator are either registered trademarks or trademarks of Adobe in the United States and/or other countries. FormPath is not affiliated with or endorsed by Adobe. The names are used only to describe file compatibility (`.ai`, `.eps`).</sub>
