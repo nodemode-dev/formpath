@@ -1,6 +1,6 @@
 [package]
 name = "formpath"
-version = "0.52.8"
+version = "0.52.9"
 description = "formpath desktop shell"
 authors = ["nodemode-ai"]
 license = "Apache-2.0"
