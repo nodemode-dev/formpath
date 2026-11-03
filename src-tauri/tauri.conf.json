@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "formpath",
+  "productName": "FormPath",
   "version": "0.52.8",
   "identifier": "ai.nodemode.formpath",
   "build": {
@@ -10,7 +10,7 @@
     "windows": [
       {
         "label": "splash",
-        "title": "formpath",
+        "title": "FormPath",
         "url": "splash.html",
         "width": 360,
         "height": 200,
