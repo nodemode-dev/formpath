@@ -13,7 +13,7 @@ frontend/
 ├── boot_frontend(.bat)         dev server launcher
 ├── oc_install(.bat)            npm install
 ├── public/
-│   ├── favicon.svg, favicon.ico, apple-touch-icon.png   app icon renders
+│   ├── favicon.png, favicon.ico, apple-touch-icon.png   app icon renders
 │   └── splash.html             desktop splash window
 └── src/
     ├── main.ts                 entry, calls startApp
