@@ -2,6 +2,15 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.53.0 · 2026-11-03
+
+- The README follows the Form family layout, with the project's own screenshots.
+
+## 0.52.9 · 2026-11-03
+
+- The app icon is the unified family icon on the desktop, in the browser tab and in the README, and the compiled app, its windows and its page titles are named FormPath.
+- The repository lists its code owners.
+
 ## 0.52.8 · 2026-10-31
 
 - The Windows desktop app no longer opens to a blank window on PCs where an installer set the `.js` file type to `text/plain` in the registry: the engine now serves scripts and stylesheets with their real types.
