@@ -4428,3 +4428,10 @@ Sets are stored through `api.saveActionSet(s.name, ...)` and removed through `de
 - logged: v0.53.1 · 2026-11-10
 
 Each call appended a `.cv-dd-pop` to `#overlay-root`, a capture `pointerdown` listener to `document` and a `MutationObserver`, none ever removed. `FormDialog.ask` rebuilds its body on every open and Asset Export refills its rows on every asset pick, so popups, document listeners and observers (each keeping its detached select alive) grew without bound. `enhanceSelect` now returns `() => { pop.remove(); removeEventListener; mo.disconnect(); }`; FormDialog runs its selects' disposers before clearing the body, and Asset Export runs a row's disposer when the row is deleted and all of them before a refill. Callers that build their selects once ignore the return value. Checked with `npx tsc --noEmit`; the popup count was not checked in the window.
+
+### src/ui/stage.ts · docPoint follows the view rotation
+- refers-to: Stage.docPoint; src/app.ts :: stage contextmenu, drop handler, RecolorDialog stagePoint
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`docPoint` converted client coordinates with `viewport.toDoc` alone, without the `Stage.unturn` step `pointer()` applies for the CSS-rotated canvases, so in a rotated view right-click selected and acted on the object at the un-rotated spot, drops landed at the wrong point and the Recolor eyedropper sampled the wrong place. It now unturns by `v.rotation` first; at rotation 0 `unturn` returns the point as it is. Checked with `npx tsc --noEmit`; not run in a rotated view.

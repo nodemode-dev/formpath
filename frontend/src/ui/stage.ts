@@ -807,7 +807,8 @@ export class Stage {
     const r = this.rect ?? this.host.getBoundingClientRect();
     const v = this.engine.current?.viewport;
     if (!v || clientX < r.left || clientY < r.top || clientX > r.right || clientY > r.bottom) return null;
-    return v.toDoc(clientX - r.left, clientY - r.top);
+    const s = Stage.unturn(clientX - r.left, clientY - r.top, r.width, r.height, v.rotation);
+    return v.toDoc(s.x, s.y);
   }
 
   private setCursor(c: string): void {
