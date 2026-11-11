@@ -122,7 +122,7 @@ export class AgentBridge {
             await api.mcpResult(secret, item.id, { allowed: yes });
             continue;
           }
-          const result = this.on || item.inapp === true ? await this.run(item.name, item.arguments ?? {}) : fail('formpath stopped taking requests.');
+          const result = this.on || item.inapp === true ? await this.run(item.name, item.arguments ?? {}, 'loop') : fail('formpath stopped taking requests.');
           await api.mcpResult(secret, item.id, result);
         } else if (status !== 204) await sleep(2000);
       } catch { await sleep(2000); }
@@ -683,11 +683,12 @@ export class AgentBridge {
     return { units: u, scale: typeof a.drawing_scale === 'number' && a.drawing_scale > 0 ? a.drawing_scale : undefined, layout: typeof a.layout === 'string' ? a.layout : undefined, merge: typeof a.merge_layers === 'boolean' ? a.merge_layers : place, fit: a.fit_artboard === true ? 'artboard' : undefined };
   }
 
-  async run(name: string, a: Record<string, unknown>): Promise<McpResult> {
+  async run(name: string, a: Record<string, unknown>, from: 'loop' | 'plugin' | 'assistant' = 'plugin'): Promise<McpResult> {
     const e = this.engine;
     const num = (k: string, d: number): number => (typeof a[k] === 'number' && Number.isFinite(a[k]) ? a[k] as number : d);
     const str = (k: string, d = ''): string => (typeof a[k] === 'string' ? a[k] as string : d);
     const has = (k: string): boolean => a[k] !== undefined && a[k] !== null;
+    if (from !== 'loop' && (name.startsWith('__') || /^(open_file|save_project|export_file|place_image|links)$/.test(name) || (name === 'variables' && ['export', 'show', 'load'].includes(str('action', 'list'))) || (name === 'actions' && str('action', 'list') === 'batch'))) return fail(`${name}${name === 'variables' || name === 'actions' ? ` ${str('action')}` : ''} reads or writes files, which only outside agents can do.`);
     const step = name !== 'undo' && name !== 'redo';
     if (step) e.beginStep();
     try {

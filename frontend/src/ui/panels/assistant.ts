@@ -74,7 +74,7 @@ export class AssistantPanel {
           let args: Record<string, unknown> = {};
           try { args = JSON.parse(call.arguments || '{}') as Record<string, unknown>; } catch { }
           const c = this.card(call.name, args);
-          const result: McpResult = this.stopped ? { content: [{ type: 'text', text: 'Stopped by the user.' }], isError: true } : /^(open_file|save_project|export_file|place_image|links)$/.test(call.name) ? { content: [{ type: 'text', text: `${call.name} works for outside agents only; in the assistant, ask the person to use the File menu.` }], isError: true } : await this.bridge.run(call.name, args);
+          const result: McpResult = this.stopped ? { content: [{ type: 'text', text: 'Stopped by the user.' }], isError: true } : /^(open_file|save_project|export_file|place_image|links|__.*)$/.test(call.name) ? { content: [{ type: 'text', text: `${call.name} works for outside agents only; in the assistant, ask the person to use the File menu.` }], isError: true } : await this.bridge.run(call.name, args, 'assistant');
           const said = result.content.map((x) => (x.type === 'text' ? x.text : '[an image of the art: images cannot be passed back here]')).join('\n');
           setText(c.querySelector('.cv-assistant-result') as HTMLElement, said.slice(0, 600));
           c.classList.toggle('is-error', !!result.isError);

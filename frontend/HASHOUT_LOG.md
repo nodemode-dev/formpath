@@ -4190,3 +4190,10 @@ The bar is now flat in formvis's order and widths: the history and zoom tools (u
 - logged: v0.52.0 · 2026-10-23
 
 The operation (Merge, Punch or Delete) comes from the Operation choice in the Shaper options bar (Merge by default), switched while Alt (Punch) or Shift (Delete) is held, as Shape Crafter takes Alt for erasing. `shaperScribble(g, stroke, op)` takes the operation as a parameter; the stroke only picks which cells it touches. Merge needs two or more touched cells, Punch cuts the touched cells covered by two or more shapes, Delete removes the topmost shape of each touched cell. An operation that does not fit what was touched changes nothing and the status line says so; the operation is never chosen from cell counts or location. The agent bridge and MCP tool `shaper` take `operation` as a required argument for scribble. Comments removed from code (kept here): the operation is always the caller's choice; action 'none' means the operation did not fit and nothing changed, null means the scribble touched no shape.
+
+### src/automation/agent-bridge.ts · file tools only for outside agents
+- refers-to: AgentBridge.run (`from`), AgentBridge.loop; src/ui/panels/assistant.ts :: tool call; src/plugins/host.ts :: case 'call'
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Plug-ins and the in-app assistant were kept from file tools only by a regex of the five public names, while `run` also answers the internal `__open`, `__place`, `__project` and `__export` (meant for the backend loop) and `variables` and `actions` have file actions. A plug-in posting `__place` with `link: true` and an absolute path read any file the engine serves; `variables export` and `actions batch` wrote into any folder. `run(name, args, from)` now takes the caller, `'plugin'` by default; only `loop()` passes `'loop'`. Any other caller is refused names starting with `__`, the five public file tools, `variables` export, show and load (show and load fetch image variables by path) and `actions` batch. The assistant passes `'assistant'` and its own regex also refuses `__` names. Checked with `npx tsc --noEmit`; not run with a plug-in in the window.
