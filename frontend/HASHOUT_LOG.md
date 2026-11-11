@@ -4463,3 +4463,10 @@ Each call appended a `.cv-dd-pop` to `#overlay-root`, a capture `pointerdown` li
 - logged: v0.53.1 · 2026-11-10
 
 `WINDOW_ONLY` named `preferences` and `quit` and `RISKY` named `revert`, `close-all`, `delete-library` and `batch`; none of these ids exist. Preferences is `settings`, so agents could open it, and Batch is `action-batch`, so `list_commands` did not say undo cannot reverse it. Now `WINDOW_ONLY` adds `settings` and `manage-plugins` and `RISKY` is `clear-recent`, `action-batch` and `package` (which writes a folder). Checked with `npx tsc --noEmit`; not run with an agent.
+
+### src/ui/layers.ts · a released press drops the row drag
+- refers-to: LayersPanel.bind :: rows pointermove
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+A press on a row that left the list sideways (under 5 px vertically) and was released outside it left `this.drag` set, since no capture was taken yet and `pointerup` never reached the rows. A later hover turned it into a moving drag with a drop line, and the `pointerup` of a click on another row's eye or lock button ran `end()` and moved the old ids. `pointermove` now clears the drag and the line when `ev.buttons & 1` is off, as `Dock.move` does. Checked with `npx tsc --noEmit`; not run in the window.

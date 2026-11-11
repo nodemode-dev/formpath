@@ -193,6 +193,7 @@ export class LayersPanel {
     this.rows.addEventListener('pointermove', (ev) => {
       const d = this.drag;
       if (!d) return;
+      if (!(ev.buttons & 1)) { this.drag = null; this.line.classList.remove('is-shown', 'is-inside'); return; }
       if (!d.moving && Math.abs(ev.clientY - d.y0) < 5) return;
       if (!d.moving) { try { this.rows.setPointerCapture(ev.pointerId); } catch { /* pointer already gone */ } }
       d.moving = true;
