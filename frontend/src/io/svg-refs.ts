@@ -265,7 +265,7 @@ export function markers(c: RefCtx, inp: MarkerInput, depth: number): MarkerOut {
     const id = v.role === 'start' ? refs.start : v.role === 'end' ? refs.end : refs.mid;
     if (!id) continue;
     const mk = c.ids.get(id);
-    if (!mk || local(mk) !== 'marker') continue;
+    if (!mk || local(mk) !== 'marker' || c.stack.includes(mk)) continue;
     const mw = c.len(mk.getAttribute('markerWidth') ?? undefined, 3), mh = c.len(mk.getAttribute('markerHeight') ?? undefined, 3);
     if (!(mw > 0 && mh > 0)) continue;
     const vbRaw = nums(mk.getAttribute('viewBox')), vb = vbRaw.length === 4 && vbRaw.every(Number.isFinite) && vbRaw[2] > 0 && vbRaw[3] > 0 ? vbRaw : null;
@@ -284,6 +284,7 @@ export function markers(c: RefCtx, inp: MarkerInput, depth: number): MarkerOut {
     const T: Mat = [co * units, si * units, -si * units, co * units, v.p.x, v.p.y];
     const st = c.styleAt(mk);
     c.setContext(inp.fillValue, inp.strokeValue);
+    c.stack.push(mk);
     try {
       if (single && inp.hasStroke && !(v.role === 'mid') && ((v.role === 'end' && (orient === 'auto' || orient === 'auto-start-reverse')) || (v.role === 'start' && orient === 'auto-start-reverse')) && inp.strokeWidth > 0) {
         const probe: VNode[] = [];
@@ -307,7 +308,7 @@ export function markers(c: RefCtx, inp: MarkerInput, depth: number): MarkerOut {
         if (spill) { out.art.push(group([...kids, pathNode(vp)], true, 'Marker')); continue; }
       }
       out.art.push(group(kids, false, 'Marker'));
-    } finally { c.setContext(undefined, undefined); }
+    } finally { c.stack.pop(); c.setContext(undefined, undefined); }
   }
   return out;
 }

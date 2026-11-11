@@ -55,7 +55,7 @@ export class NewDocumentDialog extends Dialog {
     this.units.addEventListener('change', () => { const to = this.units.value as Units, k = UNIT_K[this.units0] / UNIT_K[to]; this.w.value = String(Math.round(Number(this.w.value) * k * 100) / 100); this.h.value = String(Math.round(Number(this.h.value) * k * 100) / 100); this.units0 = to; });
     this.button('Cancel', 'ghost', () => this.close());
     this.button('Create', 'primary', () => this.create());
-    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.create(); } });
+    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); this.create(); } });
   }
 
   preset(id: string): void {
@@ -211,7 +211,7 @@ export class SettingsDialog extends Dialog {
       this.sections.set(name, pg);
     };
     const check = (key: keyof Prefs, label: string): HTMLElement => { const c = el<HTMLInputElement>('<input type="checkbox">'); c.setAttribute('aria-label', label); c.addEventListener('change', () => this.change({ [key]: c.checked } as Partial<Prefs>)); this.ctl[key] = c; return row(label, c); };
-    const num = (key: keyof Prefs, label: string, min: number, max: number, step = 1): HTMLElement => { const c = numberInput(min, max, step); c.setAttribute('aria-label', label); c.addEventListener('change', () => { const v = Number(c.value); if (Number.isFinite(v)) this.change({ [key]: Math.min(max, Math.max(min, v)) } as Partial<Prefs>); }); c.addEventListener('keydown', (e) => e.stopPropagation()); this.ctl[key] = c; return row(label, c); };
+    const num = (key: keyof Prefs, label: string, min: number, max: number, step = 1): HTMLElement => { const c = numberInput(min, max, step); c.setAttribute('aria-label', label); c.addEventListener('change', () => { const v = c.value.trim() === '' ? NaN : Number(c.value); if (!Number.isFinite(v)) { setValue(c, String(this.prefs[key])); return; } this.change({ [key]: Math.min(max, Math.max(min, v)) } as Partial<Prefs>); }); c.addEventListener('keydown', (e) => e.stopPropagation()); this.ctl[key] = c; return row(label, c); };
     const sel = (key: keyof Prefs, label: string, choices: ReadonlyArray<readonly [string, string]>): HTMLElement => { const s = selectOf(choices); s.setAttribute('aria-label', label); s.addEventListener('change', () => this.change({ [key]: key === 'recoverySeconds' ? Number(s.value) : s.value } as Partial<Prefs>)); this.ctl[key] = s; return row(label, s); };
     const color = (key: 'guideColor' | 'gridColor', label: string): HTMLElement => { const c = el<HTMLInputElement>('<input class="cv-input" type="color">'); c.setAttribute('aria-label', label); c.addEventListener('input', () => this.change({ [key]: c.value } as Partial<Prefs>)); const b = el<HTMLButtonElement>('<button class="cv-btn" type="button">Theme colour</button>'); b.addEventListener('click', () => this.change({ [key]: '' } as Partial<Prefs>)); this.ctl[key] = c; return row(label, c, b); };
     const reset = el<HTMLButtonElement>('<button class="cv-btn cv-btn-danger" type="button">Reset All Preferences...</button>');
@@ -472,7 +472,9 @@ export class ShortcutsDialog extends Dialog {
 
   show(): void { this.capturing = null; this.search.value = ''; setText(this.note, ''); this.render(); this.open(); }
 
-  private save(): void { savePrefs({ ...loadPrefs(), shortcuts: this.commands.overrides() }); }
+  onSaved: (() => void) | null = null;
+
+  private save(): void { savePrefs({ ...loadPrefs(), shortcuts: this.commands.overrides() }); this.onSaved?.(); }
 
   private capture(e: KeyboardEvent): void {
     if (!this.capturing || !this.isOpen) return;
@@ -727,7 +729,7 @@ export class ExportDialog extends Dialog {
     this.scope.addEventListener('change', () => this.sync());
     this.range.addEventListener('input', () => setClass(this.range, 'is-invalid', !parseArtboardRange(this.range.value, this.count, this.artboard)));
     this.button('Cancel', 'ghost', () => this.close());
-    this.go = this.button('Export', 'primary', () => { if (!parseArtboardRange(this.range.value, this.count, this.artboard)) { this.range.focus(); return; } const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
+    this.go = this.button('Export', 'primary', () => { if (this.scope.value === 'artboard' && this.format.value !== 'dxf' && this.format.value !== 'dwg' && !parseArtboardRange(this.range.value, this.count, this.artboard)) { this.range.focus(); return; } const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
     this.onClose = () => { const r = this.resolve; this.resolve = null; r?.(null); };
     this.quality.value = '92';
   }

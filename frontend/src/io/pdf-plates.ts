@@ -2,7 +2,7 @@ import { childrenOf } from '../engine/doc';
 import { platesOf, type Plate } from '../engine/inks';
 import type { Mat, PathData, Project, VNode } from '../engine';
 import { outlineText } from './fonts';
-import { deflate, Painter, PdfFile, PDF_MAX_SIDE, useResources } from './pdf';
+import { deflate, Painter, PdfFile, PDF_MAX_SIDE } from './pdf';
 import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
 import { PlatePaint } from './pdf-plate-map';
 import { inCopies, sheetPages } from './pdf-sheet';
@@ -37,7 +37,7 @@ export async function exportPlates(p: Project, o: PlateOptions): Promise<Blob> {
   for (const s of p.doc.symbols) await visit(s.art, true);
   if (plans.size) await live.build(pdf, deflate);
   const res = pdf.reserve(), pagesId = pdf.reserve();
-  useResources(res);
+  pdf.res = res;
   const ppi = Math.max(36, Math.min(1200, o.dpi));
   const painters = new Map<string, { painter: Painter; plate: PlatePaint; info: Plate }>();
   for (const info of plates) {

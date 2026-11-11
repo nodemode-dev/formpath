@@ -150,7 +150,7 @@ export function paintStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, raw
   return patternStyle(ctx, rc, p.pattern, p.xf, alpha);
 }
 
-const patternTiles = new Map<string, { key: string; def: PatternDef; canvas: HTMLCanvasElement | OffscreenCanvas; scale: number }>();
+const patternTiles = new Map<string, { key: string; def: PatternDef; canvas: HTMLCanvasElement | OffscreenCanvas; sx: number; sy: number }>();
 function patternStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, id: string, xf: Mat, alpha: number): Style | null {
   const def = rc.doc.patterns.find((p) => p.id === id);
   if (!def || def.tile.w <= 0 || def.tile.h <= 0) return null;
@@ -160,17 +160,18 @@ function patternStyle(ctx: CanvasRenderingContext2D, rc: RenderContext, id: stri
   const stamp = key;
   if (!tile || tile.key !== stamp || tile.def !== def) {
     const l = patternLattice(def);
-    const w = Math.ceil(l.w * scale), h = Math.ceil(l.h * scale);
-    const { canvas, ctx: t } = canvas2d(Math.min(4096, w), Math.min(4096, h));
-    t.scale(scale, scale);
+    const w = Math.min(4096, Math.ceil(l.w * scale)), h = Math.min(4096, Math.ceil(l.h * scale));
+    const sx = w / l.w, sy = h / l.h;
+    const { canvas, ctx: t } = canvas2d(w, h);
+    t.scale(sx, sy);
     t.translate(-def.tile.x, -def.tile.y);
     for (const o of latticeCopies(def, 1)) { t.save(); t.translate(o.x, o.y); renderNode(t, def.art, { ...rc, scale }); t.restore(); }
-    tile = { key: stamp, def, canvas, scale };
+    tile = { key: stamp, def, canvas, sx, sy };
     patternTiles.set(def.id, tile);
   }
   const pat = ctx.createPattern(tile.canvas as CanvasImageSource, 'repeat');
   if (!pat) return null;
-  const m = new DOMMatrix([xf[0], xf[1], xf[2], xf[3], xf[4], xf[5]]).multiply(new DOMMatrix([1 / tile.scale, 0, 0, 1 / tile.scale, def.tile.x, def.tile.y]));
+  const m = new DOMMatrix([xf[0], xf[1], xf[2], xf[3], xf[4], xf[5]]).multiply(new DOMMatrix([1 / tile.sx, 0, 0, 1 / tile.sy, def.tile.x, def.tile.y]));
   pat.setTransform(m);
   void alpha;
   return pat;

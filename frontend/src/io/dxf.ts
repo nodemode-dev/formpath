@@ -36,7 +36,7 @@ export function parseDxf(text: string): DxfFile {
   for (let i = 0; i + 1 < lines.length; i += 2) {
     const code = parseInt(lines[i].trim(), 10);
     if (!Number.isFinite(code)) { i--; continue; }
-    pairs.push([code, lines[i + 1].replace(/\s+$/, '')]);
+    pairs.push([code, lines[i + 1].replace(/\s+$/, '').replace(/\\U\+([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))]);
   }
   if (!pairs.some(([k, v]) => k === 0 && v === 'SECTION')) throw new Error('This file is not a readable DXF.');
   const file: DxfFile = { version: '', units: 'unitless', metric: false, layers: new Map(), styles: new Map(), blocks: new Map(), ents: [], layouts: ['Model'] };
@@ -238,7 +238,8 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
     if (w < 0) w = 25;
     return Math.max(0.25, (w / 100) * (72 / 25.4));
   };
-  const ocs = (e: Ent): Mat => (gn(e, 230, 1) < 0 ? [-1, 0, 0, 1, 0, 0] : [1, 0, 0, 1, 0, 0]);
+  const wcs = new Set(['LINE', 'SPLINE', 'ELLIPSE', '3DFACE', 'LEADER', 'MTEXT']);
+  const ocs = (e: Ent): Mat => (gn(e, 230, 1) < 0 && !wcs.has(e.type) ? [-1, 0, 0, 1, 0, 0] : [1, 0, 0, 1, 0, 0]);
   const push = (e: Ent, ctx: Ctx, d: PathData, mode: 'stroke' | 'fill' | 'both', extra?: { width?: number; even?: boolean; paint?: VNode['ap']['items'][number]['paint'] }): void => {
     if (!d.length) return;
     const m = mul(ctx.m, ocs(e)), dd = transformPath(d, m), col = colorOf(e, ctx), items0: VNode['ap']['items'] = [];
@@ -302,7 +303,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
           const cx = gn(e, 10), cy = gn(e, 20), ax = gn(e, 11), ay = gn(e, 21), ratio = gn(e, 40, 1), t0 = gn(e, 41, 0);
           let t1 = gn(e, 42, Math.PI * 2);
           while (t1 <= t0) t1 += Math.PI * 2;
-          const full = Math.abs(t1 - t0 - Math.PI * 2) < 1e-6, M: Mat = [ax, ay, -ay * ratio, ax * ratio, cx, cy];
+          const full = Math.abs(t1 - t0 - Math.PI * 2) < 1e-6, M: Mat = gn(e, 230, 1) < 0 ? [ax, ay, ay * ratio, -ax * ratio, cx, cy] : [ax, ay, -ay * ratio, ax * ratio, cx, cy];
           push(e, ctx, full ? transformPath(ellipsePath(-1, -1, 2, 2), M) : transformPath([{ closed: false, pts: arcSegmentPath(0, 0, 1, 1, t0, t1) }], M), 'stroke');
           break;
         }
@@ -322,7 +323,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
         case '3DFACE': push(e, ctx, [{ closed: true, pts: [0, 1, 2, 3].map((k) => anchor(gn(e, 10 + k), gn(e, 20 + k))) }], 'stroke'); break;
         case 'TEXT': case 'ATTDEF': {
           if (e.type === 'ATTDEF') break;
-          const h = gn(e, 72, 0), v = gn(e, 73, 0), height = gn(e, 40, 2.5), useAlign = (h !== 0 || v !== 0) && has(e, 11);
+          const h = gn(e, 72, 0), v = gn(e, 73, 0), height = gn(e, 40, 2.5), useAlign = (h !== 0 || v !== 0) && h !== 3 && h !== 5 && has(e, 11);
           const at = useAlign ? { x: gn(e, 11), y: gn(e, 21) } : { x: gn(e, 10), y: gn(e, 20) };
           const dy = v === 2 ? -height / 2 : v === 3 ? -height : v === 1 ? height * 0.25 : 0;
           const rot = gn(e, 50, 0), ra = (rot * Math.PI) / 180;
@@ -348,22 +349,22 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
             const type = next(92);
             if (type & 2) {
               const hb = next(72); next(73);
-              const n = next(93), vs: Array<{ p: Pt; b: number }> = [];
+              const n = Math.min(next(93), c.length - k), vs: Array<{ p: Pt; b: number }> = [];
               for (let v = 0; v < n; v++) { const x = next(10), y = next(20); let b = 0; if (hb && c[k]?.[0] === 42) b = parseFloat(c[k++][1]) || 0; vs.push({ p: { x, y }, b }); }
               const sp = polyPath(vs, true);
               if (sp) d.push(sp);
             } else {
-              const n = next(93), pts: Anchor[] = [];
+              const n = Math.min(next(93), c.length - k), pts: Anchor[] = [];
               for (let ed = 0; ed < n; ed++) {
                 const et = next(72);
                 if (et === 1) { const a = { x: next(10), y: next(20) }, b = { x: next(11), y: next(21) }; joinAnchors(pts, [anchor(a.x, a.y), anchor(b.x, b.y)]); }
                 else if (et === 2) { const cx = next(10), cy = next(20), r = next(40), a0 = next(50), a1 = next(51), ccw = next(73); let s = (a0 * Math.PI) / 180, t = (a1 * Math.PI) / 180; if (!ccw) { s = -s; t = -t; } while (ccw ? t <= s : t >= s) t += ccw ? Math.PI * 2 : -Math.PI * 2; joinAnchors(pts, arcSegmentPath(cx, cy, r, r, s, t)); }
                 else if (et === 3) { const cx = next(10), cy = next(20), ax = next(11), ay = next(21), ratio = next(40), a0 = next(50), a1 = next(51), ccw = next(73); let s = (a0 * Math.PI) / 180, t = (a1 * Math.PI) / 180; if (!ccw) { s = -s; t = -t; } while (ccw ? t <= s : t >= s) t += ccw ? Math.PI * 2 : -Math.PI * 2; joinAnchors(pts, transformPath([{ closed: false, pts: arcSegmentPath(0, 0, 1, 1, s, t) }], [ax, ay, -ay * ratio, ax * ratio, cx, cy])[0].pts); }
                 else if (et === 4) {
-                  const deg = next(94); next(73); next(74); const nk = next(95), nc = next(96), kn: number[] = [], cp: Pt[] = [], ws: number[] = [];
+                  const deg = next(94); next(73); next(74); const nk = Math.min(next(95), c.length - k), nc = Math.min(next(96), c.length - k), kn: number[] = [], cp: Pt[] = [], ws: number[] = [];
                   for (let q = 0; q < nk; q++) kn.push(next(40));
                   for (let q = 0; q < nc; q++) { const x = next(10), y = next(20); cp.push({ x, y }); if (c[k]?.[0] === 42) ws.push(parseFloat(c[k++][1])); }
-                  if (c[k]?.[0] === 97) { const nf = parseInt(c[k++][1], 10); for (let q = 0; q < nf; q++) { next(11); next(21); } }
+                  if (c[k]?.[0] === 97) { const nf = Math.min(parseInt(c[k++][1], 10), c.length - k); for (let q = 0; q < nf; q++) { next(11); next(21); } }
                   const sp = bspline(deg, kn, cp, ws, false, []);
                   if (sp) joinAnchors(pts, sp.pts);
                 }
@@ -409,7 +410,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
             const local = mul(mul(mul([1, 0, 0, 1, gn(e, 10), gn(e, 20)], R), [1, 0, 0, 1, cI * dx, r * dy]), mul([sx, 0, 0, sy, 0, 0], [1, 0, 0, 1, -b.base.x, -b.base.y]));
             run(b.ents, { ...sub, m: mul(mul(ctx.m, ocs(e)), local) }, false);
           }
-          for (const at of attribs) if ((gn(at, 70, 0) & 1) === 0) { const h = gn(at, 72, 0), useAlign = h !== 0 && has(at, 11); text(at, ctx, textPlain(g(at, 1)), useAlign ? { x: gn(at, 11), y: gn(at, 21) } : { x: gn(at, 10), y: gn(at, 20) }, gn(at, 40, 2.5), gn(at, 50, 0), h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left'); }
+          for (const at of attribs) if ((gn(at, 70, 0) & 1) === 0) { const h = gn(at, 72, 0), useAlign = h !== 0 && h !== 3 && h !== 5 && has(at, 11); text(at, ctx, textPlain(g(at, 1)), useAlign ? { x: gn(at, 11), y: gn(at, 21) } : { x: gn(at, 10), y: gn(at, 20) }, gn(at, 40, 2.5), gn(at, 50, 0), h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left'); }
           break;
         }
         case 'POINT': skip('points'); break;
@@ -678,7 +679,7 @@ export async function exportDxf(p: Project, o: DxfExportOptions, outline: (n: Te
     w.splice(seedAt, ['9', '$HANDSEED', '5', w.seed]);
   }
   w.p(0, 'EOF');
-  return new Blob([w.text().replace(/\n/g, '\r\n')], { type: 'application/dxf' });
+  return new Blob([w.text().replace(/[^\x00-\x7e]/g, (ch) => `\\U+${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`).replace(/\n/g, '\r\n')], { type: 'application/dxf' });
 }
 
 function transformArt(n: VNode, m: Mat): VNode {

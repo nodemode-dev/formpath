@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/lib.sh"
 py="$FORMPATH_ROOT/backend/venv/bin/python"
+[ -x "$py" ] || py="$FORMPATH_ROOT/backend/venv/Scripts/python.exe"
 [ -x "$py" ] || py="$(fp_python)" || { fp_say "Python 3.12+ is required"; exit 1; }
 for a in "$@"; do
   [ "$a" = "--commands" ] && exec "$py" "$FORMPATH_ROOT/setup/command_counts.py" "$@"

@@ -40,6 +40,7 @@ import { PluginHost } from './plugins/host';
 import { registerBuiltinTools } from './tools';
 import { pendingShape, shapeAt } from './tools/draw';
 import { typeDefaults } from './tools/type';
+import { toolOrigin } from './tools/transform';
 import { editWidthPoint } from './ui/width-point-dialog';
 import { AboutDialog, ExportDialog, NewDocumentDialog, OpenDialog, ScreensDialog, SettingsDialog, ShortcutsDialog, type ExportChoice } from './ui/app-dialogs';
 import { brandMark } from './ui/brand';
@@ -1074,7 +1075,7 @@ export function startApp(): void {
 
   async function transformDialog(kind: 'move' | 'rotate' | 'scale' | 'reflect' | 'shear'): Promise<void> {
     if (!sel()) return;
-    const ids = engine.targetIds(), o = centerOfSel();
+    const ids = engine.targetIds(), o = (/^(rotate|reflect|scale|shear)$/.test(engine.tool) ? toolOrigin(engine) : null) ?? centerOfSel();
     const fields = {
       move: [{ kind: 'number', key: 'dx', label: 'Horizontal', value: 0, unit: 'pt' }, { kind: 'number', key: 'dy', label: 'Vertical', value: 0, unit: 'pt' }],
       rotate: [{ kind: 'number', key: 'angle', label: 'Angle', value: 0, unit: '°', min: -360, max: 360 }],
@@ -1976,6 +1977,7 @@ export function startApp(): void {
     void native.build().catch(() => undefined);
     for (const ev of ['active', 'doc', 'selection', 'history', 'tool'] as const) engine.on(ev, () => native.refresh());
     engine.on('projects', () => { void native.build().catch(() => undefined); });
+    shortcuts.onSaved = () => { void native.build().catch(() => undefined); };
   }
   contextMenu.setItems(['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-in-place', '-', 'group', 'ungroup', 'ungroup-all', 'isolate', '-', { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', 'transform-each', '-', 'reset-bounding-box'] }, { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', 'send-to-layer'] }, { label: 'Select', items: ['select-above', 'select-below'] }, '-', 'make-clip', 'release-clip', 'compound-make', 'create-outlines', 'outline-stroke', 'expand-appearance', '-', 'collect-layer', 'new-symbol', { label: 'Collect for Export', items: ['collect-single', 'collect-multiple'] }]);
   stageEl.addEventListener('contextmenu', (e) => {
@@ -2063,6 +2065,7 @@ export function startApp(): void {
     if (menubar.isOpen || contextMenu.isOpen) { if (e.key === 'Escape') { e.preventDefault(); menubar.close(); contextMenu.close(); } return; }
     const target = e.target instanceof Element ? e.target : null;
     if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (e.code === 'Space' && target?.matches(':focus-visible') && target.closest('button, [role="button"], [role="option"], [role="menuitem"], [role="tab"]')) return;
     if (e.code === 'Space' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (!e.repeat) stage.setSpace(true); return; }
     if (stage.toolKeydown(e)) { e.preventDefault(); return; }
     const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };

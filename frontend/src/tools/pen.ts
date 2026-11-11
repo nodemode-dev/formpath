@@ -204,7 +204,7 @@ registerTool({
     if (ev.key === 'Enter' || ev.key === 'Escape') { finish(ctx); return true; }
     return false;
   },
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); P.dragging = false; },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); P.dragging = false; P.closing = false; },
   overlay: (ctx, g) => {
     const e = ctx.engine, sp = draft(e), h = P.hover;
     if (!sp || !h || P.dragging) return;
@@ -293,6 +293,7 @@ registerTool({
     else { e.cancelDrag(); if (A.part === 'anchor') convertAnchor(e, A.id, A.index); }
     A.id = '';
   },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); A.id = ''; ctx.redraw(); },
 });
 
 interface CState { id: string | null; pts: Array<{ p: Pt; corner: boolean }>; hover: Pt | null }

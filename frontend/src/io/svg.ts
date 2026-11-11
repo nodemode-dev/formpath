@@ -40,6 +40,7 @@ class Writer {
   private patIds = new Map<string, string>();
   private patArts = new Map<string, string>();
   private ko = false;
+  readonly emitted = new Set<string>();
   constructor(private readonly p: Project, private readonly o: SvgOptions, private readonly images: Map<string, string>, private readonly outlines: Map<string, PathData>) {}
   get doc(): Doc { return this.p.doc; }
   id(prefix: string): string { this.n++; return `${prefix}${this.n}`; }
@@ -347,7 +348,7 @@ class Writer {
       case 'path': if (n.guide) return ''; return this.wrap(n, this.shape(n, effectPath(n.d, n.ap.effects), n.rule));
       case 'compound': return this.wrap(n, this.shape(n, effectPath(n.children.flatMap((c) => c.d), n.ap.effects), n.rule));
       case 'text': return this.wrap(n, this.text(n));
-      case 'image': { const href = this.images.get(n.src); return href ? this.wrap(n, `<image data-formpath-src="${esc(n.src)}" width="${n.w}" height="${n.h}" transform="${mat(n.xf, this.o.precision)}" preserveAspectRatio="none" href="${href}"/>`) : ''; }
+      case 'image': { const href = this.images.get(n.src); if (href) this.emitted.add(n.src); return href ? this.wrap(n, `<image data-formpath-src="${esc(n.src)}" width="${n.w}" height="${n.h}" transform="${mat(n.xf, this.o.precision)}" preserveAspectRatio="none" href="${href}"/>`) : ''; }
       case 'symbol': {
         const s = this.doc.symbols.find((x) => x.id === n.symbol), art = instanceArt(this.doc, n);
         if (!s || !art) return '';
@@ -389,9 +390,7 @@ export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     meta = `<metadata id="formpath-data">${btoa(bin)}</metadata>`;
-    const used = new Set<string>(), seen = (x: VNode): void => { if (x.kind === 'image') used.add(x.src); childrenOf(x)?.forEach(seen); };
-    p.doc.layers.forEach(seen);
-    const loose = [...textureImageKeys(p.doc)].filter((k) => !used.has(k) && images.has(k));
+    const loose = [...images.keys()].filter((k) => !w.emitted.has(k));
     if (loose.length) meta += `<g display="none">${loose.map((k) => `<image data-formpath-src="${esc(k)}" width="1" height="1" href="${images.get(k)}"/>`).join('')}</g>`;
   }
   const bg = typeof o.artboard === 'number' ? p.doc.artboards[o.artboard]?.bg : null;
@@ -441,8 +440,10 @@ function dataUrlToBlob(u: string): Blob | null {
   const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(u);
   if (!m) return null;
   const mime = m[1] ?? 'application/octet-stream';
-  if (m[2]) { const bin = atob(m[3]); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: mime }); }
-  return new Blob([decodeURIComponent(m[3])], { type: mime });
+  try {
+    if (m[2]) { const bin = atob(m[3]); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: mime }); }
+    return new Blob([decodeURIComponent(m[3])], { type: mime });
+  } catch { return null; }
 }
 
 export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImport> {
@@ -461,7 +462,8 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     } catch { }
   }
   const vb = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
-  const W = len(svg.getAttribute('width') ?? undefined, vb[2] || 612), H = len(svg.getAttribute('height') ?? undefined, vb[3] || 792);
+  const dim = (s: string | null, d: number): number => (s && !/(%|em|ex)\s*$/.test(s) ? len(s, d) : d);
+  const W = dim(svg.getAttribute('width'), vb[2] || 612), H = dim(svg.getAttribute('height'), vb[3] || 792);
   let root: Mat = [1, 0, 0, 1, 0, 0];
   if (vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0) root = [W / vb[2], 0, 0, H / vb[3], (-vb[0] * W) / vb[2], (-vb[1] * H) / vb[3]];
   const doc = newDoc(W, H, { title: name });
@@ -492,7 +494,7 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
   };
   const leftOut = new Set<string>(), patterns = new Map<string, PatternDef>(), patStack: Element[] = [];
   let paintCtx: { fill?: string; stroke?: string } = {};
-  const gradPaint = (ref: string, bboxOf: () => Rect, m: Mat): Paint | null => {
+  const gradPaint = (ref: string, bboxOf: () => Rect, m: Mat, uboxOf?: () => Rect | null): Paint | null => {
     const first = ids.get(ref);
     if (!first) return null;
     const chain: Element[] = [first];
@@ -503,15 +505,17 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     const stops = stopsEl.map((s) => { const st = { ...styleOf(s.getAttribute('style') ?? '') }; const off = s.getAttribute('offset') ?? '0'; const c = parseColor(st['stop-color'] ?? s.getAttribute('stop-color') ?? '#000') ?? { kind: 'rgb' as const, r: 0, g: 0, b: 0 }; return stop(off.endsWith('%') ? parseFloat(off) / 100 : parseFloat(off) || 0, c, parseFloat(st['stop-opacity'] ?? s.getAttribute('stop-opacity') ?? '1') * alphaOf(st['stop-color'] ?? s.getAttribute('stop-color') ?? undefined)); });
     if (stops.length < 2) return stops[0] ? solid(stops[0].color) : null;
     const user = attr('gradientUnits') === 'userSpaceOnUse', gt = parseTransform(attr('gradientTransform'));
-    const b = bboxOf();
+    const b = bboxOf(), ub = user ? null : uboxOf?.() ?? null;
+    const fr = (s: string | null, d: number): number => (s === null ? d : s.endsWith('%') ? parseFloat(s) / 100 : parseFloat(s));
+    const unit = (q: { x: number; y: number }): { x: number; y: number } => (ub ? apply(m, ub.x + q.x * ub.w, ub.y + q.y * ub.h) : { x: b.x + q.x * b.w, y: b.y + q.y * b.h });
     const P = (x: string | null, y: string | null, dx: number, dy: number): { x: number; y: number } => {
       const fx = x === null ? dx : x.endsWith('%') ? parseFloat(x) / 100 : parseFloat(x), fy = y === null ? dy : y.endsWith('%') ? parseFloat(y) / 100 : parseFloat(y);
       const q = apply(gt, fx, fy);
-      return user ? apply(m, q.x, q.y) : { x: b.x + q.x * b.w, y: b.y + q.y * b.h };
+      return user ? apply(m, q.x, q.y) : unit(q);
     };
     if (chain[0].nodeName === 'radialGradient') {
       const c = P(attr('cx'), attr('cy'), 0.5, 0.5), rr = attr('r'), rv = rr === null ? 0.5 : rr.endsWith('%') ? parseFloat(rr) / 100 : parseFloat(rr);
-      const edge = user ? (() => { const q = apply(gt, parseFloat(attr('cx') ?? '0') + rv, parseFloat(attr('cy') ?? '0')); return apply(m, q.x, q.y); })() : { x: c.x + rv * b.w, y: c.y };
+      const edge = user ? (() => { const q = apply(gt, parseFloat(attr('cx') ?? '0') + rv, parseFloat(attr('cy') ?? '0')); return apply(m, q.x, q.y); })() : ub ? P(String(fr(attr('cx'), 0.5) + rv), String(fr(attr('cy'), 0.5)), 0, 0) : { x: c.x + rv * b.w, y: c.y };
       const g = radialGradient(stops);
       return { type: 'gradient', gradient: { ...g, geom: { x1: c.x, y1: c.y, x2: edge.x, y2: edge.y } } };
     }
@@ -529,7 +533,7 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     if (u) {
       const pe = ids.get(u[1]);
       if (pe && pe.nodeName.toLowerCase() === 'pattern') return patternPaint(refCtx, pe, m, ubox ? ubox() : null, 0) ?? NONE;
-      const g = gradPaint(u[1], bbox, m);
+      const g = gradPaint(u[1], bbox, m, ubox);
       if (g) return g;
       const fb = v.replace(u[0], '').trim();
       const fc = fb && fb !== 'none' ? parseColor(fb === 'currentColor' ? '#000' : fb) : null;
@@ -550,9 +554,10 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     }
     return null;
   };
-  let imgN = 0;
+  let imgN = 0, visited = 0;
   const walkNode = (e: Element, inherited: Style, m0: Mat, out: VNode[], depth: number): void => {
     if (depth > 64) return;
+    if (++visited > 200000) { leftOut.add('The drawing expands to more than 200,000 elements; the rest was left out.'); return; }
     const tag = e.nodeName.toLowerCase();
     if (['defs', 'style', 'metadata', 'title', 'desc', 'clippath', 'mask', 'lineargradient', 'radialgradient', 'pattern', 'symbol', 'marker', 'filter', 'script'].includes(tag)) return;
     const st = { ...Object.fromEntries(Object.entries(inherited).filter(([k]) => INHERITED.has(k))), ...own(e) };
@@ -573,10 +578,14 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     if (tag === 'use') {
       const ref = ids.get((e.getAttribute('href') ?? e.getAttribute('xlink:href') ?? '').replace(/^#/, ''));
       if (!ref) return;
+      if (ref.contains(e) || patStack.includes(ref)) { leftOut.add('A use element that refers to itself was left out.'); return; }
       const um = mul(m, [1, 0, 0, 1, len(e.getAttribute('x') ?? undefined), len(e.getAttribute('y') ?? undefined)]);
       const kids: VNode[] = [];
-      if (ref.nodeName.toLowerCase() === 'symbol') { const sm = vbMat(ref, e.getAttribute('width') ?? ref.getAttribute('width'), e.getAttribute('height') ?? ref.getAttribute('height'), um); for (const c of Array.from(ref.children)) walk(c, st, sm, kids, depth + 1); }
-      else walk(ref, st, um, kids, depth + 1);
+      patStack.push(ref);
+      try {
+        if (ref.nodeName.toLowerCase() === 'symbol') { const sm = vbMat(ref, e.getAttribute('width') ?? ref.getAttribute('width'), e.getAttribute('height') ?? ref.getAttribute('height'), um); for (const c of Array.from(ref.children)) walk(c, st, sm, kids, depth + 1); }
+        else walk(ref, st, um, kids, depth + 1);
+      } finally { patStack.pop(); }
       if (kids.length && (opacity < 1 || blend !== 'normal')) out.push({ id: newId('g'), kind: 'group', clip: false, children: kids, opacity, blend, ap: { items: [], effects: [] } });
       else out.push(...kids);
       return;
@@ -709,8 +718,9 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
   for (const c of Array.from(svg.children)) walk(c, {}, root, top, 0);
   const groups = top.filter((n) => n.kind === 'group');
   const layers: LayerNode[] = [];
-  if (groups.length >= 1 && groups.length === top.length && groups.every((g) => g.name && (groups.length > 1 || (g.kind === 'group' && !g.clip && g.opacity === 1 && g.blend === 'normal' && !g.mask && !g.ap.effects.length)))) {
-    groups.forEach((g, i) => { const l = { ...doc.layers[0], id: newId('l'), name: g.name ?? `Layer ${i + 1}`, children: g.kind === 'group' ? g.children : [g], color: ['#4f80ff', '#ff4f4f', '#4fbf4f', '#4f4fff', '#ffd400'][i % 5] }; layers.push(l); });
+  const bare = (g: VNode): boolean => g.kind === 'group' && !g.clip && g.opacity === 1 && g.blend === 'normal' && !g.mask && !g.ap.effects.length;
+  if (groups.length >= 1 && groups.length === top.length && groups.every((g) => g.name && (groups.length > 1 || bare(g)))) {
+    groups.forEach((g, i) => { const l = { ...doc.layers[0], id: newId('l'), name: g.name ?? `Layer ${i + 1}`, children: g.kind === 'group' && bare(g) ? g.children : [g], color: ['#4f80ff', '#ff4f4f', '#4fbf4f', '#4f4fff', '#ffd400'][i % 5] }; layers.push(l); });
   } else layers.push({ ...doc.layers[0], name: 'Layer 1', children: top });
   doc.layers = layers;
   return { doc, assets, native: false, title: name, leftOut: [...leftOut] };

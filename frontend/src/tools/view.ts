@@ -20,6 +20,7 @@ registerTool({
   move: (ctx, p) => { if (!H.last) return; ctx.engine.pan(p.screen.x - H.last.x, p.screen.y - H.last.y); H.last = p.screen; },
   up: () => { H.last = null; },
   dblclick: (ctx) => ctx.engine.fitAll(),
+  cancel: () => { H.last = null; },
 });
 
 const RV = { on: false, start: 0, base: 0 };
@@ -29,16 +30,17 @@ registerTool({
   hint: () => 'Drag to turn the view; Shift snaps to 15 degrees. Double-click resets the view.',
   cursor: () => CURSORS.rotate,
   options: (e) => [{ kind: 'title', text: 'Rotate View' }, { kind: 'number', label: 'Angle', min: -360, max: 360, unit: '°', get: () => e.current?.viewport.rotation ?? 0, set: (v) => e.setViewRotation(v) }, { kind: 'button', label: 'Reset View', run: () => e.setViewRotation(0) }],
-  down: (ctx, p) => { const v = ctx.view(); RV.on = true; RV.start = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2); RV.base = ctx.engine.current?.viewport.rotation ?? 0; },
+  down: (ctx, p) => { const v = ctx.view(); RV.on = true; RV.base = ctx.engine.current?.viewport.rotation ?? 0; RV.start = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2) + (RV.base * Math.PI) / 180; },
   move: (ctx, p) => {
     if (!RV.on) return;
-    const v = ctx.view(), a = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2);
+    const v = ctx.view(), a = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2) + ((ctx.engine.current?.viewport.rotation ?? 0) * Math.PI) / 180;
     let deg = RV.base + ((a - RV.start) * 180) / Math.PI;
     if (p.shift) deg = Math.round(deg / 15) * 15;
     ctx.engine.setViewRotation(deg);
   },
   up: () => { RV.on = false; },
   dblclick: (ctx) => ctx.engine.setViewRotation(0),
+  cancel: () => { RV.on = false; },
 });
 
 const Z = { on: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 } };
@@ -60,6 +62,7 @@ registerTool({
   },
   dblclick: (ctx) => ctx.engine.zoomTo(1),
   overlay: (ctx, g) => { if (Z.on) marquee(ctx, g, Z.start, Z.cur); },
+  cancel: (ctx) => { Z.on = false; ctx.redraw(); },
 });
 
 export const ARTBOARD_PRESETS: ReadonlyArray<{ id: string; label: string; w: number; h: number }> = [
@@ -176,6 +179,7 @@ registerTool({
     }
     if (AB.mode === 'new') { marquee(ctx, g, AB.start, AB.cur); const r = dragRect(AB.start, AB.cur, false, false); hud(ctx, g, v.toScreen(AB.cur), [`W: ${unitLabel(e, r.w)}`, `H: ${unitLabel(e, r.h)}`]); }
   },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); AB.mode = null; ctx.redraw(); },
 });
 
 function abHandle(ctx: { engine: import('../engine').Engine; view(): import('../extensions/registry').ViewInfo }, screen: Pt): number {

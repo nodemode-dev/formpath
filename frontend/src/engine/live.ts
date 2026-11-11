@@ -311,14 +311,12 @@ export function meshGrid(r: Rect, rows: number, cols: number): Pt[] {
 function coonsFromShape(shape: PathData): ((u: number, v: number) => Pt) | null {
   const sp = shape[0];
   if (!sp || sp.pts.length < 3) return null;
-  const poly = flattenSub({ ...sp, closed: true }, 0.5);
+  const raw = flattenSub({ ...sp, closed: true }, 0.5), poly = signedAreaSub({ ...sp, closed: true }) > 0 ? raw : raw.slice().reverse();
   const b = pathBounds(shape);
   const corners = [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
   const idx = corners.map((c) => { let best = 0, bd = Infinity; poly.forEach((p, i) => { const d = dist(p, c); if (d < bd) { bd = d; best = i; } }); return best; });
   const sideOf = (a: number, z: number): Pt[] => { const out: Pt[] = []; let i = a; for (let guard = 0; guard <= poly.length; guard++) { out.push(poly[i]); if (i === z) break; i = (i + 1) % poly.length; } return out; };
-  const fwd = signedAreaSub({ ...sp, closed: true }) > 0;
-  const order = fwd ? [0, 1, 2, 3] : [0, 3, 2, 1];
-  const c = order.map((k) => idx[k]);
+  const c = idx;
   const top = sideOf(c[0], c[1]), right = sideOf(c[1], c[2]), bottom = sideOf(c[3], c[2]).length > 1 ? sideOf(c[2], c[3]).reverse() : [], left = sideOf(c[3], c[0]).reverse();
   if (top.length < 2 || right.length < 2 || bottom.length < 2 || left.length < 2) return null;
   const at = (line: Pt[], t: number): Pt => { const f = t * (line.length - 1), i = Math.min(line.length - 2, Math.floor(f)), k = f - i; return { x: line[i].x + (line[i + 1].x - line[i].x) * k, y: line[i].y + (line[i + 1].y - line[i].y) * k }; };

@@ -23,9 +23,9 @@ export interface CatalogueEntry {
 
 export interface RunResult { ok: boolean; id: string; message: string }
 
-export const WINDOW_ONLY = new Set(['terminal-toggle', 'terminal-new', 'claude-code', 'claude-chat', 'quit', 'shortcuts', 'preferences']);
+export const WINDOW_ONLY = new Set(['terminal-toggle', 'terminal-new', 'claude-code', 'claude-chat', 'shortcuts', 'settings', 'manage-plugins']);
 const READ_ONLY_GROUPS = new Set(['View', 'Window', 'Help']);
-const RISKY = new Set(['delete-library', 'clear-recent', 'revert', 'close-all', 'batch']);
+const RISKY = new Set(['clear-recent', 'action-batch', 'package']);
 
 interface Deps { engine: Engine; commands: Commands; menus: () => MenuDef[] }
 

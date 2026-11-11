@@ -357,7 +357,9 @@ function pie(c: Ctx, a: Acc): void {
     for (const i of order) {
       const v = d.values[r][i];
       if (v === null || v <= 0 || totals[r] <= 0) continue;
-      const sweep = (v / totals[r]) * 360, dd = sweep >= 359.999 ? ellipsePath(cx - R, cy - R, 2 * R, 2 * R) : piePath(cx - R, cy - R, 2 * R, 2 * R, ang, ang + sweep);
+      const sweep = (v / totals[r]) * 360;
+      if (sweep < 1e-4) { ang += sweep; continue; }
+      const dd = sweep >= 359.999 ? ellipsePath(cx - R, cy - R, 2 * R, 2 * R) : piePath(cx - R, cy - R, 2 * R, 2 * R, ang, ang + sweep);
       shadowOf(c, a, `s${i}:c${r}`, dd);
       push(a, i, P(`s${i}:c${r}`, dd, { items: [fill(seriesPaint(i)), stroke(solid(WHITE), 0.5)], effects: [] }));
       if (s.pieLegend === 'wedges') { const t = ((ang + sweep / 2) * Math.PI) / 180, rr = sweep >= 359.999 ? 0 : R * 0.62; a.legend.push(label(c, `wl${r}:${i}`, d.series[i], cx + Math.cos(t) * rr, cy + Math.sin(t) * rr + s.size * 0.35, 'center')); }

@@ -80,7 +80,7 @@ export function transformNode<T extends VNode>(n: T, m: Mat, o: XfOpts = { strok
     }
     case 'repeat': {
       const s = n.spec;
-      const spec = s.kind === 'radial' ? (() => { const c = apply(m, s.cx, s.cy); return { ...s, cx: c.x, cy: c.y, radius: s.radius * matScale(m) }; })() : s.kind === 'mirror' ? (() => { const c = apply(m, s.cx, s.cy); return { ...s, cx: c.x, cy: c.y }; })() : s;
+      const spec = s.kind === 'radial' ? (() => { const c = apply(m, s.cx, s.cy); return { ...s, cx: c.x, cy: c.y, radius: s.radius * matScale(m) }; })() : s.kind === 'mirror' ? (() => { const c = apply(m, s.cx, s.cy), a = (s.angle * Math.PI) / 180, vx = m[0] * -Math.sin(a) + m[2] * Math.cos(a), vy = m[1] * -Math.sin(a) + m[3] * Math.cos(a); return { ...s, cx: c.x, cy: c.y, angle: (Math.atan2(-vx, vy) * 180) / Math.PI }; })() : s;
       return { ...base, children: n.children.map((c) => transformNode(c, m, o)), spec } as T;
     }
   }

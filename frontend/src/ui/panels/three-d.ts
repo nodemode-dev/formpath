@@ -60,9 +60,11 @@ export class ThreeDPanel {
     const preset = selectCtl('Position', PRESETS, (v) => { const r = ROTATION_PRESETS[v]; if (r) set({ rx: r[0], ry: r[1], rz: r[2] }); });
     this.ctl.preset = preset;
     const picking = (input: HTMLInputElement, apply: (v: string) => void): void => {
-      let open = false;
-      input.addEventListener('input', () => { if (!open) { open = true; engine.beginGesture(); } apply(input.value); });
-      input.addEventListener('change', () => { if (open) { open = false; engine.endGesture(); } });
+      let open = false, t = 0;
+      const end = (): void => { window.clearTimeout(t); if (open) { open = false; engine.endGesture(); } };
+      input.addEventListener('input', () => { if (!open) { open = true; engine.beginGesture(); } apply(input.value); window.clearTimeout(t); t = window.setTimeout(end, 800); });
+      input.addEventListener('change', end);
+      input.addEventListener('blur', end);
     };
     picking(this.shade, (v) => set({ shading_color: v }));
     picking(this.lightColor, (v) => this.patchLight('color', v));

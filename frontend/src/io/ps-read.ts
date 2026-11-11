@@ -255,7 +255,7 @@ class Puller {
 
 // image, colorimage and imagemask. Returns false when it could not make sense of the operands.
 function paintImage(ps: Interp, kind: 'image' | 'colorimage' | 'imagemask'): boolean {
-  let w = 0, h = 0, bits = 8, matrix: Mat | null = null, decode: number[] | null = null, polarity = false, comps = 1, sources: PsObj[] = [];
+  let w = 0, h = 0, bits = 8, matrix: Mat | null = null, decode: number[] | null = null, polarity = false, comps = 1, sources: PsObj[] = [], spaced = false;
   const num = (o: PsObj | undefined, d: number): number => (typeof o === 'number' ? o : d);
   if (kind === 'colorimage') {
     comps = ps.num();
@@ -283,7 +283,8 @@ function paintImage(ps: Interp, kind: 'image' | 'colorimage' | 'imagemask'): boo
       if (kind === 'imagemask') polarity = third === true; else bits = typeof third === 'number' ? third : 8;
       h = ps.num(); w = ps.num();
     }
-    if (kind === 'image') comps = ps.imgSpace.n;
+    spaced = kind === 'image' && isDict(top);
+    if (spaced) comps = ps.imgSpace.n;
   }
   if (!(w > 0 && h > 0) || w * h > 1e8 || !matrix || !sources.length) return false;
   w = Math.round(w); h = Math.round(h);
@@ -309,8 +310,8 @@ function paintImage(ps: Interp, kind: 'image' | 'colorimage' | 'imagemask'): boo
     const rows: Uint8Array[][] = [];
     for (let y = 0; y < h; y++) rows.push(pulls.map((p) => p.take(rowBytes)));
     for (const p of pulls) p.finish();
-    const dec = decode && decode.length >= comps * 2 ? decode : ps.imgSpace.palette && kind === 'image' ? [0, (1 << bits) - 1] : Array.from({ length: comps }, () => [0, 1]).flat();
-    const s: Samples = { w, h, bits, comps: kind === 'imagemask' ? 1 : comps, rows, decode: dec, ...(kind === 'image' && ps.imgSpace.palette ? { palette: ps.imgSpace.palette } : {}), ...(kind === 'imagemask' ? { mask: { paintOne: polarity, r: fillColor.r, g: fillColor.g, b: fillColor.b } } : {}) };
+    const dec = decode && decode.length >= comps * 2 ? decode : ps.imgSpace.palette && spaced ? [0, (1 << bits) - 1] : Array.from({ length: comps }, () => [0, 1]).flat();
+    const s: Samples = { w, h, bits, comps: kind === 'imagemask' ? 1 : comps, rows, decode: dec, ...(spaced && ps.imgSpace.palette ? { palette: ps.imgSpace.palette } : {}), ...(kind === 'imagemask' ? { mask: { paintOne: polarity, r: fillColor.r, g: fillColor.g, b: fillColor.b } } : {}) };
     pending = { key: `${key}.png`, w, h, rgba: toRgba(s) };
   }
   ps.images.push(pending);

@@ -539,6 +539,27 @@ Every graph and variable change is one edit. graphTargets maps any selected part
 
 The engine never calls the model; the io layer brings back finished nodes and these three methods make each result one undo step. `addPatternSwatches` adds grid PatternDefs with their tiles and a pattern swatch for each, and optionally fills objects with the first, in one edit, so generated patterns are ordinary patterns (Edit Pattern, edit_pattern, SVG and PDF all treat them alike). `replaceWithClip` puts the generated art and the original shape into a clipping group in the shape's place, the shape last so it is the clipping path and keeps its stroke. `replaceWithText` inserts Retype's live type above the last source object and removes the sources unless asked to keep them (an image under the type).
 
+### src/engine/index.ts · copy collects brushes and swatches from the whole tree
+- refers-to: src/engine/index.ts :: Engine.copy, Engine.paste
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Brushes and global swatches went onto the clipboard only when a top-level copied node used them, so a brushed or swatch-filled path inside a copied group pasted into another document without its BrushDef or swatch (plain stroke, lost link), and type span colours were never looked at. Their ids are now collected in the same `walk` as patterns, with every span's fill and stroke, and the clipboard filters the document's brushes and swatches by those sets. Checked with tsc only.
+
+### src/engine/index.ts · Place is one step
+- refers-to: src/engine/index.ts :: Engine.addImage, beginStep, endStep
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+addImage registered the image in one edit and added the node in another, so Undo after Place left an invisible second Place step. The pair is now wrapped in beginStep/endStep like addModel, but only when no step is open: the io placers and the agent bridge already open one around it, and `step` holds a single mark, so a nested beginStep would move it. Checked with tsc only.
+
+### src/engine/index.ts · deleteArtboard keeps the active artboard
+- refers-to: src/engine/index.ts :: Engine.deleteArtboard
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Deleting an artboard before the active one shifted the later artboards down while `activeArtboard` stayed, so the next artboard became active and Fit Artboard, Select All on Artboard and active-artboard export used it. The index now drops by one when the deleted artboard came before it and is clamped as before otherwise. Checked with tsc only.
+
 ## src/engine/history.ts
 
 ### src/engine/history.ts · push merge
@@ -554,6 +575,13 @@ The engine never calls the model; the io layer brings back finished nodes and th
 - logged: v0.20.0 · 2026-10-10
 
 History.limit is still one static value (the Preferences undo steps); Engine.setHistoryLimit sets it and calls trim on every project, which drops the oldest states beyond the limit but never the current one or anything after it. stateAt returns a state for New Document from State.
+
+### src/engine/history.ts · marks survive dropped states
+- refers-to: src/engine/history.ts :: History.mark, History.rewind, History.squash, History.push, History.trim; src/engine/index.ts :: newDocumentFromState
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`mark` returned the array index of the current state, and once the history was full every push spliced the oldest state off the front, so a saved mark slid onto a later state: cancelling Edit Pattern or Edit Symbol after 200 edits rewound into the session and left the tile or symbol group behind, saving squashed the wrong range, and beginStep/endStep stopped merging; trim did the same. History now counts dropped states (`dropped`), `mark` adds the count and `rewind` and `squash` subtract it, so a mark whose state is gone gives null or false. `stateAt` and `jump` keep plain indices, so newDocumentFromState takes `steps().current` instead of `mark()`. Checked with tsc and a node check on a copy of the class (rewind and squash after 250 edits, after a trim, and with a dropped mark).
 
 ## src/engine/viewport.ts
 
@@ -614,6 +642,13 @@ The mesh envelope used to map through straight bilinear cells:
 
 It is replaced by meshMapper in envelope.ts, Coons patches with handles and knots, which equals the bilinear map while no handle has moved.
 
+### src/engine/live.ts · top-object envelope and winding
+- refers-to: src/engine/live.ts :: coonsFromShape
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+For a counter-clockwise top shape `coonsFromShape` reordered the corners to [0, 3, 2, 1] but still walked the outline forward, so top became the left edge, right the bottom edge, and the art was mirrored across the diagonal (a 100 by 50 rectangle sent the frame's top-right corner to (0, 50)). The flattened outline is now reversed for that winding and the corners keep their natural order, as mesh.ts `sides` does. Checked with tsc and the reviewer's node repro with the fix copied in: both windings map (1, 0) to (100, 0).
+
 ## src/engine/envelope.ts
 
 ### src/engine/envelope.ts · mesh model
@@ -638,6 +673,13 @@ homography builds the 3 by 3 projective map from one quadrilateral to another as
 - logged: v0.17.0 · 2026-10-08
 
 bbox is the angle in degrees (y down, so positive turns clockwise on screen) of an object's bounding box. transformNode maps the box's x axis through the matrix and keeps the result folded into minus 45 to 45, since a box turned 90 degrees is the same box; under 0.01 degrees the field is dropped, so moves and plain scales never add it and old files open unchanged. A scale along a turned box is R S R^-1, which maps the axis onto itself, so the angle survives it. An envelope moved or scaled along the page axes moves its contents, frame and mesh together as before. Under any other matrix (rotation, reflection, shear) its contents and frame stay put and only the envelope shape is mapped (a warp or top-object envelope first becomes a 6 by 6 mesh), because the contents are mapped through their own axis-aligned box; Coons patches are affine invariant, so the result is exact. This makes transform.ts import live.ts, which imports transform.ts: the cycle is only used inside functions, never at module load.
+
+### src/engine/transform.ts · mirror repeat axis follows the transform
+- refers-to: src/engine/transform.ts :: transformNode (repeat); src/engine/live.ts :: repeat placement (mirror)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+A mirror repeat's centre was mapped through the transform but its angle was copied, so after Rotate or Reflect the copy was still mirrored across the old axis and the pair lost its symmetry. The axis direction `(-sin a, cos a)` is now mapped through the linear part of the matrix and the angle read back with `atan2(-vx, vy)`. Under rotation, reflection and uniform scale the new mirror equals the old one conjugated by the transform (node check, error below 1e-12); a non-uniform scale has no exact mirror and keeps the mapped axis.
 
 ## src/engine/snap.ts
 
@@ -753,6 +795,13 @@ paper.js (MIT) does booleans, intersections, offset and simplify on real curves.
 - logged: v0.17.0 · 2026-10-08
 
 The outline of a curved stroke is built from flattened offsets and then fitted back to curves. paper's `simplify` fitted straight across corners, so a butt end came out as a bulge about a tenth of the width deep and miter tips were rounded, visibly in Expand Appearance, Outline Stroke and now the clip of gradient strokes in SVG and PDF. The outline is now cut at every vertex that turns more than 0.45 radians (butt ends, square caps, miter tips, inner join points) and each run between corners is simplified on its own, so corners stay sharp and the curves between them stay curves. A closed outline with no such corner is simplified whole as before.
+
+### src/engine/kernel.ts, src/engine/pathfinder.ts · holes in nested contours
+- refers-to: src/engine/kernel.ts :: regionParts; src/engine/pathfinder.ts :: splitContours
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Both functions gave a hole to every outer contour containing the hole's interior point. In a bullseye (ring, hole, island, hole) the inner hole went to the outer ring as well as the island, and since paper.js takes a disc's centre as its interior point, the middle hole also went to the island inside it, so Divide, Merge, the Eraser, Shaper regions and Interlace filled the centre and the gap and emptied the island. A hole now goes only to the smallest outer that is larger than the hole and contains its interior point; boolean results never cross, so that is its direct parent. Checked with tsc and a node check with the installed paper.js on a four-ring bullseye.
 
 ## src/engine/ops/recolor.ts
 
@@ -884,6 +933,13 @@ Layout is cached per node by identity and never reads the document, so anything 
 
 reflow runs perspSync after the dimension and graph refresh, so every edit, drag preview, undo and file open sees attached art whose source matches what is drawn, and the grid is written into the document in the same step that first attaches art. It returns the same document when nothing attached changed.
 
+### src/engine/flow.ts · wrap around a clip group uses the clipping path
+- refers-to: src/engine/flow.ts :: outlines
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The wrap outline of a clip group came from `children[0]`, the bottom clipped art, while render, bounds, hit testing and the rest of the engine take the last child as the clipping path, so area type was pushed away by invisible art. It now uses the last child. Checked with tsc only.
+
 ## src/engine/symbolism.ts
 
 ### src/engine/symbolism.ts · instance tint and the symbolism operations
@@ -970,6 +1026,13 @@ A Live Paint group is a group carrying `livePaint`: its children are the edges a
 - logged: v0.12.0 · 2026-10-07
 
 A face's paint is stored as a seed: a point and a paint. The face that contains a seed takes its paint, the last seed winning, so editing the edges re-flows colour the way Illustrator does: a face split in two keeps the colour in the half that holds the seed. Painting a face replaces the seeds already inside it. Make seeds every face from the fill of the topmost original shape that covered it, measured at a point inside the face (the middle of the widest run across a few scanlines), then strips the fills from the children so they are only edges. Edge painting (v0.13.0) splits the nearest child path where other edges cross it, through paper.js intersections, and styles only the piece under the click; the pieces become sibling paths with the original appearance, so the faces do not change and a later edge paint on a piece finds no crossings inside it. The Live Paint Selection tool keeps its faces as seed points and its edges as points on the edge in `Engine.livePaintSelection`; while that tool is active `setFill`, `setStroke` and `deleteSelection` act on them instead of on the group, and a whole Live Paint group selected with the Selection tool takes a new fill on every face rather than on its edge paths. Face nodes are synthesised with ids derived from the group's id and cached per faces and seeds, and the renderer, hit test, SVG and PDF writers all draw them under the edges. Selecting a Live Paint group or a tracing object no longer resets the Fill and Stroke widget to none, which made the bucket paint black after the first click.
+
+### src/engine/index.ts · Make Fill Regions removes only what it absorbs
+- refers-to: src/engine/index.ts :: makeLivePaint
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Make Fill Regions absorbs only paths, compound paths and groups with edges (`adds`, plus an existing Fill Regions host), but it removed every selected top object, so a selected text object, image, symbol instance or mesh vanished, or was overwritten by the new group when it was the topmost. The removal and placement order is now built from the host and `adds`, and other selected objects stay. Checked with tsc only; not run in the app.
 
 ### src/engine/ops/paths.ts · removed live paint helpers
 - refers-to: src/engine/ops/paths.ts :: shapeRegions, livePaintFill, openAsRegion, interior
@@ -1106,6 +1169,13 @@ transformNode maps xf: a translation or a positive axis-aligned scale is folded 
 - logged: v0.20.0 · 2026-10-10
 
 Not built: sliding column designs (they need a horizontal slide line inside the design and a way to draw it), a second value axis for one series of a combined graph (combined series share the left or right axis), Illustrator's First Row in Front and First Column in Front stacking options, the separate category axis tick count and Draw Tick Marks Between Labels option, and rotating designs in bar graphs (designs are scaled into the bar without turning). Labels are measured with the shaped fonts when they are loaded; a top legend measured before a font loads keeps its spacing until the graph next regenerates.
+
+### src/engine/graph.ts · tiny pie wedges are skipped
+- refers-to: src/engine/graph.ts :: pie; src/engine/geometry.ts :: piePath
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+piePath turns a sweep under 1e-6 degrees into a whole ellipse, so the second wedge of a row like [1000000000, 1] (3.6e-7 degrees) was drawn as a full disc over the chart. pie() now skips wedges under 1e-4 degrees and still advances the angle, as it skips zero and negative values. Checked with tsc only.
 
 ## src/engine/variables.ts
 
@@ -1541,6 +1611,13 @@ The public notes do not say which way the single Gray value runs. formpath write
 
 resolveImages turns a data set's image values into assets before the synchronous engine edit: asset:key reuses a picture already in the document, a URL (http, https, data or blob) is fetched in the window, anything else is an absolute path read by the engine service. Each value is fetched once per project (cached by value) and stored in the project's assets under a fresh image key, so .fpth saves carry the pictures. Exports never touch the open document's history: each variation is a temporary Project built from applyDataSetDoc and reflow (so graphs regenerate) sharing the asset blobs, rendered by the same SVG, PDF and raster writers as File > Export. A folder destination writes each file through the engine and, when anything failed, formpath-data-merge-errors.txt; otherwise everything goes into one zip.
 
+### src/io/data-merge.ts · file names de-duplicated without case
+- refers-to: src/io/data-merge.ts :: exportDataSets (used)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`used` compared stems case-sensitively, so "Anna" and "ANNA" both kept their names and on NTFS or APFS (or a zip unpacked there) the second file replaced the first silently. The set now holds lower-cased stems, so the second becomes "ANNA 2". Checked: tsc clean. Not run on Windows or macOS.
+
 ## src/io/project-io.ts
 
 ### src/io/project-io.ts · artboard rect
@@ -1600,6 +1677,13 @@ parseColor knows the whole CSS named list, 3, 4, 6 and 8 digit hex, and hsl and 
 - logged: v0.37.0 · 2026-10-16
 
 A pattern paint whose xf scales the art (every imported SVG pattern with patternContentUnits or a viewBox) was rendered into a tile canvas at the unscaled size and then stretched, which blurred it. The tile scale now multiplies in the square root of the determinant of xf.
+
+### src/engine/render.ts · pattern period is the lattice
+- refers-to: src/engine/render.ts :: patternStyle, patternTiles
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The tile canvas is `ceil(lattice * scale)` pixels (at most 4096) but the pattern was mapped back with `1 / scale`, so it repeated every `ceil(l.w * scale) / scale` units: a 37.3 pt tile at 100% repeated every 38 pt (seams and drift), and a lattice over 512 pt at scale 8 was cut off. The tile now keeps `sx` and `sy`, canvas size over lattice size, for both drawing the tile and the pattern matrix, so the period is exactly the lattice. Checked with tsc and a node check of the period; not looked at on screen.
 
 ### src/io/svg.ts · symbols as symbol and use
 - refers-to: src/io/svg.ts :: Writer.node case symbol, symbolArts
@@ -1664,6 +1748,27 @@ SVG cannot draw an image through a curved map, and a triangle-per-cell clip tree
 
 Live type keeps its axes as `font-variation-settings`, and because Chromium ignores that property for installed fonts while honouring the matching font properties, `wght` is also written as `font-weight`, `wdth` as `font-stretch` and `slnt` as an oblique `font-style`; a run with any other axis (optical size or a custom axis), which no font property can carry, is written as outlines of the glyphs the canvas drew. A glyph with a transform (`t`: Touch Type, character rotation or justification glyph scaling) cannot sit in a `tspan`, so it is written on its own after the line's runs: its outline when the font is loaded, otherwise a `text` element with its full matrix, inside a `g` with the type's transform (the surrounding `text` is closed and reopened around it). Hyphens, list markers and tab leaders are glyphs of the layout, so they export as characters in the runs.
 
+### src/io/svg.ts, src/io/svg-refs.ts · use and marker cycles, element budget
+- refers-to: src/io/svg.ts :: importSvg walkNode (use branch, visited); src/io/svg-refs.ts :: markers
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`use` and marker contents were followed with only the depth limit of 64, so `<g id="a"><use href="#a"/><use href="#a"/></g>`, a marker whose content uses the same marker, or a chain of groups each using the previous one ten times froze the tab on Open, Place or paste. A `use` now skips a target that contains it or is already on the reference stack (`patStack`, shared with patterns and masks through RefCtx.stack), a marker on that stack is not drawn inside itself, and walkNode stops after 200,000 elements; skips leave a left-out note. Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo imports the self loop in 6 ms, the self-marker in 4 ms and a 20-level chain of ten uses in about 1.2 s.
+
+### src/io/svg.ts · preserve-editing keeps every image's bytes
+- refers-to: src/io/svg.ts :: Writer.emitted, Writer.node (case 'image'), exportSvg (preserve branch)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Reopening takes image bytes only from elements with `data-formpath-src`. Hidden images, images in hidden layers, warped images (baked to a PNG without the key) and images only in unplaced symbols got none, while the old leftover list counted every image node in the layers as written and added only pattern textures, so they reopened blank. Writer now records each key it writes with `data-formpath-src` in `emitted`, and the hidden leftover `<g display="none">` holds every exported image not in it (also images outside a selection export). Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo round-trips a visible and a hidden image with both assets back.
+
+### src/io/svg.ts · root size in percent, non-plain layer groups, bounding-box gradients, bad data URLs
+- refers-to: src/io/svg.ts :: importSvg (dim, bare), gradPaint (ub, fr, unit), dataUrlToBlob
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Four import faults. `width="100%"` with a viewBox read as 100 pt (`len` has no `%` case); the root size (`dim`) now ignores percent, em and ex and falls back to the viewBox. With two or more named top-level groups, each layer took only its group's children, dropping opacity, blend, clip, mask and filter; a group that is not `bare` now stays whole inside its layer. objectBoundingBox gradients were placed on the page-space box of the already transformed shape, so rotation and skew were ignored; they now map the unit square through the untransformed box (`ubox`, pathBounds of the shape's own data) and then the element matrix, per the SVG spec, and fall back to the old box when there is none (type). A data: URL that fails to decode now gives null (that image is skipped) instead of aborting the import. Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo: 800 x 600 artboard, both layer groups kept, the rotate(45) gradient runs along the rect, a plain radial is unchanged, and the bad data URL no longer stops the import.
+
 ## src/io/pdf.ts
 
 ### src/io/pdf.ts · group and layer items
@@ -1725,6 +1830,20 @@ An image with a warp grid is rasterised at the export ppi through the same rende
 - logged: v0.22.0 · 2026-10-08
 
 A paint linked to a spot swatch (directly or as a tint) is written as `/CSn cs t scn` against `[/Separation /Name /DeviceCMYK f]`, where f is a Type 2 function from no ink to the swatch's CMYK values, so viewers draw the alternate and separation tools show the plate under the swatch's name. Spaces are kept once per swatch name in the shared resource dictionary, which every page and form uses. Names are PDF name objects: bytes outside the regular range and delimiters are written as #xx. Gradients that use spot colours still go out as process colours. [Registration] (now linked from the Swatches panel like a global swatch) is written as `/Separation /All` with a full CMYK alternate, so it prints on every plate. Brush pieces with their own opacity (bristles) each get an ExtGState.
+
+### src/io/pdf.ts · JPEG passthrough only for plain upright JPEGs
+- refers-to: src/io/pdf.ts :: jpegHead, Painter.image
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Every placed JPEG was written through unchanged as DCTDecode tagged DeviceRGB, sized from the decoded bitmap, so a grayscale or CMYK JPEG did not match its colour space (garbage or a refused image in viewers) and a photo with an EXIF orientation came out unrotated with width and height swapped. `jpegHead` reads the markers up to the first frame header: passthrough now needs an 8-bit SOF0, SOF1 or SOF2 frame with one or three components, EXIF orientation absent or 1, and a frame size equal to the bitmap; one component is tagged DeviceGray. Anything else is re-encoded from the decoded, upright bitmap. Checked: tsc clean; jpegHead in node on Pillow-made RGB, progressive, gray, CMYK and EXIF 1, 6 and 8 files (both byte orders). Not opened in a PDF viewer.
+
+### src/io/pdf.ts, src/io/pdf-plates.ts · resource dictionary id per file
+- refers-to: src/io/pdf.ts :: PdfFile.res, Painter (pattern, forms, groups, masks), exportPdf; src/io/pdf-plates.ts :: exportPlates
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The shared resource dictionary's object number was a module variable (`RES`, set through `useResources`) that both exporters set at the start and Painter read for every page, form and tiling pattern; exportPdf awaits many times, so an export started meanwhile (agent export during a user export or separations) re-pointed the first file's objects at the second file's number. It is now `PdfFile.res`, set by exportPdf and exportPlates and read as `this.pdf.res`; the variable and `useResources` are removed. Checked: tsc clean, tests/pdf.test.ts passes. Not run with two overlapping exports.
 
 ## src/io/pdf-read.ts
 
@@ -1791,6 +1910,13 @@ Types 4 to 7 are decoded with their own bit width for flag, coordinate and compo
 
 Revisions 2 to 4 derive the key by the MD5 algorithm (RC4 40 and 128, crypt filters V2 and AESV2), revisions 5 and 6 validate and unwrap the 256 bit key from U/UE or O/OE (R6 uses the iterated hash with SHA-256/384/512 and AES-128-CBC, R5 plain SHA-256); the empty user password is tried first and an owner password also opens the file. MD5 and RC4 are written out because WebCrypto has neither; AES and SHA use WebCrypto, and unpadded AES-CBC decrypt (key unwrap) appends one encrypted padding block so WebCrypto's padding check passes. After the trailer is known every object parsed in the clear has its strings decrypted once, the Encrypt dictionary excepted; streams are decrypted in `decode` by object and generation number, XRef streams, streams with a Crypt filter and unencrypted metadata are left alone, and the strings inside object streams are not decrypted again because the stream already was. A password that is needed and absent or wrong throws PdfPasswordError; the open flow asks for it in a small dialog and asks again on a wrong one, and the MCP open_file tool's `password` parameter is tried once and, if wrong, fails without a dialog. Public-key (Adobe.PubSec) handlers still throw.
 
+### src/io/pdf-read.ts · requested pages past 200
+- refers-to: src/io/pdf-read.ts :: readPdfVector (chosen); src/io/place.ts :: pdfArt
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The page loop ran over the first 200 pages and filtered by `opts.pages`, so Place of page 201 or later found nothing. With `opts.pages` the loop now reads exactly those pages (sorted, unique, in range, at most 200) and adds no "pages 201 to N" note; opening the whole file keeps the 200-page cap and the note. Checked: tsc clean, tests/pdf.test.ts passes, and a scratch check outside the repo on a hand-made 205-page PDF reads page index 203 alone and still caps the full open at 200.
+
 ## src/io/raster.ts
 
 ### src/io/raster.ts · exportForScreens
@@ -1799,6 +1925,13 @@ Revisions 2 to 4 derive the key by the MD5 algorithm (RC4 40 and 128, crypt filt
 - logged: v0.9.0 · 2026-10-07
 
 Each artboard and each scale and format becomes one file named after the artboard plus the suffix; SVG and PDF items call back into the writers; everything lands in one zip.
+
+### src/io/raster.ts · stamped ppi follows the capped scale
+- refers-to: src/io/raster.ts :: exportRaster, rasterCap, renderRegion
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+renderRegion renders at `rasterCap`'s scale (16,384 px per side at most) but exportRaster stamped pHYs, JFIF density and TIFF resolution with `72 * o.scale`, so a capped export claimed the requested ppi and printed smaller than the artboard. The ppi now comes from the capped scale, as in exportOther; an explicit TIFF ppi still wins. Checked: tsc clean. Not run on a capped export (needs a browser canvas).
 
 ## src/io/fonts.ts
 
@@ -1815,6 +1948,20 @@ opentype.js does not read vhea, vmtx or VORG, so `fontFor` keeps each font's raw
 - logged: v0.9.0 · 2026-10-07
 
 Inter and JetBrains Mono `.woff` files come from @fontsource through a lazy glob, so each face is fetched only when type uses it. Installed fonts are found and served by the engine's fonts service. A missing face draws with Inter.
+
+### src/io/fonts.ts · GSUB extension lookups
+- refers-to: src/io/fonts.ts :: applyLookup, Sub (lookupType, extension)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+opentype.js keeps an Extension lookup (type 7) as type 7 with each real subtable under `extension` and its own `lookupType` (read in its parser). applyLookup had no case for 7, so contextual features in fonts that wrap lookups in extensions (Noto, Source and other large families) did nothing. It now unwraps such a lookup into the inner type and subtables first; the spec requires one type per extension lookup, so the first subtable's type is taken. Checked: tsc clean; a scratch copy of applyLookup in node substitutes through an extension-wrapped single lookup, a chain context calling it, and an extension-wrapped chain context. Not compared with hb-shape on a real font.
+
+### src/io/fonts.ts, src/io/api.ts · a failed font lookup is retried
+- refers-to: src/io/api.ts :: api.findFont; src/io/fonts.ts :: fontFor, fontNow
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+findFont turned every error into null and fontFor and fontNow cached it for the session, so a font first asked for while the engine was down (desktop window before the sidecar, an engine restart) kept fallback metrics, could not be outlined, was rasterised in EPS and dropped from .ai private data until reload. findFont now returns null only for the engine's 404 (not installed) and rethrows the rest; fontFor deletes its cached promise when the load throws; fontNow, seeing that, lets the key be asked for again 5 s later instead of on every render (a browser without the engine would otherwise send a request per frame). Checked: tsc clean. Not run with the engine stopped and then started.
 
 ### src/io/fonts.ts · OpenType shaping
 - refers-to: src/io/fonts.ts :: installShaping, fontNow, subsOf, ligate, single, fractions, OT_ORDER; src/engine/text.ts :: Shaping, setShaping, items, drawText
@@ -1929,6 +2076,34 @@ Written from Autodesk's DXF reference. `parseDxf` reads ASCII group-code pairs (
 
 AutoCAD 2000 output carries the structure AutoCAD expects of an AC1015 file: handles and owners on every table record and entity, the VPORT, LTYPE, LAYER, STYLE, VIEW, UCS, APPID, DIMSTYLE and BLOCK_RECORD tables, the model and paper space blocks, an OBJECTS section with the root dictionary, and `$HANDSEED` spliced in after the last handle is known. Each subpath goes out as an LWPOLYLINE when every segment is a line or a circular arc (`arcOf` fits a circle through the ends and midpoint and checks four more points to 0.1 percent of the radius, so formpath's own circles and rounded corners keep exact bulges), else as a degree 3 SPLINE whose control points are the Bezier handles with every joint knot tripled, which is exact. Filled closed paths add a solid HATCH with polyline loops flagged external; nonzero fill maps to the outer style and even-odd to normal. R12 has no lightweight polylines, splines or hatches, so it writes POLYLINE and VERTEX with bulges, flattens other curves to 0.05 pt and leaves fills as outlines. Colours are the nearest ACI plus the 420 true colour in 2000; lineweights snap to AutoCAD's standard list and scale with the drawing only when asked. Gradients write their middle colour; images, effects and transparency are not written, since DXF has no equivalent that CAD programs read reliably.
 
+### src/io/dxf.ts · HATCH boundary counts are bounded
+- refers-to: src/io/dxf.ts :: dxfToDoc case 'HATCH'
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The HATCH counts (93 vertices or edges, 95 knots, 96 control points, 97 fit points) drove their loops unchecked, and `next()` returns 0 without moving once the pairs run out, so `93` set to 1e9 pushed a billion vertices and hung the window. Each count is now limited to the pairs left in the entity; a damaged hatch reads what is there and is skipped as a hatch without boundaries when nothing is. Checked: tsc clean; a scratch check outside the repo imports hatches with 93, 95 and 96 at 1e9 in under 5 ms each and a normal square hatch unchanged.
+
+### src/io/dxf.ts · only OCS entities are mirrored by a negative extrusion
+- refers-to: src/io/dxf.ts :: dxfToDoc (wcs, ocs, case 'ELLIPSE')
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The reading explainer above says entities with extrusion z -1 are mirrored in x; that is right only for OCS entities (circle, arc, 2D polylines, solid, trace, text, insert, hatch). LINE, SPLINE, ELLIPSE, 3DFACE, LEADER and MTEXT are in world coordinates, so a mirrored ellipse (MIRROR leaves 230 = -1) came in at -x with its arc reversed; DWG ELLIPSE records always carry 230. `ocs` now returns the identity for those six types, and an ELLIPSE with a negative extrusion takes its minor axis as normal x major, `(ay, -ax) * ratio`, so its parameter runs clockwise as seen from +z. Checked: tsc clean; a scratch check outside the repo puts full and half ellipses with 230 = -1 at x = 5 (the half on the mirrored side), a LINE with 230 = -1 unmoved, and a CIRCLE with 230 = -1 still mirrored.
+
+### src/io/dxf.ts · non-ASCII goes out as \U+XXXX
+- refers-to: src/io/dxf.ts :: exportDxf (the Blob), parseDxf (pair reader)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The file declares `$DWGCODEPAGE ANSI_1252` (R12 has that default too) but the Blob was UTF-8, so CAD programs showed "Straße" as "StraÃŸe" and CJK as byte soup. Every character above 0x7E is now written as `\U+XXXX`, the pre-2007 escape for characters outside the code page, so the file is ASCII in any code page; characters outside the BMP go out as two escapes (one per UTF-16 unit), which formpath reads back exactly and a CAD program shows as two unknown characters. parseDxf decodes `\U+XXXX` in every pair as it reads, so layer and block names come back too, and Export DWG (which re-parses this text) gets the same strings as before. Checked: tsc clean; a scratch check outside the repo round-trips the layer "Straße Ø" and the text "Ø25 °C 日本" through DXF 2000 (ASCII file) and through DWG. Not opened in a CAD program.
+
+### src/io/dxf.ts · Aligned and Fit TEXT
+- refers-to: src/io/dxf.ts :: dxfToDoc case 'TEXT', INSERT attributes
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+With justification 72 = 3 (Aligned) or 5 (Fit), point 10 is the baseline start and point 11 its end; the reader took point 11 and fell through to left alignment, so the text started where it should end. Those two now place at point 10, left aligned (the stretch between the points is not applied). Checked: tsc clean; a scratch check outside the repo places 72 = 3 and 5 at x = 0 and 72 = 2 still right-aligned at x = 50.
+
 ## src/io/eps.ts
 
 ### src/io/eps.ts · EPS writer
@@ -1946,6 +2121,13 @@ Follows the EPSF 3.0 conventions (one page, `%%BoundingBox` in whole points with
 - logged: v0.37.0 · 2026-10-16
 
 image, colorimage and imagemask used to pop their operands and skip the data. They now build image nodes. Operands come in both forms (w h bps matrix source, and the Level 2 dictionary with DataSource, Decode, ImageMatrix, BitsPerComponent), and colorimage takes one source or one per component (read row by row, so procedures that share currentfile interleave correctly). A data source is a string, a procedure called until the bytes are in (the Pillow and Photoshop pattern, currentfile buf readhexstring pop), or a file: currentfile plus a chain of filters. The file objects are real now: currentfile reads the program text at the interpreter's position, readhexstring, readstring and readline consume it (they were stubs that returned empty), and filter builds ASCIIHexDecode, ASCII85Decode, RunLengthDecode, FlateDecode, DCTDecode and SubFileDecode stages. All of it is synchronous so the interpreter stays synchronous: Flate uses a small inflate in ps-filters.ts, and a DCT stream is read to its EOI marker and handed to the browser as the image asset itself (Decode is ignored for JPEG, the browser already undoes Adobe's inverted CMYK). Samples are 1, 2, 4, 8, 12 or 16 bits per component, gray, RGB or CMYK (naive conversion, like toRgb without a profile), with Decode arrays and Indexed colour spaces whose lookup is a string; a CMYK image is converted to RGB because the engine image node is RGB. The image matrix gives xf = flip x ctm x inverse(matrix), so rotation, flips and shear carry over, and the node goes through emit, so a clip in force wraps it in the usual clip group. imagemask paints the current colour where the sample is 0 (Decode [0 1], polarity false) or 1 (polarity true) and leaves the rest transparent, as an image node named Image mask; that is a bitmap, not a vector fill, so it does not stay sharp at any size. Raw images are encoded to PNG after interpretation, which is why readEpsVector is now async and returns the assets map that readForeign hands to the project. epsSource decodes true latin1 now: TextDecoder's latin1 label is windows-1252 and corrupted bytes 0x80 to 0x9f of binary data. Left out still: LZWDecode, CCITTFax, ImageType 3 and 4 (masked images), image dictionaries whose DataSource is a procedure reading a stream held in a variable name, and the colour space is not restored by grestore.
+
+### src/io/ps-read.ts · the five-operand image is always gray
+- refers-to: src/io/ps-read.ts :: paintImage (spaced)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The component count (and an Indexed palette) of the current colour space was applied to both forms of `image`, but the PLRM renders the five-operand form as one gray component regardless of the current space; only the dictionary form uses it. After `/DeviceRGB setcolorspace` a five-operand gray image pulled three bytes per pixel and ate the program after its data, losing the art that followed. `spaced` (dictionary form of `image`) now gates both. Checked: tsc clean; a scratch check outside the repo reads DeviceRGB, a 2 x 2 five-operand gray image from currentfile, then a filled triangle: image and path both come in.
 
 ### src/io/ps-read.ts · reading foreign EPS
 - refers-to: src/io/ps-read.ts :: Interp, Lexer, OPS, readEpsVector, epsSource, shadingPaint, showText
@@ -2939,6 +3121,13 @@ Widths in W come from the font's advances at the used axis values; FontDescripto
 
 Settings live in the optional `Doc.cm` (rgb and cmyk profile references as id plus name, intent, bpc, proof setup). It rides inside the manifest's document object through the existing spread, so .fpth needs no new code, and a document without `cm` behaves exactly as before: paint.ts only calls into the module and falls back to the formula whenever `cmToRgb` or `cmToCmyk` return null, which is the case with no CMYK profile set or before its tables arrive. The module is global state, not per document, because paint.ts has no document argument; `activateDocument` runs on doc, active and projects events and keys the load by profile ids, intent and bpc. When the tables land, the app invalidates cached layers and emits render, the way fontsChanged does for fonts. A profile is found by id first and then by name, so a project opened on another computer with a different copy of the same profile still resolves. The CMYK to RGB table is 9 points per axis with quadrilinear interpolation (tetrahedral was not worth the code at that size), RGB to CMYK is 17 points trilinear, and results are memoised for the last query because renders ask for the same colour many times in a row. The engine never fetches: `setColorBackend` is installed by io/color-ops.ts, which keeps engine/ free of io.
 
+### src/engine/color-management.ts · unresolved profiles clear the active tables
+- refers-to: src/engine/color-management.ts :: loadActive, activateDocument
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+When the newly active document's profiles could not be resolved, loadActive returned early and kept the previous document's tables, so its CMYK colours were previewed and converted through another document's profiles, and since `wanted` already held the new key, it never retried. That return now clears `active` (the formula fallback applies) and resets `wanted`, so the next activateDocument tries again. A failed table fetch (the catch) still only clears `active`, so a backend that is down is not asked again on every edit. Checked with tsc only.
+
 ### src/engine/color-management.ts · Proof Colors is a post pass on the scene canvas
 - refers-to: src/ui/stage.ts :: Stage.proofPass; src/engine/color-management.ts :: applyProof, isProofing, activeProof
 - kind: rationale
@@ -2952,6 +3141,13 @@ Proof Colors is a view state in the module (not saved), the proof setup is saved
 - logged: v0.32.0 · 2026-10-15
 
 The conversion is one Engine.edit that maps layers, swatches, symbol art, graphic style appearances and artboard backgrounds, then writes colorMode and the new profile in the same step, so one Undo returns the old colours, mode and settings together. Unlike recolor.ts it keeps swatch ids and tints on paints because the swatch itself is converted in the same pass. To CMYK, an RGB or gray-derived colour goes through the destination's RGB to CMYK table, an existing CMYK colour goes through the old profile to RGB and then the new table, and gray colours stay gray. To RGB, only CMYK colours change; an RGB to RGB conversion between two RGB profiles is not done (the numbers are kept and the profile is assigned). Brush art and pattern tiles are left as they are.
+
+### src/engine/ops/profile-convert.ts · patterns, masks and region fills convert too
+- refers-to: src/engine/ops/profile-convert.ts :: convertDoc, convertNode
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Pattern tile art, opacity mask art, Fill Regions seeds and Shaper fills kept their old colours after Convert to Profile, so a CMYK document still printed and separated them from RGB values. convertDoc now converts `doc.patterns[*].art`, and convertNode converts `mask.art` and, for groups, `livePaint.fills` and `shaper.fills`. This replaces "pattern tiles are left as they are" above; brush art is still not converted. Checked with tsc and the module bundled with esbuild in a scratch folder and run on a small document.
 
 ### src/io/pdf-x.ts · pdfxParts helper
 - refers-to: src/io/pdf-x.ts :: pdfxParts; src/engine/color-management.ts :: documentCmykProfileBytes
@@ -3447,6 +3643,13 @@ The Registration colour of the marks was always [/Separation /All /DeviceCMYK ..
 
 The Open Design Specification orders the common entity handles as owner (entity mode 0), reactors, extension dictionary (R2004 and later only when present, always counted for R13 to R2000), then for R2000 and earlier the previous and next entity handles (only when the no-links bit is 0), then layer, linetype, material and plot style. R2004 and later have no previous or next handles at all; the code already skipped them for versions other than 15. The code read the previous and next pair before the reactors; it now reads them after the extension dictionary. The values are not used, and the same number of handles is read either way, so the layer handle that follows was always the same one: all 104 sample drawings (2000, 2004, 2010, 2013, 2018 and the example and sample files) give identical per-layer entity counts, kind counts, block counts, layer tables and coordinate deviations before and after, and 22 of them have entities with reactors (the R2000 ones among them: Constraints, Leader, PolyLine2D, TS1 and example_2000, where 2, 6, 1, 5 and 14 entities carry both reactors and links), checked against reference DXFs from the converter used as a black box. So this is a correctness fix of the stream order with no change in any result today; it matters when something later reads those handles. Not verified: an R13 or R14 drawing, which the samples do not contain.
 
+### src/io/dwg-file.ts, src/io/dwg-r2007.ts · section map counts are bounded
+- refers-to: src/io/dwg-file.ts :: sysPage, r2004 (section info loop, load); src/io/dwg-r2007.ts :: readContainer
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The section maps were trusted: an R2004 to R2018 section-info entry with a page count like 0xFFFFFFFF pushed up to four billion page records, a system page, section or page size near 4 GB was allocated as asked, and an R2007 section-map name length of -64 walked the position back so the loop never ended; opening such a file froze the window. A page count that does not fit in the bytes left of the map, a system page over 64 MB decoded (the R2007 reader's limit), a section over 256 MB, a maximum page size over 16 MB and a negative or overlong R2007 name length now throw DwgError. Checked: tsc clean. Not run on a damaged or real R2004 or R2007 file (none in the repo; the writer writes R2000).
+
 ## src/engine/groupfx.ts (vector effects on groups, layers and type)
 
 ### src/engine/groupfx.ts · vector effects act on a group, layer or live type through one shadow node
@@ -3574,6 +3777,13 @@ Export > .ai now also writes what Illustrator keeps in a page's /PieceInfo /Illu
 - logged: v0.41.0 · 2026-10-16
 
 Illustrator was not available, so nobody has opened this output in it. What is checked: the PDF passes qpdf --check, renders with pdftoppm and opens in pypdf; the private blocks decode back with the same extractor that reads the 34 real files, the header, block layout and every operator used appear in the real corpus (only %%EndData and the thumbnail form are taken from the AI spec and the real thumbnails), and formpath's own legacy reader rebuilds the same layers, groups, clip group, compounds, gradient, spot swatch, symbol art and coordinates from the decoded text. What is unverified: whether Illustrator accepts the file or falls back to the PDF; the meaning of a few operators copied from real files (the 4 in `4 %_Br`, `Xm` beside `Bm`, the `0 AE`, `0 Xw` and `0 Ae` lines, the second Lb flag after the visible flag); the template layer flags (inferred, no real template layer in the corpus); the Bg leading flag for stroke gradients; the hex raster layout of XI (real files use binary); the document data dictionary being reduced to the artboards and two keys instead of Illustrator's full set; and whether Illustrator wants an /AIPrivateData block boundary at a specific place (real files cut at the %AI12_CompressedData marker and every 65536 bytes after, which is what is written).
+
+### src/io/ai-private.ts · gradient ramp in Xm/Bm, symbol art moved per instance
+- refers-to: src/io/ai-private.ts :: Emit.gradientInstance, Emit.moved
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Gradients went out with origin, angle and length on Bg and an identity Xm/Bm, but the reader (ai-legacy.ts Reader.exec 'Xm'/'Bm') takes that matrix as the unit ramp's map to the page, replacing Bg's frame, so a placed .ai showed every gradient from (0,0) to (1,0). Bg now has the unit frame (0 0, angle 0, length 1) and Xm and Bm the ramp `dx dy -dy dx x1 y1`, so a reader that concatenates and one that replaces get the same ramp; a zero-length ramp uses dx 1. `moved` overwrote the shared outline of a text in a symbol's art, so instance k carried k transforms, and left nested symbols, blends, envelopes and repeats in place; a text now gets its moved outline under a new key `id~n`, a nested symbol composes its matrix and other containers move their children (withChildren). Checked: tsc clean; a scratch check outside the repo reads the private text back with buildAi: the gradient spans the rect edge to edge, and two instances (1x and 2x) of a symbol holding a text have their outlines in place. Not opened in Illustrator.
 
 ### src/io/ai-modern.ts · PDF compatible .ai opened through its private data
 - refers-to: src/io/ai-modern.ts :: readAiModern, aiPrivateText, modernText, aiArtboards; src/io/pdf-read.ts :: readAiPrivateBlocks; src/io/ai-legacy.ts :: buildAi; src/app.ts :: openFiles
@@ -3749,6 +3959,20 @@ An audit reported that the Scissors click and Knife drag changed nothing. Driven
 - logged: v0.43.0 · 2026-10-16
 
 `eraseRegion` skipped every path with an open subpath and subtracted the eraser from stroke-only closed shapes as if they were fills, which turned a ring outline into a solid. Filled closed shapes still use the boolean subtract (and are now left alone when the eraser misses them); everything else is cut along the outline: each subpath is split where it crosses the eraser, with the eraser grown by half the stroke width, and pieces whose midpoint lies inside are dropped, so open lines and stroke-only shapes become open pieces that keep their appearance. `scissorsCut` shares `cutSub` for paths and for the subpaths of a compound path, removes the handle that pointed across the cut at both new ends, and returns the document unchanged when the cut lands on an open path's end, so no empty history step is made.
+
+### src/engine/ops/paths.ts · eraseSegments keeps untouched paths
+- refers-to: src/engine/ops/paths.ts :: eraseSegments; src/tools/freehand.ts :: pathEraser
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`eraseSegments` rebuilt every subpath as an open path on every call, so any Path Eraser drag, even over empty canvas, committed an Erase Path step that opened every selected closed path (with a doubled end anchor) and split a multi-subpath path into one node per subpath, losing an evenodd hole. A subpath with no erased segment is now kept as it is, nothing erased returns the document unchanged (the tool then cancels the drag), and a closed subpath is walked from its first erased segment so the run that wraps past the first anchor stays one piece. Checked with tsc and a node check on a copy of the loop: empty canvas, an erased edge and an erased closing segment of a rectangle.
+
+### src/engine/ops/paths.ts · eraseSegments tests the curve midpoint
+- refers-to: src/engine/ops/paths.ts :: eraseSegments
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The eraser test used the midpoint of the chord between a segment's anchors, which for a curve lies off the curve (70.7 from the centre on a quarter arc of radius 100), so dragging inside an ellipse deleted arcs the eraser never touched. The test point is now `bezPoint(s, 0.5)`, the same point as before on a straight segment. Checked with tsc and a node check of bezPoint on a quarter arc and a line.
 
 ### src/engine/index.ts · default type fill
 - refers-to: src/engine/index.ts :: fillPicked, typeFill, setFill, defaultFillStroke, newDocument, addText; src/tools/type.ts :: activate
@@ -4183,3 +4407,171 @@ The bar is now flat in formvis's order and widths: the history and zoom tools (u
 - logged: v0.52.0 · 2026-10-23
 
 The operation (Merge, Punch or Delete) comes from the Operation choice in the Shaper options bar (Merge by default), switched while Alt (Punch) or Shift (Delete) is held, as Shape Crafter takes Alt for erasing. `shaperScribble(g, stroke, op)` takes the operation as a parameter; the stroke only picks which cells it touches. Merge needs two or more touched cells, Punch cuts the touched cells covered by two or more shapes, Delete removes the topmost shape of each touched cell. An operation that does not fit what was touched changes nothing and the status line says so; the operation is never chosen from cell counts or location. The agent bridge and MCP tool `shaper` take `operation` as a required argument for scribble. Comments removed from code (kept here): the operation is always the caller's choice; action 'none' means the operation did not fit and nothing changed, null means the scribble touched no shape.
+
+### src/automation/agent-bridge.ts · file tools only for outside agents
+- refers-to: AgentBridge.run (`from`), AgentBridge.loop; src/ui/panels/assistant.ts :: tool call; src/plugins/host.ts :: case 'call'
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Plug-ins and the in-app assistant were kept from file tools only by a regex of the five public names, while `run` also answers the internal `__open`, `__place`, `__project` and `__export` (meant for the backend loop) and `variables` and `actions` have file actions. A plug-in posting `__place` with `link: true` and an absolute path read any file the engine serves; `variables export` and `actions batch` wrote into any folder. `run(name, args, from)` now takes the caller, `'plugin'` by default; only `loop()` passes `'loop'`. Any other caller is refused names starting with `__`, the five public file tools, `variables` export, show and load (show and load fetch image variables by path) and `actions` batch. The assistant passes `'assistant'` and its own regex also refuses `__` names. Checked with `npx tsc --noEmit`; not run with a plug-in in the window.
+
+### src/ui/panels/three-d.ts · a cancelled colour pick closes its gesture
+- refers-to: ThreeDPanel constructor :: picking
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Shading Color, Light Color and Surface Color opened `engine.beginGesture()` on the first `input` and closed it only on `change`. Cancelling the native picker after dragging in it puts the value back, so no `change` fires and the gesture stayed open: every later edit merged into the previous history step and the trace draft stayed on. The gesture now also closes 800 ms after the last `input` and on `blur`; `end` checks `open`, so a second close does nothing. Checked with `npx tsc --noEmit`; the native picker was not run.
+
+### src/ui/form-dialog.ts, src/ui/app-dialogs.ts · Enter on a button is the button's
+- refers-to: FormDialog constructor :: scrim keydown; NewDocumentDialog constructor :: scrim keydown
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The scrim's Enter handler called `preventDefault()` and applied the dialog for every Enter outside a textarea, so Enter on a focused Cancel applied the edit, on Delete (Width Point Edit) edited instead of deleting, on an enhanced select's `.cv-dd-btn` committed the form, and in New Document Cancel or a preset card created a document. Both handlers now skip targets that are `HTMLButtonElement`, as `PlaceDialog` already does; the focused button then activates itself (OK and Create still apply). Checked with `npx tsc --noEmit`; keyboard not run in the window.
+
+### src/tools · every dragging tool has a cancel
+- refers-to: src/tools/select.ts :: groupSelect, lasso, selection cancel (CW); src/tools/pen.ts :: anchorPoint, pen cancel (P.closing); src/tools/freehand.ts :: cancel (shared by all eight freehand tools); src/tools/transform.ts :: xformTool, reshape, liquifyTool; src/tools/paint.ts :: mesh; src/tools/view.ts :: hand, rotateView, zoom, artboard
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Stage unwinds a drag that is cut short (another tool's shortcut, a second finger, `pointercancel`, Escape) only through `tool.cancel`, and these tools had none: `engine.dragBase` stayed set with the preview in the document, so the next click with Rotate, Reflect, Scale or Shear committed the cancelled transform (stale `T.on` and `T.moved`), the next `beginDrag` took the preview as its base and the next `edit` snapped the art back. The Selection tool's cancel left `CW.on` set, so the next move drag ran `dragWidget` and changed a corner radius under the name Move. Each cancel now calls `cancelDrag()` when the engine is dragging and clears that tool's drag flags; the Selection cancel also clears `CW` and the overlay, and the Pen cancel clears `P.closing` (a stale value made the next path end after its first anchor). Checked with `npx tsc --noEmit`; the drags were not run in the window.
+
+### src/automation/agent-bridge.ts · counts held to the published ranges
+- refers-to: AgentBridge.run :: undo, redo, make_blend, repeat; AgentBridge.perspectiveTool :: grid cell
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`backend/app/routers/mcp.py` publishes maxima in each tool's `inputSchema` but does not validate `arguments`, and `num()` only drops non-finite values, so `undo {steps: 1e15}`, `make_blend {steps: 1e7}`, a radial `repeat` with 1e8 instances or a grid `cell` of 1e-6 froze the window; blend and repeat specs are saved in the document and the recovery copy, so it froze again on reopen. The bridge now clamps to the schema: undo and redo steps 1 to 100, blend steps 1 to 1000 (make and options), repeat instances 2 to 400 and rows and columns 1 to 100 (make and options), grid cell 1 to 2000 pt. The engine undo loop that keeps going after history runs out is engine code and not changed here. Checked with `npx tsc --noEmit`; not run against a window.
+
+### src/tools/view.ts · Rotate View measures the pointer's own angle
+- refers-to: rotateView :: down, move
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`p.screen` comes from `Stage.unturn` with the live `viewport.rotation`, which this drag keeps changing, so `atan2(p.screen)` was the pointer's angle minus the rotation and `deg = base + (a - start)` fed the rotation back into itself: the view turned about half as far as the pointer and jittered. Both the start angle and the moving angle now add the current rotation back (in radians). Checked with `npx tsc --noEmit` and a node simulation of `unturn` and the tool: a 90 degree sweep from a 30 degree view reads 45, 60, 75, 90, 105, 120 at 15 degree marks. Not run in the window.
+
+### src/app.ts, src/tools/transform.ts · transform dialogs use the tool's reference point
+- refers-to: src/app.ts :: transformDialog; src/tools/transform.ts :: toolOrigin, origin, xformTool up
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Rotate, Reflect, Scale and Shear tools set `T.origin` on a click (Alt-click also opens the dialog), but `T.origin` is private to the tool module and `transformDialog` always used `centerOfSel()`, so the dialog turned the art about the selection centre, not the point just set. `toolOrigin(e)` exports `origin(e)` (the set point for the current selection, else the geometric centre) and `transformDialog` uses it while `engine.tool` is one of those four; otherwise `centerOfSel()` as before. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/properties.ts · Transform fields use the preview-bounds setting
+- refers-to: TransformFields :: x, y, rot, shear, flips, resize, sync; src/engine/index.ts :: setBounds
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The fields read `selectionBounds(false)` (geometric) while `setBounds` measures `view.previewBounds`, so with Use Preview Bounds on and a 10 pt stroke, W = 200 on a 100 pt square scaled by 200/110 and shifted the art, and X or Y landed half a stroke off. Every bounds read in `TransformFields` now calls `selectionBounds()` with its default, the same rectangle `setBounds` uses; with the setting off nothing changes. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/panels/symbols.ts · Artboard Options keeps the background
+- refers-to: ArtboardsPanel.options
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Background field was seeded with the literal `#ffffff` and `bg` was rebuilt from it on OK whenever Transparent was unchecked, so renaming an artboard through the dialog turned a coloured background white. The field is now seeded with `hex(a.bg)` (imported as `hexOf`, because the function's own `hex` constant would shadow it), and when the field still holds that value on OK the stored `a.bg` is kept as it is, so a CMYK background is not rewritten as RGB. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/panels/actions.ts · set names are unique
+- refers-to: ActionsPanel.unique, newSet, editRow (set rename), duplicate, loadText, save, remove
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Sets are stored through `api.saveActionSet(s.name, ...)` and removed through `deleteActionSet(s.name)`, so two sets with one name shared a file: the later save replaced the other set, only one came back after a reload, and deleting one removed the other's file. Only `loadText` made names unique. `unique(base, self?)` now holds that loop (it compares without case, for case-insensitive disks) and New Set, a set rename, Duplicate on a set and `loadText` all go through it. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/dropdown.ts · enhanceSelect returns a disposer
+- refers-to: enhanceSelect; src/ui/form-dialog.ts :: FormDialog.disposers, ask; src/ui/panels/asset-export.ts :: rowDisposers, fillRows, addRow
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Each call appended a `.cv-dd-pop` to `#overlay-root`, a capture `pointerdown` listener to `document` and a `MutationObserver`, none ever removed. `FormDialog.ask` rebuilds its body on every open and Asset Export refills its rows on every asset pick, so popups, document listeners and observers (each keeping its detached select alive) grew without bound. `enhanceSelect` now returns `() => { pop.remove(); removeEventListener; mo.disconnect(); }`; FormDialog runs its selects' disposers before clearing the body, and Asset Export runs a row's disposer when the row is deleted and all of them before a refill. Callers that build their selects once ignore the return value. Checked with `npx tsc --noEmit`; the popup count was not checked in the window.
+
+### src/ui/stage.ts · docPoint follows the view rotation
+- refers-to: Stage.docPoint; src/app.ts :: stage contextmenu, drop handler, RecolorDialog stagePoint
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`docPoint` converted client coordinates with `viewport.toDoc` alone, without the `Stage.unturn` step `pointer()` applies for the CSS-rotated canvases, so in a rotated view right-click selected and acted on the object at the un-rotated spot, drops landed at the wrong point and the Recolor eyedropper sampled the wrong place. It now unturns by `v.rotation` first; at rotation 0 `unturn` returns the point as it is. Checked with `npx tsc --noEmit`; not run in a rotated view.
+
+### src/tools/transform.ts · Ctrl+Alt shear selects its copy
+- refers-to: shearDrag; freeTransform up; src/tools/select.ts :: endTransform
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`shearDrag` passed `p.alt` to `transformNodes`, so a copy was made, but dropped the result's ids and never called `noteDragTransform`: `endTransform` committed with the original selected and Transform Again did not know the shear. It now keeps the result, sets `FT.copyIds` to the copy's ids when Alt is held (null otherwise) and notes the matrix, as the other Free Transform drags do. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/automation/catalogue.ts · the gate lists real command ids
+- refers-to: WINDOW_ONLY, RISKY; src/app.ts :: commands settings, manage-plugins, action-batch, package, clear-recent
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`WINDOW_ONLY` named `preferences` and `quit` and `RISKY` named `revert`, `close-all`, `delete-library` and `batch`; none of these ids exist. Preferences is `settings`, so agents could open it, and Batch is `action-batch`, so `list_commands` did not say undo cannot reverse it. Now `WINDOW_ONLY` adds `settings` and `manage-plugins` and `RISKY` is `clear-recent`, `action-batch` and `package` (which writes a folder). Checked with `npx tsc --noEmit`; not run with an agent.
+
+### src/ui/layers.ts · a released press drops the row drag
+- refers-to: LayersPanel.bind :: rows pointermove
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+A press on a row that left the list sideways (under 5 px vertically) and was released outside it left `this.drag` set, since no capture was taken yet and `pointerup` never reached the rows. A later hover turned it into a moving drag with a drop line, and the `pointerup` of a click on another row's eye or lock button ran `end()` and moved the old ids. `pointermove` now clears the drag and the line when `ev.buttons & 1` is off, as `Dock.move` does. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/place-dialog.ts · a stale thumbnail run hands over its queue
+- refers-to: PlaceDialog.drain, ask
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`busy` is shared across dialog sessions. Reopening Place while the previous session's thumbnail was rendering queued the new visible pages and called `drain`, which returned because `busy` was still set; the old run then saw `token` change and exited without draining, so the first thumbnails stayed blank until a scroll. The `finally` of `drain` now restarts it when the queue holds work and the token has moved on. Checked with `npx tsc --noEmit`; not run with a slow PDF.
+
+### src/ui/text-editor.ts · caret steps by code point
+- refers-to: TextEditor.key :: Backspace, Delete, ArrowLeft, ArrowRight; prevPoint, nextPoint
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Caret steps were one UTF-16 code unit, so Backspace after an emoji left its high surrogate and an arrow key landed inside the pair; the lone surrogate showed as a replacement glyph and was saved. `prevPoint` and `nextPoint` step over a high and low surrogate pair as one character; Backspace and ArrowLeft use the first, Delete and ArrowRight the second. Grapheme clusters (an emoji with a skin-tone modifier or a ZWJ sequence) still take one step per code point. Checked with `npx tsc --noEmit` and the helpers in node; typing not run in the window.
+
+### src/ui/terminal-dock.ts · New Terminal opens one when the dock was hidden
+- refers-to: TerminalDock.newTerminal, open, boot, opens
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+With the dock hidden, `newTerminal` called `toggle(true)` and awaited `pending`, and `boot` opens a terminal only when there are no tabs, so with terminals already open the command just showed the old tab. `open()` now counts its calls in `opens`; `newTerminal` notes the count before showing the dock and, if start-up did not open a terminal, opens one. A dock that starts empty still gets exactly one. Checked with `npx tsc --noEmit`; not run against the terminal service.
+
+### src/ui/app-dialogs.ts · an empty preference number is not its minimum
+- refers-to: SettingsDialog constructor :: num
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`Number('')` is 0, which is finite, so clearing a Preferences number and leaving it saved the field's minimum; for Undo steps kept that called `setHistoryLimit(10)` and dropped the history beyond 10 steps at once. An empty or non-numeric field now gets `this.prefs[key]` written back and nothing is saved. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/app.ts · Space on a keyboard-focused button
+- refers-to: window keydown :: Space hand
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The global keydown took Space for the temporary Hand on every element that is not a field and called `preventDefault()`, so buttons, dropdown items, menu items and tabs could not be pressed with Space. Space now passes to the element when it matches `:focus-visible` and is a `button` or has role button, option, menuitem or tab. `:focus-visible` keeps the Hand after a mouse click, which leaves focus on the clicked button without matching it. Checked with `npx tsc --noEmit`; keyboard not run in the window.
+
+### src/ui/app-dialogs.ts · Export checks the range only when it is used
+- refers-to: ExportDialog constructor :: Export button; ExportDialog.sync (Range row), value
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Export button refused any invalid Range text and focused the field, also when the Range row was hidden (scope other than the active artboard, or DXF or DWG) and the range would not be read, so Export silently did nothing. It now validates under the same condition `sync` uses to show the row and `value` uses to read it. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/panels/graph-data.ts · the grid is built from the data, not from text
+- refers-to: gridOf; GraphDataWindow.load, import handler
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`load` wrote the data through `dataToText` (which quotes a label holding a quote, tab or newline and doubles its quotes) and split it on newlines and tabs, stripping only the outer quotes, so `He said "hi"` came back with doubled quotes that every Apply doubled again and a newline split the row. The import handler did the same with `parseTable`'s result. `gridOf(d)` builds the rows directly from `cleanData(d)` (series header, one row per category, empty cells for null) and both paths use it; `dataToText` is no longer imported here. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/menu.ts, src/ui/app-dialogs.ts · shortcut changes reach the menus
+- refers-to: PopupMenu.refresh; ShortcutsDialog.save, onSaved; src/app.ts :: native menus block; src/ui/native-menu.ts :: build
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`setItems` returns early when the item list is unchanged and `refresh` rewrote label, enabled and checked but not `.cv-menu-keys`, so a remapped or removed shortcut kept its old label; native accelerators are set only in `NativeMenus.build`, which ran again only on `projects`, so on macOS the old key kept running the old command. `refresh` now writes each row's `keyLabel` through `setText` (a write only when it differs), and `ShortcutsDialog.save` calls `onSaved`, which `app.ts` sets to `native.build()` when native menus are on. Checked with `npx tsc --noEmit`; native menus not run (macOS desktop only).
+
+### src/ui/panels/kit.ts, src/ui/panels/stroke.ts · typed units, decimal comma, dash values
+- refers-to: evalNumber, numField commit; StrokePanel constructor (dash fields), applyDashes
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`evalNumber` stripped any letter suffix and used the number as is (10 mm in a pt field applied 10 pt), and `1,5` threw and reverted silently. It now takes the field's `.cv-unit` text: a suffix equal to it passes, a length unit converts through `UNIT_PT` to the field's length unit, anything else throws so the field reverts; a single comma in a number without a dot is the decimal point (so `1,000` reads as 1). The dash and gap fields committed through `numField` (evaluated and clamped) but `applyDashes` re-read the raw text with `parseFloat`, so `2*6` gave 2 and `-5` a negative dash; the field now passes its index and the committed value, and only the other fields are read from their (already formatted) text. Checked with `npx tsc --noEmit` and a node copy of `evalNumber`; not run in the window.

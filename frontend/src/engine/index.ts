@@ -951,7 +951,7 @@ export class Engine extends Emitter<EngineEvents> {
     p.activeArtboard = p.doc.artboards.length - 1;
   }
   setArtboard(i: number, patch: Partial<Artboard>): void { this.edit('Artboard Options', (d) => ({ ...d, artboards: d.artboards.map((a, k) => (k === i ? { ...a, ...patch, w: clampArtboardSide(patch.w ?? a.w), h: clampArtboardSide(patch.h ?? a.h) } : a)) })); }
-  deleteArtboard(i: number): void { const p = this.current; if (!p || p.doc.artboards.length < 2) return; this.edit('Delete Artboard', (d) => ({ ...d, artboards: d.artboards.filter((_, k) => k !== i) })); p.activeArtboard = Math.min(p.activeArtboard, p.doc.artboards.length - 1); }
+  deleteArtboard(i: number): void { const p = this.current; if (!p || p.doc.artboards.length < 2) return; this.edit('Delete Artboard', (d) => ({ ...d, artboards: d.artboards.filter((_, k) => k !== i) })); p.activeArtboard = i < p.activeArtboard ? p.activeArtboard - 1 : Math.min(p.activeArtboard, p.doc.artboards.length - 1); }
   setActiveArtboard(i: number): void { const p = this.current; if (!p || i < 0 || i >= p.doc.artboards.length) return; p.activeArtboard = i; this.emit('options', null); this.emit('render', null); }
   fitArtboard(i: number, to: 'art' | 'selection'): void {
     const p = this.current; if (!p) return;
@@ -1466,7 +1466,7 @@ export class Engine extends Emitter<EngineEvents> {
       if (paint) fills.push({ at, paint });
     }
     const made: GroupNode = { ...g, livePaint: { ...lp, fills } };
-    const order = inDocOrder(p.doc, nodes.map((n) => n.id)), last = order[order.length - 1];
+    const order = inDocOrder(p.doc, [...(host ? [host] : []), ...adds].map((n) => n.id)), last = order[order.length - 1];
     this.edit(host ? 'Merge Fill Regions' : 'Make Fill Regions', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => made), select: [made.id] }));
     return made.id;
   }
@@ -2136,7 +2136,7 @@ export class Engine extends Emitter<EngineEvents> {
   newDocumentFromState(index?: number): Project | null {
     const p = this.current;
     if (!p) return null;
-    const st = p.history.stateAt(index ?? p.history.mark());
+    const st = p.history.stateAt(index ?? p.history.steps().current);
     if (!st) return null;
     const q = this.addProject(st.doc, `${p.name} ${st.name}`.slice(0, 80));
     for (const [k, b] of p.assets) q.assets.set(k, b);
@@ -2387,13 +2387,14 @@ export class Engine extends Emitter<EngineEvents> {
     const t = topObjects(p.doc, p.selection);
     if (!t.length) return;
     const nodes = t.map((id) => findNode(p.doc, id) as VNode);
-    const syms = new Set<string>(), imgs = new Set<string>(), pats = new Set<string>();
-    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const e of n.ap.effects) if (e.id === '3d.model' && typeof e.params.model === 'string') { const m = p.doc.images[e.params.model] ? getMesh(e.params.model) : null; imgs.add(e.params.model); for (const g of m?.groups ?? []) if (g.tex) imgs.add(g.tex); } else if (e.id.startsWith('3d.') && typeof e.params.texture === 'string') { const t = e.params.texture, s = p.doc.symbols.find((x) => x.id === t || x.name === t); if (p.doc.images[t]) imgs.add(t); else if (s) syms.add(s.id); } for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
+    const syms = new Set<string>(), imgs = new Set<string>(), pats = new Set<string>(), brs = new Set<string>(), sws = new Set<string>();
+    const swatchOf = (q: Paint): void => { if ((q.type === 'color' || q.type === 'gradient') && q.swatch) sws.add(q.swatch); };
+    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const e of n.ap.effects) if (e.id === '3d.model' && typeof e.params.model === 'string') { const m = p.doc.images[e.params.model] ? getMesh(e.params.model) : null; imgs.add(e.params.model); for (const g of m?.groups ?? []) if (g.tex) imgs.add(g.tex); } else if (e.id.startsWith('3d.') && typeof e.params.texture === 'string') { const t = e.params.texture, s = p.doc.symbols.find((x) => x.id === t || x.name === t); if (p.doc.images[t]) imgs.add(t); else if (s) syms.add(s.id); } for (const i of n.ap.items) { if (i.paint.type === 'pattern') pats.add(i.paint.pattern); if (i.kind === 'stroke' && i.brush) brs.add(i.brush); swatchOf(i.paint); } if (n.kind === 'text') for (const s of n.spans) { swatchOf(s.style.fill); swatchOf(s.style.stroke); } });
     const assets = new Map<string, Blob>();
     for (const k of imgs) { const b = p.assets.get(k); if (b) assets.set(k, b); }
     this.clipboard = {
-      stamp: newId('cb'), nodes, symbols: p.doc.symbols.filter((s) => syms.has(s.id)), swatches: p.doc.swatches.filter((s) => nodes.some((n) => n.ap.items.some((i) => (i.paint.type === 'color' || i.paint.type === 'gradient') && i.paint.swatch === s.id))),
-      patterns: p.doc.patterns.filter((x) => pats.has(x.id)), brushes: p.doc.brushes.filter((b) => nodes.some((n) => n.ap.items.some((i) => i.kind === 'stroke' && i.brush === b.id))),
+      stamp: newId('cb'), nodes, symbols: p.doc.symbols.filter((s) => syms.has(s.id)), swatches: p.doc.swatches.filter((s) => sws.has(s.id)),
+      patterns: p.doc.patterns.filter((x) => pats.has(x.id)), brushes: p.doc.brushes.filter((b) => brs.has(b.id)),
       images: Object.fromEntries([...imgs].map((k) => [k, p.doc.images[k]]).filter(([, v]) => v)), assets, bounds: selectionBounds(p.doc, nodes),
     };
     this.emit('options', null);
@@ -2445,8 +2446,12 @@ export class Engine extends Emitter<EngineEvents> {
     p.assets.set(key, blob);
     const s = width ? width / w : 1;
     const node: VNode = { id: newId('im'), kind: 'image', src: key, w, h, xf: [s, 0, 0, s, at.x, at.y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(link ? { link } : {}), ...(linked ? { linked, link: linked.name } : {}) };
+    const own = !this.step;
+    if (own) this.beginStep();
     this.edit('Place', (d) => ({ ...d, images: { ...d.images, [key]: { mime: blob.type || 'image/png', w, h } } }));
-    return this.addNodes('Place', [node])[0] ?? '';
+    const id = this.addNodes('Place', [node])[0] ?? '';
+    if (own) this.endStep();
+    return id;
   }
 
   addImageAsset(key: string, blob: Blob, w: number, h: number): boolean {

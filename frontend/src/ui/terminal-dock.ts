@@ -71,6 +71,7 @@ export class TerminalDock {
   private active: string | null = null;
   private started = false;
   private pending: Promise<void> | null = null;
+  private opens = 0;
   private chat: ChatPane | null = null;
   private chatTab: HTMLElement | null = null;
 
@@ -107,7 +108,7 @@ export class TerminalDock {
   }
 
   async newTerminal(): Promise<void> {
-    if (!this.isOpen()) { this.toggle(true); await this.pending; return; }
+    if (!this.isOpen()) { const n = this.opens; this.toggle(true); await this.pending; if (this.opens !== n) return; }
     await this.open();
   }
 
@@ -235,6 +236,7 @@ export class TerminalDock {
   }
 
   private async open(): Promise<void> {
+    this.opens++;
     this.reveal();
     try { this.mount(await api.openTerminal(100, 20), true); } catch (err) { this.onFail(err); }
   }

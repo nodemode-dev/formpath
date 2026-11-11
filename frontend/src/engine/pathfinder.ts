@@ -160,7 +160,8 @@ export function splitContours(d: PathData): PathData[] {
   if (!kids.length) return [d];
   const outer = kids.filter((k) => k.clockwise === kids[0].clockwise);
   if (outer.length <= 1) return [d];
-  return outer.map((o) => [...fromPaper(o), ...kids.filter((h) => h.clockwise !== o.clockwise && o.contains(h.interiorPoint)).flatMap((h) => fromPaper(h))]);
+  const owner = (h: paper.Path): paper.Path | undefined => outer.filter((o) => Math.abs(o.area) > Math.abs(h.area) && o.contains(h.interiorPoint)).sort((a, b) => Math.abs(a.area) - Math.abs(b.area))[0];
+  return outer.map((o) => [...fromPaper(o), ...kids.filter((h) => h.clockwise !== o.clockwise && owner(h) === o).flatMap((h) => fromPaper(h))]);
 }
 
 interface Face { d: PathData; top: number }

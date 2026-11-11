@@ -38,6 +38,7 @@ export class FormDialog extends Dialog {
   private resolve: ((v: Record<string, FieldValue> | null) => void) | null = null;
   private title = '';
   private readers: Array<() => [string, FieldValue]> = [];
+  private disposers: Array<() => void> = [];
   private opts: FormOpts = {};
   private readonly okBtn: HTMLButtonElement;
   private readonly extraBtn: HTMLButtonElement;
@@ -54,7 +55,7 @@ export class FormDialog extends Dialog {
     this.previewBox = q<HTMLInputElement>(this.previewRow, 'input');
     this.foot.prepend(this.previewRow);
     this.previewBox.addEventListener('change', () => this.update());
-    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); this.finish(this.values()); } });
+    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); this.finish(this.values()); } });
     this.onClose = () => { if (!this.settled) { this.settled = true; this.opts.cancel?.(); this.resolve?.(null); this.resolve = null; formHooks.onResult?.(this.title, null); } };
   }
 
@@ -82,6 +83,7 @@ export class FormDialog extends Dialog {
     this.opts = opts;
     this.settled = false;
     this.readers = [];
+    for (const d of this.disposers.splice(0)) d();
     this.body.textContent = '';
     (this.scrim.querySelector('.cv-dialog') as HTMLElement).style.setProperty('--cv-dialog-w', `${opts.width ?? 380}px`);
     for (const f of fields) {
@@ -100,7 +102,7 @@ export class FormDialog extends Dialog {
         s.value = f.value;
         s.addEventListener('change', () => this.update());
         this.field(f.label, s);
-        enhanceSelect(s);
+        this.disposers.push(enhanceSelect(s));
         this.readers.push(() => [f.key, s.value]);
       } else if (f.kind === 'check') {
         const row = el('<label class="cv-check"><input type="checkbox"><span></span></label>');

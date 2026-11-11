@@ -78,7 +78,7 @@ def tools_reference() -> str:
 
 
 def commands_reference() -> str | None:
-    path = Path(os.environ.get("FORMPATH_DATA", str(Path.home() / "Formpath"))) / "commands-catalogue.json"
+    path = Path(os.environ.get("FORMPATH_DATA_DIR") or str(Path.home() / "Formpath")).expanduser() / "commands-catalogue.json"
     if not path.exists():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))

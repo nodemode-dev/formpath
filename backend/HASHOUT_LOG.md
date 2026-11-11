@@ -54,6 +54,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - app/routers/fonts.py
 - app/services/fonts.py
 - app/main.py
+- formpath and setup (the launchers)
 
 ## formpath_engine.py
 
@@ -71,6 +72,20 @@ The desktop shell starts this with `FORMPATH_PORT=0`; Uvicorn binds a free loopb
 
 formcompiler runs `./formpath desktop build` in Git Bash on Windows. `--add-data` took `$FORMPATH_ROOT/frontend/dist;frontend_dist`, an MSYS path such as `/d/a/formpath/formpath/frontend/dist` joined to its destination by `;` inside one argument, which Git Bash may not convert to a Windows path before it reaches PyInstaller, so the build could fail to find the frontend or freeze an engine without it. On Windows the script now takes `root` from `cygpath -w "$FORMPATH_ROOT"` and uses it for the `--add-data` source and the entry script; macOS and Linux keep `$FORMPATH_ROOT`. The paths stay absolute because `--specpath build/pyinstaller` makes relative ones resolve against the spec folder. There is no `--add-binary`. Found by the family builds audit of 2026-10-30.
 
+### formpath_engine.py · the engine knows the port it listens on
+- refers-to: formpath_engine.py :: main; app/core/config.py :: port; app/services/terminal.py :: engine_url, base_env; app/services/claude_code.py :: mcp_config
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The desktop shell starts the sidecar with `FORMPATH_PORT=0`, and `config.port()` read that "0" as a real value (a non-empty string, so the `or BACKEND_PORT` fallback never ran), while nothing recorded the port Uvicorn then picked. So in the desktop app Claude Code's `--mcp-config` (the Claude Code tab and every Chat message) named `http://127.0.0.1:0/mcp` and the dock's shells got `FORMPATH_ENGINE_URL`, `FORMPATH_MCP_URL` and `FORMPATH_URL` on port 0: no formpath tools in Claude Code, and `./formpath cli` and the stdio bridge failed inside the dock. When the port is 0, `main` now binds a socket to 127.0.0.1 port 0, reads the free port the system gave it, closes it, writes that port to `FORMPATH_PORT` and passes it to Uvicorn, which still prints the `http://127.0.0.1:<port>` line the shell reads. A set port is used as before. The port is free between the close and Uvicorn's bind for a few milliseconds only; another program taking that exact port in between would make the engine fail to start, as any taken port does. Checked: the engine run with `FORMPATH_PORT=0` printed port 48863, and a dock shell opened through `POST /api/terminal` echoed `FORMPATH_MCP_URL=http://127.0.0.1:48863/mcp`; the backend tests pass. The frozen sidecar and the desktop app were not built here.
+
+### formpath_engine.py · the Windows desktop build freezes the fresh frontend
+- refers-to: setup/desktop.bat; setup/freeze_backend.bat :: the frontend\dist check; setup/desktop_build
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`setup/desktop.bat` (run by `build_app.bat` and `formpath.bat desktop build`) froze the engine first and rebuilt the frontend after. `freeze_backend.bat` builds the frontend only when `frontend\dist\index.html` is missing, so after any earlier build the sidecar bundled the previous `dist` as its `frontend_dist`; the rebuilt `dist` then reached only Tauri's splash, while the main window is served by the engine from its bundled copy, so the Windows installer showed the old UI. The bash path (`setup/desktop_build`) already builds first. `desktop.bat build` now runs `build_frontend.bat` and then `freeze_backend.bat`; `desktop.bat dev` freezes as before. The icon line now runs before the freeze; `src-tauri\icons\icon.ico` is tracked, so it does nothing in a checkout. CRLF endings kept. Not run on Windows: reasoned from the order of the calls.
+
 ## oc_install
 
 ### oc_install · Python on Windows and the venv layout
@@ -80,6 +95,13 @@ formcompiler runs `./formpath desktop build` in Git Bash on Windows. `--add-data
 
 formcompiler runs `./formpath install` in Git Bash on its Windows runner, where setup-python provides `python` (and `py`) and `python3` may not exist, so the candidate list tried only python3.14 to python3 and stopped with "Python 3.12 or newer is required". `python` is now the last candidate, the same list as `setup/lib.sh :: fp_python` and formpdf and formtxt; the version check still refuses an older one. The activate script is `venv/bin/activate` on macOS and Linux and `venv/Scripts/activate` on Windows; the script now picks whichever exists and stops with a message when neither does (a half-made venv), instead of a bare `source` error. Found by the family builds audit of 2026-10-30.
 
+### oc_install.bat · stops when the venv cannot be made
+- refers-to: oc_install.bat :: venv, activate; setup/install_all.bat
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+When `%PY% -m venv venv` failed (a Python without venv, a locked folder), the script went on: `call venv\Scripts\activate.bat` failed, `python -m pip` and `pip install` ran against the system Python, `install_all.bat` reported success, and boot later said the venv was missing. The venv step now exits 1 when it fails, and the script stops with a message when `venv\Scripts\activate.bat` is missing (also a half-made venv left by an earlier run), before any pip runs. `install_all.bat` already stops on that exit code. CRLF endings kept. Not run on Windows: reasoned from cmd's `||` and `if not exist` rules.
+
 ## app/core/config.py
 
 ### app/core/config.py · ports and folders
@@ -88,6 +110,13 @@ formcompiler runs `./formpath install` in Git Bash on its Windows runner, where 
 - logged: v0.9.0 · 2026-10-07
 
 8230 so formpath runs beside formvis (8190). Data lives in `~/Formpath` unless `FORMPATH_DATA_DIR` is set; the library folder can be moved (`FORMPATH_LIBRARY_DIR`, or `library.json` written by the app), including into a synced folder.
+
+### app/core/config.py · opened-project sessions live in the data folder
+- refers-to: app/core/config.py :: sessions_dir; app/services/sessions.py :: create, prune, asset path
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Sessions (the images of an opened project, served to the window) were kept in `<temp>/formpath-sessions`. On Linux that is the shared `/tmp`: a second account on the machine could not open projects (the folder belonged to the first, PermissionError and a 500), the images were readable by every account, and a local user who made `/tmp/formpath-sessions` or a symlink by that name first received every opened project's images. macOS and Windows give each account its own temp folder, so they were not exposed. `sessions_dir` is now `sessions` inside the data folder (`~/Formpath` or `FORMPATH_DATA_DIR`), which belongs to the person like `Chat`, `profiles` and `plugins` beside it; `prune` still removes sessions older than a day, and an old `/tmp/formpath-sessions` is no longer read or cleaned. Checked: `sessions.create` writes under `<data>/sessions/<id>/images`; the backend tests pass; `ruff check` on config.py passes.
 
 ## app/core/local_guard.py
 
@@ -256,6 +285,13 @@ Linked images need the size and modified time of their files: files_stat answers
 
 Saving compares the version the window opened with the file's current version; if another device or window changed it, the incoming save is written beside it as a conflict copy and both are kept.
 
+### app/routers/projects.py · moving the library is all or nothing
+- refers-to: app/routers/projects.py :: set_folder
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`PUT /api/projects/folder` with `move` copied and deleted one project at a time and wrote `library.json` only after the loop. When a copy failed half-way (disk full, permission, a short copy), the projects already moved were gone from the old folder while the library still pointed there, so they disappeared from the app; an `OSError` from `copy2` was an unhandled 500. A name taken twice (`X.fpth` and `X (moved).fpth` both in the new folder) made `copy2` overwrite the earlier `X (moved).fpth`. Now every project is copied first; on any failure the copies made so far are removed, nothing is deleted, `library.json` is left as it was, and the answer is a 400 naming the file and the reason. Only after every copy succeeded are the originals deleted (one that cannot be deleted stays in both folders). A taken name tries `X (moved)`, then `X (moved 2)`, `X (moved 3)` and so on. Checked in a scratch run with `copy2` failing on the second of three projects: 400 "B.fpth could not be moved (No space left on device); nothing was moved.", all three still in the old folder, the new folder as before and the library still on the old folder; then a clean move moved 3, with `A.fpth` landing as `A (moved 2).fpth` and the existing `A (moved).fpth` untouched. The backend tests pass. `library.json` is still written in place, not through a temp file.
+
 ## app/routers/fonts.py
 
 ### app/routers/fonts.py · find and file
@@ -315,12 +351,33 @@ A terminal is a shell on this computer, so every route and the WebSocket refuse 
 
 Follows formlit's design. The Claude Code button runs the person's own `claude` (Preferences path, `FORMPATH_CLAUDE_BIN`, `PATH`, the usual install folders, then a login shell's `command -v`) in a PTY tab of kind `claude`, started through the login shell so the person's `PATH` and Node are found, with `--mcp-config` naming formpath's `/mcp` over HTTP plus the `x-formpath-inapp` header, `--allowedTools mcp__formpath` and a note appended to the system prompt. The token is minted per engine start and never written to disk, so only programs the engine starts carry it. The Chat tab runs `claude -p ... --output-format stream-json --include-partial-messages` per message, resuming the same session id, and publishes start, delta, tool, toolDone, usage, done, reset and adopted events to the chat WebSocket; tool result pictures are saved under the data folder's `Chat` and served by name only. Sign-in stays Claude Code's own: nothing here reads or stores a credential. `chat_sessions` reads Claude Code's own transcripts for the agent folder so a conversation started in a tab can be continued in Chat, and Open in Claude Code resumes a Chat conversation in a tab.
 
+### app/services/claude_code.py · the person's text comes after `--`
+- refers-to: app/services/claude_code.py :: argv, _chat_argv
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Chat message and the tab's first message were positional arguments among the options (`-p <text> --output-format ...`, and the prompt appended after `--resume`), so a message starting with "-", such as a Markdown bullet `- make the circle red` or `--help me align these`, was read by Claude Code as an option: "unknown option" and the Chat answered "Claude Code stopped before answering". Both builders now put every option first and pass the text after `--`, the end-of-options marker. Checked against the installed Claude Code 2.1.322 with no sign-in: `-p --output-format text --help-me` fails with "unknown option '--help-me'", while `-p --output-format text -- --help-me` and the full Chat argument list ending in `-- '- red circle'` both get past parsing to "Not logged in"; `_chat_argv` ends in `--resume S1 -- '- red circle'`; the backend tests pass.
+
+### app/services/claude_code.py · the transcripts folder for non-ASCII paths
+- refers-to: app/services/claude_code.py :: _project_dir, chat_sessions, chat_adopt
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Claude Code names a project's transcript folder by turning every character outside ASCII letters and digits into "-", but `_project_dir` used `str.isalnum()`, which keeps é, ü and other letters. For an agent folder under a home such as `/Users/josé`, Chat looked in a folder that does not exist: no conversations to continue, and adopting one failed with "No Claude Code conversation was found". The test is now ASCII letters and digits only. Checked: the installed Claude Code 2.1.322 run in a folder named `josé_ü` reports its project folder as `...-jos---`, and `_project_dir` now gives the same name; the backend tests pass. Not checked: Claude Code's handling of very long paths.
+
 ### app/routers/mcp.py · in-app token
 - refers-to: app/routers/mcp.py :: _inapp, _call, _ask, bridge_next (eligible)
 - kind: rationale
 - logged: v0.24.0 · 2026-10-15
 
 A `tools/call` carrying the engine's in-app token sets the `_inapp` context variable, which skips the outside-agent consent question in `_call` and marks the queued item `inapp` so the window's long poll delivers it even while outside agents are not allowed. Every other client still meets the question and the window session secret. The window must still be open: the token removes the question, not the window.
+
+### app/routers/mcp.py · a call that timed out leaves the queue
+- refers-to: app/routers/mcp.py :: _ask, _put, _pending, bridge_next
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`_ask` queued the call for the window and, when the wait ran out (600 s for a tool, 180 s for `__consent__`), told the agent it failed but left the item in `_pending`; its `finally` cleared only `_waiting` and `_delivered`. Trigger: an agent calls a tool while the window was live in the last 30 s, then the window closes or stops polling before it takes the call. The next window to open, minutes or hours later, received and ran it: a stale draw, delete or `__open` changed the person's current document, or a stale consent question appeared. `_ask` now keeps the queued dict and removes it from `_pending` in the `finally` (a `ValueError` means the window already took it). Checked: `_ask("x", {}, 0.05)` with no window returns None and leaves `_pending` and `_waiting` empty; the backend tests pass. Left as it was: `bridge_next` puts a taken item back at the front when the window disconnects between taking and answering; if the call's wait ends in that same moment, the item could still stay queued.
 
 ## app/routers/commands.py
 
@@ -490,3 +547,54 @@ The bridge already read `psd_edit` (default true) after the editable PSD writer 
 - logged: v0.52.8 · 2026-10-31
 
 Python's `mimetypes` takes file types from the Windows registry (`HKEY_CLASSES_ROOT\.js`, value `Content Type`) over its own table, and some installers and editors set `.js` to `text/plain`. On those PCs the engine served the built window's scripts as `text/plain`, WebView2 refused every module script under strict MIME checking, and the desktop window stayed blank; macOS, Linux, dev mode (Vite serves the page) and Windows PCs with the default value never showed it. The three calls pin `.js` and `.mjs` to `text/javascript` and `.css` to `text/css`, which covers `StaticFiles`, `FileResponse` and any direct `guess_type`. They sit after the last import, not above the imports: a module that re-reads the registry while importing cannot undo them, and no import follows a statement (E402). They look redundant off Windows; keep them. Repro on a Windows PC: `reg add "HKCU\Software\Classes\.js" /v "Content Type" /d "text/plain" /f`, then launch the rebuilt app; restore with `/d "text/javascript"`. Checked here: with the table poisoned to `text/plain` for js, mjs and css through `mimetypes.init(files=...)`, the three calls return `text/javascript`, `text/javascript` and `text/css`; `py_compile` passes. Not yet run on a Windows PC.
+
+## formpath and setup (the launchers)
+
+### formpath · mcp, cli and i18n run a Python that is new enough
+- refers-to: formpath :: the mcp, cli and i18n case; setup/lib.sh :: fp_python; setup/mcp_stdio.py, setup/cli.py, setup/i18n.py
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`./formpath mcp`, `cli` and `i18n` ran a bare `python3`, skipping the version check the other launchers make through `fp_python`. The three scripts use `X | None` annotations, which Python 3.9 evaluates at definition time and rejects with `TypeError: unsupported operand type(s) for |`, so an MCP client started from the macOS GUI (minimal `PATH`, where `/usr/bin/python3` is 3.9) saw the formpath server die at once; in Git Bash on Windows, where only `python` may exist, the command was not found. The three arms are now one: source `setup/lib.sh`, take `fp_python` (3.12 or newer, `python` last) and stop with "Python 3.12 or newer is required" on stderr when there is none, then exec the script with it. Where only an old Python is on `PATH` the command still cannot run, but it now says why instead of a traceback. Checked: `bash -n formpath`; `./formpath i18n check` exits 0, `./formpath cli` prints its usage, and `./formpath mcp` starts the bridge, which found no engine and started one, on this machine (Python 3.13). Not run on macOS or in Git Bash.
+
+### setup/python.bat · returns Python's exit code
+- refers-to: setup/python.bat; formpath.bat :: mcp, i18n, cli, claude, agents
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`( "%PY%" %* & exit /b %ERRORLEVEL% )` has `%ERRORLEVEL%` expanded when cmd parses the line, before Python runs, so the script returned the errorlevel from before (normally 0) and `formpath.bat agents sync --check`, `i18n check` and a failed `cli run` reported success. The same held for the `py -3` line. Both now end in a bare `exit /b`, which keeps the errorlevel current when it runs; the last two lines were already correct. CRLF endings kept. Not run on Windows: reasoned from cmd's parsing rules (percent expansion happens once per parsed line or block; `exit /b` without a number keeps the current errorlevel).
+
+### setup/mcp_stdio.py · a slow answer is not a dead engine
+- refers-to: setup/mcp_stdio.py :: forward, start_engine; app/routers/mcp.py :: _call, _ask
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`forward` waited 660 s for the engine, but one `tools/call` can take up to 845 s there (20 s for a live window, 45 s for a new one, 180 s for consent, 600 s for the tool). The read timeout is a `TimeoutError`, an `OSError`, so it fell into the "the engine is not answering" branch: the bridge started `./formpath serve` beside the running engine, `/api/version` answered 200 from the old one, and the same JSON-RPC request was posted again, so a draw or delete ran twice. A timeout (raised directly, or as the reason of a `URLError`) now answers the call once with "formpath did not answer in time" and never restarts or reposts; the wait is 900 s, above the engine's own longest. Checked: against a stub that takes 3 s, with the wait cut to 1 s for the check, the bridge answered the JSON-RPC error with the request's id and the stub saw one POST.
+
+### setup/clean.bat · --all removes the venv on its own
+- refers-to: setup/clean.bat :: --all
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The `--all` line was `( if exist frontend\node_modules rmdir ... & if exist backend\venv rmdir ... )`. In cmd, everything after an `if` condition on the same line, `&` included, is the `if`'s command, so the venv was removed only when `frontend\node_modules` existed, and `formpath.bat clean --all` left `backend\venv` in place once node_modules was gone. The two removals are now separate lines inside the block. CRLF endings kept. Not run on Windows: reasoned from cmd's parsing of `if` with `&`.
+
+### setup/check, counts, doctor and formpath agents · the Windows venv layout
+- refers-to: setup/check :: py; setup/counts :: py; setup/doctor :: vpy; formpath :: agents; setup/lib.sh :: fp_venv
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+These four looked only at `backend/venv/bin/python`. In Git Bash on Windows the venv's interpreter is `backend/venv/Scripts/python.exe`, so `./formpath check` (engine self-check, harness sync check), `counts` and `agents` fell back to the system Python and failed to import fastapi although the venv was installed, and `doctor` skipped its keyring check. Each now tries `Scripts/python.exe` when `bin/python` is not there, the same two layouts `fp_venv` already accepts; the fallbacks after it are unchanged. Checked: `bash -n` on the four files; `./formpath doctor` runs as before on Linux. Not run in Git Bash on Windows.
+
+### setup/agents.py and setup/command_counts.py · read FORMPATH_DATA_DIR
+- refers-to: setup/agents.py :: commands_reference; setup/command_counts.py :: load; app/core/config.py :: data_dir
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Both read the stored command catalogue from `FORMPATH_DATA`, a name nothing else sets, while the engine writes it to `FORMPATH_DATA_DIR` (or `~/Formpath`). With `FORMPATH_DATA_DIR` set, `./formpath agents sync` built the harness skill's `references/commands.md` from a stale or missing `~/Formpath/commands-catalogue.json`, and `counts --commands` fell back to the wrong file when the engine was not answering. Both now read `FORMPATH_DATA_DIR`, an empty value counting as unset and `~` expanded, as `config.data_dir` does. Checked: with `FORMPATH_DATA_DIR` pointing at a scratch catalogue, `commands_reference` rendered it and `command_counts.load` (engine port unreachable) returned its one command.
+
+### build_app · the macOS bundle is named from productName
+- refers-to: build_app :: product, app, the disk image stage, the install to Applications; src-tauri/tauri.conf.json :: productName
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Tauri names the macOS bundle after `productName`, which is "FormPath" since 0.52.9, but `build_app` still looked for `bundle/macos/formpath.app`. On a case-sensitive volume a full build ended in "the build finished but .../formpath.app is missing" and exit 1; on the usual case-insensitive volume it worked but put the app in the disk image and in Applications as `formpath.app`. The script now reads `productName` from `tauri.conf.json`, as it reads `version`, and uses `$product.app` for the bundle, the disk image stage and the installed copy. Left as they were: `pgrep -x formpath` and `tell application "formpath" to quit`, because the running process's name depends on the bundle's executable name, which was not checked here; the quit is a courtesy and the copy goes ahead either way. Checked: `bash -n build_app`, and the read gives "FormPath". Not run on macOS.

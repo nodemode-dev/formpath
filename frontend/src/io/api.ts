@@ -102,7 +102,7 @@ export const api = {
   async spellDictionaryEdit(add: string[], remove: string[] = []): Promise<string[]> { return (await json<{ words: string[] }>(await request('/spell/dictionary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ add, remove }) }))).words; },
   async similarFonts(id: string, limit = 10): Promise<SimilarFont[]> { try { return (await json<{ fonts: SimilarFont[] }>(await request(`/fonts/similar?id=${encodeURIComponent(id)}&limit=${limit}`))).fonts; } catch { return []; } },
   async fonts(): Promise<FontInfo[]> { try { return await json<FontInfo[]>(await request('/fonts')); } catch { return []; } },
-  async findFont(family: string, style: string): Promise<FontInfo | null> { try { return await json<FontInfo>(await request(`/fonts/find?family=${encodeURIComponent(family)}&style=${encodeURIComponent(style)}`)); } catch { return null; } },
+  async findFont(family: string, style: string): Promise<FontInfo | null> { try { return await json<FontInfo>(await request(`/fonts/find?family=${encodeURIComponent(family)}&style=${encodeURIComponent(style)}`)); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } },
   async fontFile(id: string): Promise<ArrayBuffer> { return (await request(`/fonts/file/${encodeURIComponent(id)}`)).arrayBuffer(); },
   async subsetFont(src: { id: string } | { bytes: ArrayBuffer }, gids: number[], axes: Record<string, number>): Promise<{ data: Uint8Array; cff: boolean } | null> {
     const body = new FormData();

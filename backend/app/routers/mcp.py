@@ -492,7 +492,8 @@ async def _ask(name: str, args: dict, timeout: float) -> dict | None:
     rid = str(next(_ids))
     fut = asyncio.get_running_loop().create_future()
     _waiting[rid] = fut
-    _put({"id": rid, "name": name, "arguments": args, **({"inapp": True} if _inapp.get() else {})})
+    item = {"id": rid, "name": name, "arguments": args, **({"inapp": True} if _inapp.get() else {})}
+    _put(item)
     try:
         return await asyncio.wait_for(fut, timeout=timeout)
     except asyncio.TimeoutError:
@@ -500,6 +501,10 @@ async def _ask(name: str, args: dict, timeout: float) -> dict | None:
     finally:
         _waiting.pop(rid, None)
         _delivered.pop(rid, None)
+        try:
+            _pending.remove(item)
+        except ValueError:
+            pass
 
 
 _OPENABLE = {".fpth", ".svg", ".svgz", ".pdf", ".ai", ".eps", ".epsf", ".ps", ".dxf", ".dwg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".psd", ".psb", ".tif", ".tiff", ".obj", ".glb", ".gltf"}

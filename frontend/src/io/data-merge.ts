@@ -88,8 +88,8 @@ export async function exportDataSets(engine: Engine, o: MergeOpts, version: stri
       const images = await resolveImages(p, i, (t) => errors.push(`${sets[i].name}: ${t}`));
       const q = await variationProject(p, i, images);
       let stem = fileStem(p.doc, sets[i], o.nameVar, i), n = 2;
-      while (used.has(stem)) stem = `${fileStem(p.doc, sets[i], o.nameVar, i)} ${n++}`;
-      used.add(stem);
+      while (used.has(stem.toLowerCase())) stem = `${fileStem(p.doc, sets[i], o.nameVar, i)} ${n++}`;
+      used.add(stem.toLowerCase());
       files.push({ name: `${stem}.${o.format}`, blob: await renderAs(q, o.format, Math.min(o.artboard, q.doc.artboards.length - 1), o.scale, version) });
       if (o.fpth) files.push({ name: `${stem}.fpth`, blob: await projectBlob(q) });
     } catch (err) { errors.push(`${sets[i].name}: ${err instanceof Error ? err.message : String(err)}`); }

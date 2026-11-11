@@ -39,12 +39,12 @@ class TransformFields {
     const at = (b: Rect): { x: number; y: number } => ({ x: b.x + b.w * refPoint.x, y: b.y + b.h * refPoint.y });
     const ab = (): { x: number; y: number } => { const p = engine.current; const a = p?.doc.artboards[p.activeArtboard]; return a ?? { x: 0, y: 0 }; };
     const apply = (r: Partial<Rect>): void => { engine.setBounds(r); };
-    this.x = numField('X', '', (v) => { const b = engine.selectionBounds(false); if (b) apply({ x: v * unit(engine).k + ab().x - b.w * refPoint.x }); });
-    this.y = numField('Y', '', (v) => { const b = engine.selectionBounds(false); if (b) apply({ y: v * unit(engine).k + ab().y - b.h * refPoint.y }); });
+    this.x = numField('X', '', (v) => { const b = engine.selectionBounds(); if (b) apply({ x: v * unit(engine).k + ab().x - b.w * refPoint.x }); });
+    this.y = numField('Y', '', (v) => { const b = engine.selectionBounds(); if (b) apply({ y: v * unit(engine).k + ab().y - b.h * refPoint.y }); });
     this.w = numField('W', '', (v) => this.resize(v * unit(engine).k, null), { min: 0 });
     this.h = numField('H', '', (v) => this.resize(null, v * unit(engine).k), { min: 0 });
-    this.rot = numField('', '°', (v) => { const b = engine.selectionBounds(false); if (b && v) { engine.rotateBy(v, at(b)); this.rot.set(0); } }, { title: 'Rotate' });
-    this.shear = numField('', '°', (v) => { const b = engine.selectionBounds(false); if (b && v) { engine.shear(v, 'horizontal', at(b)); this.shear.set(0); } }, { title: 'Shear' });
+    this.rot = numField('', '°', (v) => { const b = engine.selectionBounds(); if (b && v) { engine.rotateBy(v, at(b)); this.rot.set(0); } }, { title: 'Rotate' });
+    this.shear = numField('', '°', (v) => { const b = engine.selectionBounds(); if (b && v) { engine.shear(v, 'horizontal', at(b)); this.shear.set(0); } }, { title: 'Shear' });
     q(this.rot.el, '.cv-pf-label').innerHTML = icon('vRotate', 14);
     q(this.shear.el, '.cv-pf-label').innerHTML = icon('vShear', 14);
     this.grid = refGrid(() => { syncRef(this.grid); this.sync(); });
@@ -56,7 +56,7 @@ class TransformFields {
     top.append(this.grid, grid, this.link);
     this.el.append(top, row(this.rot.el, this.shear.el));
     if (full) {
-      const flips = row(iconButton('flipH', 'Flip Horizontal', () => { const b = engine.selectionBounds(false); if (b) engine.reflect('horizontal', at(b)); }), iconButton('flipV', 'Flip Vertical', () => { const b = engine.selectionBounds(false); if (b) engine.reflect('vertical', at(b)); }));
+      const flips = row(iconButton('flipH', 'Flip Horizontal', () => { const b = engine.selectionBounds(); if (b) engine.reflect('horizontal', at(b)); }), iconButton('flipV', 'Flip Vertical', () => { const b = engine.selectionBounds(); if (b) engine.reflect('vertical', at(b)); }));
       const strokes = check('Scale Strokes & Effects', (v) => engine.setView({ scaleStrokes: v }));
       const pats = check('Transform Patterns', (v) => engine.setView({ transformPatterns: v }));
       const corners = check('Use Preview Bounds', (v) => engine.setView({ previewBounds: v }));
@@ -68,7 +68,7 @@ class TransformFields {
   }
 
   private resize(w: number | null, h: number | null): void {
-    const e = this.engine, b = e.selectionBounds(false);
+    const e = this.engine, b = e.selectionBounds();
     if (!b) return;
     let nw = w ?? b.w, nh = h ?? b.h;
     if (this.linked && b.w > 0 && b.h > 0) { if (w !== null) nh = b.h * (nw / b.w); else if (h !== null) nw = b.w * (nh / b.h); }
@@ -76,7 +76,7 @@ class TransformFields {
   }
 
   sync(): void {
-    const e = this.engine, b = e.selectionBounds(false), u = unit(e), p = e.current, a = p?.doc.artboards[p.activeArtboard] ?? { x: 0, y: 0 };
+    const e = this.engine, b = e.selectionBounds(), u = unit(e), p = e.current, a = p?.doc.artboards[p.activeArtboard] ?? { x: 0, y: 0 };
     const r = (v: number): number => Math.round(v * 100) / 100;
     this.x.set(b ? r((b.x + b.w * refPoint.x - a.x) / u.k) : null);
     this.y.set(b ? r((b.y + b.h * refPoint.y - a.y) / u.k) : null);

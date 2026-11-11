@@ -23,6 +23,8 @@ function origin(e: Engine): Pt | null {
   return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null;
 }
 
+export function toolOrigin(e: Engine): Pt | null { return origin(e); }
+
 function reflectAcross(o: Pt, deg: number): Mat {
   const r = rotateAbout(deg, o.x, o.y), back = rotateAbout(-deg, o.x, o.y);
   return mul(r, mul([1, 0, 0, -1, 0, 2 * o.y], back));
@@ -91,6 +93,7 @@ function xformTool(id: string, label: string, iconName: string, group: string, o
       g.beginPath(); g.arc(s.x, s.y, 4, 0, Math.PI * 2); g.moveTo(s.x - 9, s.y); g.lineTo(s.x + 9, s.y); g.moveTo(s.x, s.y - 9); g.lineTo(s.x, s.y + 9); g.stroke(); g.restore();
       if (T.on && T.moved) hud(ctx, g, ctx.view().toScreen(T.cur), T.info);
     },
+    cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); T.on = false; T.moved = false; T.info = []; ctx.redraw(); },
   });
 }
 
@@ -126,7 +129,10 @@ function shearDrag(ctx: ToolContext, p: ToolPointer): void {
   const k = horiz ? (b.x - a.x) / Math.max(1e-6, r.h) * (top ? -1 : 1) : (b.y - a.y) / Math.max(1e-6, r.w) * (left ? -1 : 1);
   const oy = top ? r.y + r.h : r.y, ox = left ? r.x + r.w : r.x;
   const s: Mat = horiz ? [1, 0, k, 1, -k * oy, 0] : [1, k, 0, 1, 0, -k * ox];
-  e.dragTo(transformNodes(base, FT.ids, mul(toDoc, mul(s, toLocal)), p.alt, xf(e)).doc);
+  const m = mul(toDoc, mul(s, toLocal)), res = transformNodes(base, FT.ids, m, p.alt, xf(e));
+  FT.copyIds = p.alt ? res.ids : null;
+  e.dragTo(res.doc);
+  e.noteDragTransform(m, p.alt);
   FT.info = [`${fmt((Math.atan(k) * 180) / Math.PI)}°`];
 }
 const ftMode = (e: Engine): FtMode => e.options.ftMode ?? 'transform';
@@ -253,6 +259,7 @@ registerTool({
     e.dragTo(replaceNode(base, R.id, mapAnchorsNode(n, f)));
   },
   up: (ctx) => { const e = ctx.engine; if (!R.on) return; R.on = false; if (R.moved) e.commitDrag(); else e.cancelDrag(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); R.on = false; ctx.redraw(); },
 });
 
 type WSide = 'l' | 'r';
@@ -503,6 +510,7 @@ function liquifyTool(id: string, label: string, iconName: string, order: number,
       const v = ctx.view(), s = v.toScreen(L.hover);
       g.save(); g.strokeStyle = ctx.paint().accent; g.beginPath(); g.arc(s.x, s.y, (ctx.engine.options.liquifySize / 2) * v.zoom, 0, Math.PI * 2); g.stroke(); g.restore();
     },
+    cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); L.on = false; ctx.redraw(); },
   });
 }
 liquifyTool('warp', 'Warp Tool', 'vWarp', 57, 'warp', 'Shift+R');

@@ -118,6 +118,7 @@ export function readContainer(d: Uint8Array): Container {
   for (let p = 0; p + 64 <= sm.length;) {
     const enc = i64(sm, p + 48), np = i64(sm, p + 56), nl = i64(sm, p + 32);
     p += 64;
+    if (nl < 0 || nl > sm.length - p) throw new DwgError('The section map of this DWG drawing is damaged.');
     let name = '';
     for (let i = 0; i + 1 < nl && p + i + 1 < sm.length; i += 2) { const c = sm[p + i] | (sm[p + i + 1] << 8); if (!c) break; name += String.fromCharCode(c); }
     p += nl;

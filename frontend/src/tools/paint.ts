@@ -267,6 +267,7 @@ registerTool({
     e.dragTo(replaceNode(base, M.id, { ...m, points: pts }));
   },
   up: (ctx) => { if (envelopeUp(ctx)) return; const e = ctx.engine; if (!M.on) return; M.on = false; if (M.moved) e.commitDrag(); else e.cancelDrag(); ctx.redraw(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); M.on = false; EP.on = false; ctx.redraw(); },
   options: (e) => [
     { kind: 'title', text: 'Mesh' },
     { kind: 'range', label: 'Rows', min: 1, max: 20, get: () => e.options.meshRows, set: (v) => e.update({ meshRows: Math.round(v) }) },

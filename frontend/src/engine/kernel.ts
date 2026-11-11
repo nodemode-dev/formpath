@@ -360,5 +360,6 @@ export function regionParts(d: PathData): PathData[] {
   const outers = pieces.filter((p) => p.clockwise === (pieces[0]?.clockwise ?? true));
   if (outers.length <= 1) return [d];
   const holes = pieces.filter((p) => !outers.includes(p));
-  return outers.map((o) => [fromPaperPath(o), ...holes.filter((h) => o.contains(h.interiorPoint)).map(fromPaperPath)]);
+  const owner = (h: paper.Path): paper.Path | undefined => outers.filter((o) => Math.abs(o.area) > Math.abs(h.area) && o.contains(h.interiorPoint)).sort((a, b) => Math.abs(a.area) - Math.abs(b.area))[0];
+  return outers.map((o) => [fromPaperPath(o), ...holes.filter((h) => owner(h) === o).map(fromPaperPath)]);
 }

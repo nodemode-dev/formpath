@@ -188,7 +188,10 @@ async function loadActive(cm: ColorSettings, key: string): Promise<void> {
   try {
     if (!profiles.length) await refreshProfiles();
     const s = resolveSettings(cm);
-    if (!s.rgb || !s.cmyk) return;
+    if (!s.rgb || !s.cmyk) {
+      if (wanted === key) { wanted = ''; if (active) { active = null; activeKey = ''; lastC = -1; notify(); } }
+      return;
+    }
     const luts = await cmykLuts(s.rgb, s.cmyk, s.intent, s.bpc);
     if (wanted !== key) return;
     active = luts; activeKey = key; lastC = -1;

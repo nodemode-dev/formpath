@@ -122,7 +122,7 @@ class PlaceDialog extends Dialog {
         img.src = url;
         setClass(img, 'is-loaded', true);
       }
-    } finally { this.busy = false; }
+    } finally { this.busy = false; if (this.queue.length && token !== this.token) void this.drain(); }
   }
 
   private finish(ok: boolean): void {
