@@ -3023,6 +3023,13 @@ Proof Colors is a view state in the module (not saved), the proof setup is saved
 
 The conversion is one Engine.edit that maps layers, swatches, symbol art, graphic style appearances and artboard backgrounds, then writes colorMode and the new profile in the same step, so one Undo returns the old colours, mode and settings together. Unlike recolor.ts it keeps swatch ids and tints on paints because the swatch itself is converted in the same pass. To CMYK, an RGB or gray-derived colour goes through the destination's RGB to CMYK table, an existing CMYK colour goes through the old profile to RGB and then the new table, and gray colours stay gray. To RGB, only CMYK colours change; an RGB to RGB conversion between two RGB profiles is not done (the numbers are kept and the profile is assigned). Brush art and pattern tiles are left as they are.
 
+### src/engine/ops/profile-convert.ts · patterns, masks and region fills convert too
+- refers-to: src/engine/ops/profile-convert.ts :: convertDoc, convertNode
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Pattern tile art, opacity mask art, Fill Regions seeds and Shaper fills kept their old colours after Convert to Profile, so a CMYK document still printed and separated them from RGB values. convertDoc now converts `doc.patterns[*].art`, and convertNode converts `mask.art` and, for groups, `livePaint.fills` and `shaper.fills`. This replaces "pattern tiles are left as they are" above; brush art is still not converted. Checked with tsc and the module bundled with esbuild in a scratch folder and run on a small document.
+
 ### src/io/pdf-x.ts · pdfxParts helper
 - refers-to: src/io/pdf-x.ts :: pdfxParts; src/engine/color-management.ts :: documentCmykProfileBytes
 - kind: explainer
