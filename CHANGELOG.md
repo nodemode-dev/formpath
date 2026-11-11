@@ -2,6 +2,11 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.53.2 · 2026-11-11
+
+- Cancelling a symbol or pattern edit puts the document back as it was even when the edit took more steps than History Options keeps; before, the edit group stayed and the symbol instance stayed hidden.
+- PDF export draws characters the chosen font lacks, such as Greek in Inter or Chinese and Japanese, from a font that has them: Inter's own Greek, Cyrillic, Vietnamese and extended Latin files first, then a font installed on the computer. Create Outlines and outlined PDF text use the same fallback. When no font has a character, it stays an empty box and the export says which characters.
+
 ## 0.53.1 · 2026-11-10
 
 - The Path Eraser leaves paths it does not touch unchanged, and it tests the curve itself rather than the straight line between its points.
