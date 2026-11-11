@@ -1928,6 +1928,13 @@ Inter and JetBrains Mono `.woff` files come from @fontsource through a lazy glob
 
 opentype.js keeps an Extension lookup (type 7) as type 7 with each real subtable under `extension` and its own `lookupType` (read in its parser). applyLookup had no case for 7, so contextual features in fonts that wrap lookups in extensions (Noto, Source and other large families) did nothing. It now unwraps such a lookup into the inner type and subtables first; the spec requires one type per extension lookup, so the first subtable's type is taken. Checked: tsc clean; a scratch copy of applyLookup in node substitutes through an extension-wrapped single lookup, a chain context calling it, and an extension-wrapped chain context. Not compared with hb-shape on a real font.
 
+### src/io/fonts.ts, src/io/api.ts · a failed font lookup is retried
+- refers-to: src/io/api.ts :: api.findFont; src/io/fonts.ts :: fontFor, fontNow
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+findFont turned every error into null and fontFor and fontNow cached it for the session, so a font first asked for while the engine was down (desktop window before the sidecar, an engine restart) kept fallback metrics, could not be outlined, was rasterised in EPS and dropped from .ai private data until reload. findFont now returns null only for the engine's 404 (not installed) and rethrows the rest; fontFor deletes its cached promise when the load throws; fontNow, seeing that, lets the key be asked for again 5 s later instead of on every render (a browser without the engine would otherwise send a request per frame). Checked: tsc clean. Not run with the engine stopped and then started.
+
 ### src/io/fonts.ts · OpenType shaping
 - refers-to: src/io/fonts.ts :: installShaping, fontNow, subsOf, ligate, single, fractions, OT_ORDER; src/engine/text.ts :: Shaping, setShaping, items, drawText
 - kind: rationale

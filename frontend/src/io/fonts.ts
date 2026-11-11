@@ -136,7 +136,7 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
           if (names.some((x) => !had.includes(x))) instanceStyles.set(family, [...new Set([...had, ...names])]);
         }
         return font;
-      } catch { return null; }
+      } catch { parsed.delete(key); return null; }
     })();
     parsed.set(key, p);
   }
@@ -217,7 +217,7 @@ function fontNow(st: CharStyle): Font | null {
   const hit = ready.get(key);
   if (hit !== undefined) return hit;
   ready.set(key, null);
-  void fontFor(st.font, st.style).then((f) => { ready.set(key, f); if (f) { fontsChanged(); onFace?.(); } });
+  void fontFor(st.font, st.style).then((f) => { if (!f && !parsed.has(key)) { setTimeout(() => { if (ready.get(key) === null) ready.delete(key); }, 5000); return; } ready.set(key, f); if (f) { fontsChanged(); onFace?.(); } });
   return null;
 }
 
