@@ -768,6 +768,13 @@ paper.js (MIT) does booleans, intersections, offset and simplify on real curves.
 
 The outline of a curved stroke is built from flattened offsets and then fitted back to curves. paper's `simplify` fitted straight across corners, so a butt end came out as a bulge about a tenth of the width deep and miter tips were rounded, visibly in Expand Appearance, Outline Stroke and now the clip of gradient strokes in SVG and PDF. The outline is now cut at every vertex that turns more than 0.45 radians (butt ends, square caps, miter tips, inner join points) and each run between corners is simplified on its own, so corners stay sharp and the curves between them stay curves. A closed outline with no such corner is simplified whole as before.
 
+### src/engine/kernel.ts, src/engine/pathfinder.ts · holes in nested contours
+- refers-to: src/engine/kernel.ts :: regionParts; src/engine/pathfinder.ts :: splitContours
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Both functions gave a hole to every outer contour containing the hole's interior point. In a bullseye (ring, hole, island, hole) the inner hole went to the outer ring as well as the island, and since paper.js takes a disc's centre as its interior point, the middle hole also went to the island inside it, so Divide, Merge, the Eraser, Shaper regions and Interlace filled the centre and the gap and emptied the island. A hole now goes only to the smallest outer that is larger than the hole and contains its interior point; boolean results never cross, so that is its direct parent. Checked with tsc and a node check with the installed paper.js on a four-ring bullseye.
+
 ## src/engine/ops/recolor.ts
 
 ### src/engine/ops/recolor.ts · RECOLOR
