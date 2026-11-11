@@ -2027,6 +2027,13 @@ The HATCH counts (93 vertices or edges, 95 knots, 96 control points, 97 fit poin
 
 The reading explainer above says entities with extrusion z -1 are mirrored in x; that is right only for OCS entities (circle, arc, 2D polylines, solid, trace, text, insert, hatch). LINE, SPLINE, ELLIPSE, 3DFACE, LEADER and MTEXT are in world coordinates, so a mirrored ellipse (MIRROR leaves 230 = -1) came in at -x with its arc reversed; DWG ELLIPSE records always carry 230. `ocs` now returns the identity for those six types, and an ELLIPSE with a negative extrusion takes its minor axis as normal x major, `(ay, -ax) * ratio`, so its parameter runs clockwise as seen from +z. Checked: tsc clean; a scratch check outside the repo puts full and half ellipses with 230 = -1 at x = 5 (the half on the mirrored side), a LINE with 230 = -1 unmoved, and a CIRCLE with 230 = -1 still mirrored.
 
+### src/io/dxf.ts · non-ASCII goes out as \U+XXXX
+- refers-to: src/io/dxf.ts :: exportDxf (the Blob), parseDxf (pair reader)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The file declares `$DWGCODEPAGE ANSI_1252` (R12 has that default too) but the Blob was UTF-8, so CAD programs showed "Straße" as "StraÃŸe" and CJK as byte soup. Every character above 0x7E is now written as `\U+XXXX`, the pre-2007 escape for characters outside the code page, so the file is ASCII in any code page; characters outside the BMP go out as two escapes (one per UTF-16 unit), which formpath reads back exactly and a CAD program shows as two unknown characters. parseDxf decodes `\U+XXXX` in every pair as it reads, so layer and block names come back too, and Export DWG (which re-parses this text) gets the same strings as before. Checked: tsc clean; a scratch check outside the repo round-trips the layer "Straße Ø" and the text "Ø25 °C 日本" through DXF 2000 (ASCII file) and through DWG. Not opened in a CAD program.
+
 ## src/io/eps.ts
 
 ### src/io/eps.ts · EPS writer

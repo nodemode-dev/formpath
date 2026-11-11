@@ -36,7 +36,7 @@ export function parseDxf(text: string): DxfFile {
   for (let i = 0; i + 1 < lines.length; i += 2) {
     const code = parseInt(lines[i].trim(), 10);
     if (!Number.isFinite(code)) { i--; continue; }
-    pairs.push([code, lines[i + 1].replace(/\s+$/, '')]);
+    pairs.push([code, lines[i + 1].replace(/\s+$/, '').replace(/\\U\+([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))]);
   }
   if (!pairs.some(([k, v]) => k === 0 && v === 'SECTION')) throw new Error('This file is not a readable DXF.');
   const file: DxfFile = { version: '', units: 'unitless', metric: false, layers: new Map(), styles: new Map(), blocks: new Map(), ents: [], layouts: ['Model'] };
@@ -679,7 +679,7 @@ export async function exportDxf(p: Project, o: DxfExportOptions, outline: (n: Te
     w.splice(seedAt, ['9', '$HANDSEED', '5', w.seed]);
   }
   w.p(0, 'EOF');
-  return new Blob([w.text().replace(/\n/g, '\r\n')], { type: 'application/dxf' });
+  return new Blob([w.text().replace(/[^\x00-\x7e]/g, (ch) => `\\U+${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`).replace(/\n/g, '\r\n')], { type: 'application/dxf' });
 }
 
 function transformArt(n: VNode, m: Mat): VNode {
