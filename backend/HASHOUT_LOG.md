@@ -570,3 +570,10 @@ Python's `mimetypes` takes file types from the Windows registry (`HKEY_CLASSES_R
 - logged: v0.53.1 · 2026-11-10
 
 The `--all` line was `( if exist frontend\node_modules rmdir ... & if exist backend\venv rmdir ... )`. In cmd, everything after an `if` condition on the same line, `&` included, is the `if`'s command, so the venv was removed only when `frontend\node_modules` existed, and `formpath.bat clean --all` left `backend\venv` in place once node_modules was gone. The two removals are now separate lines inside the block. CRLF endings kept. Not run on Windows: reasoned from cmd's parsing of `if` with `&`.
+
+### setup/check, counts, doctor and formpath agents · the Windows venv layout
+- refers-to: setup/check :: py; setup/counts :: py; setup/doctor :: vpy; formpath :: agents; setup/lib.sh :: fp_venv
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+These four looked only at `backend/venv/bin/python`. In Git Bash on Windows the venv's interpreter is `backend/venv/Scripts/python.exe`, so `./formpath check` (engine self-check, harness sync check), `counts` and `agents` fell back to the system Python and failed to import fastapi although the venv was installed, and `doctor` skipped its keyring check. Each now tries `Scripts/python.exe` when `bin/python` is not there, the same two layouts `fp_venv` already accepts; the fallbacks after it are unchanged. Checked: `bash -n` on the four files; `./formpath doctor` runs as before on Linux. Not run in Git Bash on Windows.

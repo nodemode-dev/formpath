@@ -11,6 +11,7 @@ if py="$(fp_python)"; then ok "python $("$py" -V 2>&1 | awk '{print $2}')"; else
 if [ -f "$FORMPATH_ROOT/backend/venv/bin/activate" ] || [ -f "$FORMPATH_ROOT/backend/venv/Scripts/activate" ]; then ok "engine venv"; else warn "engine venv" "run ./formpath install"; fi
 if [ -d "$FORMPATH_ROOT/frontend/node_modules" ]; then ok "frontend node_modules"; else warn "frontend deps" "run ./formpath install"; fi
 vpy="$FORMPATH_ROOT/backend/venv/bin/python"
+[ -x "$vpy" ] || vpy="$FORMPATH_ROOT/backend/venv/Scripts/python.exe"
 if [ -x "$vpy" ]; then
   if "$vpy" -c "import keyring" >/dev/null 2>&1; then ok "password store (keyring)"; else warn "keyring" "rerun ./formpath install"; fi
 fi

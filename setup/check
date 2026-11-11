@@ -2,6 +2,7 @@
 source "$(dirname "$0")/lib.sh"
 fail=0
 py="$FORMPATH_ROOT/backend/venv/bin/python"
+[ -x "$py" ] || py="$FORMPATH_ROOT/backend/venv/Scripts/python.exe"
 [ -x "$py" ] || py="$(fp_python)" || { fp_say "Python 3.12+ is required"; exit 1; }
 run() { fp_say "$1"; shift; "$@" || fail=1; }
 run "frontend typecheck and build" bash -c "cd '$FORMPATH_ROOT/frontend' && npm run build --silent"

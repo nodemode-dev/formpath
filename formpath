@@ -59,7 +59,7 @@ case "$cmd" in
   claude)
     command -v claude >/dev/null 2>&1 || { printf '[formpath] Claude Code is not installed: https://claude.com/claude-code\n' >&2; exit 1; }
     exec claude --mcp-config "{\"mcpServers\":{\"formpath\":{\"type\":\"stdio\",\"command\":\"$PWD/formpath\",\"args\":[\"mcp\"]}}}" --allowedTools mcp__formpath "$@" ;;
-  agents) py=python3; [ -x backend/venv/bin/python ] && py=backend/venv/bin/python; exec "$py" setup/agents.py "$@" ;;
+  agents) py=python3; [ -x backend/venv/Scripts/python.exe ] && py=backend/venv/Scripts/python.exe; [ -x backend/venv/bin/python ] && py=backend/venv/bin/python; exec "$py" setup/agents.py "$@" ;;
   clean) exec setup/clean "$@" ;;
   help|-h|--help) usage ;;
   *) printf '[formpath] unknown command: %s\n\n' "$cmd"; usage; exit 2 ;;
