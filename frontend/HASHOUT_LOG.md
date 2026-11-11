@@ -1611,6 +1611,13 @@ The public notes do not say which way the single Gray value runs. formpath write
 
 resolveImages turns a data set's image values into assets before the synchronous engine edit: asset:key reuses a picture already in the document, a URL (http, https, data or blob) is fetched in the window, anything else is an absolute path read by the engine service. Each value is fetched once per project (cached by value) and stored in the project's assets under a fresh image key, so .fpth saves carry the pictures. Exports never touch the open document's history: each variation is a temporary Project built from applyDataSetDoc and reflow (so graphs regenerate) sharing the asset blobs, rendered by the same SVG, PDF and raster writers as File > Export. A folder destination writes each file through the engine and, when anything failed, formpath-data-merge-errors.txt; otherwise everything goes into one zip.
 
+### src/io/data-merge.ts · file names de-duplicated without case
+- refers-to: src/io/data-merge.ts :: exportDataSets (used)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`used` compared stems case-sensitively, so "Anna" and "ANNA" both kept their names and on NTFS or APFS (or a zip unpacked there) the second file replaced the first silently. The set now holds lower-cased stems, so the second becomes "ANNA 2". Checked: tsc clean. Not run on Windows or macOS.
+
 ## src/io/project-io.ts
 
 ### src/io/project-io.ts · artboard rect
