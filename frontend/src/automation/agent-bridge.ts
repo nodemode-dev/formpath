@@ -309,7 +309,7 @@ export class AgentBridge {
         let g = has('preset') ? presetGrid(doc, str('preset') === 'one_point' ? 1 : str('preset') === 'three_point' ? 3 : 2) : gridOf(doc);
         if (has('type')) { const t = Math.round(num('type', 2)); if (t < 1 || t > 3) throw new ToolError('type must be 1, 2 or 3.'); g = { ...g, type: t as 1 | 2 | 3 }; if (t === 3 && Math.abs(g.vp3) < 1) g = { ...g, vp3: Math.max(4 * g.distance, Math.abs(g.height) * 4) }; }
         const n = (k: string, d: number): number => num(k, d);
-        if (has('cell')) g = { ...g, cell: n('cell', g.cell) };
+        if (has('cell')) g = { ...g, cell: Math.max(1, Math.min(2000, n('cell', g.cell))) };
         if (has('angle')) g = { ...g, angle: n('angle', g.angle) };
         if (has('distance')) g = { ...g, distance: n('distance', g.distance) };
         if (has('horizon_height')) g = { ...g, height: n('horizon_height', g.height) };
@@ -1290,8 +1290,8 @@ export class AgentBridge {
           const act = str('action', 'make');
           if (act === 'release') return e.releaseLive(this.ids(a)) ? text('Released the blend.') : fail('Select a blend.');
           if (act === 'expand') return e.expand('object', this.ids(a)) ? text('Expanded the blend.') : fail('Select a blend.');
-          if (act === 'options') return e.setBlendSpec({ ...(has('spacing') ? { spacing: str('spacing') as 'smooth' } : {}), ...(has('steps') ? { steps: Math.max(1, Math.round(num('steps', 8))) } : {}), ...(has('distance') ? { distance: num('distance', 10) } : {}), ...(has('align_to_path') ? { alignToPath: a.align_to_path === true } : {}) }, this.ids(a)) ? text('Changed the blend options.') : fail('Select a blend.');
-          const ok = e.makeBlend(has('steps') ? Math.max(1, Math.round(num('steps', 8))) : undefined, (str('spacing', 'steps') as 'steps'), num('distance', 10), this.ids(a));
+          if (act === 'options') return e.setBlendSpec({ ...(has('spacing') ? { spacing: str('spacing') as 'smooth' } : {}), ...(has('steps') ? { steps: Math.max(1, Math.min(1000, Math.round(num('steps', 8)))) } : {}), ...(has('distance') ? { distance: num('distance', 10) } : {}), ...(has('align_to_path') ? { alignToPath: a.align_to_path === true } : {}) }, this.ids(a)) ? text('Changed the blend options.') : fail('Select a blend.');
+          const ok = e.makeBlend(has('steps') ? Math.max(1, Math.min(1000, Math.round(num('steps', 8)))) : undefined, (str('spacing', 'steps') as 'steps'), num('distance', 10), this.ids(a));
           return ok ? text(`Made a blend (id ${e.selectedIds()[0]}).`, { id: e.selectedIds()[0] }) : fail('Blends need two or more objects.');
         }
         case 'envelope': {
@@ -1307,8 +1307,8 @@ export class AgentBridge {
           if (kind === 'release') return e.releaseLive(this.ids(a)) ? text('Released the repeat.') : fail('Select a repeat.');
           if (kind === 'expand') return e.expand('object', this.ids(a)) ? text('Expanded the repeat.') : fail('Select a repeat.');
           const sel = e.selected()[0];
-          if (sel?.kind === 'repeat' && !Array.isArray(a.ids)) { e.setRepeatSpec({ ...(has('instances') ? { instances: Math.round(num('instances', 8)) } : {}), ...(has('radius') ? { radius: num('radius', 100) } : {}), ...(has('rows') ? { rows: Math.round(num('rows', 3)) } : {}), ...(has('columns') ? { cols: Math.round(num('columns', 3)) } : {}), ...(has('h_spacing') ? { hs: num('h_spacing', 10) } : {}), ...(has('v_spacing') ? { vs: num('v_spacing', 10) } : {}), ...(has('angle') ? { angle: num('angle', 90) } : {}) }); return text('Changed the repeat options.'); }
-          const ok = e.makeRepeat(kind as 'radial', { instances: has('instances') ? Math.round(num('instances', 8)) : undefined, radius: has('radius') ? num('radius', 100) : undefined, rows: has('rows') ? Math.round(num('rows', 3)) : undefined, cols: has('columns') ? Math.round(num('columns', 3)) : undefined, hs: has('h_spacing') ? num('h_spacing', 10) : undefined, vs: has('v_spacing') ? num('v_spacing', 10) : undefined, angle: has('angle') ? num('angle', 90) : undefined }, this.ids(a));
+          if (sel?.kind === 'repeat' && !Array.isArray(a.ids)) { e.setRepeatSpec({ ...(has('instances') ? { instances: Math.max(2, Math.min(400, Math.round(num('instances', 8)))) } : {}), ...(has('radius') ? { radius: num('radius', 100) } : {}), ...(has('rows') ? { rows: Math.max(1, Math.min(100, Math.round(num('rows', 3)))) } : {}), ...(has('columns') ? { cols: Math.max(1, Math.min(100, Math.round(num('columns', 3)))) } : {}), ...(has('h_spacing') ? { hs: num('h_spacing', 10) } : {}), ...(has('v_spacing') ? { vs: num('v_spacing', 10) } : {}), ...(has('angle') ? { angle: num('angle', 90) } : {}) }); return text('Changed the repeat options.'); }
+          const ok = e.makeRepeat(kind as 'radial', { instances: has('instances') ? Math.max(2, Math.min(400, Math.round(num('instances', 8)))) : undefined, radius: has('radius') ? num('radius', 100) : undefined, rows: has('rows') ? Math.max(1, Math.min(100, Math.round(num('rows', 3)))) : undefined, cols: has('columns') ? Math.max(1, Math.min(100, Math.round(num('columns', 3)))) : undefined, hs: has('h_spacing') ? num('h_spacing', 10) : undefined, vs: has('v_spacing') ? num('v_spacing', 10) : undefined, angle: has('angle') ? num('angle', 90) : undefined }, this.ids(a));
           return ok ? text(`Made a ${kind} repeat (id ${e.selectedIds()[0]}).`, { id: e.selectedIds()[0] }) : fail('Nothing changed.');
         }
         case 'symbol': {
@@ -1745,8 +1745,8 @@ export class AgentBridge {
           return n ? text(`Replaced ${n} run(s) with ${to.font} ${to.style}.`) : fail(`No type uses ${str('font')}${has('style') ? ` ${str('style')}` : ''}.`);
         }
         case 'create_outlines': { const ok = await this.deps.outlines(this.ids(a)); return ok ? text('Created outlines.', { selection: e.selectedIds() }) : fail('Nothing was outlined: select type, and check that its font can be read.'); }
-        case 'undo': { const n = Math.max(1, Math.round(num('steps', 1))); return e.undo(n) ? text(`Undid ${n} step${n === 1 ? '' : 's'}.`) : fail('Nothing to undo.'); }
-        case 'redo': { const n = Math.max(1, Math.round(num('steps', 1))); return e.redo(n) ? text(`Redid ${n} step${n === 1 ? '' : 's'}.`) : fail('Nothing to redo.'); }
+        case 'undo': { const n = Math.max(1, Math.min(100, Math.round(num('steps', 1)))); return e.undo(n) ? text(`Undid ${n} step${n === 1 ? '' : 's'}.`) : fail('Nothing to undo.'); }
+        case 'redo': { const n = Math.max(1, Math.min(100, Math.round(num('steps', 1)))); return e.redo(n) ? text(`Redid ${n} step${n === 1 ? '' : 's'}.`) : fail('Nothing to redo.'); }
         default: return fail(`formpath has no tool named ${name}.`);
       }
     } catch (err) {

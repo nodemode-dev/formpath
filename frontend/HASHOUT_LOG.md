@@ -4295,3 +4295,10 @@ The scrim's Enter handler called `preventDefault()` and applied the dialog for e
 - logged: v0.53.1 · 2026-11-10
 
 Stage unwinds a drag that is cut short (another tool's shortcut, a second finger, `pointercancel`, Escape) only through `tool.cancel`, and these tools had none: `engine.dragBase` stayed set with the preview in the document, so the next click with Rotate, Reflect, Scale or Shear committed the cancelled transform (stale `T.on` and `T.moved`), the next `beginDrag` took the preview as its base and the next `edit` snapped the art back. The Selection tool's cancel left `CW.on` set, so the next move drag ran `dragWidget` and changed a corner radius under the name Move. Each cancel now calls `cancelDrag()` when the engine is dragging and clears that tool's drag flags; the Selection cancel also clears `CW` and the overlay, and the Pen cancel clears `P.closing` (a stale value made the next path end after its first anchor). Checked with `npx tsc --noEmit`; the drags were not run in the window.
+
+### src/automation/agent-bridge.ts · counts held to the published ranges
+- refers-to: AgentBridge.run :: undo, redo, make_blend, repeat; AgentBridge.perspectiveTool :: grid cell
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`backend/app/routers/mcp.py` publishes maxima in each tool's `inputSchema` but does not validate `arguments`, and `num()` only drops non-finite values, so `undo {steps: 1e15}`, `make_blend {steps: 1e7}`, a radial `repeat` with 1e8 instances or a grid `cell` of 1e-6 froze the window; blend and repeat specs are saved in the document and the recovery copy, so it froze again on reopen. The bridge now clamps to the schema: undo and redo steps 1 to 100, blend steps 1 to 1000 (make and options), repeat instances 2 to 400 and rows and columns 1 to 100 (make and options), grid cell 1 to 2000 pt. The engine undo loop that keeps going after history runs out is engine code and not changed here. Checked with `npx tsc --noEmit`; not run against a window.
