@@ -330,6 +330,13 @@ A terminal is a shell on this computer, so every route and the WebSocket refuse 
 
 Follows formlit's design. The Claude Code button runs the person's own `claude` (Preferences path, `FORMPATH_CLAUDE_BIN`, `PATH`, the usual install folders, then a login shell's `command -v`) in a PTY tab of kind `claude`, started through the login shell so the person's `PATH` and Node are found, with `--mcp-config` naming formpath's `/mcp` over HTTP plus the `x-formpath-inapp` header, `--allowedTools mcp__formpath` and a note appended to the system prompt. The token is minted per engine start and never written to disk, so only programs the engine starts carry it. The Chat tab runs `claude -p ... --output-format stream-json --include-partial-messages` per message, resuming the same session id, and publishes start, delta, tool, toolDone, usage, done, reset and adopted events to the chat WebSocket; tool result pictures are saved under the data folder's `Chat` and served by name only. Sign-in stays Claude Code's own: nothing here reads or stores a credential. `chat_sessions` reads Claude Code's own transcripts for the agent folder so a conversation started in a tab can be continued in Chat, and Open in Claude Code resumes a Chat conversation in a tab.
 
+### app/services/claude_code.py · the person's text comes after `--`
+- refers-to: app/services/claude_code.py :: argv, _chat_argv
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Chat message and the tab's first message were positional arguments among the options (`-p <text> --output-format ...`, and the prompt appended after `--resume`), so a message starting with "-", such as a Markdown bullet `- make the circle red` or `--help me align these`, was read by Claude Code as an option: "unknown option" and the Chat answered "Claude Code stopped before answering". Both builders now put every option first and pass the text after `--`, the end-of-options marker. Checked against the installed Claude Code 2.1.322 with no sign-in: `-p --output-format text --help-me` fails with "unknown option '--help-me'", while `-p --output-format text -- --help-me` and the full Chat argument list ending in `-- '- red circle'` both get past parsing to "Not logged in"; `_chat_argv` ends in `--resume S1 -- '- red circle'`; the backend tests pass.
+
 ### app/routers/mcp.py · in-app token
 - refers-to: app/routers/mcp.py :: _inapp, _call, _ask, bridge_next (eligible)
 - kind: rationale

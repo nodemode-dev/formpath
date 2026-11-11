@@ -137,7 +137,7 @@ def argv(path: str, prompt: str | None, resume: str | None = None) -> list[str]:
     if resume:
         cmd += ["--resume", resume]
     if prompt:
-        cmd.append(prompt)
+        cmd += ["--", prompt]
     return _wrap(cmd)
 
 
@@ -217,11 +217,11 @@ def chat_image(name: str) -> Path | None:
 
 
 def _chat_argv(path: str, text: str, session: str | None) -> list[str]:
-    cmd = [path, "-p", text, "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+    cmd = [path, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
            "--mcp-config", mcp_config(), "--allowedTools", "mcp__formpath", "--append-system-prompt", CHAT_NOTE]
     if session:
         cmd += ["--resume", session]
-    return _wrap(cmd)
+    return _wrap(cmd + ["--", text])
 
 
 def _usage_of(u: dict) -> tuple[int, int]:
