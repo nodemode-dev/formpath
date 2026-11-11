@@ -1971,6 +1971,13 @@ Written from Autodesk's DXF reference. `parseDxf` reads ASCII group-code pairs (
 
 AutoCAD 2000 output carries the structure AutoCAD expects of an AC1015 file: handles and owners on every table record and entity, the VPORT, LTYPE, LAYER, STYLE, VIEW, UCS, APPID, DIMSTYLE and BLOCK_RECORD tables, the model and paper space blocks, an OBJECTS section with the root dictionary, and `$HANDSEED` spliced in after the last handle is known. Each subpath goes out as an LWPOLYLINE when every segment is a line or a circular arc (`arcOf` fits a circle through the ends and midpoint and checks four more points to 0.1 percent of the radius, so formpath's own circles and rounded corners keep exact bulges), else as a degree 3 SPLINE whose control points are the Bezier handles with every joint knot tripled, which is exact. Filled closed paths add a solid HATCH with polyline loops flagged external; nonzero fill maps to the outer style and even-odd to normal. R12 has no lightweight polylines, splines or hatches, so it writes POLYLINE and VERTEX with bulges, flattens other curves to 0.05 pt and leaves fills as outlines. Colours are the nearest ACI plus the 420 true colour in 2000; lineweights snap to AutoCAD's standard list and scale with the drawing only when asked. Gradients write their middle colour; images, effects and transparency are not written, since DXF has no equivalent that CAD programs read reliably.
 
+### src/io/dxf.ts · HATCH boundary counts are bounded
+- refers-to: src/io/dxf.ts :: dxfToDoc case 'HATCH'
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The HATCH counts (93 vertices or edges, 95 knots, 96 control points, 97 fit points) drove their loops unchecked, and `next()` returns 0 without moving once the pairs run out, so `93` set to 1e9 pushed a billion vertices and hung the window. Each count is now limited to the pairs left in the entity; a damaged hatch reads what is there and is skipped as a hatch without boundaries when nothing is. Checked: tsc clean; a scratch check outside the repo imports hatches with 93, 95 and 96 at 1e9 in under 5 ms each and a normal square hatch unchanged.
+
 ## src/io/eps.ts
 
 ### src/io/eps.ts · EPS writer

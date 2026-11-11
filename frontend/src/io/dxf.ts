@@ -348,22 +348,22 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
             const type = next(92);
             if (type & 2) {
               const hb = next(72); next(73);
-              const n = next(93), vs: Array<{ p: Pt; b: number }> = [];
+              const n = Math.min(next(93), c.length - k), vs: Array<{ p: Pt; b: number }> = [];
               for (let v = 0; v < n; v++) { const x = next(10), y = next(20); let b = 0; if (hb && c[k]?.[0] === 42) b = parseFloat(c[k++][1]) || 0; vs.push({ p: { x, y }, b }); }
               const sp = polyPath(vs, true);
               if (sp) d.push(sp);
             } else {
-              const n = next(93), pts: Anchor[] = [];
+              const n = Math.min(next(93), c.length - k), pts: Anchor[] = [];
               for (let ed = 0; ed < n; ed++) {
                 const et = next(72);
                 if (et === 1) { const a = { x: next(10), y: next(20) }, b = { x: next(11), y: next(21) }; joinAnchors(pts, [anchor(a.x, a.y), anchor(b.x, b.y)]); }
                 else if (et === 2) { const cx = next(10), cy = next(20), r = next(40), a0 = next(50), a1 = next(51), ccw = next(73); let s = (a0 * Math.PI) / 180, t = (a1 * Math.PI) / 180; if (!ccw) { s = -s; t = -t; } while (ccw ? t <= s : t >= s) t += ccw ? Math.PI * 2 : -Math.PI * 2; joinAnchors(pts, arcSegmentPath(cx, cy, r, r, s, t)); }
                 else if (et === 3) { const cx = next(10), cy = next(20), ax = next(11), ay = next(21), ratio = next(40), a0 = next(50), a1 = next(51), ccw = next(73); let s = (a0 * Math.PI) / 180, t = (a1 * Math.PI) / 180; if (!ccw) { s = -s; t = -t; } while (ccw ? t <= s : t >= s) t += ccw ? Math.PI * 2 : -Math.PI * 2; joinAnchors(pts, transformPath([{ closed: false, pts: arcSegmentPath(0, 0, 1, 1, s, t) }], [ax, ay, -ay * ratio, ax * ratio, cx, cy])[0].pts); }
                 else if (et === 4) {
-                  const deg = next(94); next(73); next(74); const nk = next(95), nc = next(96), kn: number[] = [], cp: Pt[] = [], ws: number[] = [];
+                  const deg = next(94); next(73); next(74); const nk = Math.min(next(95), c.length - k), nc = Math.min(next(96), c.length - k), kn: number[] = [], cp: Pt[] = [], ws: number[] = [];
                   for (let q = 0; q < nk; q++) kn.push(next(40));
                   for (let q = 0; q < nc; q++) { const x = next(10), y = next(20); cp.push({ x, y }); if (c[k]?.[0] === 42) ws.push(parseFloat(c[k++][1])); }
-                  if (c[k]?.[0] === 97) { const nf = parseInt(c[k++][1], 10); for (let q = 0; q < nf; q++) { next(11); next(21); } }
+                  if (c[k]?.[0] === 97) { const nf = Math.min(parseInt(c[k++][1], 10), c.length - k); for (let q = 0; q < nf; q++) { next(11); next(21); } }
                   const sp = bspline(deg, kn, cp, ws, false, []);
                   if (sp) joinAnchors(pts, sp.pts);
                 }
