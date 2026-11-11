@@ -461,10 +461,11 @@ export async function readPdfVector(data: ArrayBuffer, title: string, password?:
   };
   const installed = await systemFonts().catch((): InstalledFont[] => []);
   const names = new FontNames(families(), installed);
-  if (pages.length > 200) skipped.add(`pages 201 to ${pages.length}`);
+  if (pages.length > 200 && !opts.pages) skipped.add(`pages 201 to ${pages.length}`);
   let x0 = 0;
-  for (const [pi, pg] of pages.slice(0, 200).entries()) {
-    if (opts.pages && !opts.pages.includes(pi)) continue;
+  const chosen = opts.pages ? [...new Set(opts.pages)].filter((i) => i >= 0 && i < pages.length).sort((a, b) => a - b).slice(0, 200) : [...pages.keys()].slice(0, 200);
+  for (const pi of chosen) {
+    const pg = pages[pi];
     const [bx0, by0, bx1, by1] = opts.box ? pg.boxes[opts.box] : pg.box, w = Math.abs(bx1 - bx0), h = Math.abs(by1 - by0), left = Math.min(bx0, bx1), top = Math.max(by0, by1);
     const rot = pg.rotate, side = rot === 90 || rot === 270;
     const aw = side ? h : w, ah = side ? w : h;

@@ -1896,6 +1896,13 @@ Types 4 to 7 are decoded with their own bit width for flag, coordinate and compo
 
 Revisions 2 to 4 derive the key by the MD5 algorithm (RC4 40 and 128, crypt filters V2 and AESV2), revisions 5 and 6 validate and unwrap the 256 bit key from U/UE or O/OE (R6 uses the iterated hash with SHA-256/384/512 and AES-128-CBC, R5 plain SHA-256); the empty user password is tried first and an owner password also opens the file. MD5 and RC4 are written out because WebCrypto has neither; AES and SHA use WebCrypto, and unpadded AES-CBC decrypt (key unwrap) appends one encrypted padding block so WebCrypto's padding check passes. After the trailer is known every object parsed in the clear has its strings decrypted once, the Encrypt dictionary excepted; streams are decrypted in `decode` by object and generation number, XRef streams, streams with a Crypt filter and unencrypted metadata are left alone, and the strings inside object streams are not decrypted again because the stream already was. A password that is needed and absent or wrong throws PdfPasswordError; the open flow asks for it in a small dialog and asks again on a wrong one, and the MCP open_file tool's `password` parameter is tried once and, if wrong, fails without a dialog. Public-key (Adobe.PubSec) handlers still throw.
 
+### src/io/pdf-read.ts · requested pages past 200
+- refers-to: src/io/pdf-read.ts :: readPdfVector (chosen); src/io/place.ts :: pdfArt
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The page loop ran over the first 200 pages and filtered by `opts.pages`, so Place of page 201 or later found nothing. With `opts.pages` the loop now reads exactly those pages (sorted, unique, in range, at most 200) and adds no "pages 201 to N" note; opening the whole file keeps the 200-page cap and the note. Checked: tsc clean, tests/pdf.test.ts passes, and a scratch check outside the repo on a hand-made 205-page PDF reads page index 203 alone and still caps the full open at 200.
+
 ## src/io/raster.ts
 
 ### src/io/raster.ts · exportForScreens
