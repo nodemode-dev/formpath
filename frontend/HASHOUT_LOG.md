@@ -1720,6 +1720,13 @@ Live type keeps its axes as `font-variation-settings`, and because Chromium igno
 
 Reopening takes image bytes only from elements with `data-formpath-src`. Hidden images, images in hidden layers, warped images (baked to a PNG without the key) and images only in unplaced symbols got none, while the old leftover list counted every image node in the layers as written and added only pattern textures, so they reopened blank. Writer now records each key it writes with `data-formpath-src` in `emitted`, and the hidden leftover `<g display="none">` holds every exported image not in it (also images outside a selection export). Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo round-trips a visible and a hidden image with both assets back.
 
+### src/io/svg.ts · root size in percent, non-plain layer groups, bounding-box gradients, bad data URLs
+- refers-to: src/io/svg.ts :: importSvg (dim, bare), gradPaint (ub, fr, unit), dataUrlToBlob
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Four import faults. `width="100%"` with a viewBox read as 100 pt (`len` has no `%` case); the root size (`dim`) now ignores percent, em and ex and falls back to the viewBox. With two or more named top-level groups, each layer took only its group's children, dropping opacity, blend, clip, mask and filter; a group that is not `bare` now stays whole inside its layer. objectBoundingBox gradients were placed on the page-space box of the already transformed shape, so rotation and skew were ignored; they now map the unit square through the untransformed box (`ubox`, pathBounds of the shape's own data) and then the element matrix, per the SVG spec, and fall back to the old box when there is none (type). A data: URL that fails to decode now gives null (that image is skipped) instead of aborting the import. Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo: 800 x 600 artboard, both layer groups kept, the rotate(45) gradient runs along the rect, a plain radial is unchanged, and the bad data URL no longer stops the import.
+
 ## src/io/pdf.ts
 
 ### src/io/pdf.ts · group and layer items
