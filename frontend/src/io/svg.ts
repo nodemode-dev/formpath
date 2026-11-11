@@ -40,6 +40,7 @@ class Writer {
   private patIds = new Map<string, string>();
   private patArts = new Map<string, string>();
   private ko = false;
+  readonly emitted = new Set<string>();
   constructor(private readonly p: Project, private readonly o: SvgOptions, private readonly images: Map<string, string>, private readonly outlines: Map<string, PathData>) {}
   get doc(): Doc { return this.p.doc; }
   id(prefix: string): string { this.n++; return `${prefix}${this.n}`; }
@@ -347,7 +348,7 @@ class Writer {
       case 'path': if (n.guide) return ''; return this.wrap(n, this.shape(n, effectPath(n.d, n.ap.effects), n.rule));
       case 'compound': return this.wrap(n, this.shape(n, effectPath(n.children.flatMap((c) => c.d), n.ap.effects), n.rule));
       case 'text': return this.wrap(n, this.text(n));
-      case 'image': { const href = this.images.get(n.src); return href ? this.wrap(n, `<image data-formpath-src="${esc(n.src)}" width="${n.w}" height="${n.h}" transform="${mat(n.xf, this.o.precision)}" preserveAspectRatio="none" href="${href}"/>`) : ''; }
+      case 'image': { const href = this.images.get(n.src); if (href) this.emitted.add(n.src); return href ? this.wrap(n, `<image data-formpath-src="${esc(n.src)}" width="${n.w}" height="${n.h}" transform="${mat(n.xf, this.o.precision)}" preserveAspectRatio="none" href="${href}"/>`) : ''; }
       case 'symbol': {
         const s = this.doc.symbols.find((x) => x.id === n.symbol), art = instanceArt(this.doc, n);
         if (!s || !art) return '';
@@ -389,9 +390,7 @@ export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     meta = `<metadata id="formpath-data">${btoa(bin)}</metadata>`;
-    const used = new Set<string>(), seen = (x: VNode): void => { if (x.kind === 'image') used.add(x.src); childrenOf(x)?.forEach(seen); };
-    p.doc.layers.forEach(seen);
-    const loose = [...textureImageKeys(p.doc)].filter((k) => !used.has(k) && images.has(k));
+    const loose = [...images.keys()].filter((k) => !w.emitted.has(k));
     if (loose.length) meta += `<g display="none">${loose.map((k) => `<image data-formpath-src="${esc(k)}" width="1" height="1" href="${images.get(k)}"/>`).join('')}</g>`;
   }
   const bg = typeof o.artboard === 'number' ? p.doc.artboards[o.artboard]?.bg : null;

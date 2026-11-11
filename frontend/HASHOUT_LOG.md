@@ -1706,6 +1706,13 @@ Live type keeps its axes as `font-variation-settings`, and because Chromium igno
 
 `use` and marker contents were followed with only the depth limit of 64, so `<g id="a"><use href="#a"/><use href="#a"/></g>`, a marker whose content uses the same marker, or a chain of groups each using the previous one ten times froze the tab on Open, Place or paste. A `use` now skips a target that contains it or is already on the reference stack (`patStack`, shared with patterns and masks through RefCtx.stack), a marker on that stack is not drawn inside itself, and walkNode stops after 200,000 elements; skips leave a left-out note. Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo imports the self loop in 6 ms, the self-marker in 4 ms and a 20-level chain of ten uses in about 1.2 s.
 
+### src/io/svg.ts · preserve-editing keeps every image's bytes
+- refers-to: src/io/svg.ts :: Writer.emitted, Writer.node (case 'image'), exportSvg (preserve branch)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Reopening takes image bytes only from elements with `data-formpath-src`. Hidden images, images in hidden layers, warped images (baked to a PNG without the key) and images only in unplaced symbols got none, while the old leftover list counted every image node in the layers as written and added only pattern textures, so they reopened blank. Writer now records each key it writes with `data-formpath-src` in `emitted`, and the hidden leftover `<g display="none">` holds every exported image not in it (also images outside a selection export). Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo round-trips a visible and a hidden image with both assets back.
+
 ## src/io/pdf.ts
 
 ### src/io/pdf.ts · group and layer items
