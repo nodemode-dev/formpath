@@ -4435,3 +4435,10 @@ Each call appended a `.cv-dd-pop` to `#overlay-root`, a capture `pointerdown` li
 - logged: v0.53.1 · 2026-11-10
 
 `docPoint` converted client coordinates with `viewport.toDoc` alone, without the `Stage.unturn` step `pointer()` applies for the CSS-rotated canvases, so in a rotated view right-click selected and acted on the object at the un-rotated spot, drops landed at the wrong point and the Recolor eyedropper sampled the wrong place. It now unturns by `v.rotation` first; at rotation 0 `unturn` returns the point as it is. Checked with `npx tsc --noEmit`; not run in a rotated view.
+
+### src/tools/transform.ts · Ctrl+Alt shear selects its copy
+- refers-to: shearDrag; freeTransform up; src/tools/select.ts :: endTransform
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`shearDrag` passed `p.alt` to `transformNodes`, so a copy was made, but dropped the result's ids and never called `noteDragTransform`: `endTransform` committed with the original selected and Transform Again did not know the shear. It now keeps the result, sets `FT.copyIds` to the copy's ids when Alt is held (null otherwise) and notes the matrix, as the other Free Transform drags do. Checked with `npx tsc --noEmit`; not run in the window.

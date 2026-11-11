@@ -129,7 +129,10 @@ function shearDrag(ctx: ToolContext, p: ToolPointer): void {
   const k = horiz ? (b.x - a.x) / Math.max(1e-6, r.h) * (top ? -1 : 1) : (b.y - a.y) / Math.max(1e-6, r.w) * (left ? -1 : 1);
   const oy = top ? r.y + r.h : r.y, ox = left ? r.x + r.w : r.x;
   const s: Mat = horiz ? [1, 0, k, 1, -k * oy, 0] : [1, k, 0, 1, 0, -k * ox];
-  e.dragTo(transformNodes(base, FT.ids, mul(toDoc, mul(s, toLocal)), p.alt, xf(e)).doc);
+  const m = mul(toDoc, mul(s, toLocal)), res = transformNodes(base, FT.ids, m, p.alt, xf(e));
+  FT.copyIds = p.alt ? res.ids : null;
+  e.dragTo(res.doc);
+  e.noteDragTransform(m, p.alt);
   FT.info = [`${fmt((Math.atan(k) * 180) / Math.PI)}°`];
 }
 const ftMode = (e: Engine): FtMode => e.options.ftMode ?? 'transform';
