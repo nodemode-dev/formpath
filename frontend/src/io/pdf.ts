@@ -15,7 +15,7 @@ import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../eng
 import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
 import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, PatternDef, Project, Rect, StrokeItem, VNode } from '../engine';
-import { missingGlyphs, outlineText } from './fonts';
+import { colourEmoji, missingGlyphs, outlineText } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
 import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
@@ -31,8 +31,7 @@ import { aiThumbSize, buildAiPrivate } from './ai-private';
 import { pdfaParts, pdfString as pdfTextString, xmpPdfA } from './pdf-x';
 import { DEFAULT_COMPRESSION, pdfRefusal, permissionValue, securityActive, standardRules, STANDARD_LABELS, type PdfCompression, type PdfSecurity, type PdfStandard } from './pdf-std';
 
-export const PDF_NOTES: { last: string[] } = { last: [] };
-export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: PdfStandard; sheet?: PrintSettings; compression?: PdfCompression; security?: PdfSecurity; layers?: boolean; aiPrivate?: boolean }
+export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: PdfStandard; sheet?: PrintSettings; compression?: PdfCompression; security?: PdfSecurity; layers?: boolean; aiPrivate?: boolean; notes?: (note: string) => void }
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
 export const PDF_MAX_SIDE = 14400;
@@ -608,7 +607,6 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const std: PdfStandard = o.standard ?? 'none', rules = standardRules(std), secure = securityActive(o.security) ? o.security : undefined;
   const refusal = pdfRefusal({ standard: std, security: o.security, layers: o.layers });
   if (refusal) throw new Error(refusal);
-  PDF_NOTES.last = [];
   const pdf = new PdfFile();
   const outlines = new Map<string, PathData>();
   const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false, missing = new Set<string>();
@@ -751,8 +749,18 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names}${extra} >>`);
   const info = pdf.add(`<< /Title ${pdfTextString(title)} /Producer ${pdfString(producer)} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
   const blob = await pdf.build(root, info, rules.header, docId, sealer, (o.compression ?? DEFAULT_COMPRESSION).flate !== false);
-  PDF_NOTES.last = missing.size ? [`No font on this computer has ${[...missing].slice(0, 12).join(' ')}${missing.size > 12 ? ` and ${missing.size - 12} more` : ''}, so ${missing.size === 1 ? 'it shows' : 'they show'} as an empty box. Install a font with ${missing.size === 1 ? 'that character' : 'those characters'} and export again.`] : [];
+  for (const note of glyphNotes([...missing])) o.notes?.(note);
   return blob;
+}
+
+const listed = (chars: string[]): string => `${chars.slice(0, 12).join(' ')}${chars.length > 12 ? ` and ${chars.length - 12} more` : ''}`;
+
+export function glyphNotes(missing: string[]): string[] {
+  const emoji = missing.filter(colourEmoji), other = missing.filter((ch) => !colourEmoji(ch));
+  return [
+    ...(emoji.length ? [`Colour emoji cannot be embedded in a PDF, so ${listed(emoji)} ${emoji.length === 1 ? 'shows' : 'show'} as an empty box. Use a character from a symbol font instead.`] : []),
+    ...(other.length ? [`No font on this computer has ${listed(other)}, so ${other.length === 1 ? 'it shows' : 'they show'} as an empty box. Install a font with ${other.length === 1 ? 'that character' : 'those characters'} and export again.`] : []),
+  ];
 }
 
 export async function readPdfNative(data: ArrayBuffer): Promise<{ manifest: Record<string, unknown>; assets: Map<string, Blob> } | null> {

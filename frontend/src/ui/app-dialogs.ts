@@ -532,7 +532,7 @@ export class AboutDialog extends Dialog {
 export type ExportFormat = 'svg' | 'pdf' | 'ai' | 'png' | 'png8' | 'gif' | 'bmp' | 'psd' | 'jpg' | 'webp' | 'tiff' | 'eps' | 'dxf' | 'dwg';
 export interface TiffExportChoice { compression: TiffCompression; cmyk: boolean; ppi: number }
 export interface CadChoice { version: 'R12' | '2000'; units: DxfUnit; scale: number; text: 'text' | 'outlines'; lineweights: boolean }
-export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks; icc?: boolean; raster?: Partial<RasterExtra> }
+export interface ExportChoice { format: ExportFormat; scope: 'artboard' | 'all' | 'art' | 'selection'; artboard: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; preserve: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice; artboards?: number[]; tiff?: TiffExportChoice; marks?: PdfMarks; icc?: boolean; raster?: Partial<RasterExtra>; notes?: (note: string) => void }
 
 export function parseArtboardRange(text: string, count: number, current: number): number[] | null {
   const t = text.trim().toLowerCase();

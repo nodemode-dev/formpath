@@ -172,6 +172,7 @@ async function bundledFallback(family: string, style: string, ch: string): Promi
 
 const fallbacks = new Map<string, Promise<FallbackGlyph | null>>();
 export function fallbackGlyph(ch: string, family: string, style: string): Promise<FallbackGlyph | null> {
+  if (invisibleChar(ch) || colourEmoji(ch)) return Promise.resolve(null);
   const key = `${family}|${style}|${ch}`;
   let p = fallbacks.get(key);
   if (!p) {
@@ -190,16 +191,25 @@ export function fallbackGlyph(ch: string, family: string, style: string): Promis
   return p;
 }
 
-export async function glyphOrFallback(ch: string, st: CharStyle, font: Font, gid: number): Promise<FallbackGlyph & { style: CharStyle; missing: boolean }> {
-  if (gid !== 0 || !ch.trim()) return { font, gid, family: st.font, source: st.font, style: st, missing: false };
+const INVISIBLE = /^[\p{Cf}\p{M}︀-️]$/u;
+const EMOJI = /^\p{Emoji_Presentation}$/u;
+export const invisibleChar = (ch: string): boolean => INVISIBLE.test(ch);
+export const colourEmoji = (ch: string): boolean => EMOJI.test(ch);
+
+export interface GlyphPick extends FallbackGlyph { style: CharStyle; missing: boolean; skip: boolean }
+export async function glyphOrFallback(ch: string, st: CharStyle, font: Font, gid: number): Promise<GlyphPick> {
+  const own: GlyphPick = { font, gid, family: st.font, source: st.font, style: st, missing: false, skip: false };
+  if (gid !== 0 || !ch.trim()) return own;
+  if (invisibleChar(ch)) return { ...own, skip: true };
+  if (colourEmoji(ch)) return { ...own, missing: true };
   const hit = await fallbackGlyph(ch, st.font, st.style);
-  return hit ? { ...hit, style: { ...st, font: hit.family, axes: undefined }, missing: false } : { font, gid, family: st.font, source: st.font, style: st, missing: true };
+  return hit ? { ...hit, style: { ...st, font: hit.family, axes: undefined }, missing: false, skip: false } : { ...own, missing: true };
 }
 
 export async function missingGlyphs(n: TextNode): Promise<string[]> {
   const out = new Set<string>();
   for (const g of layoutText(n).glyphs) {
-    if (!g.ch.trim() || g.ch.charCodeAt(0) < 32) continue;
+    if (!g.ch.trim() || g.ch.charCodeAt(0) < 32 || invisibleChar(g.ch)) continue;
     const font = await fontFor(g.style.font, g.style.style);
     if (!font) continue;
     const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
@@ -270,6 +280,7 @@ export async function outlineText(n: TextNode): Promise<PathData | null> {
     const font = await fontFor(g.style.font, g.style.style);
     if (!font) return null;
     const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
+    if (pick.skip) continue;
     const local: Mat = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]);
     out.push(...transformPath(variedGlyph(pick.font, pick.gid, pick.style).d, n.mode === 'path' ? local : mul(n.xf, local)));
   }
