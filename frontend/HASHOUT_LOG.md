@@ -4484,3 +4484,10 @@ A press on a row that left the list sideways (under 5 px vertically) and was rel
 - logged: v0.53.1 · 2026-11-10
 
 Caret steps were one UTF-16 code unit, so Backspace after an emoji left its high surrogate and an arrow key landed inside the pair; the lone surrogate showed as a replacement glyph and was saved. `prevPoint` and `nextPoint` step over a high and low surrogate pair as one character; Backspace and ArrowLeft use the first, Delete and ArrowRight the second. Grapheme clusters (an emoji with a skin-tone modifier or a ZWJ sequence) still take one step per code point. Checked with `npx tsc --noEmit` and the helpers in node; typing not run in the window.
+
+### src/ui/terminal-dock.ts · New Terminal opens one when the dock was hidden
+- refers-to: TerminalDock.newTerminal, open, boot, opens
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+With the dock hidden, `newTerminal` called `toggle(true)` and awaited `pending`, and `boot` opens a terminal only when there are no tabs, so with terminals already open the command just showed the old tab. `open()` now counts its calls in `opens`; `newTerminal` notes the count before showing the dock and, if start-up did not open a terminal, opens one. A dock that starts empty still gets exactly one. Checked with `npx tsc --noEmit`; not run against the terminal service.
