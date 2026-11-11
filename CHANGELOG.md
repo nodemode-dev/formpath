@@ -2,6 +2,10 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.53.2 · 2026-11-11
+
+- An agent that calls formpath in the first half minute after the computer starts is told at once that formpath is not open, and the window opens for it; before, the call waited three minutes for a window that was not there. The engine tests no longer fail on a test machine that has just started.
+
 ## 0.53.1 · 2026-11-10
 
 - The Path Eraser leaves paths it does not touch unchanged, and it tests the curve itself rather than the straight line between its points.
