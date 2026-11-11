@@ -358,6 +358,13 @@ Follows formlit's design. The Claude Code button runs the person's own `claude` 
 
 The Chat message and the tab's first message were positional arguments among the options (`-p <text> --output-format ...`, and the prompt appended after `--resume`), so a message starting with "-", such as a Markdown bullet `- make the circle red` or `--help me align these`, was read by Claude Code as an option: "unknown option" and the Chat answered "Claude Code stopped before answering". Both builders now put every option first and pass the text after `--`, the end-of-options marker. Checked against the installed Claude Code 2.1.322 with no sign-in: `-p --output-format text --help-me` fails with "unknown option '--help-me'", while `-p --output-format text -- --help-me` and the full Chat argument list ending in `-- '- red circle'` both get past parsing to "Not logged in"; `_chat_argv` ends in `--resume S1 -- '- red circle'`; the backend tests pass.
 
+### app/services/claude_code.py · the transcripts folder for non-ASCII paths
+- refers-to: app/services/claude_code.py :: _project_dir, chat_sessions, chat_adopt
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Claude Code names a project's transcript folder by turning every character outside ASCII letters and digits into "-", but `_project_dir` used `str.isalnum()`, which keeps é, ü and other letters. For an agent folder under a home such as `/Users/josé`, Chat looked in a folder that does not exist: no conversations to continue, and adopting one failed with "No Claude Code conversation was found". The test is now ASCII letters and digits only. Checked: the installed Claude Code 2.1.322 run in a folder named `josé_ü` reports its project folder as `...-jos---`, and `_project_dir` now gives the same name; the backend tests pass. Not checked: Claude Code's handling of very long paths.
+
 ### app/routers/mcp.py · in-app token
 - refers-to: app/routers/mcp.py :: _inapp, _call, _ask, bridge_next (eligible)
 - kind: rationale

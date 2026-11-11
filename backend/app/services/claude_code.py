@@ -361,7 +361,7 @@ def chat_reset() -> dict:
 
 def _project_dir(folder: str) -> Path:
     root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser()
-    return root / "projects" / "".join(ch if ch.isalnum() else "-" for ch in folder)
+    return root / "projects" / "".join(ch if ch.isascii() and ch.isalnum() else "-" for ch in folder)
 
 
 def _transcript(path: Path) -> list[dict]:
