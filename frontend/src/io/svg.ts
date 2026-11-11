@@ -550,9 +550,10 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     }
     return null;
   };
-  let imgN = 0;
+  let imgN = 0, visited = 0;
   const walkNode = (e: Element, inherited: Style, m0: Mat, out: VNode[], depth: number): void => {
     if (depth > 64) return;
+    if (++visited > 200000) { leftOut.add('The drawing expands to more than 200,000 elements; the rest was left out.'); return; }
     const tag = e.nodeName.toLowerCase();
     if (['defs', 'style', 'metadata', 'title', 'desc', 'clippath', 'mask', 'lineargradient', 'radialgradient', 'pattern', 'symbol', 'marker', 'filter', 'script'].includes(tag)) return;
     const st = { ...Object.fromEntries(Object.entries(inherited).filter(([k]) => INHERITED.has(k))), ...own(e) };
@@ -573,10 +574,14 @@ export async function importSvg(text: string, name = 'Untitled'): Promise<SvgImp
     if (tag === 'use') {
       const ref = ids.get((e.getAttribute('href') ?? e.getAttribute('xlink:href') ?? '').replace(/^#/, ''));
       if (!ref) return;
+      if (ref.contains(e) || patStack.includes(ref)) { leftOut.add('A use element that refers to itself was left out.'); return; }
       const um = mul(m, [1, 0, 0, 1, len(e.getAttribute('x') ?? undefined), len(e.getAttribute('y') ?? undefined)]);
       const kids: VNode[] = [];
-      if (ref.nodeName.toLowerCase() === 'symbol') { const sm = vbMat(ref, e.getAttribute('width') ?? ref.getAttribute('width'), e.getAttribute('height') ?? ref.getAttribute('height'), um); for (const c of Array.from(ref.children)) walk(c, st, sm, kids, depth + 1); }
-      else walk(ref, st, um, kids, depth + 1);
+      patStack.push(ref);
+      try {
+        if (ref.nodeName.toLowerCase() === 'symbol') { const sm = vbMat(ref, e.getAttribute('width') ?? ref.getAttribute('width'), e.getAttribute('height') ?? ref.getAttribute('height'), um); for (const c of Array.from(ref.children)) walk(c, st, sm, kids, depth + 1); }
+        else walk(ref, st, um, kids, depth + 1);
+      } finally { patStack.pop(); }
       if (kids.length && (opacity < 1 || blend !== 'normal')) out.push({ id: newId('g'), kind: 'group', clip: false, children: kids, opacity, blend, ap: { items: [], effects: [] } });
       else out.push(...kids);
       return;

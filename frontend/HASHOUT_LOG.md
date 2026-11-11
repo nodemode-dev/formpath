@@ -1678,6 +1678,13 @@ SVG cannot draw an image through a curved map, and a triangle-per-cell clip tree
 
 Live type keeps its axes as `font-variation-settings`, and because Chromium ignores that property for installed fonts while honouring the matching font properties, `wght` is also written as `font-weight`, `wdth` as `font-stretch` and `slnt` as an oblique `font-style`; a run with any other axis (optical size or a custom axis), which no font property can carry, is written as outlines of the glyphs the canvas drew. A glyph with a transform (`t`: Touch Type, character rotation or justification glyph scaling) cannot sit in a `tspan`, so it is written on its own after the line's runs: its outline when the font is loaded, otherwise a `text` element with its full matrix, inside a `g` with the type's transform (the surrounding `text` is closed and reopened around it). Hyphens, list markers and tab leaders are glyphs of the layout, so they export as characters in the runs.
 
+### src/io/svg.ts, src/io/svg-refs.ts · use and marker cycles, element budget
+- refers-to: src/io/svg.ts :: importSvg walkNode (use branch, visited); src/io/svg-refs.ts :: markers
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`use` and marker contents were followed with only the depth limit of 64, so `<g id="a"><use href="#a"/><use href="#a"/></g>`, a marker whose content uses the same marker, or a chain of groups each using the previous one ten times froze the tab on Open, Place or paste. A `use` now skips a target that contains it or is already on the reference stack (`patStack`, shared with patterns and masks through RefCtx.stack), a marker on that stack is not drawn inside itself, and walkNode stops after 200,000 elements; skips leave a left-out note. Checked: tsc clean, tests/svg.test.ts passes, and a scratch check outside the repo imports the self loop in 6 ms, the self-marker in 4 ms and a 20-level chain of ten uses in about 1.2 s.
+
 ## src/io/pdf.ts
 
 ### src/io/pdf.ts · group and layer items
