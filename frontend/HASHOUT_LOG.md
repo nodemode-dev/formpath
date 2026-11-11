@@ -1622,6 +1622,13 @@ parseColor knows the whole CSS named list, 3, 4, 6 and 8 digit hex, and hsl and 
 
 A pattern paint whose xf scales the art (every imported SVG pattern with patternContentUnits or a viewBox) was rendered into a tile canvas at the unscaled size and then stretched, which blurred it. The tile scale now multiplies in the square root of the determinant of xf.
 
+### src/engine/render.ts · pattern period is the lattice
+- refers-to: src/engine/render.ts :: patternStyle, patternTiles
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The tile canvas is `ceil(lattice * scale)` pixels (at most 4096) but the pattern was mapped back with `1 / scale`, so it repeated every `ceil(l.w * scale) / scale` units: a 37.3 pt tile at 100% repeated every 38 pt (seams and drift), and a lattice over 512 pt at scale 8 was cut off. The tile now keeps `sx` and `sy`, canvas size over lattice size, for both drawing the tile and the pattern matrix, so the period is exactly the lattice. Checked with tsc and a node check of the period; not looked at on screen.
+
 ### src/io/svg.ts · symbols as symbol and use
 - refers-to: src/io/svg.ts :: Writer.node case symbol, symbolArts
 - kind: rationale
