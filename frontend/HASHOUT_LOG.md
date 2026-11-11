@@ -2055,6 +2055,13 @@ The reading explainer above says entities with extrusion z -1 are mirrored in x;
 
 The file declares `$DWGCODEPAGE ANSI_1252` (R12 has that default too) but the Blob was UTF-8, so CAD programs showed "Straße" as "StraÃŸe" and CJK as byte soup. Every character above 0x7E is now written as `\U+XXXX`, the pre-2007 escape for characters outside the code page, so the file is ASCII in any code page; characters outside the BMP go out as two escapes (one per UTF-16 unit), which formpath reads back exactly and a CAD program shows as two unknown characters. parseDxf decodes `\U+XXXX` in every pair as it reads, so layer and block names come back too, and Export DWG (which re-parses this text) gets the same strings as before. Checked: tsc clean; a scratch check outside the repo round-trips the layer "Straße Ø" and the text "Ø25 °C 日本" through DXF 2000 (ASCII file) and through DWG. Not opened in a CAD program.
 
+### src/io/dxf.ts · Aligned and Fit TEXT
+- refers-to: src/io/dxf.ts :: dxfToDoc case 'TEXT', INSERT attributes
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+With justification 72 = 3 (Aligned) or 5 (Fit), point 10 is the baseline start and point 11 its end; the reader took point 11 and fell through to left alignment, so the text started where it should end. Those two now place at point 10, left aligned (the stretch between the points is not applied). Checked: tsc clean; a scratch check outside the repo places 72 = 3 and 5 at x = 0 and 72 = 2 still right-aligned at x = 50.
+
 ## src/io/eps.ts
 
 ### src/io/eps.ts · EPS writer

@@ -323,7 +323,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
         case '3DFACE': push(e, ctx, [{ closed: true, pts: [0, 1, 2, 3].map((k) => anchor(gn(e, 10 + k), gn(e, 20 + k))) }], 'stroke'); break;
         case 'TEXT': case 'ATTDEF': {
           if (e.type === 'ATTDEF') break;
-          const h = gn(e, 72, 0), v = gn(e, 73, 0), height = gn(e, 40, 2.5), useAlign = (h !== 0 || v !== 0) && has(e, 11);
+          const h = gn(e, 72, 0), v = gn(e, 73, 0), height = gn(e, 40, 2.5), useAlign = (h !== 0 || v !== 0) && h !== 3 && h !== 5 && has(e, 11);
           const at = useAlign ? { x: gn(e, 11), y: gn(e, 21) } : { x: gn(e, 10), y: gn(e, 20) };
           const dy = v === 2 ? -height / 2 : v === 3 ? -height : v === 1 ? height * 0.25 : 0;
           const rot = gn(e, 50, 0), ra = (rot * Math.PI) / 180;
@@ -410,7 +410,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
             const local = mul(mul(mul([1, 0, 0, 1, gn(e, 10), gn(e, 20)], R), [1, 0, 0, 1, cI * dx, r * dy]), mul([sx, 0, 0, sy, 0, 0], [1, 0, 0, 1, -b.base.x, -b.base.y]));
             run(b.ents, { ...sub, m: mul(mul(ctx.m, ocs(e)), local) }, false);
           }
-          for (const at of attribs) if ((gn(at, 70, 0) & 1) === 0) { const h = gn(at, 72, 0), useAlign = h !== 0 && has(at, 11); text(at, ctx, textPlain(g(at, 1)), useAlign ? { x: gn(at, 11), y: gn(at, 21) } : { x: gn(at, 10), y: gn(at, 20) }, gn(at, 40, 2.5), gn(at, 50, 0), h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left'); }
+          for (const at of attribs) if ((gn(at, 70, 0) & 1) === 0) { const h = gn(at, 72, 0), useAlign = h !== 0 && h !== 3 && h !== 5 && has(at, 11); text(at, ctx, textPlain(g(at, 1)), useAlign ? { x: gn(at, 11), y: gn(at, 21) } : { x: gn(at, 10), y: gn(at, 20) }, gn(at, 40, 2.5), gn(at, 50, 0), h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left'); }
           break;
         }
         case 'POINT': skip('points'); break;
