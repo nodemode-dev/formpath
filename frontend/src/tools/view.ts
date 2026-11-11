@@ -30,10 +30,10 @@ registerTool({
   hint: () => 'Drag to turn the view; Shift snaps to 15 degrees. Double-click resets the view.',
   cursor: () => CURSORS.rotate,
   options: (e) => [{ kind: 'title', text: 'Rotate View' }, { kind: 'number', label: 'Angle', min: -360, max: 360, unit: '°', get: () => e.current?.viewport.rotation ?? 0, set: (v) => e.setViewRotation(v) }, { kind: 'button', label: 'Reset View', run: () => e.setViewRotation(0) }],
-  down: (ctx, p) => { const v = ctx.view(); RV.on = true; RV.start = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2); RV.base = ctx.engine.current?.viewport.rotation ?? 0; },
+  down: (ctx, p) => { const v = ctx.view(); RV.on = true; RV.base = ctx.engine.current?.viewport.rotation ?? 0; RV.start = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2) + (RV.base * Math.PI) / 180; },
   move: (ctx, p) => {
     if (!RV.on) return;
-    const v = ctx.view(), a = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2);
+    const v = ctx.view(), a = Math.atan2(p.screen.y - v.height / 2, p.screen.x - v.width / 2) + ((ctx.engine.current?.viewport.rotation ?? 0) * Math.PI) / 180;
     let deg = RV.base + ((a - RV.start) * 180) / Math.PI;
     if (p.shift) deg = Math.round(deg / 15) * 15;
     ctx.engine.setViewRotation(deg);

@@ -4309,3 +4309,10 @@ Stage unwinds a drag that is cut short (another tool's shortcut, a second finger
 - logged: v0.53.1 · 2026-11-10
 
 `backend/app/routers/mcp.py` publishes maxima in each tool's `inputSchema` but does not validate `arguments`, and `num()` only drops non-finite values, so `undo {steps: 1e15}`, `make_blend {steps: 1e7}`, a radial `repeat` with 1e8 instances or a grid `cell` of 1e-6 froze the window; blend and repeat specs are saved in the document and the recovery copy, so it froze again on reopen. The bridge now clamps to the schema: undo and redo steps 1 to 100, blend steps 1 to 1000 (make and options), repeat instances 2 to 400 and rows and columns 1 to 100 (make and options), grid cell 1 to 2000 pt. The engine undo loop that keeps going after history runs out is engine code and not changed here. Checked with `npx tsc --noEmit`; not run against a window.
+
+### src/tools/view.ts · Rotate View measures the pointer's own angle
+- refers-to: rotateView :: down, move
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`p.screen` comes from `Stage.unturn` with the live `viewport.rotation`, which this drag keeps changing, so `atan2(p.screen)` was the pointer's angle minus the rotation and `deg = base + (a - start)` fed the rotation back into itself: the view turned about half as far as the pointer and jittered. Both the start angle and the moving angle now add the current rotation back (in radians). Checked with `npx tsc --noEmit` and a node simulation of `unturn` and the tool: a 90 degree sweep from a 30 degree view reads 45, 60, 75, 90, 105, 120 at 15 degree marks. Not run in the window.
