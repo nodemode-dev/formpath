@@ -468,7 +468,7 @@ def _err(req_id, code: int, message: str) -> dict:
 
 
 def _live() -> bool:
-    return time.monotonic() - _seen <= LIVE
+    return _seen > 0 and time.monotonic() - _seen <= LIVE
 
 
 def _fail(text: str) -> dict:
@@ -477,7 +477,7 @@ def _fail(text: str) -> dict:
 
 def _open_window() -> bool:
     global _opened_at
-    if os.environ.get("FORMPATH_OPEN_WINDOW", "1") == "0" or config.is_desktop() or time.monotonic() - _opened_at < 60:
+    if os.environ.get("FORMPATH_OPEN_WINDOW", "1") == "0" or config.is_desktop() or (_opened_at > 0 and time.monotonic() - _opened_at < 60):
         return False
     _opened_at = time.monotonic()
     import webbrowser

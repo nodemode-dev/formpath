@@ -379,6 +379,13 @@ A `tools/call` carrying the engine's in-app token sets the `_inapp` context vari
 
 `_ask` queued the call for the window and, when the wait ran out (600 s for a tool, 180 s for `__consent__`), told the agent it failed but left the item in `_pending`; its `finally` cleared only `_waiting` and `_delivered`. Trigger: an agent calls a tool while the window was live in the last 30 s, then the window closes or stops polling before it takes the call. The next window to open, minutes or hours later, received and ran it: a stale draw, delete or `__open` changed the person's current document, or a stale consent question appeared. `_ask` now keeps the queued dict and removes it from `_pending` in the `finally` (a `ValueError` means the window already took it). Checked: `_ask("x", {}, 0.05)` with no window returns None and leaves `_pending` and `_waiting` empty; the backend tests pass. Left as it was: `bridge_next` puts a taken item back at the front when the window disconnects between taking and answering; if the call's wait ends in that same moment, the item could still stay queued.
 
+### app/routers/mcp.py · a window that never polled is not live on a machine that has just started
+- refers-to: app/routers/mcp.py :: _live, _open_window, _seen, _opened_at
+- kind: fix
+- logged: v0.53.2 · 2026-11-11
+
+`_seen` and `_opened_at` start at 0.0 and were compared with `time.monotonic()` as if 0.0 were long ago. On Linux, macOS and Windows that clock counts from when the machine started, so for the first 30 s after a start `_live()` answered true with no window ever seen, and for the first 60 s `_open_window()` answered false as if a window had just been opened. An agent call in that half minute did not get "formpath is not open": it was queued for consent and waited 180 s for a window that was not there, and nothing opened the window for it. This is what failed CI on the merge of pull request 5: the runner had been up for under 30 s when `tests/test_f2_consent.py::test_with_no_window_every_tool_is_refused_and_nothing_is_queued` ran, the call waited for consent and the test's 40 s limit ended it with TimeoutError. The same tree had passed minutes earlier on a runner that had been up longer; the code is as old as 0.1.0. Both checks now treat 0.0 as never: `_live()` needs `_seen > 0` and `_open_window()` only holds back when `_opened_at > 0`. Reproduced with a scratch pytest plugin outside the repo that makes `time.monotonic()` read 3 s at the start of the run: before, that one test failed with TimeoutError after 40 s, as in CI; after, 108 passed, also with the clock starting at 29 s so that it crosses 30 s during the run.
+
 ## app/routers/commands.py
 
 ### app/routers/commands.py · the catalogue over HTTP
