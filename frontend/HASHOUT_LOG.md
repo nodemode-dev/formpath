@@ -555,6 +555,13 @@ The engine never calls the model; the io layer brings back finished nodes and th
 
 History.limit is still one static value (the Preferences undo steps); Engine.setHistoryLimit sets it and calls trim on every project, which drops the oldest states beyond the limit but never the current one or anything after it. stateAt returns a state for New Document from State.
 
+### src/engine/history.ts · marks survive dropped states
+- refers-to: src/engine/history.ts :: History.mark, History.rewind, History.squash, History.push, History.trim; src/engine/index.ts :: newDocumentFromState
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`mark` returned the array index of the current state, and once the history was full every push spliced the oldest state off the front, so a saved mark slid onto a later state: cancelling Edit Pattern or Edit Symbol after 200 edits rewound into the session and left the tile or symbol group behind, saving squashed the wrong range, and beginStep/endStep stopped merging; trim did the same. History now counts dropped states (`dropped`), `mark` adds the count and `rewind` and `squash` subtract it, so a mark whose state is gone gives null or false. `stateAt` and `jump` keep plain indices, so newDocumentFromState takes `steps().current` instead of `mark()`. Checked with tsc and a node check on a copy of the class (rewind and squash after 250 edits, after a trim, and with a dropped mark).
+
 ## src/engine/viewport.ts
 
 ### src/engine/viewport.ts · insetRight

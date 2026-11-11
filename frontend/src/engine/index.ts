@@ -2136,7 +2136,7 @@ export class Engine extends Emitter<EngineEvents> {
   newDocumentFromState(index?: number): Project | null {
     const p = this.current;
     if (!p) return null;
-    const st = p.history.stateAt(index ?? p.history.mark());
+    const st = p.history.stateAt(index ?? p.history.steps().current);
     if (!st) return null;
     const q = this.addProject(st.doc, `${p.name} ${st.name}`.slice(0, 80));
     for (const [k, b] of p.assets) q.assets.set(k, b);

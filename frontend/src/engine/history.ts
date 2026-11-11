@@ -6,6 +6,7 @@ export class History {
   static limit = 200;
   private states: HistoryState[];
   private at = 0;
+  private dropped = 0;
   private savedDoc: Doc | null;
   private dirty = false;
 
@@ -31,6 +32,7 @@ export class History {
     if (this.states.length > History.limit + 1) {
       const drop = this.states.length - History.limit - 1;
       this.states.splice(0, drop);
+      this.dropped += drop;
     }
     this.at = this.states.length - 1;
     this.rev += 1;
@@ -45,12 +47,14 @@ export class History {
     const cut = Math.min(drop, this.at);
     if (cut <= 0) return;
     this.states.splice(0, cut);
+    this.dropped += cut;
     this.at -= cut;
     this.rev += 1;
   }
 
-  mark(): number { return this.at; }
-  squash(from: number): boolean {
+  mark(): number { return this.at + this.dropped; }
+  squash(mark: number): boolean {
+    const from = mark - this.dropped;
     if (from < 0 || this.at <= from + 1 || this.at !== this.states.length - 1) return false;
     const first = this.states[from + 1], last = this.states[this.at];
     this.states = [...this.states.slice(0, from + 1), { ...last, name: first.name }];
@@ -59,7 +63,8 @@ export class History {
     return true;
   }
 
-  rewind(to: number): HistoryState | null {
+  rewind(mark: number): HistoryState | null {
+    const to = mark - this.dropped;
     if (to < 0 || to >= this.states.length || to > this.at) return null;
     this.states = this.states.slice(0, to + 1);
     this.at = to;
