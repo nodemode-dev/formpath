@@ -583,6 +583,13 @@ History.limit is still one static value (the Preferences undo steps); Engine.set
 
 `mark` returned the array index of the current state, and once the history was full every push spliced the oldest state off the front, so a saved mark slid onto a later state: cancelling Edit Pattern or Edit Symbol after 200 edits rewound into the session and left the tile or symbol group behind, saving squashed the wrong range, and beginStep/endStep stopped merging; trim did the same. History now counts dropped states (`dropped`), `mark` adds the count and `rewind` and `squash` subtract it, so a mark whose state is gone gives null or false. `stateAt` and `jump` keep plain indices, so newDocumentFromState takes `steps().current` instead of `mark()`. Checked with tsc and a node check on a copy of the class (rewind and squash after 250 edits, after a trim, and with a dropped mark).
 
+### src/engine/history.ts · Cancel restores a dropped mark from the session's saved state
+- refers-to: src/engine/history.ts :: History.rewind (saved); src/engine/symbols.ts :: SymbolSession.start; src/engine/pattern.ts :: PatternSession.start; src/engine/index.ts :: enterSymbolEdit, exitSymbolEdit, enterPatternEdit, exitPatternEdit
+- kind: fix
+- logged: v0.53.2 · 2026-11-11
+
+With a small undo limit (History Options 20) an isolation edit of more steps than the limit pushed its own mark off the history, `rewind` gave null and Cancel only refreshed, so the edit group stayed and the instance stayed hidden. Each session now keeps `start`, the history state at its mark (documents are immutable, so this is a reference, not a copy). `rewind(mark, saved)` with a mark that is gone makes `saved` the only state, sets `dropped` to the mark so later marks stay consistent, and returns it; every state still in the history was inside the session, so nothing outside the session is lost. Pinning the mark was not chosen: a session that ends by undoing past its entry would leave the pin set. Done still squashes only when the mark survives; past the limit the session's steps stay as separate steps. Checked: tests/history.test.ts.
+
 ## src/engine/viewport.ts
 
 ### src/engine/viewport.ts · insetRight

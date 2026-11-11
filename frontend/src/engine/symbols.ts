@@ -4,6 +4,7 @@ import { mapPathAdaptive } from './envelope';
 import { apply, translate } from './geometry';
 import { emptyAppearance } from './paint';
 import { transformNode } from './transform';
+import type { HistoryState } from './history';
 import type { Doc, GroupNode, Mat, Pt, Rect, SymbolDef, SymbolPart, SymbolSlice, VNode } from './types';
 
 export type SymbolRegistration = 'tl' | 't' | 'tr' | 'l' | 'c' | 'r' | 'bl' | 'b' | 'br';
@@ -65,7 +66,7 @@ export function slicedArt(doc: Doc, art: VNode, slice: SymbolSlice, sx: number, 
   return warp(art, (p) => ({ x: fx(p.x), y: fy(p.y) }));
 }
 
-export interface SymbolSession { symbol: string; group: string; instance: string | null; hidden: boolean; origin: Pt; shell: GroupNode | null; plain: boolean; mark: number; before: string[]; ids: Record<string, string> }
+export interface SymbolSession { symbol: string; group: string; instance: string | null; hidden: boolean; origin: Pt; shell: GroupNode | null; plain: boolean; mark: number; start: HistoryState; before: string[]; ids: Record<string, string> }
 
 const plainGroup = (n: VNode): n is GroupNode => n.kind === 'group' && !n.clip && !n.trace && !n.livePaint && !n.dim && !n.graph && !n.intertwine && !n.shaper && !n.mask && n.opacity === 1 && n.blend === 'normal' && !n.ap.items.length && !n.ap.effects.length;
 

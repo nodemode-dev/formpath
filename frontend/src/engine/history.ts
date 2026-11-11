@@ -63,8 +63,15 @@ export class History {
     return true;
   }
 
-  rewind(mark: number): HistoryState | null {
+  rewind(mark: number, saved?: HistoryState): HistoryState | null {
     const to = mark - this.dropped;
+    if (to < 0 && saved && mark >= 0) {
+      this.states = [saved];
+      this.at = 0;
+      this.dropped = mark;
+      this.rev += 1;
+      return this.current;
+    }
     if (to < 0 || to >= this.states.length || to > this.at) return null;
     this.states = this.states.slice(0, to + 1);
     this.at = to;
