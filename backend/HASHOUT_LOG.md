@@ -78,6 +78,13 @@ formcompiler runs `./formpath desktop build` in Git Bash on Windows. `--add-data
 
 The desktop shell starts the sidecar with `FORMPATH_PORT=0`, and `config.port()` read that "0" as a real value (a non-empty string, so the `or BACKEND_PORT` fallback never ran), while nothing recorded the port Uvicorn then picked. So in the desktop app Claude Code's `--mcp-config` (the Claude Code tab and every Chat message) named `http://127.0.0.1:0/mcp` and the dock's shells got `FORMPATH_ENGINE_URL`, `FORMPATH_MCP_URL` and `FORMPATH_URL` on port 0: no formpath tools in Claude Code, and `./formpath cli` and the stdio bridge failed inside the dock. When the port is 0, `main` now binds a socket to 127.0.0.1 port 0, reads the free port the system gave it, closes it, writes that port to `FORMPATH_PORT` and passes it to Uvicorn, which still prints the `http://127.0.0.1:<port>` line the shell reads. A set port is used as before. The port is free between the close and Uvicorn's bind for a few milliseconds only; another program taking that exact port in between would make the engine fail to start, as any taken port does. Checked: the engine run with `FORMPATH_PORT=0` printed port 48863, and a dock shell opened through `POST /api/terminal` echoed `FORMPATH_MCP_URL=http://127.0.0.1:48863/mcp`; the backend tests pass. The frozen sidecar and the desktop app were not built here.
 
+### formpath_engine.py · the Windows desktop build freezes the fresh frontend
+- refers-to: setup/desktop.bat; setup/freeze_backend.bat :: the frontend\dist check; setup/desktop_build
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`setup/desktop.bat` (run by `build_app.bat` and `formpath.bat desktop build`) froze the engine first and rebuilt the frontend after. `freeze_backend.bat` builds the frontend only when `frontend\dist\index.html` is missing, so after any earlier build the sidecar bundled the previous `dist` as its `frontend_dist`; the rebuilt `dist` then reached only Tauri's splash, while the main window is served by the engine from its bundled copy, so the Windows installer showed the old UI. The bash path (`setup/desktop_build`) already builds first. `desktop.bat build` now runs `build_frontend.bat` and then `freeze_backend.bat`; `desktop.bat dev` freezes as before. The icon line now runs before the freeze; `src-tauri\icons\icon.ico` is tracked, so it does nothing in a checkout. CRLF endings kept. Not run on Windows: reasoned from the order of the calls.
+
 ## oc_install
 
 ### oc_install · Python on Windows and the venv layout
