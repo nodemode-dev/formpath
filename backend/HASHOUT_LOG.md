@@ -95,6 +95,13 @@ The desktop shell starts the sidecar with `FORMPATH_PORT=0`, and `config.port()`
 
 formcompiler runs `./formpath install` in Git Bash on its Windows runner, where setup-python provides `python` (and `py`) and `python3` may not exist, so the candidate list tried only python3.14 to python3 and stopped with "Python 3.12 or newer is required". `python` is now the last candidate, the same list as `setup/lib.sh :: fp_python` and formpdf and formtxt; the version check still refuses an older one. The activate script is `venv/bin/activate` on macOS and Linux and `venv/Scripts/activate` on Windows; the script now picks whichever exists and stops with a message when neither does (a half-made venv), instead of a bare `source` error. Found by the family builds audit of 2026-10-30.
 
+### oc_install.bat · stops when the venv cannot be made
+- refers-to: oc_install.bat :: venv, activate; setup/install_all.bat
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+When `%PY% -m venv venv` failed (a Python without venv, a locked folder), the script went on: `call venv\Scripts\activate.bat` failed, `python -m pip` and `pip install` ran against the system Python, `install_all.bat` reported success, and boot later said the venv was missing. The venv step now exits 1 when it fails, and the script stops with a message when `venv\Scripts\activate.bat` is missing (also a half-made venv left by an earlier run), before any pip runs. `install_all.bat` already stops on that exit code. CRLF endings kept. Not run on Windows: reasoned from cmd's `||` and `if not exist` rules.
+
 ## app/core/config.py
 
 ### app/core/config.py · ports and folders
