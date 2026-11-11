@@ -232,8 +232,8 @@ export async function exportRaster(p: Project, o: RasterOpts): Promise<Blob> {
   const c = await renderRegion(p, { ...o, transparent: o.transparent && o.format !== 'jpg' });
   const want = o.icc ?? !!p.doc.cm, cmykTiff = o.format === 'tiff' && !!o.tiff?.cmyk;
   const found = want || cmykTiff ? await rasterIcc(p, cmykTiff) : null;
-  const icc = found && !want ? { profile: null, lut: found.lut } : found;
-  return canvasBlob(c, o.format, o.quality, o.tiff ? { ...o.tiff, ppi: o.tiff.ppi ?? Math.round(72 * o.scale) } : { ppi: Math.round(72 * o.scale) }, o.transparent, icc);
+  const icc = found && !want ? { profile: null, lut: found.lut } : found, ppi = Math.round(72 * rasterCap(o.region, o.scale).scale);
+  return canvasBlob(c, o.format, o.quality, o.tiff ? { ...o.tiff, ppi: o.tiff.ppi ?? ppi } : { ppi }, o.transparent, icc);
 }
 
 export interface ScreenItem { artboard: number; scale: number; format: RasterFormat | 'svg' | 'pdf'; suffix: string }

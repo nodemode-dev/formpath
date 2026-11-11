@@ -1912,6 +1912,13 @@ The page loop ran over the first 200 pages and filtered by `opts.pages`, so Plac
 
 Each artboard and each scale and format becomes one file named after the artboard plus the suffix; SVG and PDF items call back into the writers; everything lands in one zip.
 
+### src/io/raster.ts · stamped ppi follows the capped scale
+- refers-to: src/io/raster.ts :: exportRaster, rasterCap, renderRegion
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+renderRegion renders at `rasterCap`'s scale (16,384 px per side at most) but exportRaster stamped pHYs, JFIF density and TIFF resolution with `72 * o.scale`, so a capped export claimed the requested ppi and printed smaller than the artboard. The ppi now comes from the capped scale, as in exportOther; an explicit TIFF ppi still wins. Checked: tsc clean. Not run on a capped export (needs a browser canvas).
+
 ## src/io/fonts.ts
 
 ### src/io/fonts.ts · vertical metrics
