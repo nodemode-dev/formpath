@@ -15,7 +15,7 @@ import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../eng
 import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
 import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, PatternDef, Project, Rect, StrokeItem, VNode } from '../engine';
-import { outlineText } from './fonts';
+import { missingGlyphs, outlineText } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
 import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
@@ -31,6 +31,7 @@ import { aiThumbSize, buildAiPrivate } from './ai-private';
 import { pdfaParts, pdfString as pdfTextString, xmpPdfA } from './pdf-x';
 import { DEFAULT_COMPRESSION, pdfRefusal, permissionValue, securityActive, standardRules, STANDARD_LABELS, type PdfCompression, type PdfSecurity, type PdfStandard } from './pdf-std';
 
+export const PDF_NOTES: { last: string[] } = { last: [] };
 export interface PdfOptions { artboards: number[]; preserve: boolean; ppi: number; title?: string; version?: string; marks?: PdfMarks; liveText?: boolean; standard?: PdfStandard; sheet?: PrintSettings; compression?: PdfCompression; security?: PdfSecurity; layers?: boolean; aiPrivate?: boolean }
 
 const BM: Partial<Record<BlendMode, string>> = { multiply: 'Multiply', screen: 'Screen', overlay: 'Overlay', darken: 'Darken', lighten: 'Lighten', color_dodge: 'ColorDodge', color_burn: 'ColorBurn', hard_light: 'HardLight', soft_light: 'SoftLight', difference: 'Difference', exclusion: 'Exclusion', hue: 'Hue', saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity' };
@@ -607,14 +608,16 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const std: PdfStandard = o.standard ?? 'none', rules = standardRules(std), secure = securityActive(o.security) ? o.security : undefined;
   const refusal = pdfRefusal({ standard: std, security: o.security, layers: o.layers });
   if (refusal) throw new Error(refusal);
+  PDF_NOTES.last = [];
   const pdf = new PdfFile();
   const outlines = new Map<string, PathData>();
-  const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false;
+  const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false, missing = new Set<string>();
   const visit = async (n: VNode, plain: boolean): Promise<void> => {
     if (n.kind === 'text') {
       const d = await outlineText(n);
       if (d) {
         outlines.set(n.id, d);
+        for (const ch of await missingGlyphs(n)) missing.add(ch);
         const plan = wantLive && !plain ? await live.plan(p.doc, n) : null;
         if (plan) plans.set(n.id, plan);
       }
@@ -747,7 +750,9 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   }
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names}${extra} >>`);
   const info = pdf.add(`<< /Title ${pdfTextString(title)} /Producer ${pdfString(producer)} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
-  return pdf.build(root, info, rules.header, docId, sealer, (o.compression ?? DEFAULT_COMPRESSION).flate !== false);
+  const blob = await pdf.build(root, info, rules.header, docId, sealer, (o.compression ?? DEFAULT_COMPRESSION).flate !== false);
+  PDF_NOTES.last = missing.size ? [`No font on this computer has ${[...missing].slice(0, 12).join(' ')}${missing.size > 12 ? ` and ${missing.size - 12} more` : ''}, so ${missing.size === 1 ? 'it shows' : 'they show'} as an empty box. Install a font with ${missing.size === 1 ? 'that character' : 'those characters'} and export again.`] : [];
+  return blob;
 }
 
 export async function readPdfNative(data: ArrayBuffer): Promise<{ manifest: Record<string, unknown>; assets: Map<string, Blob> } | null> {

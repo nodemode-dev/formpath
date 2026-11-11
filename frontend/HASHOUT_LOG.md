@@ -1956,6 +1956,13 @@ opentype.js does not read vhea, vmtx or VORG, so `fontFor` keeps each font's raw
 
 Inter and JetBrains Mono `.woff` files come from @fontsource through a lazy glob, so each face is fetched only when type uses it. Installed fonts are found and served by the engine's fonts service. A missing face draws with Inter.
 
+### src/io/fonts.ts, src/io/pdf-text.ts, src/io/pdf.ts · a character the font lacks comes from a font that has it
+- refers-to: src/io/fonts.ts :: BUNDLED, SUBSETS, bundledLoader (subset), bundledSubset, bundledFallback, fallbackGlyph, glyphOrFallback, missingGlyphs, CJK_FALLBACKS, GENERAL_FALLBACKS, outlineText; src/io/pdf-text.ts :: LiveFonts.plan; src/io/pdf.ts :: PDF_NOTES, exportPdf; src/app.ts :: exportBlob; src/automation/agent-bridge.ts :: export_file
+- kind: fix
+- logged: v0.53.2 · 2026-11-11
+
+Only the latin @fontsource file of Inter and JetBrains Mono was loaded, so Omega, Cyrillic or CJK typed in Inter got glyph 0 and PDF export embedded the font's empty glyph (a "NO GLYPH" box in viewers), while SVG kept the character as text and the browser filled it in. For a non-space character whose glyph is 0, `glyphOrFallback` now asks `fallbackGlyph`, cached per family, style and character: first the same bundled family's other subset files (latin-ext, greek, greek-ext, cyrillic, cyrillic-ext, vietnamese; the glob now includes them, about 1.2 MB more in the build, same OFL licence and NOTICE row), then installed families through the existing `fontFor` and `api.findFont` resolver, CJK families first for CJK code points and general families first otherwise, then bundled Inter. The fallback glyph keeps the layout position; its face is keyed by its source file (`source`), never by family alone, because Inter latin and Inter greek are different fonts with different glyph ids. Axes are dropped for a fallback glyph. `outlineText` uses the same pick, so outlined PDF text and Create Outlines match. When no font has a character the glyph stays 0 and `exportPdf` sets `PDF_NOTES.last` (the PSD_NOTES pattern) to one sentence naming the characters; the export dialog shows it as a toast and `export_file` appends it to its result. Nothing is embedded that is not already bundled or installed on the person's computer. Checked: tests/pdf-glyphs.test.ts (subsetting mocked to return the font file; the CJK case uses Arial Unicode MS, Droid Sans Fallback, Noto Sans CJK or Microsoft YaHei when one is on the machine and is skipped otherwise).
+
 ### src/io/fonts.ts · GSUB extension lookups
 - refers-to: src/io/fonts.ts :: applyLookup, Sub (lookupType, extension)
 - kind: fix

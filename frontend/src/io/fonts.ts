@@ -4,18 +4,19 @@ import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, setShaping, weigh
 import type { Anchor, CharStyle, Mat, PathData, SubPath, TextNode } from '../engine';
 import { api, type FontInfo, type SimilarFont } from './api';
 
-const BUNDLED = import.meta.glob('../../node_modules/@fontsource/{inter,jetbrains-mono}/files/*-latin-*-{normal,italic}.woff', { query: '?url', import: 'default' }) as Record<string, () => Promise<string>>;
+const BUNDLED = import.meta.glob('../../node_modules/@fontsource/{inter,jetbrains-mono}/files/*-{latin,latin-ext,greek,greek-ext,cyrillic,cyrillic-ext,vietnamese}-*-{normal,italic}.woff', { query: '?url', import: 'default' }) as Record<string, () => Promise<string>>;
+const SUBSETS = ['latin-ext', 'greek', 'greek-ext', 'cyrillic', 'cyrillic-ext', 'vietnamese'];
 
 export const BUNDLED_FAMILIES = ['Inter', 'JetBrains Mono'];
 export const WEB_FAMILIES = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Trebuchet MS', 'Garamond', 'Palatino', 'Futura', 'Avenir', 'Gill Sans', 'Optima', 'Menlo', 'Impact'];
 export const STYLES = ['Thin', 'Extra Light', 'Light', 'Regular', 'Medium', 'Semibold', 'Bold', 'Extra Bold', 'Black', 'Italic', 'Light Italic', 'Medium Italic', 'Bold Italic'];
 
-function bundledLoader(family: string, style: string): (() => Promise<string>) | null {
+function bundledLoader(family: string, style: string, subset = 'latin'): (() => Promise<string>) | null {
   const slug = family.toLowerCase().replace(/\s+/g, '-');
   if (slug !== 'inter' && slug !== 'jetbrains-mono') return null;
   const { weight, italic } = weightOf(style);
   const pick = (w: number, it: boolean): (() => Promise<string>) | null => {
-    const key = Object.keys(BUNDLED).find((k) => k.endsWith(`/${slug}-latin-${w}-${it ? 'italic' : 'normal'}.woff`));
+    const key = Object.keys(BUNDLED).find((k) => k.endsWith(`/${slug}-${subset}-${w}-${it ? 'italic' : 'normal'}.woff`));
     return key ? BUNDLED[key] : null;
   };
   const ws = [weight, 400, 500, 600, 700, 300];
@@ -143,6 +144,70 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
   return p;
 }
 
+const CJK_FALLBACKS = ['PingFang SC', 'Hiragino Sans GB', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Apple SD Gothic Neo', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', 'Source Han Sans SC', 'Microsoft YaHei', 'Yu Gothic', 'Meiryo', 'Malgun Gothic', 'SimSun', 'MS Gothic', 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'Songti SC', 'Arial Unicode MS'];
+const GENERAL_FALLBACKS = ['Helvetica Neue', 'Arial', 'Segoe UI', 'Noto Sans', 'DejaVu Sans', 'Liberation Sans', 'Lucida Grande', 'Arial Unicode MS', 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols', 'Noto Sans Symbols 2'];
+const isCjk = (cp: number): boolean => (cp >= 0x2e80 && cp <= 0x9fff) || (cp >= 0xac00 && cp <= 0xd7af) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xffef) || (cp >= 0x20000 && cp <= 0x3ffff);
+
+export interface FallbackGlyph { font: Font; gid: number; family: string; source: string }
+const covers = (font: Font | null, ch: string): number => (font ? font.charToGlyph(ch).index : 0);
+
+function bundledSubset(family: string, style: string, subset: string): Promise<Font | null> {
+  const key = `${family}|${style}|${subset}`;
+  let p = parsed.get(key);
+  if (!p) {
+    const load = bundledLoader(family, style, subset);
+    p = load ? load().then((url) => fetch(url)).then((r) => r.arrayBuffer()).then(keep).catch(() => { parsed.delete(key); return null; }) : Promise.resolve(null);
+    parsed.set(key, p);
+  }
+  return p;
+}
+
+async function bundledFallback(family: string, style: string, ch: string): Promise<FallbackGlyph | null> {
+  for (const sub of SUBSETS) {
+    const font = await bundledSubset(family, style, sub), gid = covers(font, ch);
+    if (font && gid) return { font, gid, family, source: `${family}/${sub}` };
+  }
+  return null;
+}
+
+const fallbacks = new Map<string, Promise<FallbackGlyph | null>>();
+export function fallbackGlyph(ch: string, family: string, style: string): Promise<FallbackGlyph | null> {
+  const key = `${family}|${style}|${ch}`;
+  let p = fallbacks.get(key);
+  if (!p) {
+    p = (async () => {
+      const own = await bundledFallback(family, style, ch);
+      if (own) return own;
+      const cp = ch.codePointAt(0) ?? 0, order = isCjk(cp) ? [...CJK_FALLBACKS, ...GENERAL_FALLBACKS] : [...GENERAL_FALLBACKS, ...CJK_FALLBACKS];
+      for (const fam of [...new Set(order)].filter((f) => f !== family)) {
+        const font = await fontFor(fam, style).catch(() => null), gid = covers(font, ch);
+        if (font && gid) return { font, gid, family: fam, source: fam };
+      }
+      return family === 'Inter' ? null : bundledFallback('Inter', style, ch);
+    })();
+    fallbacks.set(key, p);
+  }
+  return p;
+}
+
+export async function glyphOrFallback(ch: string, st: CharStyle, font: Font, gid: number): Promise<FallbackGlyph & { style: CharStyle; missing: boolean }> {
+  if (gid !== 0 || !ch.trim()) return { font, gid, family: st.font, source: st.font, style: st, missing: false };
+  const hit = await fallbackGlyph(ch, st.font, st.style);
+  return hit ? { ...hit, style: { ...st, font: hit.family, axes: undefined }, missing: false } : { font, gid, family: st.font, source: st.font, style: st, missing: true };
+}
+
+export async function missingGlyphs(n: TextNode): Promise<string[]> {
+  const out = new Set<string>();
+  for (const g of layoutText(n).glyphs) {
+    if (!g.ch.trim() || g.ch.charCodeAt(0) < 32) continue;
+    const font = await fontFor(g.style.font, g.style.style);
+    if (!font) continue;
+    const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
+    if (pick.missing) out.add(g.ch);
+  }
+  return [...out];
+}
+
 type Varied = { d: PathData; adv: number };
 type VarGlyph = { advanceWidth?: number; _advanceWidth?: number; leftSideBearing?: number; _leftSideBearing?: number };
 type VarFont = { variation?: { getTransform(g: number, coords: Record<string, number>): { advanceWidth?: number; path: { commands: PathCommand[] } } } };
@@ -204,9 +269,9 @@ export async function outlineText(n: TextNode): Promise<PathData | null> {
     if (g.ch === ' ' || g.ch === '\t') continue;
     const font = await fontFor(g.style.font, g.style.style);
     if (!font) return null;
-    const gid = g.gid ?? font.charToGlyph(g.ch).index;
+    const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
     const local: Mat = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]);
-    out.push(...transformPath(variedGlyph(font, gid, g.style).d, n.mode === 'path' ? local : mul(n.xf, local)));
+    out.push(...transformPath(variedGlyph(pick.font, pick.gid, pick.style).d, n.mode === 'path' ? local : mul(n.xf, local)));
   }
   return out;
 }

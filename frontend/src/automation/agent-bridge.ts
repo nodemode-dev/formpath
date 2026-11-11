@@ -42,6 +42,7 @@ import type { BrushDef, Doc, PerspPlane } from '../engine/types';
 import { DXF_UNITS, type DxfImportOptions, type DxfUnit } from '../io/dxf';
 import type { CadChoice } from '../ui/app-dialogs';
 import { compressionFrom, pdfRefusal, securityFrom, standardFrom, type PdfCompression, type PdfSecurity, type PdfStandard } from '../io/pdf-std';
+import { PDF_NOTES } from '../io/pdf';
 import { artParts, generativePalettes, modelState, PATTERN_PRESETS, patternVariations, placeVector, recolorWithPalette, shapeFillVariations, textToVectorVariations, type GenCommon, type PatternLayout, type Variation as GenVariation } from '../io/generative';
 import { detailLevel, EFFECT_NAMES, STYLE_IDS, styleReference, TONE_IDS } from '../io/gen-options';
 import { reportLines } from '../io/gen-repair';
@@ -781,7 +782,8 @@ export class AgentBridge {
           const pdfOnly = fmt === 'pdf', standard = pdfOnly ? standardFrom(a.pdf_standard) : 'none', security = pdfOnly ? securityFrom(a) : undefined, layers = pdfOnly && a.pdf_layers === true;
           if (pdfOnly) { const refusal = pdfRefusal({ standard, security, layers }); if (refusal) return fail(refusal); }
           const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, raster, scale: has('ppi') ? Math.max(1, Math.min(2400, num('ppi', 72))) / 72 : Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
-          return blob ? text(`Exported ${fmt.toUpperCase()}.`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
+          const note = (fmt === 'pdf' || fmt === 'ai') && PDF_NOTES.last.length ? ` ${PDF_NOTES.last.join(' ')}` : '';
+          return blob ? text(`Exported ${fmt.toUpperCase()}.${note}`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {
           const q = has('index') ? e.projects[Math.round(num('index', 0))] : e.projects.find((x) => x.name === str('name'));

@@ -5,7 +5,7 @@ import { resolvePaint } from '../engine/paint';
 import { axesKey, glyphMat, hasAxes, layoutText } from '../engine/text';
 import type { CharStyle, Doc, Mat, Paint, TextNode } from '../engine';
 import { api } from './api';
-import { fontFor, fontSource, glyphAdvance } from './fonts';
+import { fontFor, fontSource, glyphAdvance, glyphOrFallback } from './fonts';
 
 export interface PdfSink { add(dict: string, stream?: Uint8Array): number }
 export interface Ink { fill: string | null; stroke: string | null; width: number }
@@ -84,10 +84,11 @@ export class LiveFonts {
       if (!solidOrNone(doc, st.fill) || (hasStroke && !solidOrNone(doc, st.stroke))) return null;
       const font = await fontFor(st.font, st.style);
       if (!font) return null;
-      const gid = g.gid ?? font.charToGlyph(g.ch).index;
-      if (gid === 0 && /\s/.test(g.ch)) continue;
+      const own = g.gid ?? font.charToGlyph(g.ch).index;
+      if (own === 0 && /\s/.test(g.ch)) continue;
+      const pick = await glyphOrFallback(g.ch, st, font, own), ps = pick.style;
       const local = mul(glyphMat(g), [(g.size * st.hscale) / 100, 0, 0, (g.size * st.vscale) / 100, 0, 0]), m = n.mode === 'path' ? local : mul(n.xf, local);
-      staged.push({ key: `${st.font}|${st.style}|${hasAxes(st) ? axesKey(st) : ''}`, font, style: st, gid, ch: g.ch, tm: [m[0], m[1], -m[2], -m[3], m[4], m[5]] });
+      staged.push({ key: `${pick.source}|${ps.style}|${hasAxes(ps) ? axesKey(ps) : ''}`, font: pick.font, style: ps, gid: pick.gid, ch: g.ch, tm: [m[0], m[1], -m[2], -m[3], m[4], m[5]] });
     }
     const glyphs: LiveGlyph[] = [], used = new Set<Face>();
     for (const s of staged) {

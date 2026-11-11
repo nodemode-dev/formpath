@@ -15,7 +15,7 @@ import { fontsChanged, plainText, textNode } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
 import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
-import { exportPdf, readPdfNative } from './io/pdf';
+import { exportPdf, PDF_NOTES, readPdfNative } from './io/pdf';
 import { buildPrintPdf, printPdf } from './io/print';
 import { PrintDialog } from './ui/print-dialog';
 import { DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
@@ -817,7 +817,11 @@ export function startApp(): void {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
       return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
     }
-    if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, aiPrivate: c.format === 'ai', ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : true, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined });
+    if (c.format === 'pdf' || c.format === 'ai') {
+      const pdfBlob = await exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, aiPrivate: c.format === 'ai', ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : true, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined });
+      if (PDF_NOTES.last.length) toast(PDF_NOTES.last[0], 'info');
+      return pdfBlob;
+    }
     if (c.format === 'eps') {
       const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
       if (scope === 'all' && p.doc.artboards.length > 1) {
