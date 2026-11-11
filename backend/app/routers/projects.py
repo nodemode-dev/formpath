@@ -140,15 +140,30 @@ def set_folder(body: FolderBody) -> dict:
     moved = 0
     if body.move and new.resolve() != old.resolve():
         import shutil
-        for src in sorted(old.glob(f"*{EXT}")):
-            dst = new / src.name
-            if dst.exists():
-                dst = new / f"{src.stem} (moved){src.suffix}"
-            shutil.copy2(src, dst)
-            if dst.stat().st_size != src.stat().st_size:
-                raise HTTPException(status_code=500, detail=f"{src.name} did not copy whole; nothing more was moved.")
-            src.unlink()
-            moved += 1
+        copies: list[tuple[Path, Path]] = []
+        try:
+            for src in sorted(old.glob(f"*{EXT}")):
+                dst, n = new / src.name, 1
+                while dst.exists():
+                    dst = new / f"{src.stem} (moved{'' if n == 1 else f' {n}'}){src.suffix}"
+                    n += 1
+                copies.append((src, dst))
+                shutil.copy2(src, dst)
+                if dst.stat().st_size != src.stat().st_size:
+                    raise OSError(f"{src.name} did not copy whole")
+        except OSError as exc:
+            for _, dst in copies:
+                try:
+                    dst.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise HTTPException(status_code=400, detail=f"{copies[-1][0].name if copies else 'A project'} could not be moved ({exc.strerror or exc}); nothing was moved.") from exc
+        for src, _ in copies:
+            try:
+                src.unlink()
+                moved += 1
+            except OSError:
+                pass
     settings = config.data_dir() / "library.json"
     if body.folder.strip():
         settings.write_text(json.dumps({"folder": str(new)}))

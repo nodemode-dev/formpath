@@ -278,6 +278,13 @@ Linked images need the size and modified time of their files: files_stat answers
 
 Saving compares the version the window opened with the file's current version; if another device or window changed it, the incoming save is written beside it as a conflict copy and both are kept.
 
+### app/routers/projects.py · moving the library is all or nothing
+- refers-to: app/routers/projects.py :: set_folder
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`PUT /api/projects/folder` with `move` copied and deleted one project at a time and wrote `library.json` only after the loop. When a copy failed half-way (disk full, permission, a short copy), the projects already moved were gone from the old folder while the library still pointed there, so they disappeared from the app; an `OSError` from `copy2` was an unhandled 500. A name taken twice (`X.fpth` and `X (moved).fpth` both in the new folder) made `copy2` overwrite the earlier `X (moved).fpth`. Now every project is copied first; on any failure the copies made so far are removed, nothing is deleted, `library.json` is left as it was, and the answer is a 400 naming the file and the reason. Only after every copy succeeded are the originals deleted (one that cannot be deleted stays in both folders). A taken name tries `X (moved)`, then `X (moved 2)`, `X (moved 3)` and so on. Checked in a scratch run with `copy2` failing on the second of three projects: 400 "B.fpth could not be moved (No space left on device); nothing was moved.", all three still in the old folder, the new folder as before and the library still on the old folder; then a clean move moved 3, with `A.fpth` landing as `A (moved 2).fpth` and the existing `A (moved).fpth` untouched. The backend tests pass. `library.json` is still written in place, not through a temp file.
+
 ## app/routers/fonts.py
 
 ### app/routers/fonts.py · find and file
