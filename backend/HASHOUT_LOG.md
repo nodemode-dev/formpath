@@ -329,6 +329,13 @@ Follows formlit's design. The Claude Code button runs the person's own `claude` 
 
 A `tools/call` carrying the engine's in-app token sets the `_inapp` context variable, which skips the outside-agent consent question in `_call` and marks the queued item `inapp` so the window's long poll delivers it even while outside agents are not allowed. Every other client still meets the question and the window session secret. The window must still be open: the token removes the question, not the window.
 
+### app/routers/mcp.py · a call that timed out leaves the queue
+- refers-to: app/routers/mcp.py :: _ask, _put, _pending, bridge_next
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`_ask` queued the call for the window and, when the wait ran out (600 s for a tool, 180 s for `__consent__`), told the agent it failed but left the item in `_pending`; its `finally` cleared only `_waiting` and `_delivered`. Trigger: an agent calls a tool while the window was live in the last 30 s, then the window closes or stops polling before it takes the call. The next window to open, minutes or hours later, received and ran it: a stale draw, delete or `__open` changed the person's current document, or a stale consent question appeared. `_ask` now keeps the queued dict and removes it from `_pending` in the `finally` (a `ValueError` means the window already took it). Checked: `_ask("x", {}, 0.05)` with no window returns None and leaves `_pending` and `_waiting` empty; the backend tests pass. Left as it was: `bridge_next` puts a taken item back at the front when the window disconnects between taking and answering; if the call's wait ends in that same moment, the item could still stay queued.
+
 ## app/routers/commands.py
 
 ### app/routers/commands.py · the catalogue over HTTP
