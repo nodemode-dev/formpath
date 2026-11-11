@@ -50,9 +50,12 @@ case "$cmd" in
   doctor) exec setup/doctor "$@" ;;
   check) exec setup/check "$@" ;;
   counts) exec setup/counts "$@" ;;
-  mcp) exec python3 setup/mcp_stdio.py "$@" ;;
-  cli) exec python3 setup/cli.py "$@" ;;
-  i18n) exec python3 setup/i18n.py "$@" ;;
+  mcp|cli|i18n)
+    source setup/lib.sh
+    py="$(fp_python)" || { printf '[formpath] Python 3.12 or newer is required\n' >&2; exit 1; }
+    script="setup/$cmd.py"
+    [ "$cmd" = mcp ] && script=setup/mcp_stdio.py
+    exec "$py" "$script" "$@" ;;
   claude)
     command -v claude >/dev/null 2>&1 || { printf '[formpath] Claude Code is not installed: https://claude.com/claude-code\n' >&2; exit 1; }
     exec claude --mcp-config "{\"mcpServers\":{\"formpath\":{\"type\":\"stdio\",\"command\":\"$PWD/formpath\",\"args\":[\"mcp\"]}}}" --allowedTools mcp__formpath "$@" ;;

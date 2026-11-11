@@ -54,6 +54,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - app/routers/fonts.py
 - app/services/fonts.py
 - app/main.py
+- formpath and setup (the launchers)
 
 ## formpath_engine.py
 
@@ -511,3 +512,12 @@ The bridge already read `psd_edit` (default true) after the editable PSD writer 
 - logged: v0.52.8 · 2026-10-31
 
 Python's `mimetypes` takes file types from the Windows registry (`HKEY_CLASSES_ROOT\.js`, value `Content Type`) over its own table, and some installers and editors set `.js` to `text/plain`. On those PCs the engine served the built window's scripts as `text/plain`, WebView2 refused every module script under strict MIME checking, and the desktop window stayed blank; macOS, Linux, dev mode (Vite serves the page) and Windows PCs with the default value never showed it. The three calls pin `.js` and `.mjs` to `text/javascript` and `.css` to `text/css`, which covers `StaticFiles`, `FileResponse` and any direct `guess_type`. They sit after the last import, not above the imports: a module that re-reads the registry while importing cannot undo them, and no import follows a statement (E402). They look redundant off Windows; keep them. Repro on a Windows PC: `reg add "HKCU\Software\Classes\.js" /v "Content Type" /d "text/plain" /f`, then launch the rebuilt app; restore with `/d "text/javascript"`. Checked here: with the table poisoned to `text/plain` for js, mjs and css through `mimetypes.init(files=...)`, the three calls return `text/javascript`, `text/javascript` and `text/css`; `py_compile` passes. Not yet run on a Windows PC.
+
+## formpath and setup (the launchers)
+
+### formpath · mcp, cli and i18n run a Python that is new enough
+- refers-to: formpath :: the mcp, cli and i18n case; setup/lib.sh :: fp_python; setup/mcp_stdio.py, setup/cli.py, setup/i18n.py
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`./formpath mcp`, `cli` and `i18n` ran a bare `python3`, skipping the version check the other launchers make through `fp_python`. The three scripts use `X | None` annotations, which Python 3.9 evaluates at definition time and rejects with `TypeError: unsupported operand type(s) for |`, so an MCP client started from the macOS GUI (minimal `PATH`, where `/usr/bin/python3` is 3.9) saw the formpath server die at once; in Git Bash on Windows, where only `python` may exist, the command was not found. The three arms are now one: source `setup/lib.sh`, take `fp_python` (3.12 or newer, `python` last) and stop with "Python 3.12 or newer is required" on stderr when there is none, then exec the script with it. Where only an old Python is on `PATH` the command still cannot run, but it now says why instead of a traceback. Checked: `bash -n formpath`; `./formpath i18n check` exits 0, `./formpath cli` prints its usage, and `./formpath mcp` starts the bridge, which found no engine and started one, on this machine (Python 3.13). Not run on macOS or in Git Bash.
