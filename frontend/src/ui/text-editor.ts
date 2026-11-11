@@ -204,14 +204,14 @@ export class TextEditor {
       case 'Escape': e.preventDefault(); { const id = this.id; this.end(); this.engine.setTool('selection'); if (id && this.engine.nodeById(id)) this.engine.select([id]); } return;
       case 'Enter': e.preventDefault(); if (n?.mode !== 'path') this.replace('\n'); return;
       case 'Tab': e.preventDefault(); this.replace('\t'); return;
-      case 'Backspace': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret > 0) { this.anchor = mod || e.altKey ? wordStart(text, this.caret) : this.caret - 1; this.replace(''); } return;
-      case 'Delete': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret < text.length) { this.anchor = this.caret + 1; this.replace(''); } return;
+      case 'Backspace': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret > 0) { this.anchor = mod || e.altKey ? wordStart(text, this.caret) : prevPoint(text, this.caret); this.replace(''); } return;
+      case 'Delete': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret < text.length) { this.anchor = nextPoint(text, this.caret); this.replace(''); } return;
       case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown': {
         e.preventDefault();
         const a = this.arrow(e.key);
         if (a.kind === 'line') { this.move(this.lineStep(a.dir), e.shiftKey); return; }
-        if (a.dir < 0) this.move(e.altKey || mod ? wordStart(text, this.caret) : this.range() && !e.shiftKey ? Math.min(this.caret, this.anchor) : this.caret - 1, e.shiftKey);
-        else this.move(e.altKey || mod ? wordEnd(text, this.caret) : this.range() && !e.shiftKey ? Math.max(this.caret, this.anchor) : this.caret + 1, e.shiftKey);
+        if (a.dir < 0) this.move(e.altKey || mod ? wordStart(text, this.caret) : this.range() && !e.shiftKey ? Math.min(this.caret, this.anchor) : prevPoint(text, this.caret), e.shiftKey);
+        else this.move(e.altKey || mod ? wordEnd(text, this.caret) : this.range() && !e.shiftKey ? Math.max(this.caret, this.anchor) : nextPoint(text, this.caret), e.shiftKey);
         return;
       }
       case 'Home': e.preventDefault(); this.move(this.lineEdge(false), e.shiftKey); return;
@@ -271,5 +271,7 @@ export class TextEditor {
 
 function wordStart(t: string, i: number): number { let k = i; while (k > 0 && /\s/.test(t[k - 1])) k--; while (k > 0 && /\S/.test(t[k - 1])) k--; return k; }
 function wordEnd(t: string, i: number): number { let k = i; while (k < t.length && /\s/.test(t[k])) k++; while (k < t.length && /\S/.test(t[k])) k++; return k; }
+function prevPoint(t: string, i: number): number { return i >= 2 && /[\uDC00-\uDFFF]/.test(t[i - 1]) && /[\uD800-\uDBFF]/.test(t[i - 2]) ? i - 2 : i - 1; }
+function nextPoint(t: string, i: number): number { return i + 2 <= t.length && /[\uD800-\uDBFF]/.test(t[i]) && /[\uDC00-\uDFFF]/.test(t[i + 1]) ? i + 2 : i + 1; }
 
 export const typing: { editor: TextEditor | null } = { editor: null };

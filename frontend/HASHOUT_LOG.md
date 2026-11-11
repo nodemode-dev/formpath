@@ -4477,3 +4477,10 @@ A press on a row that left the list sideways (under 5 px vertically) and was rel
 - logged: v0.53.1 · 2026-11-10
 
 `busy` is shared across dialog sessions. Reopening Place while the previous session's thumbnail was rendering queued the new visible pages and called `drain`, which returned because `busy` was still set; the old run then saw `token` change and exited without draining, so the first thumbnails stayed blank until a scroll. The `finally` of `drain` now restarts it when the queue holds work and the token has moved on. Checked with `npx tsc --noEmit`; not run with a slow PDF.
+
+### src/ui/text-editor.ts · caret steps by code point
+- refers-to: TextEditor.key :: Backspace, Delete, ArrowLeft, ArrowRight; prevPoint, nextPoint
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Caret steps were one UTF-16 code unit, so Backspace after an emoji left its high surrogate and an arrow key landed inside the pair; the lone surrogate showed as a replacement glyph and was saved. `prevPoint` and `nextPoint` step over a high and low surrogate pair as one character; Backspace and ArrowLeft use the first, Delete and ArrowRight the second. Grapheme clusters (an emoji with a skin-tone modifier or a ZWJ sequence) still take one step per code point. Checked with `npx tsc --noEmit` and the helpers in node; typing not run in the window.
