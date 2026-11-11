@@ -4519,3 +4519,10 @@ The global keydown took Space for the temporary Hand on every element that is no
 - logged: v0.53.1 · 2026-11-10
 
 The Export button refused any invalid Range text and focused the field, also when the Range row was hidden (scope other than the active artboard, or DXF or DWG) and the range would not be read, so Export silently did nothing. It now validates under the same condition `sync` uses to show the row and `value` uses to read it. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/panels/graph-data.ts · the grid is built from the data, not from text
+- refers-to: gridOf; GraphDataWindow.load, import handler
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`load` wrote the data through `dataToText` (which quotes a label holding a quote, tab or newline and doubles its quotes) and split it on newlines and tabs, stripping only the outer quotes, so `He said "hi"` came back with doubled quotes that every Apply doubled again and a newline split the row. The import handler did the same with `parseTable`'s result. `gridOf(d)` builds the rows directly from `cleanData(d)` (series header, one row per category, empty cells for null) and both paths use it; `dataToText` is no longer imported here. Checked with `npx tsc --noEmit`; not run in the window.

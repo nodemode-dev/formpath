@@ -1,9 +1,10 @@
-import { cleanData, dataToText, parseGrid, parseNumber, parseTable } from '../../engine/graph';
+import { cleanData, parseGrid, parseNumber, parseTable } from '../../engine/graph';
 import type { Engine, GraphData } from '../../engine';
 import { el, patchList, q, setClass, setDisabled, setHidden, setText, setValue } from '../dom';
 import { icon } from '../icons';
 
 const MIN_ROWS = 14, MIN_COLS = 7;
+const gridOf = (d: GraphData): string[][] => { const c = cleanData(d); return [['', ...c.series], ...c.cats.map((cat, i) => [cat, ...c.values[i].map((v) => (v === null ? '' : String(v)))])]; };
 const btn = (ic: string, label: string): string => `<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(ic, 16)}</button>`;
 
 export class GraphDataWindow {
@@ -31,7 +32,7 @@ export class GraphDataWindow {
     const [imp, trans, swap, revert, apply] = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.cv-gdw-tools button'));
     const file = q<HTMLInputElement>(this.el, 'input[type="file"]');
     imp.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void f.text().then((t) => { this.draft = this.normal(dataToText(parseTable(t)).split('\n').map((l) => l.split('\t'))); this.touch(); }); });
+    file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void f.text().then((t) => { this.draft = this.normal(gridOf(parseTable(t))); this.touch(); }); });
     trans.addEventListener('click', () => { const w = Math.max(...this.draft.map((r) => r.length)); this.draft = this.normal(Array.from({ length: w }, (_, c) => this.draft.map((r) => r[c] ?? ''))); this.touch(); });
     swap.addEventListener('click', () => { this.draft = this.draft.map((r) => [r[0] ?? '', ...this.swapPairs(r.slice(1))]); this.touch(); });
     revert.addEventListener('click', () => { this.load(true); });
@@ -103,7 +104,7 @@ export class GraphDataWindow {
   private load(reset: boolean): void {
     const d = this.data();
     if (!d) return;
-    const text = dataToText(d), rows = text.split('\n').map((l) => l.split('\t').map((c) => c.replace(/^"|"$/g, '')));
+    const rows = gridOf(d);
     if (!reset && JSON.stringify(rows) === JSON.stringify(this.draft)) return;
     this.draft = rows;
     this.dirty = false;
