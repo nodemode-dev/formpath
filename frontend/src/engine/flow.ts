@@ -22,7 +22,7 @@ function outlines(doc: Doc, n: VNode): Pt[][] {
   }
   const kids = n.kind === 'group' || n.kind === 'blend' || n.kind === 'repeat' ? childrenOf(n) : null;
   if (kids && !(n.kind === 'group' && n.clip)) return kids.flatMap((c) => outlines(doc, c));
-  if (n.kind === 'group' && n.clip && n.children[0]) return outlines(doc, n.children[0]);
+  if (n.kind === 'group' && n.clip && n.children.length) return outlines(doc, n.children[n.children.length - 1]);
   const b = geomBounds(doc, n);
   return isEmptyRect(b) ? [] : [rectCorners(b)];
 }

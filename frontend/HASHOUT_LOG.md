@@ -912,6 +912,13 @@ Layout is cached per node by identity and never reads the document, so anything 
 
 reflow runs perspSync after the dimension and graph refresh, so every edit, drag preview, undo and file open sees attached art whose source matches what is drawn, and the grid is written into the document in the same step that first attaches art. It returns the same document when nothing attached changed.
 
+### src/engine/flow.ts · wrap around a clip group uses the clipping path
+- refers-to: src/engine/flow.ts :: outlines
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The wrap outline of a clip group came from `children[0]`, the bottom clipped art, while render, bounds, hit testing and the rest of the engine take the last child as the clipping path, so area type was pushed away by invisible art. It now uses the last child. Checked with tsc only.
+
 ## src/engine/symbolism.ts
 
 ### src/engine/symbolism.ts · instance tint and the symbolism operations
