@@ -50,7 +50,7 @@ export class StrokePanel {
     this.align = seg([{ id: 'center', label: 'Align Stroke to Center', icon: 'alignCenterStroke' }, { id: 'inside', label: 'Align Stroke to Inside', icon: 'alignInsideStroke' }, { id: 'outside', label: 'Align Stroke to Outside', icon: 'alignOutsideStroke' }], (id) => set({ align: id as StrokeItem['align'] }));
     this.dashed = check('Dashed Line', (on) => set({ dash: on ? [12, 6] : [] }));
     for (let i = 0; i < 6; i++) {
-      const f = numField(i % 2 ? 'gap' : 'dash', '', () => this.applyDashes(), { min: 0, max: 1000 });
+      const f = numField(i % 2 ? 'gap' : 'dash', '', (v) => this.applyDashes(i, v), { min: 0, max: 1000 });
       this.dashes.push(f);
       this.dashBox.appendChild(f.el);
     }
@@ -109,8 +109,8 @@ export class StrokePanel {
     if (v) resetWidthProfiles();
   }
 
-  private applyDashes(): void {
-    const vals = this.dashes.map((f) => parseFloat(q<HTMLInputElement>(f.el, 'input').value)).map((v) => (Number.isFinite(v) ? v : NaN));
+  private applyDashes(at: number, value: number): void {
+    const vals = this.dashes.map((f, i) => (i === at ? value : parseFloat(q<HTMLInputElement>(f.el, 'input').value))).map((v) => (Number.isFinite(v) ? v : NaN));
     const out: number[] = [];
     for (let i = 0; i < vals.length; i += 2) { if (!Number.isFinite(vals[i])) break; out.push(vals[i], Number.isFinite(vals[i + 1]) ? vals[i + 1] : vals[i]); }
     this.engine.setStroke({ dash: out.length ? out : [12, 6] });

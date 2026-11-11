@@ -4561,3 +4561,10 @@ The Export button refused any invalid Range text and focused the field, also whe
 - logged: v0.53.1 · 2026-11-10
 
 `setItems` returns early when the item list is unchanged and `refresh` rewrote label, enabled and checked but not `.cv-menu-keys`, so a remapped or removed shortcut kept its old label; native accelerators are set only in `NativeMenus.build`, which ran again only on `projects`, so on macOS the old key kept running the old command. `refresh` now writes each row's `keyLabel` through `setText` (a write only when it differs), and `ShortcutsDialog.save` calls `onSaved`, which `app.ts` sets to `native.build()` when native menus are on. Checked with `npx tsc --noEmit`; native menus not run (macOS desktop only).
+
+### src/ui/panels/kit.ts, src/ui/panels/stroke.ts · typed units, decimal comma, dash values
+- refers-to: evalNumber, numField commit; StrokePanel constructor (dash fields), applyDashes
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`evalNumber` stripped any letter suffix and used the number as is (10 mm in a pt field applied 10 pt), and `1,5` threw and reverted silently. It now takes the field's `.cv-unit` text: a suffix equal to it passes, a length unit converts through `UNIT_PT` to the field's length unit, anything else throws so the field reverts; a single comma in a number without a dot is the decimal point (so `1,000` reads as 1). The dash and gap fields committed through `numField` (evaluated and clamped) but `applyDashes` re-read the raw text with `parseFloat`, so `2*6` gave 2 and `-5` a negative dash; the field now passes its index and the committed value, and only the other fields are read from their (already formatted) text. Checked with `npx tsc --noEmit` and a node copy of `evalNumber`; not run in the window.

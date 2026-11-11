@@ -1,4 +1,5 @@
 import type { Engine } from '../../engine';
+import { UNIT_PT, type Units } from '../../engine/types';
 import { el, q, setChecked, setClass, setDisabled, setText, setValue } from '../dom';
 import { enhanceSelect } from '../dropdown';
 import { icon } from '../icons';
@@ -15,7 +16,7 @@ export function numField(label: string, unit: string, change: (v: number) => voi
   const commit = (): void => {
     const raw = input.value.trim();
     let v: number;
-    try { v = evalNumber(raw); } catch { input.value = last === null ? '' : fmtNum(last); return; }
+    try { v = evalNumber(raw, q(n, '.cv-unit').textContent ?? ''); } catch { input.value = last === null ? '' : fmtNum(last); return; }
     if (!Number.isFinite(v)) return;
     if (o.min !== undefined) v = Math.max(o.min, v);
     if (o.max !== undefined) v = Math.min(o.max, v);
@@ -37,8 +38,12 @@ export function numField(label: string, unit: string, change: (v: number) => voi
 
 export const fmtNum = (v: number): string => String(Math.round(v * 1000) / 1000);
 
-function evalNumber(src: string): number {
-  const s = src.replace(/\s+/g, '').replace(/[a-z%°]+$/i, '');
+function evalNumber(src: string, unit = ''): number {
+  const t = src.replace(/\s+/g, ''), sfx = (/[a-z%°]+$/i.exec(t)?.[0] ?? '').toLowerCase(), u = unit.trim().toLowerCase();
+  let s = t.slice(0, t.length - sfx.length);
+  if (!s.includes('.') && /^[^,]*,[^,]*$/.test(s)) s = s.replace(',', '.');
+  const k = !sfx || sfx === u ? 1 : sfx in UNIT_PT && u in UNIT_PT ? UNIT_PT[sfx as Units] / UNIT_PT[u as Units] : NaN;
+  if (!Number.isFinite(k)) throw new Error('bad');
   let i = 0;
   const num = (): number => {
     if (s[i] === '(') { i++; const v = expr(); if (s[i++] !== ')') throw new Error('bad'); return v; }
@@ -53,7 +58,7 @@ function evalNumber(src: string): number {
   const expr = (): number => { let v = term(); while (s[i] === '+' || s[i] === '-') { const op = s[i++], r = term(); v = op === '+' ? v + r : v - r; } return v; };
   const v = expr();
   if (i !== s.length) throw new Error('bad');
-  return v;
+  return v * k;
 }
 
 export function slider(engine: Engine, label: string, min: number, max: number, change: (v: number) => void, o: { step?: number; unit?: string } = {}): Ctl<number> {
