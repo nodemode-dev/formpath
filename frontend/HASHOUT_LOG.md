@@ -4211,3 +4211,10 @@ The operation (Merge, Punch or Delete) comes from the Operation choice in the Sh
 - logged: v0.53.1 · 2026-11-10
 
 Plug-ins and the in-app assistant were kept from file tools only by a regex of the five public names, while `run` also answers the internal `__open`, `__place`, `__project` and `__export` (meant for the backend loop) and `variables` and `actions` have file actions. A plug-in posting `__place` with `link: true` and an absolute path read any file the engine serves; `variables export` and `actions batch` wrote into any folder. `run(name, args, from)` now takes the caller, `'plugin'` by default; only `loop()` passes `'loop'`. Any other caller is refused names starting with `__`, the five public file tools, `variables` export, show and load (show and load fetch image variables by path) and `actions` batch. The assistant passes `'assistant'` and its own regex also refuses `__` names. Checked with `npx tsc --noEmit`; not run with a plug-in in the window.
+
+### src/ui/panels/three-d.ts · a cancelled colour pick closes its gesture
+- refers-to: ThreeDPanel constructor :: picking
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Shading Color, Light Color and Surface Color opened `engine.beginGesture()` on the first `input` and closed it only on `change`. Cancelling the native picker after dragging in it puts the value back, so no `change` fires and the gesture stayed open: every later edit merged into the previous history step and the trace draft stayed on. The gesture now also closes 800 ms after the last `input` and on `blur`; `end` checks `open`, so a second close does nothing. Checked with `npx tsc --noEmit`; the native picker was not run.
