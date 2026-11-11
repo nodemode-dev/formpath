@@ -3489,6 +3489,13 @@ The Registration colour of the marks was always [/Separation /All /DeviceCMYK ..
 
 The Open Design Specification orders the common entity handles as owner (entity mode 0), reactors, extension dictionary (R2004 and later only when present, always counted for R13 to R2000), then for R2000 and earlier the previous and next entity handles (only when the no-links bit is 0), then layer, linetype, material and plot style. R2004 and later have no previous or next handles at all; the code already skipped them for versions other than 15. The code read the previous and next pair before the reactors; it now reads them after the extension dictionary. The values are not used, and the same number of handles is read either way, so the layer handle that follows was always the same one: all 104 sample drawings (2000, 2004, 2010, 2013, 2018 and the example and sample files) give identical per-layer entity counts, kind counts, block counts, layer tables and coordinate deviations before and after, and 22 of them have entities with reactors (the R2000 ones among them: Constraints, Leader, PolyLine2D, TS1 and example_2000, where 2, 6, 1, 5 and 14 entities carry both reactors and links), checked against reference DXFs from the converter used as a black box. So this is a correctness fix of the stream order with no change in any result today; it matters when something later reads those handles. Not verified: an R13 or R14 drawing, which the samples do not contain.
 
+### src/io/dwg-file.ts, src/io/dwg-r2007.ts · section map counts are bounded
+- refers-to: src/io/dwg-file.ts :: sysPage, r2004 (section info loop, load); src/io/dwg-r2007.ts :: readContainer
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The section maps were trusted: an R2004 to R2018 section-info entry with a page count like 0xFFFFFFFF pushed up to four billion page records, a system page, section or page size near 4 GB was allocated as asked, and an R2007 section-map name length of -64 walked the position back so the loop never ended; opening such a file froze the window. A page count that does not fit in the bytes left of the map, a system page over 64 MB decoded (the R2007 reader's limit), a section over 256 MB, a maximum page size over 16 MB and a negative or overlong R2007 name length now throw DwgError. Checked: tsc clean. Not run on a damaged or real R2004 or R2007 file (none in the repo; the writer writes R2000).
+
 ## src/engine/groupfx.ts (vector effects on groups, layers and type)
 
 ### src/engine/groupfx.ts · vector effects act on a group, layer or live type through one shadow node

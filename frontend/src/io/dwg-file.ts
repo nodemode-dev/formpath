@@ -42,6 +42,7 @@ function sysPage(d: Uint8Array, at: number): Uint8Array {
   if (at + 20 > d.length) throw new DwgError('A system page is outside the file.');
   const dec = u32(d, at + 4), comp = u32(d, at + 8), ct = u32(d, at + 12);
   if (at + 20 + comp > d.length) throw new DwgError('A system page is cut short.');
+  if (dec > 0x4000000) throw new DwgError('A system page of this DWG drawing is damaged.');
   return ct === 2 ? lz77(d, at + 20, comp, dec) : d.slice(at + 20, at + 20 + dec);
 }
 
@@ -69,6 +70,7 @@ function r2004(d: Uint8Array, tag: string, ver: number): Sections {
     let name = '';
     for (let i = 0; i < 64 && si[p + 32 + i]; i++) name += String.fromCharCode(si[p + 32 + i]);
     p += 96;
+    if (np > (si.length - p) / 16) throw new DwgError('The section map of this DWG drawing is damaged.');
     const ps: SecDesc['pages'] = [];
     for (let q = 0; q < np; q++, p += 16) ps.push({ no: u32(si, p), size: u32(si, p + 4), start: u64(si, p + 8) });
     descs.set(name, { name, size, pages: ps, comp, maxd: u32(si, p0 + 12) });
@@ -76,6 +78,7 @@ function r2004(d: Uint8Array, tag: string, ver: number): Sections {
   const load = (name: string): Uint8Array => {
     const s = descs.get(name);
     if (!s) throw new DwgError(`The ${name} section of this DWG drawing is missing.`);
+    if (s.size > 0x10000000 || s.maxd > 0x1000000) throw new DwgError('A section of this DWG drawing is too large.');
     const out = new Uint8Array(s.size);
     for (const pg of s.pages) {
       const ref = pages.get(pg.no);
