@@ -100,16 +100,17 @@ rm -f "$tlog"
 
 bundle="$FORMPATH_ROOT/src-tauri/target/release/bundle"
 version="$("$py" -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' src-tauri/tauri.conf.json)"
+product="$("$py" -c 'import json, sys; print(json.load(open(sys.argv[1]))["productName"])' src-tauri/tauri.conf.json)"
 
 if [ "$os" = macos ]; then
-  app="$bundle/macos/formpath.app"
+  app="$bundle/macos/$product.app"
   [ -d "$app" ] || fp_die "the build finished but $app is missing"
   codesign --verify --deep --strict "$app" 2>/dev/null || fp_say "codesign could not verify the app; it is ad-hoc signed, so macOS may ask once before it opens"
   step "packing the disk image"
   mkdir -p "$bundle/dmg"
   dmg="$bundle/dmg/formpath_${version}_$(uname -m).dmg"
   stage="$(mktemp -d)"
-  ditto "$app" "$stage/formpath.app"
+  ditto "$app" "$stage/$product.app"
   ln -s /Applications "$stage/Applications"
   rm -f "$dmg"
   hdiutil create -quiet -volname formpath -srcfolder "$stage" -ov -format UDZO "$dmg"
@@ -124,10 +125,10 @@ if [ "$os" = macos ]; then
       osascript -e 'tell application "formpath" to quit' >/dev/null 2>&1 || true
       sleep 2
     fi
-    rm -rf "$dest/formpath.app"
-    ditto "$app" "$dest/formpath.app"
-    xattr -dr com.apple.quarantine "$dest/formpath.app" 2>/dev/null || true
-    target_app="$dest/formpath.app"
+    rm -rf "$dest/$product.app"
+    ditto "$app" "$dest/$product.app"
+    xattr -dr com.apple.quarantine "$dest/$product.app" 2>/dev/null || true
+    target_app="$dest/$product.app"
     fp_say "installed: $target_app"
   fi
   if [ "$open_app" = 1 ]; then open "${target_app:-$app}"; fi

@@ -584,3 +584,10 @@ These four looked only at `backend/venv/bin/python`. In Git Bash on Windows the 
 - logged: v0.53.1 · 2026-11-10
 
 Both read the stored command catalogue from `FORMPATH_DATA`, a name nothing else sets, while the engine writes it to `FORMPATH_DATA_DIR` (or `~/Formpath`). With `FORMPATH_DATA_DIR` set, `./formpath agents sync` built the harness skill's `references/commands.md` from a stale or missing `~/Formpath/commands-catalogue.json`, and `counts --commands` fell back to the wrong file when the engine was not answering. Both now read `FORMPATH_DATA_DIR`, an empty value counting as unset and `~` expanded, as `config.data_dir` does. Checked: with `FORMPATH_DATA_DIR` pointing at a scratch catalogue, `commands_reference` rendered it and `command_counts.load` (engine port unreachable) returned its one command.
+
+### build_app · the macOS bundle is named from productName
+- refers-to: build_app :: product, app, the disk image stage, the install to Applications; src-tauri/tauri.conf.json :: productName
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Tauri names the macOS bundle after `productName`, which is "FormPath" since 0.52.9, but `build_app` still looked for `bundle/macos/formpath.app`. On a case-sensitive volume a full build ended in "the build finished but .../formpath.app is missing" and exit 1; on the usual case-insensitive volume it worked but put the app in the disk image and in Applications as `formpath.app`. The script now reads `productName` from `tauri.conf.json`, as it reads `version`, and uses `$product.app` for the bundle, the disk image stage and the installed copy. Left as they were: `pgrep -x formpath` and `tell application "formpath" to quit`, because the running process's name depends on the bundle's executable name, which was not checked here; the quit is a courtesy and the copy goes ahead either way. Checked: `bash -n build_app`, and the read gives "FormPath". Not run on macOS.
