@@ -2,6 +2,79 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.53.1 · 2026-11-10
+
+- The Path Eraser leaves paths it does not touch unchanged, and it tests the curve itself rather than the straight line between its points.
+- Plug-ins and the assistant can no longer reach the file tools through internal tool names.
+- Grayscale, CMYK and EXIF-rotated JPEGs export correctly to PDF.
+- Undo marks keep pointing at the same state once the history is full.
+- Cancelling a colour pick in the 3D panel closes its undo step.
+- Make Fill Regions leaves the objects it cannot use where they were.
+- Enter on Cancel, Delete or a dropdown button no longer applies the dialog.
+- A self-referencing `use` or marker no longer hangs SVG import.
+- In the desktop app, Claude Code, the Chat tab and the dock's terminals reach the engine on its real port instead of port 0, so Claude Code has formpath's tools there.
+- An agent's call that timed out is dropped instead of running later in the next window that opens.
+- Make with Top Object maps art the same way whichever way the top path winds.
+- The Windows desktop build packs the frontend it has just built, so the installed app no longer shows the previous interface.
+- `./formpath mcp`, `cli` and `i18n` run Python 3.12 or newer and say so when there is none, instead of failing on an older Python or a missing `python3`.
+- Pattern fills repeat at the tile's own width and height.
+- `formpath.bat` `mcp`, `cli`, `i18n` and `agents` return Python's exit code, so a failed check or command no longer reports success.
+- A damaged DWG section map fails with a clear error instead of hanging.
+- A DXF HATCH with a huge vertex or edge count no longer freezes DXF import.
+- A cancelled drag unwinds both the document and the tool's own state.
+- A Chat message that starts with "-", such as a bulleted line, reaches Claude Code as text.
+- Pathfinder gives each hole to its nearest enclosing shape in nested contours.
+- The stdio MCP bridge answers a slow tool call with a timeout instead of starting a second engine and sending the call again.
+- SVG saved with editing preserved keeps the pixels of hidden, warped and symbol-only images.
+- Agent tools hold counts to the ranges they advertise.
+- Rotating or reflecting a Mirror repeat turns its axis too.
+- An opened project's images are kept in the person's own data folder instead of a temporary folder shared by every account on Linux.
+- The Rotate View tool turns with the pointer.
+- Convert to Profile also converts pattern art, masks and region fills.
+- Moving the library folder moves every project or none, and a project whose name is taken lands under a new name without overwriting an earlier moved copy.
+- SVG import sizes files that are given in percent, keeps layer effects and maps bounding-box gradients through transforms.
+- The Rotate, Reflect, Scale and Shear dialogs use the tool's reference point.
+- `formpath.bat clean --all` removes the engine's venv even when `node_modules` is already gone.
+- A clip group's text wrap follows its clipping path.
+- The Windows engine install stops with a message when its venv cannot be made, instead of installing into the system Python.
+- X, Y, W and H read and write the same bounds when Use Preview Bounds is on.
+- `./formpath check`, `counts`, `doctor` and `agents` find the engine's venv in Git Bash on Windows.
+- Mirrored DXF ellipses, lines and splines import where they are drawn.
+- A document whose colour profiles cannot be found no longer keeps the previous document's colour tables.
+- `./formpath agents sync` and `counts` read the stored command catalogue from `FORMPATH_DATA_DIR`, where the engine keeps it.
+- Artboard Options keeps a coloured artboard background.
+- Copy carries the brushes and global swatches used inside groups and type.
+- `build_app` finds and installs the macOS app under its name, FormPath.app.
+- Every action set gets a name no other set has, so saving one never replaces another's file.
+- DXF export writes non-ASCII text and layer names as code page escapes, and the DXF reader decodes them.
+- Chat finds the Claude Code conversations of an agent folder whose path has non-ASCII letters.
+- Placing an image is one undo step.
+- Deleting an earlier artboard keeps the same artboard active.
+- Dialogs with enhanced dropdowns no longer leave popups and listeners behind when they close.
+- A vanishingly small pie wedge is left out instead of being drawn as a full disc.
+- A formpath .ai placed through its private data puts gradients and symbol type where they are drawn.
+- Right-click, file drops and the Recolor picker hit the right spot in a rotated view.
+- A Ctrl+Alt shear with Free Transform selects the copy.
+- The agent command gate names real command ids, so Preferences stays the person's and Batch is flagged.
+- Aligned and Fit DXF TEXT starts at its first baseline point.
+- Contextual OpenType features work in fonts that wrap their lookups in extensions.
+- A layer row press released outside the list no longer leaves a drag that moves objects later.
+- Page thumbnails appear when Place is reopened during a thumbnail render.
+- Backspace, Delete and the arrow keys step over a whole emoji.
+- New Terminal opens a new shell when the dock is hidden.
+- Clearing a number field in Preferences keeps its value instead of setting the minimum.
+- Space activates a keyboard-focused button instead of switching to the Hand tool.
+- An installed font that failed to load while the engine was down loads once the engine is up.
+- Export goes ahead when the hidden Range field holds an invalid range.
+- Graph Data keeps quotes, tabs and newlines in labels.
+- Placing page 201 or later of a long PDF works.
+- PNG, JPEG and TIFF exports record the resolution they were rendered at.
+- Data merge exports data sets whose names differ only in case to separate files.
+- Changed shortcuts show in the menus and replace the native menu accelerators at once.
+- The EPS five-operand `image` operator reads one gray sample per pixel in any colour space.
+- Number fields convert typed units and take a decimal comma, and dash fields keep their checked value.
+- Two PDF exports running at the same time each point at their own resources.
+
 ## 0.53.0 · 2026-11-03
 
 - The README follows the Form family layout, with the project's own screenshots.
