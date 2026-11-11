@@ -1,6 +1,7 @@
 import { allNodes, newDoc } from '../../engine/doc';
 import { geomBounds } from '../../engine/bounds';
 import { renderNode } from '../../engine/render';
+import { hex as hexOf } from '../../engine/paint';
 import type { Artboard, Doc, Engine, ImageNode, SymbolDef, VNode } from '../../engine';
 import type { SymbolLibrary } from '../../engine/symbol-libraries';
 import { el, patchList, q, setClass, setDisabled, setHtml, setText, setTitle } from '../dom';
@@ -187,12 +188,12 @@ export class ArtboardsPanel {
       { kind: 'select', key: 'preset', label: 'Preset', value: PRESET_SIZES.find((x) => Math.abs(x[2] - a.w) < 0.5 && Math.abs(x[3] - a.h) < 0.5)?.[0] ?? 'custom', choices: [['custom', 'Custom'], ...PRESET_SIZES.map((x) => [x[0], x[1]] as const)] },
       { kind: 'number', key: 'x', label: 'X', value: a.x, unit: 'pt' }, { kind: 'number', key: 'y', label: 'Y', value: a.y, unit: 'pt' },
       { kind: 'number', key: 'w', label: 'Width', value: a.w, min: 1, unit: 'pt' }, { kind: 'number', key: 'h', label: 'Height', value: a.h, min: 1, unit: 'pt' },
-      { kind: 'color', key: 'bg', label: 'Background', value: '#ffffff' },
+      { kind: 'color', key: 'bg', label: 'Background', value: a.bg ? hexOf(a.bg) : '#ffffff' },
       { kind: 'check', key: 'transparent', label: 'Transparent background', value: !a.bg },
     ]);
     if (!v) return;
     const pre = PRESET_SIZES.find((x) => x[0] === v.preset), presetChanged = v.preset !== 'custom' && pre && (Math.abs(pre[2] - a.w) > 0.5 || Math.abs(pre[3] - a.h) > 0.5);
-    const hex = String(v.bg), bg = v.transparent ? null : { kind: 'rgb' as const, r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
+    const hex = String(v.bg), bg = v.transparent ? null : a.bg && hex.toLowerCase() === hexOf(a.bg) ? a.bg : { kind: 'rgb' as const, r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
     const patch: Partial<Artboard> = { name: String(v.name) || a.name, x: Number(v.x), y: Number(v.y), w: presetChanged && pre ? pre[2] : Number(v.w), h: presetChanged && pre ? pre[3] : Number(v.h), bg };
     this.engine.setArtboard(i, patch);
   }

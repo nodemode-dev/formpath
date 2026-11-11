@@ -4365,3 +4365,10 @@ The Rotate, Reflect, Scale and Shear tools set `T.origin` on a click (Alt-click 
 - logged: v0.53.1 · 2026-11-10
 
 The fields read `selectionBounds(false)` (geometric) while `setBounds` measures `view.previewBounds`, so with Use Preview Bounds on and a 10 pt stroke, W = 200 on a 100 pt square scaled by 200/110 and shifted the art, and X or Y landed half a stroke off. Every bounds read in `TransformFields` now calls `selectionBounds()` with its default, the same rectangle `setBounds` uses; with the setting off nothing changes. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/panels/symbols.ts · Artboard Options keeps the background
+- refers-to: ArtboardsPanel.options
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Background field was seeded with the literal `#ffffff` and `bg` was rebuilt from it on OK whenever Transparent was unchecked, so renaming an artboard through the dialog turned a coloured background white. The field is now seeded with `hex(a.bg)` (imported as `hexOf`, because the function's own `hex` constant would shadow it), and when the field still holds that value on OK the stored `a.bg` is kept as it is, so a CMYK background is not rewritten as RGB. Checked with `npx tsc --noEmit`; not run in the window.
