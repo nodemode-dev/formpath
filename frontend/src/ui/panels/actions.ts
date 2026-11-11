@@ -241,7 +241,7 @@ export class ActionsPanel {
   }
 
   private async editRow(r: Row): Promise<void> {
-    if (r.level === 0) { const nm = await promptName('Action Set Options', r.set.name, 'Rename'); if (nm && nm !== r.set.name) { const old = r.set.name; r.set.name = nm.replace(/[\\/:*?"<>|]/g, '-'); if (!this.offline) void api.deleteActionSet(old).catch(() => undefined); this.save(r.set); this.sync(); } return; }
+    if (r.level === 0) { const nm = await promptName('Action Set Options', r.set.name, 'Rename'); if (nm && nm !== r.set.name) { const old = r.set.name; r.set.name = this.unique(nm.replace(/[\\/:*?"<>|]/g, '-'), r.set); if (!this.offline) void api.deleteActionSet(old).catch(() => undefined); this.save(r.set); this.sync(); } return; }
     if (r.level === 1 && r.action) { const nm = await promptName('Action Options', r.action.name, 'Rename'); if (nm) { r.action.name = nm; this.save(r.set); this.sync(); } return; }
     const st = r.step !== undefined ? r.action?.steps[r.step] : undefined;
     if (!st) return;
@@ -288,7 +288,7 @@ export class ActionsPanel {
   private async newSet(): Promise<void> {
     const nm = await promptName('New Set', `Set ${this.sets.length + 1}`, 'OK');
     if (!nm) return;
-    const s: ActionSet = { id: newId('as'), name: nm.replace(/[\\/:*?"<>|]/g, '-'), actions: [] };
+    const s: ActionSet = { id: newId('as'), name: this.unique(nm.replace(/[\\/:*?"<>|]/g, '-')), actions: [] };
     this.sets.push(s); this.picked = { set: s.id }; this.save(s); this.sync();
   }
 
@@ -332,7 +332,7 @@ export class ActionsPanel {
     if (!p || !s) return;
     if (p.action && p.step !== undefined) { const a = s.actions.find((x) => x.id === p.action); if (a) { a.steps.splice(p.step + 1, 0, JSON.parse(JSON.stringify(a.steps[p.step])) as ActionStep); p.step++; } }
     else if (p.action) { const a = s.actions.find((x) => x.id === p.action); if (a) { const c: Action = { ...JSON.parse(JSON.stringify(a)) as Action, id: newId('a'), name: `${a.name} copy` }; s.actions.splice(s.actions.indexOf(a) + 1, 0, c); this.picked = { set: s.id, action: c.id }; } }
-    else { const c: ActionSet = { ...JSON.parse(JSON.stringify(s)) as ActionSet, id: newId('as'), name: `${s.name} copy` }; c.actions = c.actions.map((a) => ({ ...a, id: newId('a') })); this.sets.push(c); this.picked = { set: c.id }; this.save(c); }
+    else { const c: ActionSet = { ...JSON.parse(JSON.stringify(s)) as ActionSet, id: newId('as'), name: this.unique(`${s.name} copy`) }; c.actions = c.actions.map((a) => ({ ...a, id: newId('a') })); this.sets.push(c); this.picked = { set: c.id }; this.save(c); }
     this.save(s); this.sync();
   }
 
@@ -354,12 +354,16 @@ export class ActionsPanel {
     try {
       const s = validSet(JSON.parse(text));
       if (!s) throw new Error('it is not a formpath action set.');
-      let nm = s.name, i = 2;
-      while (this.sets.some((x) => x.name === nm)) nm = `${s.name} ${i++}`;
-      s.name = nm;
+      s.name = this.unique(s.name);
       this.sets.push(s); this.picked = { set: s.id }; this.save(s); this.sync();
       this.host.notify(`Loaded ${s.name}: ${s.actions.length} actions.`);
     } catch (err) { this.host.notify(`${name}: ${err instanceof Error ? err.message : String(err)}`, 'error'); }
+  }
+
+  private unique(base: string, self?: ActionSet): string {
+    let nm = base, i = 2;
+    while (this.sets.some((x) => x !== self && x.name.toLowerCase() === nm.toLowerCase())) nm = `${base} ${i++}`;
+    return nm;
   }
 
   private async saveToFile(): Promise<void> {

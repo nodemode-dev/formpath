@@ -4379,3 +4379,10 @@ The fields read `selectionBounds(false)` (geometric) while `setBounds` measures 
 - logged: v0.53.1 · 2026-11-10
 
 The Background field was seeded with the literal `#ffffff` and `bg` was rebuilt from it on OK whenever Transparent was unchecked, so renaming an artboard through the dialog turned a coloured background white. The field is now seeded with `hex(a.bg)` (imported as `hexOf`, because the function's own `hex` constant would shadow it), and when the field still holds that value on OK the stored `a.bg` is kept as it is, so a CMYK background is not rewritten as RGB. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/panels/actions.ts · set names are unique
+- refers-to: ActionsPanel.unique, newSet, editRow (set rename), duplicate, loadText, save, remove
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Sets are stored through `api.saveActionSet(s.name, ...)` and removed through `deleteActionSet(s.name)`, so two sets with one name shared a file: the later save replaced the other set, only one came back after a reload, and deleting one removed the other's file. Only `loadText` made names unique. `unique(base, self?)` now holds that loop (it compares without case, for case-insensitive disks) and New Set, a set rename, Duplicate on a set and `loadText` all go through it. Checked with `npx tsc --noEmit`; not run in the window.
