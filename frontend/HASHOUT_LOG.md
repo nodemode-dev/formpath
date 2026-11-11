@@ -4225,3 +4225,10 @@ Plug-ins and the in-app assistant were kept from file tools only by a regex of t
 - logged: v0.53.1 · 2026-11-10
 
 Shading Color, Light Color and Surface Color opened `engine.beginGesture()` on the first `input` and closed it only on `change`. Cancelling the native picker after dragging in it puts the value back, so no `change` fires and the gesture stayed open: every later edit merged into the previous history step and the trace draft stayed on. The gesture now also closes 800 ms after the last `input` and on `blur`; `end` checks `open`, so a second close does nothing. Checked with `npx tsc --noEmit`; the native picker was not run.
+
+### src/ui/form-dialog.ts, src/ui/app-dialogs.ts · Enter on a button is the button's
+- refers-to: FormDialog constructor :: scrim keydown; NewDocumentDialog constructor :: scrim keydown
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The scrim's Enter handler called `preventDefault()` and applied the dialog for every Enter outside a textarea, so Enter on a focused Cancel applied the edit, on Delete (Width Point Edit) edited instead of deleting, on an enhanced select's `.cv-dd-btn` committed the form, and in New Document Cancel or a preset card created a document. Both handlers now skip targets that are `HTMLButtonElement`, as `PlaceDialog` already does; the focused button then activates itself (OK and Create still apply). Checked with `npx tsc --noEmit`; keyboard not run in the window.

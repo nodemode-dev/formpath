@@ -55,7 +55,7 @@ export class NewDocumentDialog extends Dialog {
     this.units.addEventListener('change', () => { const to = this.units.value as Units, k = UNIT_K[this.units0] / UNIT_K[to]; this.w.value = String(Math.round(Number(this.w.value) * k * 100) / 100); this.h.value = String(Math.round(Number(this.h.value) * k * 100) / 100); this.units0 = to; });
     this.button('Cancel', 'ghost', () => this.close());
     this.button('Create', 'primary', () => this.create());
-    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.create(); } });
+    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); this.create(); } });
   }
 
   preset(id: string): void {

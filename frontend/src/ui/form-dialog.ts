@@ -54,7 +54,7 @@ export class FormDialog extends Dialog {
     this.previewBox = q<HTMLInputElement>(this.previewRow, 'input');
     this.foot.prepend(this.previewRow);
     this.previewBox.addEventListener('change', () => this.update());
-    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); this.finish(this.values()); } });
+    this.scrim.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); this.finish(this.values()); } });
     this.onClose = () => { if (!this.settled) { this.settled = true; this.opts.cancel?.(); this.resolve?.(null); this.resolve = null; formHooks.onResult?.(this.title, null); } };
   }
 
