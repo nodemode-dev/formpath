@@ -1170,6 +1170,13 @@ transformNode maps xf: a translation or a positive axis-aligned scale is folded 
 
 Not built: sliding column designs (they need a horizontal slide line inside the design and a way to draw it), a second value axis for one series of a combined graph (combined series share the left or right axis), Illustrator's First Row in Front and First Column in Front stacking options, the separate category axis tick count and Draw Tick Marks Between Labels option, and rotating designs in bar graphs (designs are scaled into the bar without turning). Labels are measured with the shaped fonts when they are loaded; a top legend measured before a font loads keeps its spacing until the graph next regenerates.
 
+### src/engine/graph.ts · tiny pie wedges are skipped
+- refers-to: src/engine/graph.ts :: pie; src/engine/geometry.ts :: piePath
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+piePath turns a sweep under 1e-6 degrees into a whole ellipse, so the second wedge of a row like [1000000000, 1] (3.6e-7 degrees) was drawn as a full disc over the chart. pie() now skips wedges under 1e-4 degrees and still advances the angle, as it skips zero and negative values. Checked with tsc only.
+
 ## src/engine/variables.ts
 
 ### src/engine/variables.ts · variables and data sets
