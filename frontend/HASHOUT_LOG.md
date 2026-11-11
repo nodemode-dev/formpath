@@ -1726,6 +1726,13 @@ An image with a warp grid is rasterised at the export ppi through the same rende
 
 A paint linked to a spot swatch (directly or as a tint) is written as `/CSn cs t scn` against `[/Separation /Name /DeviceCMYK f]`, where f is a Type 2 function from no ink to the swatch's CMYK values, so viewers draw the alternate and separation tools show the plate under the swatch's name. Spaces are kept once per swatch name in the shared resource dictionary, which every page and form uses. Names are PDF name objects: bytes outside the regular range and delimiters are written as #xx. Gradients that use spot colours still go out as process colours. [Registration] (now linked from the Swatches panel like a global swatch) is written as `/Separation /All` with a full CMYK alternate, so it prints on every plate. Brush pieces with their own opacity (bristles) each get an ExtGState.
 
+### src/io/pdf.ts · JPEG passthrough only for plain upright JPEGs
+- refers-to: src/io/pdf.ts :: jpegHead, Painter.image
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Every placed JPEG was written through unchanged as DCTDecode tagged DeviceRGB, sized from the decoded bitmap, so a grayscale or CMYK JPEG did not match its colour space (garbage or a refused image in viewers) and a photo with an EXIF orientation came out unrotated with width and height swapped. `jpegHead` reads the markers up to the first frame header: passthrough now needs an 8-bit SOF0, SOF1 or SOF2 frame with one or three components, EXIF orientation absent or 1, and a frame size equal to the bitmap; one component is tagged DeviceGray. Anything else is re-encoded from the decoded, upright bitmap. Checked: tsc clean; jpegHead in node on Pillow-made RGB, progressive, gray, CMYK and EXIF 1, 6 and 8 files (both byte orders). Not opened in a PDF viewer.
+
 ## src/io/pdf-read.ts
 
 ### src/io/pdf-read.ts · object discovery

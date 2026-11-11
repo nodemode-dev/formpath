@@ -55,6 +55,37 @@ async function unflate(data: Uint8Array): Promise<Uint8Array> {
 /** Streams that count as line art: page content, form XObjects, shadings, tiling patterns and the character maps. Images and font programs keep their own compression. */
 const VECTOR_STREAM = /^<< \/Filter \/FlateDecode >>$|\/Subtype \/Form|\/ShadingType|\/PatternType 1/;
 
+function jpegHead(b: Uint8Array): { w: number; h: number; n: number } | null {
+  if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2, upright = true;
+  while (i + 4 <= b.length) {
+    if (b[i] !== 0xff) return null;
+    const m = b[i + 1];
+    if (m === 0xff) { i++; continue; }
+    if (m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
+    if (m === 0xd9 || m === 0xda) return null;
+    const len = (b[i + 2] << 8) | b[i + 3], end = i + 2 + len;
+    if (len < 2 || end > b.length) return null;
+    if (m === 0xe1 && len >= 16 && String.fromCharCode(...b.subarray(i + 4, i + 8)) === 'Exif') {
+      const t = i + 10, le = b[t] === 0x49, u16 = (p: number): number => (le ? b[p] | (b[p + 1] << 8) : (b[p] << 8) | b[p + 1]);
+      const ifd = t + (le ? u16(t + 4) + u16(t + 6) * 65536 : u16(t + 4) * 65536 + u16(t + 6));
+      const count = ifd + 2 <= end ? u16(ifd) : 0;
+      for (let k = 0; k < count && ifd + 2 + k * 12 + 12 <= end; k++) {
+        const e = ifd + 2 + k * 12;
+        if (u16(e) === 0x0112) upright = u16(e + 8) <= 1;
+      }
+    }
+    if (m === 0xc0 || m === 0xc1 || m === 0xc2) {
+      if (len < 8 || b[i + 4] !== 8) return null;
+      const n = b[i + 9];
+      return upright && (n === 1 || n === 3) ? { h: (b[i + 5] << 8) | b[i + 6], w: (b[i + 7] << 8) | b[i + 8], n } : null;
+    }
+    if (m >= 0xc3 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return null;
+    i = end;
+  }
+  return null;
+}
+
 export class PdfFile {
   private objs: Array<{ dict: string; stream?: Uint8Array } | null> = [null];
   private readonly enc = new TextEncoder();
@@ -342,8 +373,10 @@ export class Painter {
     const had = this.xobjects.get(ck);
     if (had) { bmp.close(); return had; }
     let id: number;
-    if (blob.type === 'image/jpeg' && !size && !this.cmykImages && !this.plate && c.images === 'auto') {
-      id = this.pdf.add(`<< /Type /XObject /Subtype /Image /Width ${bmp.width} /Height ${bmp.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode >>`, new Uint8Array(await blob.arrayBuffer()));
+    const jpg = blob.type === 'image/jpeg' && !size && !this.cmykImages && !this.plate && c.images === 'auto' ? new Uint8Array(await blob.arrayBuffer()) : null;
+    const head = jpg ? jpegHead(jpg) : null;
+    if (jpg && head && head.w === bmp.width && head.h === bmp.height) {
+      id = this.pdf.add(`<< /Type /XObject /Subtype /Image /Width ${head.w} /Height ${head.h} /ColorSpace /${head.n === 1 ? 'DeviceGray' : 'DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode >>`, jpg);
     } else {
       id = await this.rgba(pixelsOf(bmp, size), blob.type === 'image/jpeg' && c.images === 'auto' && !this.cmykImages);
     }
