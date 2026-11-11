@@ -40,6 +40,7 @@ import { PluginHost } from './plugins/host';
 import { registerBuiltinTools } from './tools';
 import { pendingShape, shapeAt } from './tools/draw';
 import { typeDefaults } from './tools/type';
+import { toolOrigin } from './tools/transform';
 import { editWidthPoint } from './ui/width-point-dialog';
 import { AboutDialog, ExportDialog, NewDocumentDialog, OpenDialog, ScreensDialog, SettingsDialog, ShortcutsDialog, type ExportChoice } from './ui/app-dialogs';
 import { brandMark } from './ui/brand';
@@ -1074,7 +1075,7 @@ export function startApp(): void {
 
   async function transformDialog(kind: 'move' | 'rotate' | 'scale' | 'reflect' | 'shear'): Promise<void> {
     if (!sel()) return;
-    const ids = engine.targetIds(), o = centerOfSel();
+    const ids = engine.targetIds(), o = (/^(rotate|reflect|scale|shear)$/.test(engine.tool) ? toolOrigin(engine) : null) ?? centerOfSel();
     const fields = {
       move: [{ kind: 'number', key: 'dx', label: 'Horizontal', value: 0, unit: 'pt' }, { kind: 'number', key: 'dy', label: 'Vertical', value: 0, unit: 'pt' }],
       rotate: [{ kind: 'number', key: 'angle', label: 'Angle', value: 0, unit: '°', min: -360, max: 360 }],

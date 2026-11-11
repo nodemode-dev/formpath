@@ -23,6 +23,8 @@ function origin(e: Engine): Pt | null {
   return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null;
 }
 
+export function toolOrigin(e: Engine): Pt | null { return origin(e); }
+
 function reflectAcross(o: Pt, deg: number): Mat {
   const r = rotateAbout(deg, o.x, o.y), back = rotateAbout(-deg, o.x, o.y);
   return mul(r, mul([1, 0, 0, -1, 0, 2 * o.y], back));

@@ -4330,3 +4330,10 @@ Stage unwinds a drag that is cut short (another tool's shortcut, a second finger
 - logged: v0.53.1 · 2026-11-10
 
 `p.screen` comes from `Stage.unturn` with the live `viewport.rotation`, which this drag keeps changing, so `atan2(p.screen)` was the pointer's angle minus the rotation and `deg = base + (a - start)` fed the rotation back into itself: the view turned about half as far as the pointer and jittered. Both the start angle and the moving angle now add the current rotation back (in radians). Checked with `npx tsc --noEmit` and a node simulation of `unturn` and the tool: a 90 degree sweep from a 30 degree view reads 45, 60, 75, 90, 105, 120 at 15 degree marks. Not run in the window.
+
+### src/app.ts, src/tools/transform.ts · transform dialogs use the tool's reference point
+- refers-to: src/app.ts :: transformDialog; src/tools/transform.ts :: toolOrigin, origin, xformTool up
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Rotate, Reflect, Scale and Shear tools set `T.origin` on a click (Alt-click also opens the dialog), but `T.origin` is private to the tool module and `transformDialog` always used `centerOfSel()`, so the dialog turned the art about the selection centre, not the point just set. `toolOrigin(e)` exports `origin(e)` (the set point for the current selection, else the geometric centre) and `transformDialog` uses it while `engine.tool` is one of those four; otherwise `centerOfSel()` as before. Checked with `npx tsc --noEmit`; not run in the window.
