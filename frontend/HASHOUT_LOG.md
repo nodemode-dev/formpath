@@ -3750,6 +3750,13 @@ An audit reported that the Scissors click and Knife drag changed nothing. Driven
 
 `eraseRegion` skipped every path with an open subpath and subtracted the eraser from stroke-only closed shapes as if they were fills, which turned a ring outline into a solid. Filled closed shapes still use the boolean subtract (and are now left alone when the eraser misses them); everything else is cut along the outline: each subpath is split where it crosses the eraser, with the eraser grown by half the stroke width, and pieces whose midpoint lies inside are dropped, so open lines and stroke-only shapes become open pieces that keep their appearance. `scissorsCut` shares `cutSub` for paths and for the subpaths of a compound path, removes the handle that pointed across the cut at both new ends, and returns the document unchanged when the cut lands on an open path's end, so no empty history step is made.
 
+### src/engine/ops/paths.ts · eraseSegments keeps untouched paths
+- refers-to: src/engine/ops/paths.ts :: eraseSegments; src/tools/freehand.ts :: pathEraser
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`eraseSegments` rebuilt every subpath as an open path on every call, so any Path Eraser drag, even over empty canvas, committed an Erase Path step that opened every selected closed path (with a doubled end anchor) and split a multi-subpath path into one node per subpath, losing an evenodd hole. A subpath with no erased segment is now kept as it is, nothing erased returns the document unchanged (the tool then cancels the drag), and a closed subpath is walked from its first erased segment so the run that wraps past the first anchor stays one piece. Checked with tsc and a node check on a copy of the loop: empty canvas, an erased edge and an erased closing segment of a rectangle.
+
 ### src/engine/index.ts · default type fill
 - refers-to: src/engine/index.ts :: fillPicked, typeFill, setFill, defaultFillStroke, newDocument, addText; src/tools/type.ts :: activate
 - kind: decision

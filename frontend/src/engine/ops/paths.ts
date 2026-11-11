@@ -391,19 +391,27 @@ export function eraseSegments(doc: Doc, id: string, region: PathData): OpResult 
   const n = findNode(doc, id);
   if (!n || n.kind !== 'path') return { doc, ids: [id] };
   const keep: SubPath[] = [];
+  let any = false;
   for (const sp of n.d) {
     let cur: Anchor[] = [];
     const segs = segments(sp);
-    segs.forEach((s, i) => {
+    const gone = segs.map((s) => {
       const mid = { x: (s[0].x + s[3].x) / 2, y: (s[0].y + s[3].y) / 2 };
-      const gone = contains(region, 'nonzero', mid) || contains(region, 'nonzero', s[0]) && contains(region, 'nonzero', s[3]);
+      return contains(region, 'nonzero', mid) || contains(region, 'nonzero', s[0]) && contains(region, 'nonzero', s[3]);
+    });
+    if (!gone.includes(true)) { keep.push(sp); continue; }
+    any = true;
+    const start = sp.closed ? gone.indexOf(true) : 0;
+    for (let k = 0; k < segs.length; k++) {
+      const i = (start + k) % segs.length;
       const a = sp.pts[i], b = sp.pts[(i + 1) % sp.pts.length];
-      if (gone) { if (cur.length > 1) keep.push({ closed: false, pts: cur }); cur = []; return; }
+      if (gone[i]) { if (cur.length > 1) keep.push({ closed: false, pts: cur }); cur = []; continue; }
       if (!cur.length) cur.push({ ...a });
       cur.push({ ...b });
-    });
+    }
     if (cur.length > 1) keep.push({ closed: false, pts: cur });
   }
+  if (!any) return { doc, ids: [id] };
   const out = updateAt(doc, pathOf(doc, id) as IndexPath, () => (keep.length ? keep.map((sp, i) => ({ ...n, id: i === 0 ? n.id : newId('p'), d: [sp], live: undefined })) : null));
   return { doc: out, ids: [id] };
 }
