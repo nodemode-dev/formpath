@@ -91,6 +91,7 @@ function xformTool(id: string, label: string, iconName: string, group: string, o
       g.beginPath(); g.arc(s.x, s.y, 4, 0, Math.PI * 2); g.moveTo(s.x - 9, s.y); g.lineTo(s.x + 9, s.y); g.moveTo(s.x, s.y - 9); g.lineTo(s.x, s.y + 9); g.stroke(); g.restore();
       if (T.on && T.moved) hud(ctx, g, ctx.view().toScreen(T.cur), T.info);
     },
+    cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); T.on = false; T.moved = false; T.info = []; ctx.redraw(); },
   });
 }
 
@@ -253,6 +254,7 @@ registerTool({
     e.dragTo(replaceNode(base, R.id, mapAnchorsNode(n, f)));
   },
   up: (ctx) => { const e = ctx.engine; if (!R.on) return; R.on = false; if (R.moved) e.commitDrag(); else e.cancelDrag(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); R.on = false; ctx.redraw(); },
 });
 
 type WSide = 'l' | 'r';
@@ -503,6 +505,7 @@ function liquifyTool(id: string, label: string, iconName: string, order: number,
       const v = ctx.view(), s = v.toScreen(L.hover);
       g.save(); g.strokeStyle = ctx.paint().accent; g.beginPath(); g.arc(s.x, s.y, (ctx.engine.options.liquifySize / 2) * v.zoom, 0, Math.PI * 2); g.stroke(); g.restore();
     },
+    cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); L.on = false; ctx.redraw(); },
   });
 }
 liquifyTool('warp', 'Warp Tool', 'vWarp', 57, 'warp', 'Shift+R');

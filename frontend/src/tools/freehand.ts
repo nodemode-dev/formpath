@@ -48,6 +48,7 @@ function collect(ctx: ToolContext, p: ToolPointer): void {
 }
 
 function begin(p: ToolPointer): void { F.on = true; F.pts = [p.doc]; F.pr = [p.pressure]; F.last = p.doc; F.ids = []; F.changed = false; F.alt = false; F.shift = false; }
+function cancel(ctx: ToolContext): void { if (ctx.engine.dragging) ctx.engine.cancelDrag(); F.on = false; ctx.engine.clearOverlay(); ctx.redraw(); }
 
 function pressureProfile(pr: number[]): WidthPoint[] | null {
   if (pr.length < 3 || pr.every((v) => v >= 0.99)) return null;
@@ -118,6 +119,7 @@ registerTool({
     ctx.redraw();
   },
   overlay: (ctx, g) => trail(ctx, g),
+  cancel,
 });
 
 registerTool({
@@ -148,6 +150,7 @@ registerTool({
   },
   up: (ctx) => { F.on = false; if (F.changed) ctx.engine.commitDrag(); else ctx.engine.cancelDrag(); },
   overlay: (ctx, g) => brushCircle(ctx, g, hoverAt, 32 / ctx.view().zoom),
+  cancel,
 });
 
 registerTool({
@@ -169,6 +172,7 @@ registerTool({
   },
   up: (ctx) => { F.on = false; if (F.changed) ctx.engine.commitDrag(); else ctx.engine.cancelDrag(); },
   overlay: (ctx, g) => brushCircle(ctx, g, hoverAt, 12 / ctx.view().zoom),
+  cancel,
 });
 
 registerTool({
@@ -188,6 +192,7 @@ registerTool({
     ctx.redraw();
   },
   overlay: (ctx, g) => trail(ctx, g),
+  cancel,
 });
 
 registerTool({
@@ -216,6 +221,7 @@ registerTool({
     ctx.redraw();
   },
   overlay: (ctx, g) => trail(ctx, g),
+  cancel,
 });
 
 function blobOutline(pts: Pt[], size: number): PathData {
@@ -256,6 +262,7 @@ registerTool({
     ctx.redraw();
   },
   overlay: (ctx, g) => { trail(ctx, g); brushCircle(ctx, g, hoverAt, ctx.engine.options.blobSize); },
+  cancel,
 });
 
 function replaceNodeOrRemove(doc: Doc, id: string, n: VNode | null): Doc {
@@ -293,6 +300,7 @@ registerTool({
     }
     trail(ctx, g, ctx.paint().accent); brushCircle(ctx, g, hoverAt, ctx.engine.options.eraserSize);
   },
+  cancel,
 });
 
 function eraserMarquee(a: Pt, b: Pt): PathData {
@@ -365,4 +373,5 @@ registerTool({
     ctx.redraw();
   },
   overlay: (ctx, g) => trail(ctx, g, ctx.paint().accent, straightLine()),
+  cancel,
 });

@@ -324,7 +324,7 @@ registerTool({
     }
     endTransform(ctx, S);
   },
-  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; L.id = null; L.drag = false; BR.on = false; SG.edge = null; ctx.redraw(); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); S.mode = null; L.id = null; L.drag = false; BR.on = false; SG.edge = null; CW.on = false; CW.w = null; CW.moved = false; ctx.engine.clearOverlay(); ctx.redraw(); },
   deactivate: () => { L.id = null; L.drag = false; },
   hover: (ctx, p) => {
     const next = p && ctx.engine.view.smartGuides ? (() => { const h = ctx.engine.hit(p.doc); return h ? ctx.engine.selectableFor(h.id) : null; })() : null;
@@ -813,6 +813,7 @@ registerTool({
     directUp(ctx, p);
   },
   overlay: (ctx, g) => { directOverlay(ctx, g); if (G.mode && G.moved) hud(ctx, g, ctx.view().toScreen(G.cur), G.info); },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); G.mode = null; D.mode = null; BR.on = false; EP.on = false; CD.on = false; CD.w = null; CD.clamped = false; ctx.engine.clearOverlay(); ctx.redraw(); },
 });
 
 export const wand = { fill: true, fillTol: 32, stroke: false, strokeTol: 32, weight: false, weightTol: 5, opacity: false, opacityTol: 5, blend: false };
@@ -854,6 +855,7 @@ registerTool({
   move: directMove,
   up: directUp,
   overlay: directOverlay,
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); D.mode = null; D.lasso = []; ctx.redraw(); },
 });
 
 export { replaceNode, fmt };

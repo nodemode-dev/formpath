@@ -20,6 +20,7 @@ registerTool({
   move: (ctx, p) => { if (!H.last) return; ctx.engine.pan(p.screen.x - H.last.x, p.screen.y - H.last.y); H.last = p.screen; },
   up: () => { H.last = null; },
   dblclick: (ctx) => ctx.engine.fitAll(),
+  cancel: () => { H.last = null; },
 });
 
 const RV = { on: false, start: 0, base: 0 };
@@ -39,6 +40,7 @@ registerTool({
   },
   up: () => { RV.on = false; },
   dblclick: (ctx) => ctx.engine.setViewRotation(0),
+  cancel: () => { RV.on = false; },
 });
 
 const Z = { on: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 } };
@@ -60,6 +62,7 @@ registerTool({
   },
   dblclick: (ctx) => ctx.engine.zoomTo(1),
   overlay: (ctx, g) => { if (Z.on) marquee(ctx, g, Z.start, Z.cur); },
+  cancel: (ctx) => { Z.on = false; ctx.redraw(); },
 });
 
 export const ARTBOARD_PRESETS: ReadonlyArray<{ id: string; label: string; w: number; h: number }> = [
@@ -176,6 +179,7 @@ registerTool({
     }
     if (AB.mode === 'new') { marquee(ctx, g, AB.start, AB.cur); const r = dragRect(AB.start, AB.cur, false, false); hud(ctx, g, v.toScreen(AB.cur), [`W: ${unitLabel(e, r.w)}`, `H: ${unitLabel(e, r.h)}`]); }
   },
+  cancel: (ctx) => { if (ctx.engine.dragging) ctx.engine.cancelDrag(); AB.mode = null; ctx.redraw(); },
 });
 
 function abHandle(ctx: { engine: import('../engine').Engine; view(): import('../extensions/registry').ViewInfo }, screen: Pt): number {

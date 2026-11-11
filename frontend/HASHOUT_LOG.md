@@ -4274,3 +4274,10 @@ Shading Color, Light Color and Surface Color opened `engine.beginGesture()` on t
 - logged: v0.53.1 · 2026-11-10
 
 The scrim's Enter handler called `preventDefault()` and applied the dialog for every Enter outside a textarea, so Enter on a focused Cancel applied the edit, on Delete (Width Point Edit) edited instead of deleting, on an enhanced select's `.cv-dd-btn` committed the form, and in New Document Cancel or a preset card created a document. Both handlers now skip targets that are `HTMLButtonElement`, as `PlaceDialog` already does; the focused button then activates itself (OK and Create still apply). Checked with `npx tsc --noEmit`; keyboard not run in the window.
+
+### src/tools · every dragging tool has a cancel
+- refers-to: src/tools/select.ts :: groupSelect, lasso, selection cancel (CW); src/tools/pen.ts :: anchorPoint, pen cancel (P.closing); src/tools/freehand.ts :: cancel (shared by all eight freehand tools); src/tools/transform.ts :: xformTool, reshape, liquifyTool; src/tools/paint.ts :: mesh; src/tools/view.ts :: hand, rotateView, zoom, artboard
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Stage unwinds a drag that is cut short (another tool's shortcut, a second finger, `pointercancel`, Escape) only through `tool.cancel`, and these tools had none: `engine.dragBase` stayed set with the preview in the document, so the next click with Rotate, Reflect, Scale or Shear committed the cancelled transform (stale `T.on` and `T.moved`), the next `beginDrag` took the preview as its base and the next `edit` snapped the art back. The Selection tool's cancel left `CW.on` set, so the next move drag ran `dragWidget` and changed a corner radius under the name Move. Each cancel now calls `cancelDrag()` when the engine is dragging and clears that tool's drag flags; the Selection cancel also clears `CW` and the overlay, and the Pen cancel clears `P.closing` (a stale value made the next path end after its first anchor). Checked with `npx tsc --noEmit`; the drags were not run in the window.
