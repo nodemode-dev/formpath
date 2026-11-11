@@ -653,6 +653,13 @@ homography builds the 3 by 3 projective map from one quadrilateral to another as
 
 bbox is the angle in degrees (y down, so positive turns clockwise on screen) of an object's bounding box. transformNode maps the box's x axis through the matrix and keeps the result folded into minus 45 to 45, since a box turned 90 degrees is the same box; under 0.01 degrees the field is dropped, so moves and plain scales never add it and old files open unchanged. A scale along a turned box is R S R^-1, which maps the axis onto itself, so the angle survives it. An envelope moved or scaled along the page axes moves its contents, frame and mesh together as before. Under any other matrix (rotation, reflection, shear) its contents and frame stay put and only the envelope shape is mapped (a warp or top-object envelope first becomes a 6 by 6 mesh), because the contents are mapped through their own axis-aligned box; Coons patches are affine invariant, so the result is exact. This makes transform.ts import live.ts, which imports transform.ts: the cycle is only used inside functions, never at module load.
 
+### src/engine/transform.ts · mirror repeat axis follows the transform
+- refers-to: src/engine/transform.ts :: transformNode (repeat); src/engine/live.ts :: repeat placement (mirror)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+A mirror repeat's centre was mapped through the transform but its angle was copied, so after Rotate or Reflect the copy was still mirrored across the old axis and the pair lost its symmetry. The axis direction `(-sin a, cos a)` is now mapped through the linear part of the matrix and the angle read back with `atan2(-vx, vy)`. Under rotation, reflection and uniform scale the new mirror equals the old one conjugated by the transform (node check, error below 1e-12); a non-uniform scale has no exact mirror and keeps the mapped axis.
+
 ## src/engine/snap.ts
 
 ### src/engine/snap.ts · targets and matching
