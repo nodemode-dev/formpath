@@ -3785,6 +3785,13 @@ An audit reported that the Scissors click and Knife drag changed nothing. Driven
 
 `eraseSegments` rebuilt every subpath as an open path on every call, so any Path Eraser drag, even over empty canvas, committed an Erase Path step that opened every selected closed path (with a doubled end anchor) and split a multi-subpath path into one node per subpath, losing an evenodd hole. A subpath with no erased segment is now kept as it is, nothing erased returns the document unchanged (the tool then cancels the drag), and a closed subpath is walked from its first erased segment so the run that wraps past the first anchor stays one piece. Checked with tsc and a node check on a copy of the loop: empty canvas, an erased edge and an erased closing segment of a rectangle.
 
+### src/engine/ops/paths.ts · eraseSegments tests the curve midpoint
+- refers-to: src/engine/ops/paths.ts :: eraseSegments
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The eraser test used the midpoint of the chord between a segment's anchors, which for a curve lies off the curve (70.7 from the centre on a quarter arc of radius 100), so dragging inside an ellipse deleted arcs the eraser never touched. The test point is now `bezPoint(s, 0.5)`, the same point as before on a straight segment. Checked with tsc and a node check of bezPoint on a quarter arc and a line.
+
 ### src/engine/index.ts · default type fill
 - refers-to: src/engine/index.ts :: fillPicked, typeFill, setFill, defaultFillStroke, newDocument, addText; src/tools/type.ts :: activate
 - kind: decision

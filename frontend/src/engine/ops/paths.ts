@@ -396,7 +396,7 @@ export function eraseSegments(doc: Doc, id: string, region: PathData): OpResult 
     let cur: Anchor[] = [];
     const segs = segments(sp);
     const gone = segs.map((s) => {
-      const mid = { x: (s[0].x + s[3].x) / 2, y: (s[0].y + s[3].y) / 2 };
+      const mid = bezPoint(s, 0.5);
       return contains(region, 'nonzero', mid) || contains(region, 'nonzero', s[0]) && contains(region, 'nonzero', s[3]);
     });
     if (!gone.includes(true)) { keep.push(sp); continue; }
