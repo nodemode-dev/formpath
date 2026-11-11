@@ -2064,6 +2064,7 @@ export function startApp(): void {
     if (menubar.isOpen || contextMenu.isOpen) { if (e.key === 'Escape') { e.preventDefault(); menubar.close(); contextMenu.close(); } return; }
     const target = e.target instanceof Element ? e.target : null;
     if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (e.code === 'Space' && target?.matches(':focus-visible') && target.closest('button, [role="button"], [role="option"], [role="menuitem"], [role="tab"]')) return;
     if (e.code === 'Space' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (!e.repeat) stage.setSpace(true); return; }
     if (stage.toolKeydown(e)) { e.preventDefault(); return; }
     const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };

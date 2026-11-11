@@ -4498,3 +4498,10 @@ With the dock hidden, `newTerminal` called `toggle(true)` and awaited `pending`,
 - logged: v0.53.1 · 2026-11-10
 
 `Number('')` is 0, which is finite, so clearing a Preferences number and leaving it saved the field's minimum; for Undo steps kept that called `setHistoryLimit(10)` and dropped the history beyond 10 steps at once. An empty or non-numeric field now gets `this.prefs[key]` written back and nothing is saved. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/app.ts · Space on a keyboard-focused button
+- refers-to: window keydown :: Space hand
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The global keydown took Space for the temporary Hand on every element that is not a field and called `preventDefault()`, so buttons, dropdown items, menu items and tabs could not be pressed with Space. Space now passes to the element when it matches `:focus-visible` and is a `button` or has role button, option, menuitem or tab. `:focus-visible` keeps the Hand after a mouse click, which leaves focus on the clicked button without matching it. Checked with `npx tsc --noEmit`; keyboard not run in the window.
