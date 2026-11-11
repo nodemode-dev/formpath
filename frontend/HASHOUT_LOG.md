@@ -621,6 +621,13 @@ The mesh envelope used to map through straight bilinear cells:
 
 It is replaced by meshMapper in envelope.ts, Coons patches with handles and knots, which equals the bilinear map while no handle has moved.
 
+### src/engine/live.ts · top-object envelope and winding
+- refers-to: src/engine/live.ts :: coonsFromShape
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+For a counter-clockwise top shape `coonsFromShape` reordered the corners to [0, 3, 2, 1] but still walked the outline forward, so top became the left edge, right the bottom edge, and the art was mirrored across the diagonal (a 100 by 50 rectangle sent the frame's top-right corner to (0, 50)). The flattened outline is now reversed for that winding and the corners keep their natural order, as mesh.ts `sides` does. Checked with tsc and the reviewer's node repro with the fix copied in: both windings map (1, 0) to (100, 0).
+
 ## src/engine/envelope.ts
 
 ### src/engine/envelope.ts · mesh model
