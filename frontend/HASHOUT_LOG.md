@@ -553,6 +553,13 @@ Brushes and global swatches went onto the clipboard only when a top-level copied
 
 addImage registered the image in one edit and added the node in another, so Undo after Place left an invisible second Place step. The pair is now wrapped in beginStep/endStep like addModel, but only when no step is open: the io placers and the agent bridge already open one around it, and `step` holds a single mark, so a nested beginStep would move it. Checked with tsc only.
 
+### src/engine/index.ts · deleteArtboard keeps the active artboard
+- refers-to: src/engine/index.ts :: Engine.deleteArtboard
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Deleting an artboard before the active one shifted the later artboards down while `activeArtboard` stayed, so the next artboard became active and Fit Artboard, Select All on Artboard and active-artboard export used it. The index now drops by one when the deleted artboard came before it and is clamped as before otherwise. Checked with tsc only.
+
 ## src/engine/history.ts
 
 ### src/engine/history.ts · push merge

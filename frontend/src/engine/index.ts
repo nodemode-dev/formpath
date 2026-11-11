@@ -951,7 +951,7 @@ export class Engine extends Emitter<EngineEvents> {
     p.activeArtboard = p.doc.artboards.length - 1;
   }
   setArtboard(i: number, patch: Partial<Artboard>): void { this.edit('Artboard Options', (d) => ({ ...d, artboards: d.artboards.map((a, k) => (k === i ? { ...a, ...patch, w: clampArtboardSide(patch.w ?? a.w), h: clampArtboardSide(patch.h ?? a.h) } : a)) })); }
-  deleteArtboard(i: number): void { const p = this.current; if (!p || p.doc.artboards.length < 2) return; this.edit('Delete Artboard', (d) => ({ ...d, artboards: d.artboards.filter((_, k) => k !== i) })); p.activeArtboard = Math.min(p.activeArtboard, p.doc.artboards.length - 1); }
+  deleteArtboard(i: number): void { const p = this.current; if (!p || p.doc.artboards.length < 2) return; this.edit('Delete Artboard', (d) => ({ ...d, artboards: d.artboards.filter((_, k) => k !== i) })); p.activeArtboard = i < p.activeArtboard ? p.activeArtboard - 1 : Math.min(p.activeArtboard, p.doc.artboards.length - 1); }
   setActiveArtboard(i: number): void { const p = this.current; if (!p || i < 0 || i >= p.doc.artboards.length) return; p.activeArtboard = i; this.emit('options', null); this.emit('render', null); }
   fitArtboard(i: number, to: 'art' | 'selection'): void {
     const p = this.current; if (!p) return;
