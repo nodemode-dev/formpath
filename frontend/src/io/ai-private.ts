@@ -1,6 +1,6 @@
 import { visualBounds } from '../engine/bounds';
 import { cornered } from '../engine/corners';
-import { childrenOf } from '../engine/doc';
+import { childrenOf, withChildren } from '../engine/doc';
 import { isLineSeg, segments } from '../engine/geometry';
 import { mixOklab, resolvePaint, toCmyk, toRgb } from '../engine/paint';
 import { gradientGeom } from '../engine/render';
@@ -169,10 +169,10 @@ class Emit {
 
   gradientInstance(g: Gradient, b: Rect, strokeToo: boolean): string[] {
     const geo = gradientGeom(g, b), x1 = this.fx(geo.x1), y1 = this.fy(geo.y1), x2 = this.fx(geo.x2), y2 = this.fy(geo.y2);
-    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const dx = x2 - x1 || (y2 === y1 ? 1 : 0), dy = y2 - y1, ramp = `${nf(dx)} ${nf(dy)} ${nf(-dy)} ${nf(dx)} ${nf(x1)} ${nf(y1)}`;
     const name = this.gradientDef(g);
     void strokeToo;
-    return ['Bb', `1 ${ps(name)} ${nf(x1)} ${nf(y1)} ${nf(ang)} ${nf(len)} 1 0 0 1 0 0 1 Bg`, '1 0 0 1 0 0 Xm', '1 0 0 1 0 0 Bm'];
+    return ['Bb', `1 ${ps(name)} 0 0 0 1 1 0 0 1 0 0 1 Bg`, `${ramp} Xm`, `${ramp} Bm`];
   }
 
   object(n: VNode, layerLocked: boolean): void {
@@ -253,8 +253,9 @@ class Emit {
       case 'compound': return { ...n, children: n.children.map((c) => ({ ...c, d: mv(c.d) })) };
       case 'group': case 'layer': return { ...n, children: n.children.map((c) => this.moved(c, m)) };
       case 'image': return { ...n, xf: mul(m, n.xf) };
-      case 'text': { const d = this.outlines.get(n.id); if (d) this.outlines.set(n.id, mv(d)); return n; }
-      default: return n;
+      case 'text': { const d = this.outlines.get(n.id); if (!d) return n; const id = `${n.id}~${this.outlines.size}`; this.outlines.set(id, mv(d)); return { ...n, id }; }
+      case 'symbol': return { ...n, xf: mul(m, n.xf) };
+      default: { const kids = childrenOf(n); return kids ? withChildren(n, kids.map((c) => this.moved(c, m))) : n; }
     }
   }
 
