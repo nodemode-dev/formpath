@@ -4512,3 +4512,10 @@ With the dock hidden, `newTerminal` called `toggle(true)` and awaited `pending`,
 - logged: v0.53.1 · 2026-11-10
 
 The global keydown took Space for the temporary Hand on every element that is not a field and called `preventDefault()`, so buttons, dropdown items, menu items and tabs could not be pressed with Space. Space now passes to the element when it matches `:focus-visible` and is a `button` or has role button, option, menuitem or tab. `:focus-visible` keeps the Hand after a mouse click, which leaves focus on the clicked button without matching it. Checked with `npx tsc --noEmit`; keyboard not run in the window.
+
+### src/ui/app-dialogs.ts · Export checks the range only when it is used
+- refers-to: ExportDialog constructor :: Export button; ExportDialog.sync (Range row), value
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The Export button refused any invalid Range text and focused the field, also when the Range row was hidden (scope other than the active artboard, or DXF or DWG) and the range would not be read, so Export silently did nothing. It now validates under the same condition `sync` uses to show the row and `value` uses to read it. Checked with `npx tsc --noEmit`; not run in the window.

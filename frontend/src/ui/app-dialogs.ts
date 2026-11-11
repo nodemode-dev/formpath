@@ -727,7 +727,7 @@ export class ExportDialog extends Dialog {
     this.scope.addEventListener('change', () => this.sync());
     this.range.addEventListener('input', () => setClass(this.range, 'is-invalid', !parseArtboardRange(this.range.value, this.count, this.artboard)));
     this.button('Cancel', 'ghost', () => this.close());
-    this.go = this.button('Export', 'primary', () => { if (!parseArtboardRange(this.range.value, this.count, this.artboard)) { this.range.focus(); return; } const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
+    this.go = this.button('Export', 'primary', () => { if (this.scope.value === 'artboard' && this.format.value !== 'dxf' && this.format.value !== 'dwg' && !parseArtboardRange(this.range.value, this.count, this.artboard)) { this.range.focus(); return; } const r = this.resolve; this.resolve = null; this.close(); r?.(this.value()); });
     this.onClose = () => { const r = this.resolve; this.resolve = null; r?.(null); };
     this.quality.value = '92';
   }
