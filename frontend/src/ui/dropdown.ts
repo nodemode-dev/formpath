@@ -1,7 +1,7 @@
 import { el, setHidden, setText } from './dom';
 import { icon } from './icons';
 
-export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string } = {}): void {
+export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string } = {}): () => void {
   const btn = el<HTMLButtonElement>(`<button class="cv-dd-btn" type="button" aria-haspopup="listbox"><span class="cv-dd-label"></span>${icon('chevronDown', 12)}</button>`);
   const pop = el(`<div class="cv-dd-pop" role="listbox" hidden>${opts.search ? '<input class="cv-dd-search" type="search">' : ''}<div class="cv-dd-list"></div></div>`);
   const list = pop.querySelector('.cv-dd-list') as HTMLElement, search = pop.querySelector('.cv-dd-search') as HTMLInputElement | null;
@@ -10,7 +10,8 @@ export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string
 
   for (const c of Array.from(select.classList)) if (c !== 'cv-dd-native') btn.classList.add(c);
 
-  new MutationObserver(() => label()).observe(select, { childList: true, subtree: true });
+  const mo = new MutationObserver(() => label());
+  mo.observe(select, { childList: true, subtree: true });
   btn.title = select.title;
   select.classList.add('cv-dd-native');
   select.after(btn);
@@ -69,8 +70,10 @@ export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (items.length) { picked = (picked + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; mark(); items[picked].scrollIntoView({ block: 'nearest' }); } return; }
     if (e.key === 'Enter') { e.preventDefault(); items[picked]?.click(); }
   });
-  document.addEventListener('pointerdown', (e) => { if (!pop.hidden && !pop.contains(e.target as Node) && !btn.contains(e.target as Node)) close(); }, true);
+  const onDown = (e: PointerEvent): void => { if (!pop.hidden && !pop.contains(e.target as Node) && !btn.contains(e.target as Node)) close(); };
+  document.addEventListener('pointerdown', onDown, true);
   label();
+  return () => { pop.remove(); document.removeEventListener('pointerdown', onDown, true); mo.disconnect(); };
 }
 
 export function enhanceAllSelects(root: ParentNode = document): void {

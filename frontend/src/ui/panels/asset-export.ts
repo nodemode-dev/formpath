@@ -22,6 +22,7 @@ export class AssetExportPanel {
   private readonly rows = el('<div class="cv-assetp-rows"></div>');
   private readonly exportBtn = el<HTMLButtonElement>('<button class="cv-btn cv-btn-primary" type="button">Export</button>');
   private readonly drawn = new WeakMap<HTMLElement, VNode[]>();
+  private readonly rowDisposers = new Map<HTMLElement, () => void>();
   private picked = new Set<string>();
   private frame = 0;
   private busy = false;
@@ -59,6 +60,8 @@ export class AssetExportPanel {
   private pick(ids: string[]): void { if (ids.length) { this.picked = new Set(ids); this.sync(); } }
 
   private fillRows(list: ReadonlyArray<ExportAssetItem>): void {
+    for (const d of this.rowDisposers.values()) d();
+    this.rowDisposers.clear();
     this.rows.textContent = '';
     for (const i of list) this.addRow(i.scale, i.format, i.suffix);
   }
@@ -78,10 +81,10 @@ export class AssetExportPanel {
     s.addEventListener('keydown', (e) => e.stopPropagation());
     for (const c of [s, x, f]) c.addEventListener('change', () => this.commit());
     const del = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" aria-label="Remove this format">${icon('close', 14)}</button>`);
-    del.addEventListener('click', () => { if (this.rows.children.length > 1) { r.remove(); this.commit(); } });
+    del.addEventListener('click', () => { if (this.rows.children.length > 1) { this.rowDisposers.get(r)?.(); this.rowDisposers.delete(r); r.remove(); this.commit(); } });
     r.append(s, x, f, del);
     this.rows.appendChild(r);
-    enhanceSelect(f);
+    this.rowDisposers.set(r, enhanceSelect(f));
   }
 
   private items(): AssetItem[] {

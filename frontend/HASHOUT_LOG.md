@@ -4407,3 +4407,10 @@ The Background field was seeded with the literal `#ffffff` and `bg` was rebuilt 
 - logged: v0.53.1 · 2026-11-10
 
 Sets are stored through `api.saveActionSet(s.name, ...)` and removed through `deleteActionSet(s.name)`, so two sets with one name shared a file: the later save replaced the other set, only one came back after a reload, and deleting one removed the other's file. Only `loadText` made names unique. `unique(base, self?)` now holds that loop (it compares without case, for case-insensitive disks) and New Set, a set rename, Duplicate on a set and `loadText` all go through it. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/dropdown.ts · enhanceSelect returns a disposer
+- refers-to: enhanceSelect; src/ui/form-dialog.ts :: FormDialog.disposers, ask; src/ui/panels/asset-export.ts :: rowDisposers, fillRows, addRow
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Each call appended a `.cv-dd-pop` to `#overlay-root`, a capture `pointerdown` listener to `document` and a `MutationObserver`, none ever removed. `FormDialog.ask` rebuilds its body on every open and Asset Export refills its rows on every asset pick, so popups, document listeners and observers (each keeping its detached select alive) grew without bound. `enhanceSelect` now returns `() => { pop.remove(); removeEventListener; mo.disconnect(); }`; FormDialog runs its selects' disposers before clearing the body, and Asset Export runs a row's disposer when the row is deleted and all of them before a refill. Callers that build their selects once ignore the return value. Checked with `npx tsc --noEmit`; the popup count was not checked in the window.
