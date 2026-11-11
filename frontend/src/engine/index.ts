@@ -1466,7 +1466,7 @@ export class Engine extends Emitter<EngineEvents> {
       if (paint) fills.push({ at, paint });
     }
     const made: GroupNode = { ...g, livePaint: { ...lp, fills } };
-    const order = inDocOrder(p.doc, nodes.map((n) => n.id)), last = order[order.length - 1];
+    const order = inDocOrder(p.doc, [...(host ? [host] : []), ...adds].map((n) => n.id)), last = order[order.length - 1];
     this.edit(host ? 'Merge Fill Regions' : 'Make Fill Regions', (d) => ({ doc: updateNodes(removeNodes(d, order.filter((id) => id !== last)), [last], () => made), select: [made.id] }));
     return made.id;
   }

@@ -978,6 +978,13 @@ A Live Paint group is a group carrying `livePaint`: its children are the edges a
 
 A face's paint is stored as a seed: a point and a paint. The face that contains a seed takes its paint, the last seed winning, so editing the edges re-flows colour the way Illustrator does: a face split in two keeps the colour in the half that holds the seed. Painting a face replaces the seeds already inside it. Make seeds every face from the fill of the topmost original shape that covered it, measured at a point inside the face (the middle of the widest run across a few scanlines), then strips the fills from the children so they are only edges. Edge painting (v0.13.0) splits the nearest child path where other edges cross it, through paper.js intersections, and styles only the piece under the click; the pieces become sibling paths with the original appearance, so the faces do not change and a later edge paint on a piece finds no crossings inside it. The Live Paint Selection tool keeps its faces as seed points and its edges as points on the edge in `Engine.livePaintSelection`; while that tool is active `setFill`, `setStroke` and `deleteSelection` act on them instead of on the group, and a whole Live Paint group selected with the Selection tool takes a new fill on every face rather than on its edge paths. Face nodes are synthesised with ids derived from the group's id and cached per faces and seeds, and the renderer, hit test, SVG and PDF writers all draw them under the edges. Selecting a Live Paint group or a tracing object no longer resets the Fill and Stroke widget to none, which made the bucket paint black after the first click.
 
+### src/engine/index.ts · Make Fill Regions removes only what it absorbs
+- refers-to: src/engine/index.ts :: makeLivePaint
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Make Fill Regions absorbs only paths, compound paths and groups with edges (`adds`, plus an existing Fill Regions host), but it removed every selected top object, so a selected text object, image, symbol instance or mesh vanished, or was overwritten by the new group when it was the topmost. The removal and placement order is now built from the host and `adds`, and other selected objects stay. Checked with tsc only; not run in the app.
+
 ### src/engine/ops/paths.ts · removed live paint helpers
 - refers-to: src/engine/ops/paths.ts :: shapeRegions, livePaintFill, openAsRegion, interior
 - kind: removed-code
