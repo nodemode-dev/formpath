@@ -71,6 +71,13 @@ The desktop shell starts this with `FORMPATH_PORT=0`; Uvicorn binds a free loopb
 
 formcompiler runs `./formpath desktop build` in Git Bash on Windows. `--add-data` took `$FORMPATH_ROOT/frontend/dist;frontend_dist`, an MSYS path such as `/d/a/formpath/formpath/frontend/dist` joined to its destination by `;` inside one argument, which Git Bash may not convert to a Windows path before it reaches PyInstaller, so the build could fail to find the frontend or freeze an engine without it. On Windows the script now takes `root` from `cygpath -w "$FORMPATH_ROOT"` and uses it for the `--add-data` source and the entry script; macOS and Linux keep `$FORMPATH_ROOT`. The paths stay absolute because `--specpath build/pyinstaller` makes relative ones resolve against the spec folder. There is no `--add-binary`. Found by the family builds audit of 2026-10-30.
 
+### formpath_engine.py · the engine knows the port it listens on
+- refers-to: formpath_engine.py :: main; app/core/config.py :: port; app/services/terminal.py :: engine_url, base_env; app/services/claude_code.py :: mcp_config
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The desktop shell starts the sidecar with `FORMPATH_PORT=0`, and `config.port()` read that "0" as a real value (a non-empty string, so the `or BACKEND_PORT` fallback never ran), while nothing recorded the port Uvicorn then picked. So in the desktop app Claude Code's `--mcp-config` (the Claude Code tab and every Chat message) named `http://127.0.0.1:0/mcp` and the dock's shells got `FORMPATH_ENGINE_URL`, `FORMPATH_MCP_URL` and `FORMPATH_URL` on port 0: no formpath tools in Claude Code, and `./formpath cli` and the stdio bridge failed inside the dock. When the port is 0, `main` now binds a socket to 127.0.0.1 port 0, reads the free port the system gave it, closes it, writes that port to `FORMPATH_PORT` and passes it to Uvicorn, which still prints the `http://127.0.0.1:<port>` line the shell reads. A set port is used as before. The port is free between the close and Uvicorn's bind for a few milliseconds only; another program taking that exact port in between would make the engine fail to start, as any taken port does. Checked: the engine run with `FORMPATH_PORT=0` printed port 48863, and a dock shell opened through `POST /api/terminal` echoed `FORMPATH_MCP_URL=http://127.0.0.1:48863/mcp`; the backend tests pass. The frozen sidecar and the desktop app were not built here.
+
 ## oc_install
 
 ### oc_install · Python on Windows and the venv layout

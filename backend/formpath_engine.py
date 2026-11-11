@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import sys
 
 
@@ -38,6 +39,11 @@ def main() -> int:
     from app.main import app as fastapi_app
 
     port = int(os.environ.get("FORMPATH_PORT", "0") or 0)
+    if not port:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        os.environ["FORMPATH_PORT"] = str(port)
     uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
     return 0
 
