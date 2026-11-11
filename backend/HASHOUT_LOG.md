@@ -104,6 +104,13 @@ formcompiler runs `./formpath install` in Git Bash on its Windows runner, where 
 
 8230 so formpath runs beside formvis (8190). Data lives in `~/Formpath` unless `FORMPATH_DATA_DIR` is set; the library folder can be moved (`FORMPATH_LIBRARY_DIR`, or `library.json` written by the app), including into a synced folder.
 
+### app/core/config.py · opened-project sessions live in the data folder
+- refers-to: app/core/config.py :: sessions_dir; app/services/sessions.py :: create, prune, asset path
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Sessions (the images of an opened project, served to the window) were kept in `<temp>/formpath-sessions`. On Linux that is the shared `/tmp`: a second account on the machine could not open projects (the folder belonged to the first, PermissionError and a 500), the images were readable by every account, and a local user who made `/tmp/formpath-sessions` or a symlink by that name first received every opened project's images. macOS and Windows give each account its own temp folder, so they were not exposed. `sessions_dir` is now `sessions` inside the data folder (`~/Formpath` or `FORMPATH_DATA_DIR`), which belongs to the person like `Chat`, `profiles` and `plugins` beside it; `prune` still removes sessions older than a day, and an old `/tmp/formpath-sessions` is no longer read or cleaned. Checked: `sessions.create` writes under `<data>/sessions/<id>/images`; the backend tests pass; `ruff check` on config.py passes.
+
 ## app/core/local_guard.py
 
 ### app/core/local_guard.py · only this computer's own window and agents reach the engine

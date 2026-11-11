@@ -1,6 +1,5 @@
 import json
 import os
-import tempfile
 from pathlib import Path
 
 from app import __version__
@@ -69,7 +68,7 @@ def exports_dir() -> Path:
 
 
 def sessions_dir() -> Path:
-    return _ensure(Path(tempfile.gettempdir()) / "formpath-sessions")
+    return _ensure(data_dir() / "sessions")
 
 
 def dist_dir() -> Path | None:
