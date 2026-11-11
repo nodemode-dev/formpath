@@ -2013,6 +2013,13 @@ AutoCAD 2000 output carries the structure AutoCAD expects of an AC1015 file: han
 
 The HATCH counts (93 vertices or edges, 95 knots, 96 control points, 97 fit points) drove their loops unchecked, and `next()` returns 0 without moving once the pairs run out, so `93` set to 1e9 pushed a billion vertices and hung the window. Each count is now limited to the pairs left in the entity; a damaged hatch reads what is there and is skipped as a hatch without boundaries when nothing is. Checked: tsc clean; a scratch check outside the repo imports hatches with 93, 95 and 96 at 1e9 in under 5 ms each and a normal square hatch unchanged.
 
+### src/io/dxf.ts · only OCS entities are mirrored by a negative extrusion
+- refers-to: src/io/dxf.ts :: dxfToDoc (wcs, ocs, case 'ELLIPSE')
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The reading explainer above says entities with extrusion z -1 are mirrored in x; that is right only for OCS entities (circle, arc, 2D polylines, solid, trace, text, insert, hatch). LINE, SPLINE, ELLIPSE, 3DFACE, LEADER and MTEXT are in world coordinates, so a mirrored ellipse (MIRROR leaves 230 = -1) came in at -x with its arc reversed; DWG ELLIPSE records always carry 230. `ocs` now returns the identity for those six types, and an ELLIPSE with a negative extrusion takes its minor axis as normal x major, `(ay, -ax) * ratio`, so its parameter runs clockwise as seen from +z. Checked: tsc clean; a scratch check outside the repo puts full and half ellipses with 230 = -1 at x = 5 (the half on the mirrored side), a LINE with 230 = -1 unmoved, and a CIRCLE with 230 = -1 still mirrored.
+
 ## src/io/eps.ts
 
 ### src/io/eps.ts · EPS writer

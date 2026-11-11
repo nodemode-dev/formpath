@@ -238,7 +238,8 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
     if (w < 0) w = 25;
     return Math.max(0.25, (w / 100) * (72 / 25.4));
   };
-  const ocs = (e: Ent): Mat => (gn(e, 230, 1) < 0 ? [-1, 0, 0, 1, 0, 0] : [1, 0, 0, 1, 0, 0]);
+  const wcs = new Set(['LINE', 'SPLINE', 'ELLIPSE', '3DFACE', 'LEADER', 'MTEXT']);
+  const ocs = (e: Ent): Mat => (gn(e, 230, 1) < 0 && !wcs.has(e.type) ? [-1, 0, 0, 1, 0, 0] : [1, 0, 0, 1, 0, 0]);
   const push = (e: Ent, ctx: Ctx, d: PathData, mode: 'stroke' | 'fill' | 'both', extra?: { width?: number; even?: boolean; paint?: VNode['ap']['items'][number]['paint'] }): void => {
     if (!d.length) return;
     const m = mul(ctx.m, ocs(e)), dd = transformPath(d, m), col = colorOf(e, ctx), items0: VNode['ap']['items'] = [];
@@ -302,7 +303,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
           const cx = gn(e, 10), cy = gn(e, 20), ax = gn(e, 11), ay = gn(e, 21), ratio = gn(e, 40, 1), t0 = gn(e, 41, 0);
           let t1 = gn(e, 42, Math.PI * 2);
           while (t1 <= t0) t1 += Math.PI * 2;
-          const full = Math.abs(t1 - t0 - Math.PI * 2) < 1e-6, M: Mat = [ax, ay, -ay * ratio, ax * ratio, cx, cy];
+          const full = Math.abs(t1 - t0 - Math.PI * 2) < 1e-6, M: Mat = gn(e, 230, 1) < 0 ? [ax, ay, ay * ratio, -ax * ratio, cx, cy] : [ax, ay, -ay * ratio, ax * ratio, cx, cy];
           push(e, ctx, full ? transformPath(ellipsePath(-1, -1, 2, 2), M) : transformPath([{ closed: false, pts: arcSegmentPath(0, 0, 1, 1, t0, t1) }], M), 'stroke');
           break;
         }
