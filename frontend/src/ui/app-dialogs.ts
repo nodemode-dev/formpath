@@ -472,7 +472,9 @@ export class ShortcutsDialog extends Dialog {
 
   show(): void { this.capturing = null; this.search.value = ''; setText(this.note, ''); this.render(); this.open(); }
 
-  private save(): void { savePrefs({ ...loadPrefs(), shortcuts: this.commands.overrides() }); }
+  onSaved: (() => void) | null = null;
+
+  private save(): void { savePrefs({ ...loadPrefs(), shortcuts: this.commands.overrides() }); this.onSaved?.(); }
 
   private capture(e: KeyboardEvent): void {
     if (!this.capturing || !this.isOpen) return;

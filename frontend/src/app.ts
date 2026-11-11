@@ -1977,6 +1977,7 @@ export function startApp(): void {
     void native.build().catch(() => undefined);
     for (const ev of ['active', 'doc', 'selection', 'history', 'tool'] as const) engine.on(ev, () => native.refresh());
     engine.on('projects', () => { void native.build().catch(() => undefined); });
+    shortcuts.onSaved = () => { void native.build().catch(() => undefined); };
   }
   contextMenu.setItems(['undo', 'redo', '-', 'cut', 'copy', 'paste', 'paste-in-place', '-', 'group', 'ungroup', 'ungroup-all', 'isolate', '-', { label: 'Transform', items: ['transform-again', '-', 'move-dialog', 'rotate-dialog', 'reflect-dialog', 'scale-dialog', 'shear-dialog', 'transform-each', '-', 'reset-bounding-box'] }, { label: 'Arrange', items: ['bring-to-front', 'bring-forward', 'send-backward', 'send-to-back', 'send-to-layer'] }, { label: 'Select', items: ['select-above', 'select-below'] }, '-', 'make-clip', 'release-clip', 'compound-make', 'create-outlines', 'outline-stroke', 'expand-appearance', '-', 'collect-layer', 'new-symbol', { label: 'Collect for Export', items: ['collect-single', 'collect-multiple'] }]);
   stageEl.addEventListener('contextmenu', (e) => {

@@ -4547,3 +4547,10 @@ The Export button refused any invalid Range text and focused the field, also whe
 - logged: v0.53.1 · 2026-11-10
 
 `load` wrote the data through `dataToText` (which quotes a label holding a quote, tab or newline and doubles its quotes) and split it on newlines and tabs, stripping only the outer quotes, so `He said "hi"` came back with doubled quotes that every Apply doubled again and a newline split the row. The import handler did the same with `parseTable`'s result. `gridOf(d)` builds the rows directly from `cleanData(d)` (series header, one row per category, empty cells for null) and both paths use it; `dataToText` is no longer imported here. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/menu.ts, src/ui/app-dialogs.ts · shortcut changes reach the menus
+- refers-to: PopupMenu.refresh; ShortcutsDialog.save, onSaved; src/app.ts :: native menus block; src/ui/native-menu.ts :: build
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`setItems` returns early when the item list is unchanged and `refresh` rewrote label, enabled and checked but not `.cv-menu-keys`, so a remapped or removed shortcut kept its old label; native accelerators are set only in `NativeMenus.build`, which ran again only on `projects`, so on macOS the old key kept running the old command. `refresh` now writes each row's `keyLabel` through `setText` (a write only when it differs), and `ShortcutsDialog.save` calls `onSaved`, which `app.ts` sets to `native.build()` when native menus are on. Checked with `npx tsc --noEmit`; native menus not run (macOS desktop only).
