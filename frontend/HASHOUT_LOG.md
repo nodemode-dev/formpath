@@ -546,6 +546,13 @@ The engine never calls the model; the io layer brings back finished nodes and th
 
 Brushes and global swatches went onto the clipboard only when a top-level copied node used them, so a brushed or swatch-filled path inside a copied group pasted into another document without its BrushDef or swatch (plain stroke, lost link), and type span colours were never looked at. Their ids are now collected in the same `walk` as patterns, with every span's fill and stroke, and the clipboard filters the document's brushes and swatches by those sets. Checked with tsc only.
 
+### src/engine/index.ts · Place is one step
+- refers-to: src/engine/index.ts :: Engine.addImage, beginStep, endStep
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+addImage registered the image in one edit and added the node in another, so Undo after Place left an invisible second Place step. The pair is now wrapped in beginStep/endStep like addModel, but only when no step is open: the io placers and the agent bridge already open one around it, and `step` holds a single mark, so a nested beginStep would move it. Checked with tsc only.
+
 ## src/engine/history.ts
 
 ### src/engine/history.ts · push merge

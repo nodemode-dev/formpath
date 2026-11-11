@@ -2446,8 +2446,12 @@ export class Engine extends Emitter<EngineEvents> {
     p.assets.set(key, blob);
     const s = width ? width / w : 1;
     const node: VNode = { id: newId('im'), kind: 'image', src: key, w, h, xf: [s, 0, 0, s, at.x, at.y], opacity: 1, blend: 'normal', ap: emptyAppearance(), ...(link ? { link } : {}), ...(linked ? { linked, link: linked.name } : {}) };
+    const own = !this.step;
+    if (own) this.beginStep();
     this.edit('Place', (d) => ({ ...d, images: { ...d.images, [key]: { mime: blob.type || 'image/png', w, h } } }));
-    return this.addNodes('Place', [node])[0] ?? '';
+    const id = this.addNodes('Place', [node])[0] ?? '';
+    if (own) this.endStep();
+    return id;
   }
 
   addImageAsset(key: string, blob: Blob, w: number, h: number): boolean {
