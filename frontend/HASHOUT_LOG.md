@@ -4344,3 +4344,10 @@ Stage unwinds a drag that is cut short (another tool's shortcut, a second finger
 - logged: v0.53.1 · 2026-11-10
 
 The Rotate, Reflect, Scale and Shear tools set `T.origin` on a click (Alt-click also opens the dialog), but `T.origin` is private to the tool module and `transformDialog` always used `centerOfSel()`, so the dialog turned the art about the selection centre, not the point just set. `toolOrigin(e)` exports `origin(e)` (the set point for the current selection, else the geometric centre) and `transformDialog` uses it while `engine.tool` is one of those four; otherwise `centerOfSel()` as before. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/properties.ts · Transform fields use the preview-bounds setting
+- refers-to: TransformFields :: x, y, rot, shear, flips, resize, sync; src/engine/index.ts :: setBounds
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The fields read `selectionBounds(false)` (geometric) while `setBounds` measures `view.previewBounds`, so with Use Preview Bounds on and a 10 pt stroke, W = 200 on a 100 pt square scaled by 200/110 and shifted the art, and X or Y landed half a stroke off. Every bounds read in `TransformFields` now calls `selectionBounds()` with its default, the same rectangle `setBounds` uses; with the setting off nothing changes. Checked with `npx tsc --noEmit`; not run in the window.
