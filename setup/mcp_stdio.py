@@ -22,11 +22,16 @@ def forward(line: str) -> str | None:
     version = (params.get("_meta") or {}).get("io.modelcontextprotocol/protocolVersion") or params.get("protocolVersion") or "2025-11-25"
     req = urllib.request.Request(URL, data=line.encode(), method="POST", headers={"Content-Type": "application/json", "Accept": "application/json", "MCP-Protocol-Version": version})
     try:
-        with urllib.request.urlopen(req, timeout=660) as r:
+        with urllib.request.urlopen(req, timeout=900) as r:
             body = r.read().decode()
     except urllib.error.HTTPError as exc:
         body = exc.read().decode() or ""
     except (urllib.error.URLError, OSError) as exc:
+        if isinstance(exc, TimeoutError) or isinstance(getattr(exc, "reason", None), TimeoutError):
+            print(f"[formpath mcp] the engine at {URL} took too long to answer: {exc}", file=sys.stderr, flush=True)
+            if msg.get("id") is None:
+                return None
+            return json.dumps({"jsonrpc": "2.0", "id": msg.get("id"), "error": {"code": -32000, "message": "formpath did not answer in time: it may be busy with a long task. Check the formpath window, then retry."}})
         print(f"[formpath mcp] the engine is not answering at {URL}: {exc}", file=sys.stderr, flush=True)
         if start_engine():
             return forward(line)

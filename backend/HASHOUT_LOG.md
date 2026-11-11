@@ -535,3 +535,10 @@ Python's `mimetypes` takes file types from the Windows registry (`HKEY_CLASSES_R
 - logged: v0.53.1 · 2026-11-10
 
 `( "%PY%" %* & exit /b %ERRORLEVEL% )` has `%ERRORLEVEL%` expanded when cmd parses the line, before Python runs, so the script returned the errorlevel from before (normally 0) and `formpath.bat agents sync --check`, `i18n check` and a failed `cli run` reported success. The same held for the `py -3` line. Both now end in a bare `exit /b`, which keeps the errorlevel current when it runs; the last two lines were already correct. CRLF endings kept. Not run on Windows: reasoned from cmd's parsing rules (percent expansion happens once per parsed line or block; `exit /b` without a number keeps the current errorlevel).
+
+### setup/mcp_stdio.py · a slow answer is not a dead engine
+- refers-to: setup/mcp_stdio.py :: forward, start_engine; app/routers/mcp.py :: _call, _ask
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`forward` waited 660 s for the engine, but one `tools/call` can take up to 845 s there (20 s for a live window, 45 s for a new one, 180 s for consent, 600 s for the tool). The read timeout is a `TimeoutError`, an `OSError`, so it fell into the "the engine is not answering" branch: the bridge started `./formpath serve` beside the running engine, `/api/version` answered 200 from the old one, and the same JSON-RPC request was posted again, so a draw or delete ran twice. A timeout (raised directly, or as the reason of a `URLError`) now answers the call once with "formpath did not answer in time" and never restarts or reposts; the wait is 900 s, above the engine's own longest. Checked: against a stub that takes 3 s, with the wait cut to 1 s for the check, the bridge answered the JSON-RPC error with the request's id and the stub saw one POST.
