@@ -521,3 +521,10 @@ Python's `mimetypes` takes file types from the Windows registry (`HKEY_CLASSES_R
 - logged: v0.53.1 · 2026-11-10
 
 `./formpath mcp`, `cli` and `i18n` ran a bare `python3`, skipping the version check the other launchers make through `fp_python`. The three scripts use `X | None` annotations, which Python 3.9 evaluates at definition time and rejects with `TypeError: unsupported operand type(s) for |`, so an MCP client started from the macOS GUI (minimal `PATH`, where `/usr/bin/python3` is 3.9) saw the formpath server die at once; in Git Bash on Windows, where only `python` may exist, the command was not found. The three arms are now one: source `setup/lib.sh`, take `fp_python` (3.12 or newer, `python` last) and stop with "Python 3.12 or newer is required" on stderr when there is none, then exec the script with it. Where only an old Python is on `PATH` the command still cannot run, but it now says why instead of a traceback. Checked: `bash -n formpath`; `./formpath i18n check` exits 0, `./formpath cli` prints its usage, and `./formpath mcp` starts the bridge, which found no engine and started one, on this machine (Python 3.13). Not run on macOS or in Git Bash.
+
+### setup/python.bat · returns Python's exit code
+- refers-to: setup/python.bat; formpath.bat :: mcp, i18n, cli, claude, agents
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`( "%PY%" %* & exit /b %ERRORLEVEL% )` has `%ERRORLEVEL%` expanded when cmd parses the line, before Python runs, so the script returned the errorlevel from before (normally 0) and `formpath.bat agents sync --check`, `i18n check` and a failed `cli run` reported success. The same held for the `py -3` line. Both now end in a bare `exit /b`, which keeps the errorlevel current when it runs; the last two lines were already correct. CRLF endings kept. Not run on Windows: reasoned from cmd's parsing rules (percent expansion happens once per parsed line or block; `exit /b` without a number keeps the current errorlevel).
