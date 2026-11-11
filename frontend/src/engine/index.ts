@@ -2387,13 +2387,14 @@ export class Engine extends Emitter<EngineEvents> {
     const t = topObjects(p.doc, p.selection);
     if (!t.length) return;
     const nodes = t.map((id) => findNode(p.doc, id) as VNode);
-    const syms = new Set<string>(), imgs = new Set<string>(), pats = new Set<string>();
-    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const e of n.ap.effects) if (e.id === '3d.model' && typeof e.params.model === 'string') { const m = p.doc.images[e.params.model] ? getMesh(e.params.model) : null; imgs.add(e.params.model); for (const g of m?.groups ?? []) if (g.tex) imgs.add(g.tex); } else if (e.id.startsWith('3d.') && typeof e.params.texture === 'string') { const t = e.params.texture, s = p.doc.symbols.find((x) => x.id === t || x.name === t); if (p.doc.images[t]) imgs.add(t); else if (s) syms.add(s.id); } for (const i of n.ap.items) if (i.paint.type === 'pattern') pats.add(i.paint.pattern); });
+    const syms = new Set<string>(), imgs = new Set<string>(), pats = new Set<string>(), brs = new Set<string>(), sws = new Set<string>();
+    const swatchOf = (q: Paint): void => { if ((q.type === 'color' || q.type === 'gradient') && q.swatch) sws.add(q.swatch); };
+    walk(nodes, (n) => { if (n.kind === 'symbol') syms.add(n.symbol); if (n.kind === 'image') imgs.add(n.src); if (n.kind === 'group' && n.trace) imgs.add(n.trace.src.src); for (const e of n.ap.effects) if (e.id === '3d.model' && typeof e.params.model === 'string') { const m = p.doc.images[e.params.model] ? getMesh(e.params.model) : null; imgs.add(e.params.model); for (const g of m?.groups ?? []) if (g.tex) imgs.add(g.tex); } else if (e.id.startsWith('3d.') && typeof e.params.texture === 'string') { const t = e.params.texture, s = p.doc.symbols.find((x) => x.id === t || x.name === t); if (p.doc.images[t]) imgs.add(t); else if (s) syms.add(s.id); } for (const i of n.ap.items) { if (i.paint.type === 'pattern') pats.add(i.paint.pattern); if (i.kind === 'stroke' && i.brush) brs.add(i.brush); swatchOf(i.paint); } if (n.kind === 'text') for (const s of n.spans) { swatchOf(s.style.fill); swatchOf(s.style.stroke); } });
     const assets = new Map<string, Blob>();
     for (const k of imgs) { const b = p.assets.get(k); if (b) assets.set(k, b); }
     this.clipboard = {
-      stamp: newId('cb'), nodes, symbols: p.doc.symbols.filter((s) => syms.has(s.id)), swatches: p.doc.swatches.filter((s) => nodes.some((n) => n.ap.items.some((i) => (i.paint.type === 'color' || i.paint.type === 'gradient') && i.paint.swatch === s.id))),
-      patterns: p.doc.patterns.filter((x) => pats.has(x.id)), brushes: p.doc.brushes.filter((b) => nodes.some((n) => n.ap.items.some((i) => i.kind === 'stroke' && i.brush === b.id))),
+      stamp: newId('cb'), nodes, symbols: p.doc.symbols.filter((s) => syms.has(s.id)), swatches: p.doc.swatches.filter((s) => sws.has(s.id)),
+      patterns: p.doc.patterns.filter((x) => pats.has(x.id)), brushes: p.doc.brushes.filter((b) => brs.has(b.id)),
       images: Object.fromEntries([...imgs].map((k) => [k, p.doc.images[k]]).filter(([, v]) => v)), assets, bounds: selectionBounds(p.doc, nodes),
     };
     this.emit('options', null);

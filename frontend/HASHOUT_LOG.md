@@ -539,6 +539,13 @@ Every graph and variable change is one edit. graphTargets maps any selected part
 
 The engine never calls the model; the io layer brings back finished nodes and these three methods make each result one undo step. `addPatternSwatches` adds grid PatternDefs with their tiles and a pattern swatch for each, and optionally fills objects with the first, in one edit, so generated patterns are ordinary patterns (Edit Pattern, edit_pattern, SVG and PDF all treat them alike). `replaceWithClip` puts the generated art and the original shape into a clipping group in the shape's place, the shape last so it is the clipping path and keeps its stroke. `replaceWithText` inserts Retype's live type above the last source object and removes the sources unless asked to keep them (an image under the type).
 
+### src/engine/index.ts · copy collects brushes and swatches from the whole tree
+- refers-to: src/engine/index.ts :: Engine.copy, Engine.paste
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Brushes and global swatches went onto the clipboard only when a top-level copied node used them, so a brushed or swatch-filled path inside a copied group pasted into another document without its BrushDef or swatch (plain stroke, lost link), and type span colours were never looked at. Their ids are now collected in the same `walk` as patterns, with every span's fill and stroke, and the clipboard filters the document's brushes and swatches by those sets. Checked with tsc only.
+
 ## src/engine/history.ts
 
 ### src/engine/history.ts · push merge
