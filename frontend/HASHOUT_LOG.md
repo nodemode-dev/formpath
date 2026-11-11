@@ -4491,3 +4491,10 @@ Caret steps were one UTF-16 code unit, so Backspace after an emoji left its high
 - logged: v0.53.1 · 2026-11-10
 
 With the dock hidden, `newTerminal` called `toggle(true)` and awaited `pending`, and `boot` opens a terminal only when there are no tabs, so with terminals already open the command just showed the old tab. `open()` now counts its calls in `opens`; `newTerminal` notes the count before showing the dock and, if start-up did not open a terminal, opens one. A dock that starts empty still gets exactly one. Checked with `npx tsc --noEmit`; not run against the terminal service.
+
+### src/ui/app-dialogs.ts · an empty preference number is not its minimum
+- refers-to: SettingsDialog constructor :: num
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`Number('')` is 0, which is finite, so clearing a Preferences number and leaving it saved the field's minimum; for Undo steps kept that called `setHistoryLimit(10)` and dropped the history beyond 10 steps at once. An empty or non-numeric field now gets `this.prefs[key]` written back and nothing is saved. Checked with `npx tsc --noEmit`; not run in the window.
