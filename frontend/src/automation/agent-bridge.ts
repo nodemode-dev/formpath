@@ -60,7 +60,7 @@ export interface AgentDeps {
   placeLinked?(path: string, at: Pt | null, width: number | null, placing?: PlaceOptions): Promise<string | null>;
   links?(a: Record<string, unknown>): Promise<{ ok: boolean; text: string; data?: Record<string, unknown> }>;
   projectBlob(): Promise<Blob | null>;
-  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'png8' | 'gif' | 'bmp' | 'psd' | 'tiff' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg', o: { raster?: Partial<RasterExtra>; scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice }): Promise<Blob | null>;
+  exportBlob(format: 'svg' | 'pdf' | 'ai' | 'png' | 'png8' | 'gif' | 'bmp' | 'psd' | 'tiff' | 'jpeg' | 'webp' | 'eps' | 'dxf' | 'dwg', o: { raster?: Partial<RasterExtra>; scope: string; artboard?: number; scale: number; quality: number; transparent: boolean; outlineText: boolean; liveText?: boolean; standard?: PdfStandard; layers?: boolean; compression?: PdfCompression; security?: PdfSecurity; cmyk?: boolean; cad?: CadChoice; notes?: (note: string) => void }): Promise<Blob | null>;
   image(scope: string, artboard: number | undefined, maxSize: number, outline: boolean): Promise<Blob | null>;
   svg(scope: string, artboard: number | undefined, ids: string[] | undefined): Promise<string>;
   outlines(ids?: string[]): Promise<boolean>;
@@ -780,8 +780,10 @@ export class AgentBridge {
           const cad: CadChoice = { version: str('dxf_version', '2000') === 'R12' ? 'R12' : '2000', units, scale: Math.max(1e-4, num('drawing_scale', 1)), text: a.outline_text === true ? 'outlines' : 'text', lineweights: a.scale_lineweights === true };
           const pdfOnly = fmt === 'pdf', standard = pdfOnly ? standardFrom(a.pdf_standard) : 'none', security = pdfOnly ? securityFrom(a) : undefined, layers = pdfOnly && a.pdf_layers === true;
           if (pdfOnly) { const refusal = pdfRefusal({ standard, security, layers }); if (refusal) return fail(refusal); }
-          const blob = await this.deps.exportBlob(fmt, { scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, raster, scale: has('ppi') ? Math.max(1, Math.min(2400, num('ppi', 72))) / 72 : Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
-          return blob ? text(`Exported ${fmt.toUpperCase()}.`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
+          const notes: string[] = [];
+          const blob = await this.deps.exportBlob(fmt, { notes: (n) => notes.push(n), scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, raster, scale: has('ppi') ? Math.max(1, Math.min(2400, num('ppi', 72))) / 72 : Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
+          const note = notes.length ? ` ${notes.join(' ')}` : '';
+          return blob ? text(`Exported ${fmt.toUpperCase()}.${note}`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {
           const q = has('index') ? e.projects[Math.round(num('index', 0))] : e.projects.find((x) => x.name === str('name'));

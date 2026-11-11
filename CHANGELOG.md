@@ -2,6 +2,14 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.53.3 · 2026-11-11
+
+- Cancelling a symbol or pattern edit puts the document back as it was even when the edit took more steps than History Options keeps; before, the edit group stayed and the symbol instance stayed hidden.
+- PDF export draws characters the chosen font lacks, such as Greek in Inter or Chinese and Japanese, from a font that has them: Inter's own Greek, Cyrillic, Vietnamese and extended Latin files first, then a font installed on the computer. Create Outlines and outlined PDF text use the same fallback. When no font has a character, it stays an empty box and the export says which characters.
+- Invisible characters (variation selectors such as the one after a heart, joiners and other format characters) and combining marks the font lacks are left out instead of starting a search through installed fonts or drawing a box. Colour emoji cannot be embedded in a PDF; they are named once in their own note, without a font search.
+- The export notes belong to the export that made them: two exports at once no longer mix them, and an export an agent asks for answers the agent instead of showing a message in the window.
+- A fallback font whose licence forbids embedding (OS/2 `fsType` restricted) is not embedded; that text is drawn as outlines instead.
+
 ## 0.53.2 · 2026-11-11
 
 - An agent that calls formpath in the first half minute after the computer starts is told at once that formpath is not open, and the window opens for it; before, the call waited three minutes for a window that was not there. The engine tests no longer fail on a test machine that has just started.

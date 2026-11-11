@@ -1361,8 +1361,8 @@ export class Engine extends Emitter<EngineEvents> {
     const v = p.viewport, origin = onInst ? { x: onInst.xf[4], y: onInst.xf[5] } : v.toDoc(v.centerX, v.height / 2);
     const { kids, shell, plain, ids } = sessionStart(def, origin);
     const g: GroupNode = { id: newId('g'), kind: 'group', name: `Symbol: ${def.name}`, clip: false, children: kids, opacity: 1, blend: 'normal', ap: emptyAppearance() };
-    const mark = p.history.mark(), before = [...p.selection];
-    const session: SymbolSession = { symbol: def.id, group: g.id, instance: onInst?.id ?? null, hidden: !!onInst?.hidden, origin, shell, plain, mark, before, ids };
+    const mark = p.history.mark(), start = p.history.current, before = [...p.selection];
+    const session: SymbolSession = { symbol: def.id, group: g.id, instance: onInst?.id ?? null, hidden: !!onInst?.hidden, origin, shell, plain, mark, start, before, ids };
     const ok = this.edit('Edit Symbol', (d) => {
       const ip = onInst ? pathOf(d, onInst.id) : null;
       const at = ip ? { parent: ip.slice(0, -1), index: ip[ip.length - 1] + 1 } : this.insertionPoint(d, p, { layer: p.activeLayer });
@@ -1385,7 +1385,7 @@ export class Engine extends Emitter<EngineEvents> {
     p.symbolEdit = null;
     p.isolation = null;
     if (!save || g?.kind !== 'group') {
-      const st = p.history.rewind(s.mark);
+      const st = p.history.rewind(s.mark, s.start);
       if (st) this.restore(p, st.doc, s.before); else this.refresh();
       this.emit('history', null);
       return false;
@@ -2223,20 +2223,20 @@ export class Engine extends Emitter<EngineEvents> {
     const kids = def ? artChildren(def.art).map((n) => cloneNode(n)) : this.targetIds(ids).map((id) => findNode(p.doc, id)).filter((n): n is VNode => !!n && n.kind !== 'layer').map((n) => cloneNode(n));
     if (!kids.length) { this.notice('Select the artwork for the pattern first.'); return false; }
     const g: VNode = { id: newId('g'), kind: 'group', name: 'Pattern Tile', clip: false, children: kids, opacity: 1, blend: 'normal', ap: emptyAppearance() };
-    const mark = p.history.mark(), before = [...p.selection];
+    const mark = p.history.mark(), start = p.history.current, before = [...p.selection];
     const ok = this.edit(def ? 'Edit Pattern' : 'Make Pattern', (d) => { const at = this.insertionPoint(d, p, { layer: p.activeLayer }); return { doc: insertInto(d, at.parent, at.index, [g]), select: [] }; });
     if (!ok) return false;
     const b = selectionBounds(p.doc, [g]), fit = !def || (Math.abs(def.tile.w - b.w) < 0.01 && Math.abs(def.tile.h - b.h) < 0.01);
     p.patternEdit = {
       pattern: def?.id ?? null, group: g.id, name: def?.name ?? `New Pattern ${p.doc.patterns.length + 1}`, type: def?.type ?? 'grid',
       hs: fit ? def?.hs ?? 0 : 0, vs: fit ? def?.vs ?? 0 : 0, brick: def?.brick ?? 0.5, overlap: def?.overlap ?? ['left', 'top'],
-      fit, w: def?.tile.w ?? b.w, h: def?.tile.h ?? b.h, copies: 3, dim: 0.7, edge: true, mark, before,
+      fit, w: def?.tile.w ?? b.w, h: def?.tile.h ?? b.h, copies: 3, dim: 0.7, edge: true, mark, start, before,
     };
     p.isolation = g.id;
     this.emit('selection', null); this.emit('render', null); this.emit('overlay', null); this.emit('options', null);
     return true;
   }
-  setPatternSession(patch: Partial<Omit<PatternSession, 'pattern' | 'group' | 'mark' | 'before'>>): void {
+  setPatternSession(patch: Partial<Omit<PatternSession, 'pattern' | 'group' | 'mark' | 'start' | 'before'>>): void {
     const p = this.current; if (!p?.patternEdit) return;
     p.patternEdit = { ...p.patternEdit, ...patch };
     this.emit('render', null); this.emit('overlay', null); this.emit('options', null);
@@ -2248,7 +2248,7 @@ export class Engine extends Emitter<EngineEvents> {
     p.patternEdit = null;
     p.isolation = null;
     if (!save || !g || !geo || g.kind !== 'group' || !g.children.length) {
-      const st = p.history.rewind(s.mark);
+      const st = p.history.rewind(s.mark, s.start);
       if (st) this.restore(p, st.doc, s.before); else this.refresh();
       this.emit('history', null);
       return null;

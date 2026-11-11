@@ -1,3 +1,4 @@
+import type { HistoryState } from './history';
 import type { PatternDef, Pt, Rect, VNode } from './types';
 
 export type PatternType = PatternDef['type'];
@@ -49,6 +50,7 @@ export interface PatternSession {
   dim: number;
   edge: boolean;
   mark: number;
+  start: HistoryState;
   before: string[];
 }
 

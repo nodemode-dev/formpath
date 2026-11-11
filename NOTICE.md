@@ -19,7 +19,7 @@ The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app ic
 
 | Package | License | Notes |
 | --- | --- | --- |
-| Inter, JetBrains Mono (via @fontsource) | SIL OFL 1.1 fonts, MIT packaging | bundled font files, also used for Create Outlines |
+| Inter, JetBrains Mono (via @fontsource) | SIL OFL 1.1 fonts, MIT packaging | bundled font files (latin, latin-ext, Greek, Cyrillic and Vietnamese subsets), also used for Create Outlines and as the fallback for characters a PDF's font lacks |
 | paper.js 0.12.18 | MIT | the curve kernel behind Pathfinder, offset and simplify |
 | opentype.js 2.0.0 | MIT | glyph outlines for type rendering, Create Outlines and PDF type |
 | @tauri-apps/api | Apache-2.0 or MIT | native menus on macOS |

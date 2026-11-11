@@ -5,7 +5,7 @@ import { resolvePaint } from '../engine/paint';
 import { axesKey, glyphMat, hasAxes, layoutText } from '../engine/text';
 import type { CharStyle, Doc, Mat, Paint, TextNode } from '../engine';
 import { api } from './api';
-import { fontFor, fontSource, glyphAdvance } from './fonts';
+import { fontFor, fontSource, glyphAdvance, glyphOrFallback } from './fonts';
 
 export interface PdfSink { add(dict: string, stream?: Uint8Array): number }
 export interface Ink { fill: string | null; stroke: string | null; width: number }
@@ -21,12 +21,15 @@ export class Face {
   readonly uni = new Map<number, string>();
   readonly adv = new Map<number, number>();
   failed = false;
+  fallback = false;
   resource = '';
   id = 0;
   constructor(readonly key: string, readonly font: Font, readonly style: CharStyle) {}
 }
 
-const solidOrNone = (doc: Doc, p: Paint): boolean => { const r = resolvePaint(doc, p); return r.type === 'none' || r.type === 'color'; };
+export const restricted = (font: Font): boolean => ((((font.tables.os2 as { fsType?: number } | undefined)?.fsType ?? 0) & 0x0002) !== 0);
+
+const solidOrNone =(doc: Doc, p: Paint): boolean => { const r = resolvePaint(doc, p); return r.type === 'none' || r.type === 'color'; };
 
 function psName(font: Font): string {
   const names = font.names as unknown as Record<string, unknown>;
@@ -76,7 +79,7 @@ export class LiveFonts {
 
   async plan(doc: Doc, n: TextNode): Promise<LiveText | null> {
     if (!this.capable(doc, n)) return null;
-    const lay = layoutText(n), staged: Array<{ key: string; font: Font; style: CharStyle; gid: number; ch: string; tm: Mat }> = [];
+    const lay = layoutText(n), staged: Array<{ key: string; font: Font; style: CharStyle; gid: number; ch: string; tm: Mat; fallback: boolean }> = [];
     for (const g of lay.glyphs) {
       const code = g.ch.charCodeAt(0);
       if (code < 32) continue;
@@ -84,15 +87,18 @@ export class LiveFonts {
       if (!solidOrNone(doc, st.fill) || (hasStroke && !solidOrNone(doc, st.stroke))) return null;
       const font = await fontFor(st.font, st.style);
       if (!font) return null;
-      const gid = g.gid ?? font.charToGlyph(g.ch).index;
-      if (gid === 0 && /\s/.test(g.ch)) continue;
+      const own = g.gid ?? font.charToGlyph(g.ch).index;
+      if (own === 0 && /\s/.test(g.ch)) continue;
+      const pick = await glyphOrFallback(g.ch, st, font, own), ps = pick.style;
+      if (pick.skip) continue;
       const local = mul(glyphMat(g), [(g.size * st.hscale) / 100, 0, 0, (g.size * st.vscale) / 100, 0, 0]), m = n.mode === 'path' ? local : mul(n.xf, local);
-      staged.push({ key: `${st.font}|${st.style}|${hasAxes(st) ? axesKey(st) : ''}`, font, style: st, gid, ch: g.ch, tm: [m[0], m[1], -m[2], -m[3], m[4], m[5]] });
+      staged.push({ key: `${pick.source}|${ps.style}|${hasAxes(ps) ? axesKey(ps) : ''}`, font: pick.font, style: ps, gid: pick.gid, ch: g.ch, tm: [m[0], m[1], -m[2], -m[3], m[4], m[5]], fallback: pick.font !== font });
     }
     const glyphs: LiveGlyph[] = [], used = new Set<Face>();
     for (const s of staged) {
       let face = this.faces.get(s.key);
       if (!face) { face = new Face(s.key, s.font, s.style); this.faces.set(s.key, face); }
+      if (s.fallback) face.fallback = true;
       face.gids.add(s.gid);
       if (s.gid !== 0 && !face.uni.has(s.gid)) face.uni.set(s.gid, s.ch);
       if (!face.adv.has(s.gid)) face.adv.set(s.gid, Math.round(glyphAdvance(s.font, s.gid, s.style) * 1e4) / 10);
@@ -106,6 +112,7 @@ export class LiveFonts {
 
   async build(pdf: PdfSink, deflate: (d: Uint8Array) => Promise<Uint8Array>, openType = true): Promise<void> {
     await Promise.all([...this.faces.values()].map(async (face) => {
+      if (face.fallback && restricted(face.font)) { face.failed = true; return; }
       const src = fontSource(face.font);
       const res = src ? await api.subsetFont(src, [...face.gids], hasAxes(face.style) ? { ...face.style.axes } : {}) : null;
       if (!res || (res.cff && !openType)) { face.failed = true; return; }
