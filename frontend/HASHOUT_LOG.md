@@ -4442,3 +4442,10 @@ Each call appended a `.cv-dd-pop` to `#overlay-root`, a capture `pointerdown` li
 - logged: v0.53.1 · 2026-11-10
 
 `shearDrag` passed `p.alt` to `transformNodes`, so a copy was made, but dropped the result's ids and never called `noteDragTransform`: `endTransform` committed with the original selected and Transform Again did not know the shear. It now keeps the result, sets `FT.copyIds` to the copy's ids when Alt is held (null otherwise) and notes the matrix, as the other Free Transform drags do. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/automation/catalogue.ts · the gate lists real command ids
+- refers-to: WINDOW_ONLY, RISKY; src/app.ts :: commands settings, manage-plugins, action-batch, package, clear-recent
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`WINDOW_ONLY` named `preferences` and `quit` and `RISKY` named `revert`, `close-all`, `delete-library` and `batch`; none of these ids exist. Preferences is `settings`, so agents could open it, and Batch is `action-batch`, so `list_commands` did not say undo cannot reverse it. Now `WINDOW_ONLY` adds `settings` and `manage-plugins` and `RISKY` is `clear-recent`, `action-batch` and `package` (which writes a folder). Checked with `npx tsc --noEmit`; not run with an agent.
