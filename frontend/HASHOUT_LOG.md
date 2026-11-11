@@ -3030,6 +3030,13 @@ Widths in W come from the font's advances at the used axis values; FontDescripto
 
 Settings live in the optional `Doc.cm` (rgb and cmyk profile references as id plus name, intent, bpc, proof setup). It rides inside the manifest's document object through the existing spread, so .fpth needs no new code, and a document without `cm` behaves exactly as before: paint.ts only calls into the module and falls back to the formula whenever `cmToRgb` or `cmToCmyk` return null, which is the case with no CMYK profile set or before its tables arrive. The module is global state, not per document, because paint.ts has no document argument; `activateDocument` runs on doc, active and projects events and keys the load by profile ids, intent and bpc. When the tables land, the app invalidates cached layers and emits render, the way fontsChanged does for fonts. A profile is found by id first and then by name, so a project opened on another computer with a different copy of the same profile still resolves. The CMYK to RGB table is 9 points per axis with quadrilinear interpolation (tetrahedral was not worth the code at that size), RGB to CMYK is 17 points trilinear, and results are memoised for the last query because renders ask for the same colour many times in a row. The engine never fetches: `setColorBackend` is installed by io/color-ops.ts, which keeps engine/ free of io.
 
+### src/engine/color-management.ts · unresolved profiles clear the active tables
+- refers-to: src/engine/color-management.ts :: loadActive, activateDocument
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+When the newly active document's profiles could not be resolved, loadActive returned early and kept the previous document's tables, so its CMYK colours were previewed and converted through another document's profiles, and since `wanted` already held the new key, it never retried. That return now clears `active` (the formula fallback applies) and resets `wanted`, so the next activateDocument tries again. A failed table fetch (the catch) still only clears `active`, so a backend that is down is not asked again on every edit. Checked with tsc only.
+
 ### src/engine/color-management.ts · Proof Colors is a post pass on the scene canvas
 - refers-to: src/ui/stage.ts :: Stage.proofPass; src/engine/color-management.ts :: applyProof, isProofing, activeProof
 - kind: rationale
