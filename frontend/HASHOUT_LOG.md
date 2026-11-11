@@ -1921,6 +1921,13 @@ opentype.js does not read vhea, vmtx or VORG, so `fontFor` keeps each font's raw
 
 Inter and JetBrains Mono `.woff` files come from @fontsource through a lazy glob, so each face is fetched only when type uses it. Installed fonts are found and served by the engine's fonts service. A missing face draws with Inter.
 
+### src/io/fonts.ts · GSUB extension lookups
+- refers-to: src/io/fonts.ts :: applyLookup, Sub (lookupType, extension)
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+opentype.js keeps an Extension lookup (type 7) as type 7 with each real subtable under `extension` and its own `lookupType` (read in its parser). applyLookup had no case for 7, so contextual features in fonts that wrap lookups in extensions (Noto, Source and other large families) did nothing. It now unwraps such a lookup into the inner type and subtables first; the spec requires one type per extension lookup, so the first subtable's type is taken. Checked: tsc clean; a scratch copy of applyLookup in node substitutes through an extension-wrapped single lookup, a chain context calling it, and an extension-wrapped chain context. Not compared with hb-shape on a real font.
+
 ### src/io/fonts.ts · OpenType shaping
 - refers-to: src/io/fonts.ts :: installShaping, fontNow, subsOf, ligate, single, fractions, OT_ORDER; src/engine/text.ts :: Shaping, setShaping, items, drawText
 - kind: rationale

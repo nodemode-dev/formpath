@@ -305,6 +305,7 @@ type Sub = {
   substFormat: number; coverage?: Cov; deltaGlyphId?: number; substitute?: number[]; alternateSets?: number[][]; ligatureSets?: Array<Array<{ ligGlyph: number; components: number[] }>>;
   ruleSets?: Rule[][]; classSets?: Rule[][]; chainRuleSets?: Rule[][]; chainClassSet?: Rule[][]; classDef?: ClassDef; backtrackClassDef?: ClassDef; inputClassDef?: ClassDef; lookaheadClassDef?: ClassDef;
   coverages?: Cov[]; backtrackCoverage?: Cov[]; inputCoverage?: Cov[]; lookaheadCoverage?: Cov[]; lookupRecords?: Rec[];
+  lookupType?: number; extension?: Sub;
 };
 type Lookup = { lookupType: number; subtables: Sub[] };
 type Gsub = { features?: Array<{ tag: string; feature?: { lookupListIndexes?: number[] } }>; lookups?: Lookup[] };
@@ -323,7 +324,8 @@ function classOf(cd: ClassDef | undefined, gid: number): number {
 }
 
 function applyLookup(gsub: Gsub, li: number, gs: G[], i: number, depth = 0): number {
-  const lk = gsub.lookups?.[li];
+  const lk0 = gsub.lookups?.[li];
+  const lk = lk0?.lookupType === 7 ? { lookupType: lk0.subtables[0]?.lookupType ?? 0, subtables: lk0.subtables.map((s) => s.extension ?? s) } : lk0;
   if (!lk || depth > 6) return 0;
   for (const st of lk.subtables) {
     const g = gs[i];
