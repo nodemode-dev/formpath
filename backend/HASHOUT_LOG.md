@@ -577,3 +577,10 @@ The `--all` line was `( if exist frontend\node_modules rmdir ... & if exist back
 - logged: v0.53.1 · 2026-11-10
 
 These four looked only at `backend/venv/bin/python`. In Git Bash on Windows the venv's interpreter is `backend/venv/Scripts/python.exe`, so `./formpath check` (engine self-check, harness sync check), `counts` and `agents` fell back to the system Python and failed to import fastapi although the venv was installed, and `doctor` skipped its keyring check. Each now tries `Scripts/python.exe` when `bin/python` is not there, the same two layouts `fp_venv` already accepts; the fallbacks after it are unchanged. Checked: `bash -n` on the four files; `./formpath doctor` runs as before on Linux. Not run in Git Bash on Windows.
+
+### setup/agents.py and setup/command_counts.py · read FORMPATH_DATA_DIR
+- refers-to: setup/agents.py :: commands_reference; setup/command_counts.py :: load; app/core/config.py :: data_dir
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+Both read the stored command catalogue from `FORMPATH_DATA`, a name nothing else sets, while the engine writes it to `FORMPATH_DATA_DIR` (or `~/Formpath`). With `FORMPATH_DATA_DIR` set, `./formpath agents sync` built the harness skill's `references/commands.md` from a stale or missing `~/Formpath/commands-catalogue.json`, and `counts --commands` fell back to the wrong file when the engine was not answering. Both now read `FORMPATH_DATA_DIR`, an empty value counting as unset and `~` expanded, as `config.data_dir` does. Checked: with `FORMPATH_DATA_DIR` pointing at a scratch catalogue, `commands_reference` rendered it and `command_counts.load` (engine port unreachable) returned its one command.
