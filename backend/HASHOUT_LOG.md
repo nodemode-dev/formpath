@@ -556,3 +556,10 @@ Python's `mimetypes` takes file types from the Windows registry (`HKEY_CLASSES_R
 - logged: v0.53.1 · 2026-11-10
 
 `forward` waited 660 s for the engine, but one `tools/call` can take up to 845 s there (20 s for a live window, 45 s for a new one, 180 s for consent, 600 s for the tool). The read timeout is a `TimeoutError`, an `OSError`, so it fell into the "the engine is not answering" branch: the bridge started `./formpath serve` beside the running engine, `/api/version` answered 200 from the old one, and the same JSON-RPC request was posted again, so a draw or delete ran twice. A timeout (raised directly, or as the reason of a `URLError`) now answers the call once with "formpath did not answer in time" and never restarts or reposts; the wait is 900 s, above the engine's own longest. Checked: against a stub that takes 3 s, with the wait cut to 1 s for the check, the bridge answered the JSON-RPC error with the request's id and the stub saw one POST.
+
+### setup/clean.bat · --all removes the venv on its own
+- refers-to: setup/clean.bat :: --all
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The `--all` line was `( if exist frontend\node_modules rmdir ... & if exist backend\venv rmdir ... )`. In cmd, everything after an `if` condition on the same line, `&` included, is the `if`'s command, so the venv was removed only when `frontend\node_modules` existed, and `formpath.bat clean --all` left `backend\venv` in place once node_modules was gone. The two removals are now separate lines inside the block. CRLF endings kept. Not run on Windows: reasoned from cmd's parsing of `if` with `&`.
