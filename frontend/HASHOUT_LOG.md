@@ -4470,3 +4470,10 @@ Each call appended a `.cv-dd-pop` to `#overlay-root`, a capture `pointerdown` li
 - logged: v0.53.1 · 2026-11-10
 
 A press on a row that left the list sideways (under 5 px vertically) and was released outside it left `this.drag` set, since no capture was taken yet and `pointerup` never reached the rows. A later hover turned it into a moving drag with a drop line, and the `pointerup` of a click on another row's eye or lock button ran `end()` and moved the old ids. `pointermove` now clears the drag and the line when `ev.buttons & 1` is off, as `Dock.move` does. Checked with `npx tsc --noEmit`; not run in the window.
+
+### src/ui/place-dialog.ts · a stale thumbnail run hands over its queue
+- refers-to: PlaceDialog.drain, ask
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+`busy` is shared across dialog sessions. Reopening Place while the previous session's thumbnail was rendering queued the new visible pages and called `drain`, which returned because `busy` was still set; the old run then saw `token` change and exited without draining, so the first thumbnails stayed blank until a scroll. The `finally` of `drain` now restarts it when the queue holds work and the token has moved on. Checked with `npx tsc --noEmit`; not run with a slow PDF.
