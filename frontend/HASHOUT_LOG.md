@@ -1838,6 +1838,13 @@ A paint linked to a spot swatch (directly or as a tint) is written as `/CSn cs t
 
 Every placed JPEG was written through unchanged as DCTDecode tagged DeviceRGB, sized from the decoded bitmap, so a grayscale or CMYK JPEG did not match its colour space (garbage or a refused image in viewers) and a photo with an EXIF orientation came out unrotated with width and height swapped. `jpegHead` reads the markers up to the first frame header: passthrough now needs an 8-bit SOF0, SOF1 or SOF2 frame with one or three components, EXIF orientation absent or 1, and a frame size equal to the bitmap; one component is tagged DeviceGray. Anything else is re-encoded from the decoded, upright bitmap. Checked: tsc clean; jpegHead in node on Pillow-made RGB, progressive, gray, CMYK and EXIF 1, 6 and 8 files (both byte orders). Not opened in a PDF viewer.
 
+### src/io/pdf.ts, src/io/pdf-plates.ts · resource dictionary id per file
+- refers-to: src/io/pdf.ts :: PdfFile.res, Painter (pattern, forms, groups, masks), exportPdf; src/io/pdf-plates.ts :: exportPlates
+- kind: fix
+- logged: v0.53.1 · 2026-11-10
+
+The shared resource dictionary's object number was a module variable (`RES`, set through `useResources`) that both exporters set at the start and Painter read for every page, form and tiling pattern; exportPdf awaits many times, so an export started meanwhile (agent export during a user export or separations) re-pointed the first file's objects at the second file's number. It is now `PdfFile.res`, set by exportPdf and exportPlates and read as `this.pdf.res`; the variable and `useResources` are removed. Checked: tsc clean, tests/pdf.test.ts passes. Not run with two overlapping exports.
+
 ## src/io/pdf-read.ts
 
 ### src/io/pdf-read.ts · object discovery

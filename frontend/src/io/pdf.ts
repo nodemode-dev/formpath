@@ -89,6 +89,7 @@ function jpegHead(b: Uint8Array): { w: number; h: number; n: number } | null {
 export class PdfFile {
   private objs: Array<{ dict: string; stream?: Uint8Array } | null> = [null];
   private readonly enc = new TextEncoder();
+  res = 0;
   reserve(): number { this.objs.push(null); return this.objs.length - 1; }
   set(id: number, dict: string, stream?: Uint8Array): void { this.objs[id] = { dict, stream }; }
   add(dict: string, stream?: Uint8Array): number { const id = this.reserve(); this.set(id, dict, stream); return id; }
@@ -232,7 +233,7 @@ export class Painter {
     if (!t) return null;
     const l = patternLattice(t.def), tl = t.def.tile;
     const content = latticeCopies(t.def, 1).map((o) => `q 1 0 0 1 ${f6(o.x)} ${f6(o.y)} cm /Im${t.form} Do Q`).join('\n');
-    const id = this.pdf.add(`<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [${f6(tl.x)} ${f6(tl.y)} ${f6(tl.x + l.w)} ${f6(tl.y + l.h)}] /XStep ${f6(l.w)} /YStep ${f6(l.h)} /Matrix [${this.mul(xf, page).map(f6).join(' ')}] /Resources ${RES} 0 R >>`, new TextEncoder().encode(content));
+    const id = this.pdf.add(`<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [${f6(tl.x)} ${f6(tl.y)} ${f6(tl.x + l.w)} ${f6(tl.y + l.h)}] /XStep ${f6(l.w)} /YStep ${f6(l.h)} /Matrix [${this.mul(xf, page).map(f6).join(' ')}] /Resources ${this.pdf.res} 0 R >>`, new TextEncoder().encode(content));
     this.patterns.set(`P${id}`, id);
     return id;
   }
@@ -267,7 +268,7 @@ export class Painter {
     this.nested--;
     this.ko = inKo;
     const form = this.pdf.reserve();
-    this.defer(form, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Resources ${RES} 0 R >>`, new TextEncoder().encode(body));
+    this.defer(form, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Resources ${this.pdf.res} 0 R >>`, new TextEncoder().encode(body));
     this.xobjects.set(this.name('F'), form);
     this.tiles.set(pid, { form, def, box: b });
   }
@@ -330,7 +331,7 @@ export class Painter {
     const arrows = art.arrows.length ? `q ${gsx}\n${fills(art.arrows, page)}\nQ` : '';
     if (solo) return [body(page), arrows].filter(Boolean).join('\n');
     const r = inflate(pathBounds(region), 2);
-    const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(r.x)} ${f(r.y)} ${f(r.x + r.w)} ${f(r.y + r.h)}] /Group << /Type /Group /S /Transparency /I true >> /Resources ${RES} 0 R >>`, new TextEncoder().encode(body([1, 0, 0, 1, 0, 0])));
+    const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(r.x)} ${f(r.y)} ${f(r.x + r.w)} ${f(r.y + r.h)}] /Group << /Type /Group /S /Transparency /I true >> /Resources ${this.pdf.res} 0 R >>`, new TextEncoder().encode(body([1, 0, 0, 1, 0, 0])));
     this.xobjects.set(this.name('F'), id);
     return [`q ${gsx} /Im${id} Do Q`, arrows].filter(Boolean).join('\n');
   }
@@ -447,7 +448,7 @@ export class Painter {
   async group(n: VNode, body: string, knockout = false, ais = false, smask = ''): Promise<string> {
     const b = inflate(visualBounds(this.doc, n), 2);
     const content = await deflate(new TextEncoder().encode(body));
-    const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true${knockout ? ' /K true' : ''} >> /Resources ${RES} 0 R /Filter /FlateDecode >>`, content);
+    const id = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true${knockout ? ' /K true' : ''} >> /Resources ${this.pdf.res} 0 R /Filter /FlateDecode >>`, content);
     this.xobjects.set(this.name('F'), id);
     return `q ${smask || `${this.extGState(n.opacity, false, n.blend, ais)} ${this.extGState(n.opacity, true, n.blend, ais)}`} /Im${id} Do Q`;
   }
@@ -463,7 +464,7 @@ export class Painter {
     this.plate = inPlate;
     const ab = visualBounds(this.doc, m.art), nb = visualBounds(this.doc, n), b = inflate(isEmptyRect(ab) ? nb : isEmptyRect(nb) ? ab : unionRect(nb, ab), 2);
     const g = this.pdf.reserve();
-    this.defer(g, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /CS /DeviceRGB >> /Resources ${RES} 0 R >>`, new TextEncoder().encode(body));
+    this.defer(g, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /CS /DeviceRGB >> /Resources ${this.pdf.res} 0 R >>`, new TextEncoder().encode(body));
     if (m.invert && !this.invert) this.invert = this.pdf.add('<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>');
     const id = this.pdf.add(`<< /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G ${g} 0 R${m.invert ? ` /TR ${this.invert} 0 R` : ''} >> /CA ${f(n.opacity)} /ca ${f(n.opacity)}${BM[n.blend] ? ` /BM /${BM[n.blend]}` : ''}${ais ? ' /AIS true' : ''} >>`);
     this.gs.set(`mask${id}`, id);
@@ -481,7 +482,7 @@ export class Painter {
     const color = sh(false);
     if (!meshHasAlpha(n)) return `/Sh${color} sh`;
     const a = sh(true), b = inflate(visualBounds(this.doc, n), 2), g = this.pdf.reserve();
-    this.defer(g, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /CS /DeviceGray >> /Resources ${RES} 0 R >>`, new TextEncoder().encode(`/Sh${a} sh`));
+    this.defer(g, `<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /CS /DeviceGray >> /Resources ${this.pdf.res} 0 R >>`, new TextEncoder().encode(`/Sh${a} sh`));
     const gs = this.pdf.add(`<< /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G ${g} 0 R >> >>`);
     this.gs.set(`mesh${gs}`, gs);
     return `q /GS${gs} gs\n/Sh${color} sh\nQ`;
@@ -525,7 +526,7 @@ export class Painter {
     for (let k = vis.length - 1; k >= 1; k--) {
       if (!vis[k].knockoutShape) {
         const body = `${await this.node(knockoutShape(vis[k]), [1, 0, 0, 1, 0, 0])}${next ? `\n/Im${next} Do` : ''}`;
-        next = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true >> /Resources ${RES} 0 R /Filter /FlateDecode >>`, await deflate(new TextEncoder().encode(body)));
+        next = this.pdf.add(`<< /Type /XObject /Subtype /Form /BBox [${f(b.x)} ${f(b.y)} ${f(b.x + b.w)} ${f(b.y + b.h)}] /Group << /Type /Group /S /Transparency /I true >> /Resources ${this.pdf.res} 0 R /Filter /FlateDecode >>`, await deflate(new TextEncoder().encode(body)));
         this.xobjects.set(this.name('U'), next);
       }
       union[k] = next;
@@ -602,9 +603,6 @@ export class Painter {
   }
 }
 
-let RES = 0;
-export function useResources(id: number): void { RES = id; }
-
 export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const std: PdfStandard = o.standard ?? 'none', rules = standardRules(std), secure = securityActive(o.security) ? o.security : undefined;
   const refusal = pdfRefusal({ standard: std, security: o.security, layers: o.layers });
@@ -632,7 +630,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   painter.cmykImages = rules.colour === 'cmyk';
   const ocgs = new Map<VNode, number>(), props = new Map<string, number>();
   if (o.layers) for (const l of p.doc.layers) if (!l.template) ocgs.set(l, pdf.add(`<< /Type /OCG /Name ${pdfTextString(l.name || 'Layer')} /Usage << /Print << /Subtype /Print /PrintState /${l.hidden || l.printable === false ? 'OFF' : 'ON'} >> /View << /ViewState /${l.hidden ? 'OFF' : 'ON'} >> >> >>`));
-  RES = pdf.reserve();
+  const RES = pdf.res = pdf.reserve();
   const pagesId = pdf.reserve();
   const aiOn = !!o.aiPrivate && o.preserve && std === 'none' && !secure && !o.sheet;
   const pieceId = aiOn ? pdf.reserve() : 0;
