@@ -132,6 +132,15 @@ In the window, Window > Terminal (or the Terminal button in the title bar) opens
 
 All FormPath builds are compiled and released from [FormCompiler](https://github.com/nodemode-dev/formcompiler); this repo holds the source.
 
+## Demo
+
+[`demo/index.html`](demo/index.html) is an offline demo that opens from `file://` or any static server and runs the real FormPath window: Poster and type, a two-artboard poster with gradients, a gradient mesh, a blend, an art brush, type on a path and graphic styles. See [`demo/README.md`](demo/README.md).
+
+- [`demos/icons/index.html`](demos/icons/index.html): Icons and a logo, twelve icons built with Pathfinder, compound paths and Outline Stroke, and a radial Repeat logo. See [`demos/icons/README.md`](demos/icons/README.md).
+- [`demos/pattern/index.html`](demos/pattern/index.html): Patterns and colour, with Make Pattern, an envelope, a 3D badge and Recolor Art colourways. See [`demos/pattern/README.md`](demos/pattern/README.md).
+
+The same three demos open inside the app from Home, from Help > Demos, or with the `demo-poster`, `demo-icons` and `demo-pattern` commands, each as a new unsaved document.
+
 ## Run it from source
 
 Prefer it in your browser, or want to contribute? Run the web UI straight from this repo.
