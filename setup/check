@@ -9,4 +9,5 @@ run "frontend typecheck and build" bash -c "cd '$FORMPATH_ROOT/frontend' && npm 
 run "engine compile" "$py" -m compileall -q "$FORMPATH_ROOT/backend/app"
 run "engine self-check" bash -c "cd '$FORMPATH_ROOT/backend' && '$py' formpath_engine.py --selfcheck"
 run "harness skill in step with the MCP catalogue" "$py" "$FORMPATH_ROOT/setup/agents.py" sync --check
+run "no sparkle icon" "$py" -B "$FORMPATH_ROOT/setup/icon_rules.py"
 exit "$fail"

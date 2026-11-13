@@ -74,7 +74,7 @@ export class RecolorDialog extends Dialog {
     this.linkBtn = tb('link', 'Link harmony colors: dragging one marker turns them all', () => { this.linked = !this.linked; this.queue(false); });
     this.linkBtn.innerHTML = `<span class="cv-rc-ico-on">${icon('link', 16)}</span><span class="cv-rc-ico-off" hidden>${icon('unlink', 16)}</span>`;
     tb('refresh', 'Randomly change color order', () => this.randomOrder());
-    tb('sparkle', 'Randomly change saturation and brightness', () => this.randomSB());
+    tb('dice', 'Randomly change saturation and brightness', () => this.randomSB());
     this.pickBtn = tb('eyeDropper', 'Color Theme Picker: click an image or object on the canvas to take its colors', () => this.togglePick());
     left.append(this.wheel, this.shape.el, bRow, tools);
     this.preset = selectCtl('Preset', [['custom', 'Custom'], ['one', '1 color job'], ['two', '2 color job'], ['harmony', 'Color harmony']], (v) => this.applyPreset(v));
@@ -457,7 +457,7 @@ export class RecolorDialog extends Dialog {
     patchList(this.list, this.rows.map((r, i) => ({ r, i })), {
       key: ({ r }) => String(r.id),
       create: ({ r, i }) => {
-        const n = el(`<div class="cv-rc-row" role="option"><button class="cv-rc-on" type="button" title="Recolor this row" aria-label="Recolor this row">${icon('check', 12)}</button><span class="cv-rc-from"></span><span class="cv-rc-arrow">${icon('chevronRight', 12)}</span><button class="cv-rc-to" type="button" title="New color: click to change" aria-label="New color"></button><button class="cv-rc-base" type="button" title="Make this the base color" aria-label="Base color">${icon('sparkle', 12)}</button></div>`);
+        const n = el(`<div class="cv-rc-row" role="option"><button class="cv-rc-on" type="button" title="Recolor this row" aria-label="Recolor this row">${icon('check', 12)}</button><span class="cv-rc-from"></span><span class="cv-rc-arrow">${icon('chevronRight', 12)}</span><button class="cv-rc-to" type="button" title="New color: click to change" aria-label="New color"></button><button class="cv-rc-base" type="button" title="Make this the base color" aria-label="Base color">${icon('target', 12)}</button></div>`);
         this.fillRow(n, r, i);
         return n;
       },

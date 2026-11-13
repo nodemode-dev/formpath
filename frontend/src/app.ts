@@ -156,7 +156,7 @@ const SHELL = `<div class="cv-app">
 <button class="cv-icon-btn" type="button" data-cmd="zoom-in">${icon('zoomIn', 16)}</button>
 <button class="cv-icon-btn" type="button" data-cmd="fit">${icon('fitView', 16)}</button>
 <span class="cv-sep"></span>
-<button class="cv-icon-btn" type="button" data-cmd="assistant">${icon('sparkle', 16)}</button>
+<button class="cv-icon-btn" type="button" data-cmd="assistant">${icon('agent', 16)}</button>
 <button class="cv-icon-btn" type="button" data-cmd="settings">${icon('settings', 16)}</button>
 </div>
 </header>

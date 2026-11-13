@@ -19,6 +19,10 @@ Vector illustration editor for the web and the desktop in the NodeMode design sy
 
 Always route code work through `.claude/skills/formpath-skillset/SKILL.md` first: it maps the subsystems, the dependency graph and the laws, and loads the right references.
 
+## Icons
+
+- The three-star sparkle icon is banned app-wide (the owner's rule): no icon, glyph or SVG of it under any name or in any form (a cluster of four-point stars, a wand trailing stars, the star glyphs), including when porting from a sibling app; use a glyph that shows what the control does. Claude Code, agents and the Assistant use the `agent`, `agentChat` and `terminal` icons. `./formpath check` and `./formpath counts --check` fail if it returns (`setup/icon_rules.py`).
+
 ## Trademarks, copyright and licences
 
 - Other vendors' product and feature names appear only to name a file format or compatibility (`.ai`, `.eps`, "PDF-compatible Illustrator file") and in `docs/PARITY.md`. Never as a formpath command, tool, panel, menu or MCP tool description, and never as "as Illustrator's" or "an Illustrator alternative" in UI text, agent text or READMEs. The renamed features are Trace Image, Fill Regions, Shape Crafter, Pin Warp, AI Shape Fill, AI Vector from Text, AI Patterns, AI Recolor, Glyph Touch, Interlace, Recolor Art and Font Match; ids keep their old names. `README.md` and `NOTICE.md` carry the trademark notice.

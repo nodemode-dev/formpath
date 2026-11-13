@@ -173,7 +173,7 @@ export class SwatchesPanel {
     const foot = el('<div class="cv-panel-foot cv-swatchp-foot"></div>');
     const mk = (name: string, label: string, run: (b: HTMLButtonElement) => void): HTMLButtonElement => { const b = el<HTMLButtonElement>(`<button class="cv-icon-btn" type="button" title="${label}" aria-label="${label}">${icon(name, 16)}</button>`); b.addEventListener('click', () => run(b)); foot.appendChild(b); return b; };
     mk('library', 'Swatch Libraries menu', (b) => this.libMenu(b));
-    mk('sparkle', 'Add Used Colors', () => engine.addUsedColors());
+    mk('swatchAdd', 'Add Used Colors', () => engine.addUsedColors());
     mk('info', 'Create Swatch Info', () => this.info());
     mk('folder', 'New Color Group from the selected swatches', () => void this.newGroup());
     mk('add', 'New Swatch from the active Fill or Stroke', () => void this.newSwatch());

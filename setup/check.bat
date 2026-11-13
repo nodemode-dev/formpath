@@ -13,4 +13,6 @@ echo [formpath] engine compile
 echo [formpath] engine self-check
 "%PY%" backend\formpath_engine.py --selfcheck || set "FAIL=1"
 "%PY%" setup\agents.py sync --check || set "FAIL=1"
+echo [formpath] no sparkle icon
+"%PY%" -B setup\icon_rules.py || set "FAIL=1"
 exit /b %FAIL%
