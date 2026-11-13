@@ -1,4 +1,5 @@
 import type { Engine } from '../engine';
+import { t } from '../i18n';
 import { brandMark } from './brand';
 import { el, setClass, setDisabled, setHidden, setText } from './dom';
 import { DEMO_CARDS } from './home-demos';
@@ -151,7 +152,7 @@ export class HomeScreen {
     for (const n of Array.from(this.root.querySelectorAll<HTMLElement>('.cv-home-page'))) setHidden(n, n.dataset.page !== this.page);
     for (const n of Array.from(this.root.querySelectorAll<HTMLElement>('.cv-home-nav-item[data-v]'))) setClass(n, 'is-active', n.dataset.v === this.page);
     const h = new Date().getHours();
-    setText(this.root.querySelector('[data-page="start"] .cv-home-title'), h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
+    setText(this.root.querySelector('[data-page="start"] .cv-home-title'), t(h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'));
   }
 
   private fill(): void {
