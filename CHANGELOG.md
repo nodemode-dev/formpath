@@ -2,6 +2,14 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.54.1 · 2026-11-13
+
+- In every language except English, an error message no longer appears when FormPath starts; it came from the Asset Export panel.
+- Home's greeting, Projects, See all, the Recent and Projects pages, the status bar labels, the window buttons and several import notes now appear in all 25 languages.
+- The three browser demo pages share one copy of their fonts, which cuts their size from 41.6 MB to 34.6 MB.
+- The README states the code size again, so `./formpath counts --check` passes.
+- An unused wand icon is gone from the icon set.
+
 ## 0.54.0 · 2026-11-13
 
 - Home's side panel can be resized, hidden and shown again, and remembers its width. It shows the formpath mark with "by nodemode.ai" and has an Agents group for Claude Code, Chat with Claude and Terminal.
