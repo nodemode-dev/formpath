@@ -4631,3 +4631,31 @@ Ported from formvis. Each page is the real window bundled as one IIFE script wit
 - logged: v0.54.0 · 2026-11-13
 
 Ported from formvis. Each button shows the dock on its kind of tab, reusing an open tab or starting one, and hides the dock when that kind is already showing. `syncDock` lights the button whose kind is the dock's active tab; the dock calls it through `onTab` on every open, hide, tab switch and last-tab close, and only those two buttons are written. The Terminal button reuses the translated Terminal key.
+
+### vite.demo.config.ts · the demo pages store their fonts once
+- refers-to: frontend/vite.demo.config.ts :: sharedFonts, fontUrl, experimental.renderBuiltUrl; demo/assets; demos/icons, demos/pattern
+- kind: rationale
+- logged: v0.54.1 · 2026-11-13
+
+Only the poster build writes the woff and woff2 files, to `demo/assets`. The `formpath-demo-shared-fonts` plugin removes them from the icons and pattern builds, whose stylesheet points at `../../../demo/assets/` and whose script resolves `../../demo/assets/` against `document.baseURI`. So `demo/` must stay next to `demos/`. The committed pages went from 41.6 MB to 34.6 MB; most of what is left is each page's own 10 MB `demo.js`. Checked from `file://` in headless Chrome with the system copy of Inter hidden: every font request resolved to `demo/assets`, none failed.
+
+### src/ui/icons.ts · wandSelect removed
+- refers-to: icons.ts :: (removed) ICONS.wandSelect
+- kind: hashed-out
+- logged: v0.54.1 · 2026-11-13
+
+Nothing used it (no code, translation key, command, demo or test); the Magic Wand tool draws `vMagicWand`. Removed text: ``wandSelect: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4l-1.41 1.41L18.17 10l1.41-1.41L15 4z"/><path d="M3.51 20.49l11-11 1.41 1.41-11 11-1.41-1.41z"/><circle cx="7" cy="3" r="1" fill="currentColor"/><circle cx="21" cy="7" r="1" fill="currentColor"/><circle cx="18" cy="2" r="1" fill="currentColor"/><circle cx="22" cy="13" r="1" fill="currentColor"/></svg>`,``
+
+### src/ui/home.ts, src/ui/home-files.ts, src/ui/caption-buttons.ts, src/io/pdf.ts · text written by repaints goes through t()
+- refers-to: home.ts :: paint; home-files.ts :: HomeFiles empty note, update; caption-buttons.ts :: look; io/pdf.ts :: glyphNotes; src/i18n/keys.json, locales/*.json
+- kind: fix
+- logged: v0.54.1 · 2026-11-13
+
+The harvest already found Home's greeting, Projects, See all and about a hundred other strings, but `i18n extract` had not been run since they were written, so no language had rows for them. Re-harvested (100 keys added, 34 stale ones pruned) and filled in all 25 languages through `i18n export`, `import` and `prune`. Four places also wrote English over text the page translator had already translated on every repaint: the greeting, the Recent and Projects empty notes and relative times, and the Maximize or Restore tooltip; they now pass through `t()` and are written once, translated. The colour emoji note in `glyphNotes` put an English verb into a placeholder (`${emoji.length === 1 ? 'shows' : 'show'}`) and is now two whole sentences. Still without a row: the "No font on this computer has {0}" note in `io/pdf.ts`, whose nested template string the harvest cannot read.
+
+### src/ui/panels/asset-export.ts · rows are read by element, not by label
+- refers-to: asset-export.ts :: AssetExportPanel.read
+- kind: fix
+- logged: v0.54.1 · 2026-11-13
+
+`read` looked each row's fields up by `aria-label` (`input[aria-label="Scale"]`, `select[aria-label="Format"]`, `input[aria-label="Suffix"]`). The page translator rewrites those labels, so in every language but English the lookup threw at startup and a red toast showed. Each row has exactly one input with a `list`, one select and one other input, so the selectors are now `input[list]`, `select` and `input:not([list])`. A lookup by a translated label is the pattern to avoid.
