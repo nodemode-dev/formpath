@@ -4596,3 +4596,66 @@ The Export button refused any invalid Range text and focused the field, also whe
 - logged: v0.53.1 · 2026-11-10
 
 `evalNumber` stripped any letter suffix and used the number as is (10 mm in a pt field applied 10 pt), and `1,5` threw and reverted silently. It now takes the field's `.cv-unit` text: a suffix equal to it passes, a length unit converts through `UNIT_PT` to the field's length unit, anything else throws so the field reverts; a single comma in a number without a dot is the decimal point (so `1,000` reads as 1). The dash and gap fields committed through `numField` (evaluated and clamped) but `applyDashes` re-read the raw text with `parseFloat`, so `2*6` gave 2 and `-5` a negative dash; the field now passes its index and the committed value, and only the other fields are read from their (already formatted) text. Checked with `npx tsc --noEmit` and a node copy of `evalNumber`; not run in the window.
+
+### src/ui/icons.ts, src/ui/icons-vector.ts, src/ui/panels/color.ts, src/ui/panels/recolor.ts · the sparkle icon is gone
+- refers-to: icons.ts :: (removed) sparkle, magicWand; swatchAdd, dice, target; icons-vector.ts :: vMagicWand, effects
+- kind: hashed-out
+- logged: v0.54.0 · 2026-11-13
+
+The family bans the three-star sparkle. Removed: the `sparkle` key (`M12 1.5l1.5 4.5 4.5 1.5...`) and the unused `magicWand` (`M7.5 5.6L10 7 8.6 4.5...`). The title bar Assistant button draws `agent`. Add Used Colors draws the new `swatchAdd`, Recolor's random saturation and brightness button the new `dice`, and each Recolor row's base-colour button the new `target`; all three are original line drawings. `vMagicWand` was a wand with plus-shaped glints and is redrawn from formvis `tWand` (a wand with radiating dashes). `effects` was two four-point stars and is redrawn from formdeck `effects` (a square with a drop shadow). The guard is `setup/icon_rules.py` (backend log). `wandSelect` (a wand with four dots) is unused and passes the guard; it was left in place.
+
+### src/ui/home.ts, src/styles/shell.css · Home's side panel resizes and collapses, with the mark and an Agents group
+- refers-to: home.ts :: HomeScreen.sidePanel, the brand block, the Agents group, holdForDemo, building; shell.css :: --cv-home-nav-w, .cv-home*
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+`sidePanel` is ported from formdeck 0.26.1. The width lives in `--cv-home-nav-w`; the drag range is 180 to 420 px and a drag under 120 px collapses the panel; two 14 by 56 px chevron tabs hide and show it. Width and hidden state are stored as `formpath.homeNav` and `formpath.homeNavHidden` and applied in the constructor before Home is mounted, so the first paint has the saved size. In the narrow window the resizer and both tabs hide. The brand block is `brandMark(26)` then formpath by nodemode.ai. The Agents group runs the existing `claude-code`, `claude-chat` and `terminal-toggle` commands with the `agent`, `agentChat` and `terminal` icons. `holdForDemo` keeps Home up while a demo builds and `building` guards Escape and Back for that time. Known gap: older Home strings (Good morning, Projects, See all) were already missing from the language tables and still are. Checked with tsc and headless Chrome (layout, resize kept over a reload, hide tab); not run in the desktop shell.
+
+### src/demos/, src/ui/home-demos.ts, src/app.ts · three demos built through the app's own tools
+- refers-to: demos/index.ts :: buildDemo; demos/kit.ts, poster.ts, icons.ts, pattern.ts; ui/home-demos.ts; app.ts :: openDemo, demoOpening; automation/command-meta.ts :: demo-poster, demo-icons, demo-pattern, demo-open
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+No demo file ships. Each demo is a TypeScript builder that drives the app's own MCP tools through `AgentBridge.run`, so a demo is also a running check of those tools. `buildDemo` pins every step to the demo's own document and records the projects it made; a failed build closes exactly those and nothing else. Each demo opens as a new unsaved document, every name and figure is invented, and the type is the bundled Inter. Poster and type: two artboards, gradients, a gradient-mesh moon, a blend, an art brush, type on a path, area type and graphic styles. Icons and a logo: 12 icons built with Pathfinder, compound paths, Outline Stroke and Shape Crafter in its explicit merge mode (`delete: false`), plus a radial Repeat logo. Patterns and colour: Make Pattern, a blend, a flag envelope, a 3D extruded badge, a Color Guide group and Recolor Art colourways. `openDemo` allows one demo at a time and shows toasts; the bridge's status `note` is muted while `demoOpening` is set so the agent status line stays quiet. Home > Start has a Demos section with 16:9 cards drawn as inline SVG in theme tokens, and Help has a Demos submenu. `setup/i18n.py` skips `frontend/src/demos` because those strings are document content. Checked in headless Chrome: all three from their cards, under a second each, no console errors.
+
+### vite.demo.config.ts, ../demo/, ../demos/ · the demos as browser pages
+- refers-to: frontend/vite.demo.config.ts; demo/src :: main, session, links, shim/api; demo/, demos/icons/, demos/pattern/ (built output)
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+Ported from formvis. Each page is the real window bundled as one IIFE script with a shim in place of the engine API; when the window is ready the page clicks the demo's Home card. The pages open from `file://`, which cannot fetch fonts, so the Latin Inter `.woff` files are inlined. The built output is committed, as formvis does: about 14 MB a page and 756 files in all, mostly font files. `npm run demo` rebuilds them. Checked from `file://` in headless Chrome with no console errors; not run in Firefox or Safari.
+
+### src/ui/titlebar-tools.ts, src/ui/terminal-dock.ts · title bar Claude Code and Terminal buttons that light with the dock
+- refers-to: titlebar-tools.ts :: TitleTools.syncDock; terminal-dock.ts :: TerminalDock.activeKind, isShowing, show, toggleKind, onTab
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+Ported from formvis. Each button shows the dock on its kind of tab, reusing an open tab or starting one, and hides the dock when that kind is already showing. `syncDock` lights the button whose kind is the dock's active tab; the dock calls it through `onTab` on every open, hide, tab switch and last-tab close, and only those two buttons are written. The Terminal button reuses the translated Terminal key.
+
+### vite.demo.config.ts · the demo pages store their fonts once
+- refers-to: frontend/vite.demo.config.ts :: sharedFonts, fontUrl, experimental.renderBuiltUrl; demo/assets; demos/icons, demos/pattern
+- kind: rationale
+- logged: v0.54.1 · 2026-11-13
+
+Only the poster build writes the woff and woff2 files, to `demo/assets`. The `formpath-demo-shared-fonts` plugin removes them from the icons and pattern builds, whose stylesheet points at `../../../demo/assets/` and whose script resolves `../../demo/assets/` against `document.baseURI`. So `demo/` must stay next to `demos/`. The committed pages went from 41.6 MB to 34.6 MB; most of what is left is each page's own 10 MB `demo.js`. Checked from `file://` in headless Chrome with the system copy of Inter hidden: every font request resolved to `demo/assets`, none failed.
+
+### src/ui/icons.ts · wandSelect removed
+- refers-to: icons.ts :: (removed) ICONS.wandSelect
+- kind: hashed-out
+- logged: v0.54.1 · 2026-11-13
+
+Nothing used it (no code, translation key, command, demo or test); the Magic Wand tool draws `vMagicWand`. Removed text: ``wandSelect: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4l-1.41 1.41L18.17 10l1.41-1.41L15 4z"/><path d="M3.51 20.49l11-11 1.41 1.41-11 11-1.41-1.41z"/><circle cx="7" cy="3" r="1" fill="currentColor"/><circle cx="21" cy="7" r="1" fill="currentColor"/><circle cx="18" cy="2" r="1" fill="currentColor"/><circle cx="22" cy="13" r="1" fill="currentColor"/></svg>`,``
+
+### src/ui/home.ts, src/ui/home-files.ts, src/ui/caption-buttons.ts, src/io/pdf.ts · text written by repaints goes through t()
+- refers-to: home.ts :: paint; home-files.ts :: HomeFiles empty note, update; caption-buttons.ts :: look; io/pdf.ts :: glyphNotes; src/i18n/keys.json, locales/*.json
+- kind: fix
+- logged: v0.54.1 · 2026-11-13
+
+The harvest already found Home's greeting, Projects, See all and about a hundred other strings, but `i18n extract` had not been run since they were written, so no language had rows for them. Re-harvested (100 keys added, 34 stale ones pruned) and filled in all 25 languages through `i18n export`, `import` and `prune`. Four places also wrote English over text the page translator had already translated on every repaint: the greeting, the Recent and Projects empty notes and relative times, and the Maximize or Restore tooltip; they now pass through `t()` and are written once, translated. The colour emoji note in `glyphNotes` put an English verb into a placeholder (`${emoji.length === 1 ? 'shows' : 'show'}`) and is now two whole sentences. Still without a row: the "No font on this computer has {0}" note in `io/pdf.ts`, whose nested template string the harvest cannot read.
+
+### src/ui/panels/asset-export.ts · rows are read by element, not by label
+- refers-to: asset-export.ts :: AssetExportPanel.read
+- kind: fix
+- logged: v0.54.1 · 2026-11-13
+
+`read` looked each row's fields up by `aria-label` (`input[aria-label="Scale"]`, `select[aria-label="Format"]`, `input[aria-label="Suffix"]`). The page translator rewrites those labels, so in every language but English the lookup threw at startup and a red toast showed. Each row has exactly one input with a `list`, one select and one other input, so the selectors are now `input[list]`, `select` and `input:not([list])`. A lookup by a translated label is the pattern to avoid.

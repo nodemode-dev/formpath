@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from icon_rules import problems as sparkle_problems
+
 ROOT = Path(__file__).resolve().parent.parent
 KINDS = (("TypeScript", ("frontend/src/",), ".ts"), ("CSS", ("frontend/src/",), ".css"),
          ("Python", ("backend/app/", "backend/formpath_engine.py", "setup/"), ".py"), ("Rust", ("src-tauri/src/",), ".rs"))
@@ -50,7 +52,7 @@ def check(root: Path = ROOT) -> list[str]:
         said, real = int(stated.replace(",", "")), c[name]
         if abs(said - real) > max(100, 0.03 * real):
             problems.append(f"{name}: README says {said:,}, the code has {real:,}")
-    return problems
+    return problems + sparkle_problems(root)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,24 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.54.1 · 2026-11-13
+
+- In every language except English, an error message no longer appears when FormPath starts; it came from the Asset Export panel.
+- Home's greeting, Projects, See all, the Recent and Projects pages, the status bar labels, the window buttons and several import notes now appear in all 25 languages.
+- The three browser demo pages share one copy of their fonts, which cuts their size from 41.6 MB to 34.6 MB.
+- The README states the code size again, so `./formpath counts --check` passes.
+- An unused wand icon is gone from the icon set.
+
+## 0.54.0 · 2026-11-13
+
+- Home's side panel can be resized, hidden and shown again, and remembers its width. It shows the formpath mark with "by nodemode.ai" and has an Agents group for Claude Code, Chat with Claude and Terminal.
+- Three demos (Poster and type, Icons and a logo, Patterns and colour) open from Home, Help > Demos or a command each, as new unsaved documents built with FormPath's own tools.
+- The same three demos open as offline browser pages from `demo/` and `demos/`.
+- The title bar has Claude Code and Terminal buttons that light while the terminal dock shows that kind of tab.
+- `./formpath mcpb build` makes a Claude Desktop extension, and `./formpath mcp --attach` connects to a running FormPath without starting one.
+- The repo carries a Claude Code plugin manifest, and its settings keep Claude Code from adding attribution lines to commits and pull requests.
+- The three-star sparkle icon is gone: the Assistant button shows the agent icon, Magic Wand and Add New Effect have new glyphs, and a check keeps the sparkle out.
+
 ## 0.53.3 · 2026-11-11
 
 - Cancelling a symbol or pattern edit puts the document back as it was even when the edit took more steps than History Options keeps; before, the edit group stayed and the symbol instance stayed hidden.

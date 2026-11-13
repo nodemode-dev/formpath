@@ -7,6 +7,7 @@
 - [UI Shell](UI-Shell)
 - [Files and Formats](Project-Format)
 - [Agents and MCP](Agents-and-MCP)
+- [Terminal](Terminal)
 - [Engine Service](Engine-Service)
 - [Desktop](Desktop)
 - [Releasing](Releasing)

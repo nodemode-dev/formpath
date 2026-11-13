@@ -25,6 +25,7 @@ if /i "%CMD%"=="doctor" ( call setup\doctor.bat & goto :eof )
 if /i "%CMD%"=="check" ( call setup\check.bat & goto :eof )
 if /i "%CMD%"=="counts" ( call setup\counts.bat %REST% & goto :eof )
 if /i "%CMD%"=="mcp" ( call setup\python.bat setup\mcp_stdio.py %REST% & goto :eof )
+if /i "%CMD%"=="mcpb" ( call setup\python.bat setup\mcpb.py %REST% & goto :eof )
 if /i "%CMD%"=="i18n" ( call setup\python.bat setup\i18n.py %REST% & goto :eof )
 if /i "%CMD%"=="cli" ( call setup\python.bat setup\cli.py %REST% & goto :eof )
 if /i "%CMD%"=="claude" ( call setup\python.bat setup\claude_launch.py %REST% & goto :eof )
@@ -37,5 +38,5 @@ exit /b 2
 :usage
 echo formpath.bat [command]
 echo   boot ^| install ^| install-desktop ^| backend ^| frontend ^| build ^| serve ^| freeze
-echo   desktop dev ^| desktop build ^| doctor ^| check ^| counts [--check] ^| mcp ^| cli list^|describe^|run ^| claude [args] ^| agents install^|sync ^| clean [--all] ^| help
+echo   desktop dev ^| desktop build ^| doctor ^| check ^| counts [--check] ^| mcp [--attach] ^| mcpb check^|build DIR ^| cli list^|describe^|run ^| claude [args] ^| agents install^|sync ^| clean [--all] ^| help
 exit /b 0

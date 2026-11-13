@@ -1,5 +1,5 @@
 import type { Commands } from './commands';
-import { el, setHidden, setText } from './dom';
+import { el, setClass, setHidden, setText } from './dom';
 import { icon } from './icons';
 import { readChoice, setTheme } from './themes';
 import { enhanceSelect } from './dropdown';
@@ -21,6 +21,7 @@ export interface TitleToolsDeps {
   arrange: (w: Workspace) => void;
   locked: () => boolean;
   setLocked: (on: boolean) => void;
+  dock?: (kind: 'claude' | 'shell') => void;
 }
 
 export class TitleTools {
@@ -28,10 +29,14 @@ export class TitleTools {
   private readonly results = el('<div class="cv-search-results" role="listbox"></div>');
   private readonly pop = el('<div class="cv-search-pop" hidden><input class="cv-search-input" type="search" placeholder="Search commands" aria-label="Search commands"></div>');
   private picked = 0;
+  private readonly claudeBtn = el<HTMLButtonElement>(`<button class="cv-tt-btn" type="button" title="Claude Code" aria-label="Claude Code" aria-pressed="false">${icon('agent', 16)}</button>`);
+  private readonly shellBtn = el<HTMLButtonElement>(`<button class="cv-tt-btn" type="button" title="Terminal" aria-label="Terminal" aria-pressed="false">${icon('terminal', 16)}</button>`);
 
   constructor(host: HTMLElement, private readonly d: TitleToolsDeps) {
     const theme = el<HTMLButtonElement>('<button class="cv-tt-btn cv-tt-bare" type="button" title="Light or dark" aria-label="Light or dark"></button>');
     const search = el<HTMLButtonElement>(`<button class="cv-tt-btn" type="button" title="Search commands" aria-label="Search commands">${icon('search', 16)}</button>`);
+    this.claudeBtn.addEventListener('click', () => d.dock?.('claude'));
+    this.shellBtn.addEventListener('click', () => d.dock?.('shell'));
     const ws = el<HTMLSelectElement>(`<select class="cv-tt-select" aria-label="Workspace"><optgroup label="Built-in">${WORKSPACES.map((w) => `<option value="${w.id}">${w.label}</option>`).join('')}</optgroup></select>`);
     const lock = el<HTMLButtonElement>('<button class="cv-tt-btn" type="button"></button>');
     const syncTheme = (): void => { const light = readChoice().theme === 'light'; theme.innerHTML = icon(light ? 'moon' : 'sun', 17); theme.setAttribute('aria-pressed', String(light)); };
@@ -65,9 +70,17 @@ export class TitleTools {
       if (e.key === 'Enter') { const b = this.results.children[this.picked] as HTMLElement | undefined; if (b) b.click(); }
     });
     document.addEventListener('pointerdown', (e) => { if (!this.pop.hidden && !this.pop.contains(e.target as Node) && !search.contains(e.target as Node)) this.close(); });
-    this.root.append(theme, search, ws, lock, this.pop);
+    this.root.append(theme, search, this.claudeBtn, this.shellBtn, ws, lock, this.pop);
     enhanceSelect(ws);
     host.appendChild(this.root);
+  }
+
+  syncDock(open: boolean, kind: string | null): void {
+    for (const [k, b] of [['claude', this.claudeBtn], ['shell', this.shellBtn]] as const) {
+      const on = open && kind === k;
+      setClass(b, 'is-on', on);
+      if (b.getAttribute('aria-pressed') !== String(on)) b.setAttribute('aria-pressed', String(on));
+    }
   }
 
   open(): void {

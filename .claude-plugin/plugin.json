@@ -1,0 +1,14 @@
+{
+  "name": "formpath",
+  "description": "Draw in formpath, the vector illustration editor, in plain language: the formpath MCP server and the skill that drives it.",
+  "author": { "name": "nodemode-ai", "email": "mackin@nodemode.ai" },
+  "license": "Apache-2.0",
+  "keywords": ["vector", "illustration", "svg", "drawing", "mcp"],
+  "skills": ["./.claude/skills/formpath-harness"],
+  "mcpServers": {
+    "formpath": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/formpath",
+      "args": ["mcp"]
+    }
+  }
+}

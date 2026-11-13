@@ -134,6 +134,8 @@ import { assignProfileDialog, colorSettingsDialog, convertToProfileDialog, proof
 import { slotTool, toolGroups } from './ui/tool-groups';
 import { Viewport } from './engine/viewport';
 import { VERSION } from './version';
+import { buildDemo, isDemo } from './demos';
+import { DEMO_CARDS } from './ui/home-demos';
 
 const LAYERS_W_KEY = 'formpath.layersW';
 const CUSTOM_TITLE_BAR_KEY = 'formpath.customTitleBar';
@@ -156,7 +158,7 @@ const SHELL = `<div class="cv-app">
 <button class="cv-icon-btn" type="button" data-cmd="zoom-in">${icon('zoomIn', 16)}</button>
 <button class="cv-icon-btn" type="button" data-cmd="fit">${icon('fitView', 16)}</button>
 <span class="cv-sep"></span>
-<button class="cv-icon-btn" type="button" data-cmd="assistant">${icon('sparkle', 16)}</button>
+<button class="cv-icon-btn" type="button" data-cmd="assistant">${icon('agent', 16)}</button>
 <button class="cv-icon-btn" type="button" data-cmd="settings">${icon('settings', 16)}</button>
 </div>
 </header>
@@ -316,11 +318,12 @@ export function startApp(): void {
   };
 
   enhanceAllSelects();
-  new TitleTools(q(root, '.cv-titlebar'), {
+  const titleTools = new TitleTools(q(root, '.cv-titlebar'), {
     commands,
     arrange: (w) => { dock.arrange(w.order, w.hidden); store('formpath.propsCol', w.propsColumn ? 'shown' : 'hidden'); syncPropsCol(); },
     locked: () => dock.locked,
     setLocked: (on) => { dock.locked = on; },
+    dock: (kind) => { void termDock.toggleKind(kind); },
   });
   const captionButtons = new CaptionButtons(q(root, '.cv-titlebar'), () => stored(CUSTOM_TITLE_BAR_KEY) === '1');
   dock.locked = dock.locked;
@@ -341,6 +344,8 @@ export function startApp(): void {
   const termDock = new TerminalDock();
   root.insertBefore(termDock.root, q(root, '.cv-status'));
   termDock.onFail = (err) => toast(message(err), 'error');
+  termDock.onTab = () => titleTools.syncDock(termDock.isOpen(), termDock.activeKind());
+  termDock.onTab();
   termDock.context = () => {
     const p = engine.current;
     if (!p) return 'formpath window: no document is open';
@@ -982,7 +987,30 @@ export function startApp(): void {
     if (!found) toast('The trace found no shapes: try another preset.', 'error');
   }
 
-  const home = new HomeScreen(root, { engine, autoShow: () => loadPrefs().autoShowHome, afterClose: () => loadPrefs().homeOnLastClose, recent: () => recent, openRecent: (name) => { void openLibrary(name); }, run: (c) => { commands.run(c); }, preset: (id) => newDoc.createPreset(id) });
+  const home = new HomeScreen(root, { engine, autoShow: () => loadPrefs().autoShowHome, afterClose: () => loadPrefs().homeOnLastClose, recent: () => recent, openRecent: (name) => { void openLibrary(name); }, run: (c) => { commands.run(c); }, preset: (id) => newDoc.createPreset(id), openDemo: (id) => { void openDemo(id); } });
+  let demoOpening: string | null = null;
+  const openDemo = async (id: string): Promise<boolean> => {
+    if (!isDemo(id)) return false;
+    if (demoOpening) { toast('A demo is still opening.'); return false; }
+    demoOpening = id;
+    home.holdForDemo(id);
+    toast('Opening the demo...');
+    const made = new Set<string>(), was = engine.current?.id ?? null;
+    try {
+      await buildDemo(id, engine, (name, a) => agents.run(name, a, 'plugin'), made);
+      toast('The demo is open. Save it to keep your changes.');
+      return true;
+    } catch (err) {
+      console.error('demo', id, message(err));
+      for (const pr of [...engine.projects]) if (made.has(pr.id)) engine.closeProject(pr.id);
+      if (was && engine.current?.id !== was && engine.projects.some((pr) => pr.id === was)) engine.switchTo(was);
+      toast('The demo could not open.', 'error');
+      return false;
+    } finally {
+      demoOpening = null;
+      home.holdForDemo(null);
+    }
+  };
   const brand = q(root, '.cv-brand');
   brand.setAttribute('role', 'button'); brand.setAttribute('tabindex', '0'); brand.setAttribute('aria-label', 'Home'); brand.title = 'Home';
   brand.addEventListener('click', () => home.show());
@@ -1003,7 +1031,7 @@ export function startApp(): void {
   const agents = new AgentBridge(engine, {
     userLibraries: () => ({ swatches: userSwatchLibraries(), brushes: userBrushLibraries(), symbols: userSymbolLibraries() }),
     ask: (title, text) => agentConfirm.ask(title, text),
-    note: (t) => status.setEngine(t),
+    note: (t) => { if (!demoOpening) status.setEngine(t); },
     allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpath:agents', { detail: true })); },
     openFile: (f, dxf, password) => openFiles([f], dxf ?? { merge: false }, password),
     placeFile: (f, at, w, dxf, placing) => placeFile(f, at, w, dxf ?? { merge: true }, placing ?? {}),
@@ -1880,6 +1908,8 @@ export function startApp(): void {
     { id: 'br-lib-save', label: 'Save Brushes...', enabled: has, run: () => void saveBrushLibrary() },
     { id: 'reset-panels', label: 'Reset Essentials', run: () => { dock.reset(); PanelGroup.resetStates(); PanelGroup.resetHomes(TAB_HOMES); store('formpath.propsCol', 'shown'); syncPropsCol(); } },
     { id: 'help', label: 'formpath Help', keys: ['F1'], run: () => help.show() },
+    ...DEMO_CARDS.map((d) => ({ id: `demo-${d.id}`, label: d.title, group: 'Help', enabled: () => demoOpening === null, run: () => { void openDemo(d.id); } })),
+    { id: 'demo-open', label: 'Open a Demo', group: 'Help', params: { id: { type: 'string' as const, enum: DEMO_CARDS.map((d) => d.id), description: 'The demo: poster, icons or pattern.', required: true } }, enabled: () => demoOpening === null, run: (a?: Record<string, unknown>) => { void openDemo(String(a?.id ?? '')); } },
     { id: 'copy-error-log', label: 'Copy Error Log', run: () => { void navigator.clipboard?.writeText(errorLog.text()); toast('Copied the error log.'); } },
     { id: 'about', label: 'About formpath', run: () => about.show(caps) },
 
@@ -1966,7 +1996,7 @@ export function startApp(): void {
     { label: 'View', items: () => ['outline', '-', 'zoom-in', 'zoom-out', 'fit', 'fit-all', 'actual', 'zoom-selection', 'reset-rotation', '-', 'toggle-edges', 'toggle-bbox', 'toggle-transparency', 'overprint-preview', { label: 'Proof Setup', items: ['proof-setup', '-', 'proof-working-cmyk', ...profileList().filter((p) => p.space === 'CMYK').slice(0, 12).map((_, i) => `proof-profile-${i}`), 'proof-monitor-rgb'] }, 'proof-colors', 'toggle-artboards', 'toggle-gradient-annotator', 'toggle-corner-widget', 'toggle-threads', '-', 'toggle-help-bar', 'custom-title-bar', 'menus-in-window', '-', 'toggle-rulers', { label: 'Guides', items: ['toggle-guides', 'lock-guides', 'make-guides', 'release-guides', 'clear-guides'] }, 'toggle-smart', '-', { label: 'Perspective Grid', items: ['persp-show', 'persp-lock', 'persp-snap', '-', 'persp-define', { label: 'One Point Perspective', items: ['persp-1p'] }, { label: 'Two Point Perspective', items: ['persp-2p'] }, { label: 'Three Point Perspective', items: ['persp-3p'] }, 'persp-presets', '-', 'persp-save-preset', '-', 'persp-plane-left', 'persp-plane-floor', 'persp-plane-right', 'persp-plane-none'] }, '-', 'toggle-grid', 'snap-grid', 'snap-point', 'snap-pixel', '-', { label: 'Screen Mode', items: ['screen-standard', 'screen-menu', 'screen-full'] }, 'toggle-panels'] },
     { label: 'Plugins', items: () => { const ids = pluginHost.commandIds(); return ['manage-plugins', ...(ids.length ? ['-', ...ids] : [])]; } },
     { label: 'Window', items: () => ['assistant', 'claude-chat', 'claude-code', 'terminal-toggle', 'terminal-new', '-', 'toggle-task-bar', 'toggle-generative', '-', 'document-info', 'separations-preview', 'ink-manager', 'swatch-info', '-', ...Object.keys(TAB_HOMES).filter((t) => prefs.showGenerative || !['shape-fill', 'generate-patterns', 'retype', 'text-to-vector'].includes(t)).map((t) => `panel-${t}`), '-', { label: 'Brush Libraries', items: brushLibItems() }, { label: 'Graphic Style Libraries', items: STYLE_LIBRARIES.map((l) => `gs-lib-${l.id}`) }, { label: 'Swatch Libraries', items: swatchLibItems() }, { label: 'Symbol Libraries', items: symbolLibItems() }, '-', 'panel-properties-col', 'reset-panels'] },
-    { label: 'Help', items: ['help', '-', 'shortcuts', 'copy-error-log', 'about'] },
+    { label: 'Help', items: ['help', { label: 'Demos', items: DEMO_CARDS.map((d) => `demo-${d.id}`) }, '-', 'shortcuts', 'copy-error-log', 'about'] },
   ];
   const menubar = new MenuBar(q(root, '.cv-menubar'), commands, menus);
   const catalogue = new Catalogue({ engine, commands, menus: () => menus });

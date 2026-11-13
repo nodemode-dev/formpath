@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 0.53.3" src="https://img.shields.io/badge/version-0.53.3-eef0f4?style=flat-square">
+  <img alt="version 0.54.1" src="https://img.shields.io/badge/version-0.54.1-eef0f4?style=flat-square">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript%20%2B%20Vite-vanilla-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python%20%2B%20FastAPI-engine-009688?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
@@ -110,6 +110,8 @@ The window, the terminal and the MCP server run the same command catalogue; the 
 ./formpath mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
 ```
 
+In the window, Window > Terminal (or the Terminal button in the title bar) opens a terminal dock with shell tabs, Claude Code tabs already connected to formpath's tools, and a Chat tab; the engine owns every process, so tabs survive a reload.
+
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. `./formpath agents install` sets them up for your user account. See [`AGENTS.md`](AGENTS.md).
 
 ## Under the hood
@@ -118,6 +120,7 @@ The window, the terminal and the MCP server run the same command catalogue; the 
 - **Service:** a FastAPI engine for projects, fonts, file import and export, and the MCP endpoint at `/mcp`.
 - **Desktop:** a Tauri 2 shell that starts the engine as a sidecar.
 - **UI:** keyed DOM patching and a pre-paint theme boot, so changes do not flash or re-render.
+- **Size:** about 60,100 lines of TypeScript, 2,200 of CSS, 6,000 of Python and 400 of Rust (product code, tests excluded; `./formpath counts --check` verifies it).
 - **Tested:** Vitest suites for `.fpth`, SVG, PDF, Pathfinder and type outlines, plus pytest suites for the engine guard, consent, MCP, versions and project files.
 
 ## Download
@@ -129,6 +132,15 @@ The window, the terminal and the MCP server run the same command catalogue; the 
 | Linux | [Download FormPath for Linux](https://formai.studio/get/formpath/linux) | [FormPath releases on FormCompiler](https://github.com/nodemode-dev/formcompiler/releases?q=formpath-v&expanded=true) |
 
 All FormPath builds are compiled and released from [FormCompiler](https://github.com/nodemode-dev/formcompiler); this repo holds the source.
+
+## Demo
+
+[`demo/index.html`](demo/index.html) is an offline demo that opens from `file://` or any static server and runs the real FormPath window: Poster and type, a two-artboard poster with gradients, a gradient mesh, a blend, an art brush, type on a path and graphic styles. See [`demo/README.md`](demo/README.md).
+
+- [`demos/icons/index.html`](demos/icons/index.html): Icons and a logo, twelve icons built with Pathfinder, compound paths and Outline Stroke, and a radial Repeat logo. See [`demos/icons/README.md`](demos/icons/README.md).
+- [`demos/pattern/index.html`](demos/pattern/index.html): Patterns and colour, with Make Pattern, an envelope, a 3D badge and Recolor Art colourways. See [`demos/pattern/README.md`](demos/pattern/README.md).
+
+The same three demos open inside the app from Home, from Help > Demos, or with the `demo-poster`, `demo-icons` and `demo-pattern` commands, each as a new unsaved document.
 
 ## Run it from source
 

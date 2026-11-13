@@ -129,6 +129,8 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - name: The harness skill's tool reference matches the engine
         run: python3 setup/agents.py sync --check
+      - name: The Claude Desktop extension manifest
+        run: python3 setup/mcpb.py check
 
   scripts:
     runs-on: ubuntu-latest
@@ -139,8 +141,11 @@ jobs:
         run: |
           for f in formpath formpath_oc_install backend/oc_install backend/boot_backend frontend/oc_install frontend/boot_frontend setup/*; do
             case "$f" in *.bat|*.py) continue ;; esac
+            [ -d "$f" ] && continue
             bash -n "$f"
           done
+      - name: No sparkle icon
+        run: python3 -B setup/icon_rules.py
       - name: No em dash in tracked markdown, no emoji in tracked text
         run: |
           python3 - <<'PY'

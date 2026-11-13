@@ -1,5 +1,8 @@
 import type { Engine } from '../engine';
-import { el, setClass, setHidden, setText } from './dom';
+import { t } from '../i18n';
+import { brandMark } from './brand';
+import { el, setClass, setDisabled, setHidden, setText } from './dom';
+import { DEMO_CARDS } from './home-demos';
 import { HomeFiles } from './home-files';
 import { icon } from './icons';
 
@@ -11,6 +14,7 @@ export interface HomeDeps {
   openRecent: (name: string) => void;
   run: (command: string) => void;
   preset: (id: string) => void;
+  openDemo: (id: string) => void;
 }
 
 type Page = 'start' | 'recent' | 'projects';
@@ -33,6 +37,7 @@ export class HomeScreen {
   private forced = false;
   private lastCount = 0;
   private hadDocument = false;
+  private building: string | null = null;
   private back!: HTMLElement;
 
   constructor(host: HTMLElement, private readonly d: HomeDeps) {
@@ -41,15 +46,22 @@ export class HomeScreen {
     const cmdItem = (cmd: string, ic: string, label: string): string => `<button class="cv-home-nav-item" type="button" data-cmd="${cmd}">${icon(ic, 16)}<span>${label}</span></button>`;
     const key = (k: string): string => `<kbd class="cv-key">${mod}</kbd><kbd class="cv-key">${k}</kbd>`;
     const formats = FORMATS.map((f) => `<span class="cv-home-format">${f}</span>`).join('');
+    const demos = DEMO_CARDS.map((c) => `<button class="cv-home-demo" type="button" data-demo-open="${c.id}" aria-busy="false"><span class="cv-home-demo-pic">${c.art}</span><span class="cv-home-demo-title">${c.title}</span><span>${c.blurb}</span></button>`).join('');
     const sizes = PRESETS.map((p) => `<button class="cv-home-size" type="button" data-preset="${p.id}"><span class="cv-home-size-box"><span style="aspect-ratio: ${p.w} / ${p.h}"></span></span><span class="cv-home-size-name">${p.name}</span><span class="cv-home-size-meta">${p.w} × ${p.h} ${p.unit}</span></button>`).join('');
     this.root.innerHTML = `<nav class="cv-home-nav" aria-label="Home">
-      <div class="cv-home-brand">formpath <span>by nodemode.ai</span></div>
+      <div class="cv-home-brand">${brandMark(26)}formpath <span translate="no">by nodemode.ai</span></div>
       ${navItem('start', 'image', 'Start')}${navItem('recent', 'history', 'Recent')}${navItem('projects', 'folder', 'Projects')}
       <div class="cv-home-nav-sep"></div>
       <div class="cv-home-nav-title">Create</div>
       ${cmdItem('new', 'newFile', 'New document')}${cmdItem('open', 'folderOpen', 'Open')}
+      <div class="cv-home-nav-sep"></div>
+      <div class="cv-home-nav-title">Agents</div>
+      ${cmdItem('claude-code', 'agent', 'Claude Code')}${cmdItem('claude-chat', 'agentChat', 'Chat with Claude')}${cmdItem('terminal-toggle', 'terminal', 'Terminal')}
       <div class="cv-home-nav-foot"><button class="cv-home-nav-item cv-home-back" type="button" data-back hidden>${icon('chevronLeft', 16)}<span>Back to Canvas</span></button>${cmdItem('settings', 'settings', 'Preferences')}${cmdItem('help', 'info', 'Help')}</div>
     </nav>
+    <div class="cv-home-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the side panel"></div>
+    <button class="cv-home-nav-hide" type="button" title="Hide the side panel" aria-label="Hide the side panel">${icon('chevronLeft', 14)}</button>
+    <button class="cv-home-nav-show" type="button" title="Show the side panel" aria-label="Show the side panel">${icon('chevronRight', 14)}</button>
     <div class="cv-home-main">
       <div class="cv-home-narrow">${navItem('start', 'image', 'Start')}${navItem('recent', 'history', 'Recent')}${navItem('projects', 'folder', 'Projects')}</div>
       <div class="cv-home-page" data-page="start">
@@ -64,6 +76,7 @@ export class HomeScreen {
             <button class="cv-home-action" type="button" data-cmd="open">${icon('folderOpen', 16)}<span class="cv-home-label">Open...</span>${key('O')}</button>
           </div>
         </div>
+        <section class="cv-home-section" data-home-section="demos"><div class="cv-home-section-head"><h2 class="cv-home-section-title">Demos</h2><span class="cv-home-note">Each opens as a new, unsaved document. Nothing of yours is changed.</span></div><div class="cv-home-demos">${demos}</div></section>
         <section class="cv-home-section"><div class="cv-home-section-head"><h2 class="cv-home-section-title">Recent</h2><button class="cv-btn cv-btn-ghost" type="button" data-v="recent">See all</button></div><div class="cv-home-slot" data-slot="start"></div></section>
         <section class="cv-home-section"><div class="cv-home-section-head"><h2 class="cv-home-section-title">New document</h2><button class="cv-btn cv-btn-ghost" type="button" data-cmd="new">More sizes...</button></div><div class="cv-home-sizes">${sizes}</div></section>
       </div>
@@ -82,21 +95,64 @@ export class HomeScreen {
       if (t.closest('[data-back]')) { this.forced = false; this.sync(); return; }
       const v = (t.closest('[data-v]') as HTMLElement | null)?.dataset.v as Page | undefined;
       if (v) { this.show(v); return; }
+      const demo = (t.closest('[data-demo-open]') as HTMLElement | null)?.dataset.demoOpen;
+      if (demo) { this.d.openDemo(demo); return; }
       const preset = (t.closest('[data-preset]') as HTMLElement | null)?.dataset.preset;
       if (preset) this.d.preset(preset);
     });
+    this.sidePanel();
     host.appendChild(this.root);
     d.engine.on('projects', () => this.sync());
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.forced && d.engine.projects.length) { this.forced = false; this.sync(); } });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.forced && this.building === null && d.engine.projects.length) { this.forced = false; this.sync(); } });
     this.paint();
     this.sync();
+  }
+
+  private sidePanel(): void {
+    const root = this.root;
+    const bar = root.querySelector<HTMLElement>('.cv-home-resizer');
+    if (!bar) return;
+    const save = (): void => {
+      try {
+        localStorage.setItem('formpath.homeNav', root.style.getPropertyValue('--cv-home-nav-w'));
+        localStorage.setItem('formpath.homeNavHidden', root.classList.contains('is-nav-hidden') ? '1' : '0');
+      } catch { return; }
+    };
+    const hide = (on: boolean): void => { setClass(root, 'is-nav-hidden', on); save(); };
+    try {
+      const w = localStorage.getItem('formpath.homeNav');
+      if (w) root.style.setProperty('--cv-home-nav-w', w.trim());
+      if (localStorage.getItem('formpath.homeNavHidden') === '1') root.classList.add('is-nav-hidden');
+    } catch { void 0; }
+    root.querySelector('.cv-home-nav-hide')?.addEventListener('click', () => hide(true));
+    root.querySelector('.cv-home-nav-show')?.addEventListener('click', () => hide(false));
+    bar.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const x0 = e.clientX;
+      const start = root.querySelector('.cv-home-nav')?.getBoundingClientRect().width || 232;
+      bar.classList.add('is-dragging');
+      const mv = (ev: PointerEvent): void => {
+        const raw = start + ev.clientX - x0;
+        const collapse = raw < 120;
+        if (root.classList.contains('is-nav-hidden') !== collapse) setClass(root, 'is-nav-hidden', collapse);
+        if (!collapse) root.style.setProperty('--cv-home-nav-w', `${Math.round(Math.max(180, Math.min(420, raw)))}px`);
+      };
+      const up = (): void => {
+        bar.classList.remove('is-dragging');
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        save();
+      };
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
   }
 
   private paint(): void {
     for (const n of Array.from(this.root.querySelectorAll<HTMLElement>('.cv-home-page'))) setHidden(n, n.dataset.page !== this.page);
     for (const n of Array.from(this.root.querySelectorAll<HTMLElement>('.cv-home-nav-item[data-v]'))) setClass(n, 'is-active', n.dataset.v === this.page);
     const h = new Date().getHours();
-    setText(this.root.querySelector('[data-page="start"] .cv-home-title'), h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
+    setText(this.root.querySelector('[data-page="start"] .cv-home-title'), t(h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'));
   }
 
   private fill(): void {
@@ -105,6 +161,20 @@ export class HomeScreen {
   }
 
   get isShown(): boolean { return !this.root.hidden; }
+
+  holdForDemo(id: string | null): void {
+    this.building = id;
+    for (const n of Array.from(this.root.querySelectorAll<HTMLElement>('[data-demo-open]'))) n.setAttribute('aria-busy', String(n.dataset.demoOpen === id));
+    if (id) {
+      if (this.page !== 'start') { this.page = 'start'; this.paint(); if (!this.root.hidden) this.fill(); }
+      this.forced = true;
+      this.sync();
+      this.root.querySelector('[data-home-section="demos"]')?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    this.forced = false;
+    this.sync();
+  }
 
   show(page?: Page): void {
     if (page && page !== this.page) { this.page = page; this.paint(); if (!this.root.hidden) this.fill(); }
@@ -117,9 +187,10 @@ export class HomeScreen {
     if (n > this.lastCount) this.forced = false;
     this.lastCount = n;
     if (n > 0) this.hadDocument = true;
-    const on = this.forced || (n === 0 && (this.hadDocument ? this.d.afterClose() : this.d.autoShow()));
+    const on = this.forced || this.building !== null || (n === 0 && (this.hadDocument ? this.d.afterClose() : this.d.autoShow()));
     if (on && this.root.hidden) { this.paint(); this.fill(); }
     setHidden(this.root, !on);
     setHidden(this.back, n === 0);
+    setDisabled(this.back as HTMLButtonElement, this.building !== null);
   }
 }

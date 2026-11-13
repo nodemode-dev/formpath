@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { api } from '../io/api';
 import { el, patchList, q, setClass, setHidden, setText } from './dom';
 import { icon } from './icons';
@@ -109,13 +110,13 @@ export class HomeFiles {
     const text = !this.loaded ? ' ' : this.all.length === 0
       ? (this.o.tab === 'recent' ? 'Documents you open or save appear here.' : 'No projects in the library yet. Save a document to add it.')
       : shown.length === 0 ? 'No files match the filter.' : '';
-    setText(this.empty, text);
+    setText(this.empty, t(text));
     setHidden(this.empty, text === '');
   }
 
   private update(n: HTMLElement, i: Item): void {
     setText(q(n, '.cv-hf-name'), i.name);
     setText(q(n, '.cv-hf-size'), sizeText(i.size));
-    setText(q(n, '.cv-hf-when'), whenText(i.when));
+    setText(q(n, '.cv-hf-when'), t(whenText(i.when)));
   }
 }

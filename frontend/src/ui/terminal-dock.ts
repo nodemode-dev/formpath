@@ -20,6 +20,8 @@ interface Tab {
   kind: string;
 }
 
+export type DockKind = 'shell' | 'claude' | 'chat';
+
 function token(name: string, fallback: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
@@ -59,6 +61,7 @@ export class TerminalDock {
 </form>
 </section>`);
   onChange: () => void = () => undefined;
+  onTab: () => void = () => undefined;
   onFail: (err: unknown) => void = () => undefined;
   context: () => string = () => '';
   note: () => string = () => '';
@@ -105,6 +108,34 @@ export class TerminalDock {
     this.onChange();
     window.dispatchEvent(new Event('resize'));
     if (on) void this.ensure();
+    this.onTab();
+  }
+
+  activeKind(): DockKind | null {
+    if (this.active === 'chat') return 'chat';
+    const kind = this.active ? this.tabs.get(this.active)?.kind : undefined;
+    return kind === 'shell' || kind === 'claude' ? kind : null;
+  }
+
+  isShowing(kind: DockKind): boolean { return this.isOpen() && this.activeKind() === kind; }
+
+  async show(kind: DockKind): Promise<void> {
+    if (kind === 'chat') { await this.showChat(); return; }
+    this.reveal();
+    if (this.pending) await this.pending;
+    if (!this.started) {
+      this.started = true;
+      for (const t of await this.list()) if (!this.tabs.has(t.id)) this.mount(t, false);
+    }
+    const own = [...this.tabs.values()].find((x) => x.kind === kind);
+    if (own) this.select(own.id);
+    else if (kind === 'claude') await this.claude();
+    else await this.open();
+  }
+
+  async toggleKind(kind: DockKind): Promise<void> {
+    if (this.isShowing(kind)) this.toggle(false);
+    else await this.show(kind);
   }
 
   async newTerminal(): Promise<void> {
@@ -156,6 +187,7 @@ export class TerminalDock {
     keep(true, this.height());
     this.onChange();
     window.dispatchEvent(new Event('resize'));
+    this.onTab();
   }
 
   private height(): number {
@@ -310,6 +342,7 @@ export class TerminalDock {
     setDisabled(this.restartBtn, id === 'chat');
     this.fitActive();
     this.focus();
+    this.onTab();
   }
 
   private closeChat(): void {
@@ -320,7 +353,7 @@ export class TerminalDock {
       this.active = null;
       const next = [...this.tabs.keys()].pop();
       if (next) this.select(next);
-      else setHidden(this.empty, false);
+      else { setHidden(this.empty, false); this.onTab(); }
     }
     this.syncAsk();
   }
@@ -348,7 +381,7 @@ export class TerminalDock {
       this.active = null;
       const next = [...this.tabs.keys()].pop() ?? (this.chatTab ? 'chat' : undefined);
       if (next) this.select(next);
-      else setDisabled(this.restartBtn, true);
+      else { setDisabled(this.restartBtn, true); this.onTab(); }
     }
     setHidden(this.empty, this.tabs.size > 0 || !!this.chatTab);
   }

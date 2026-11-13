@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { q, setClass, setHidden, setTitle } from './dom';
 import { icon } from './icons';
 
@@ -71,7 +72,7 @@ export class CaptionButtons {
     this.box.dataset.shown = '1';
     const b = q<HTMLElement>(this.box, '[data-cap="max"]');
     b.innerHTML = icon(now ? 'capRestore' : 'capMax', 16);
-    setTitle(b, now ? 'Restore' : 'Maximize');
-    b.setAttribute('aria-label', now ? 'Restore' : 'Maximize');
+    setTitle(b, t(now ? 'Restore' : 'Maximize'));
+    b.setAttribute('aria-label', t(now ? 'Restore' : 'Maximize'));
   }
 }

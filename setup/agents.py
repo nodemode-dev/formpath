@@ -2,7 +2,8 @@
 """./formpath agents: drawing in formpath from Claude Code, Codex and Cursor.
 
   sync [--check]            generate the harness skill's tool reference from the engine's MCP catalogue and mirror the
-                            skill from .claude/skills to .agents/skills (Codex, Cursor); --check: exit 1 if drifted
+                            harness and skillset skills from .claude/skills to .agents/skills (Codex, Cursor);
+                            --check: exit 1 if drifted
   install [--dry-run] [claude|codex|cursor ...]
                             set the three up for this user account (all by default): the MCP server (./formpath mcp at
                             this folder's absolute path) and the harness skill; files backed up before changing;
@@ -21,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 NAME = "formpath-harness"
 SKILL = ROOT / ".claude" / "skills" / NAME
-MIRROR = ROOT / ".agents" / "skills" / NAME
+MIRRORED = (NAME, "formpath-skillset")
 LAUNCH = str(ROOT / ("formpath.bat" if os.name == "nt" else "formpath"))
 GROUPS = [
     ("Look", {"get_document", "get_image", "get_svg", "get_object"}),
@@ -119,11 +120,13 @@ def sync(check: bool) -> int:
         drift.append(str(cref.relative_to(ROOT)))
         if not check:
             cref.write_text(cwant, encoding="utf-8")
-    if not MIRROR.exists() or _files(MIRROR) != _files(SKILL):
-        drift.append(str(MIRROR.relative_to(ROOT)))
-        if not check:
-            shutil.rmtree(MIRROR, ignore_errors=True)
-            shutil.copytree(SKILL, MIRROR)
+    for name in MIRRORED:
+        src, dst = ROOT / ".claude" / "skills" / name, ROOT / ".agents" / "skills" / name
+        if not dst.exists() or _files(dst) != _files(src):
+            drift.append(str(dst.relative_to(ROOT)))
+            if not check:
+                shutil.rmtree(dst, ignore_errors=True)
+                shutil.copytree(src, dst)
     if check:
         print("agents: in step" if not drift else "agents: drifted: " + ", ".join(drift) + " (run ./formpath agents sync)")
         return 1 if drift else 0
