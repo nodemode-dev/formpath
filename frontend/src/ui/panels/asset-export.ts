@@ -67,7 +67,7 @@ export class AssetExportPanel {
   }
 
   private read(): ExportAssetItem[] {
-    return Array.from(this.rows.children).map((r) => ({ scale: q<HTMLInputElement>(r, 'input[aria-label="Scale"]').value, format: q<HTMLSelectElement>(r, 'select[aria-label="Format"]').value, suffix: q<HTMLInputElement>(r, 'input[aria-label="Suffix"]').value }));
+    return Array.from(this.rows.children).map((r) => ({ scale: q<HTMLInputElement>(r, 'input[list]').value, format: q<HTMLSelectElement>(r, 'select').value, suffix: q<HTMLInputElement>(r, 'input:not([list])').value }));
   }
 
   private commit(): void { if (this.picked.size) this.engine.setExportAssetItems([...this.picked], this.read()); }
