@@ -1,3 +1,4 @@
+import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
@@ -36,6 +37,22 @@ const demoPage = (mode: string): Plugin => ({
   },
 });
 
+const FONT = /\.woff2?$/;
+const sharedFonts = (mode: string): Plugin => ({
+  name: 'formpath-demo-shared-fonts',
+  enforce: 'post',
+  generateBundle(_options, bundle) {
+    if (mode === 'poster') return;
+    for (const name of Object.keys(bundle)) if (FONT.test(name)) delete bundle[name];
+  },
+});
+const fontUrl = (mode: string, out: string) => (filename: string, { hostType }: { hostType: 'js' | 'css' | 'html' }) => {
+  if (mode === 'poster' || !FONT.test(filename)) return undefined;
+  const target = posix.join(posix.relative(out, '../demo'), filename);
+  if (hostType === 'js') return { runtime: `new URL(${JSON.stringify(target)}, document.baseURI).href` };
+  return posix.relative(posix.join(out, hostType === 'css' ? 'assets' : '.'), posix.join('../demo', filename));
+};
+
 const symbol = (cp: number): boolean => (cp >= 0x2600 && cp <= 0x27bf) || (cp >= 0x1f000 && cp <= 0x1faff);
 const unit = (n: number): string => `\\u${n.toString(16).toUpperCase().padStart(4, '0')}`;
 const escapeSymbols = (): Plugin => ({
@@ -73,7 +90,8 @@ export default defineConfig(({ mode }) => {
     base: './',
     publicDir: false,
     worker: { format: 'iife' },
-    plugins: [inlineWorkers(), demoPage(id), classicScript(), escapeSymbols()],
+    plugins: [inlineWorkers(), demoPage(id), classicScript(), escapeSymbols(), sharedFonts(id)],
+    experimental: { renderBuiltUrl: fontUrl(id, page.out) },
     server: { host: false, port: DEMO_PORT, strictPort: true, fs: { allow: ['..'] } },
     preview: { host: false, port: DEMO_PORT + 1, strictPort: true },
     build: {

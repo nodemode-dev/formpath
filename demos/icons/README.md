@@ -1,6 +1,6 @@
 # formpath demo: Icons and a logo
 
-The second of formpath's three offline demo pages (the others are `demo/` and `demos/pattern/`). It runs in a browser with no engine, no desktop shell and no network: double-click `index.html`, or serve the repository with a static server and open `/demos/icons/`.
+The second of formpath's three offline demo pages (the others are `demo/` and `demos/pattern/`). It runs in a browser with no engine, no desktop shell and no network: double-click `index.html`, or serve the repository with a static server and open `/demos/icons/`. Its fonts are the ones stored once in `demo/assets`, loaded by relative path, so keep `demo/` beside `demos/`.
 
 ## What it shows
 

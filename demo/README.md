@@ -7,7 +7,7 @@ An offline demo of the formpath vector editor that runs in a browser with no eng
 - Double-click `demo/index.html` (it works from `file://`), or
 - serve the repository with any static server, for example `python3 -m http.server 8000`, and open `/demo/`.
 
-Every script, style and font is local to the folder. There are no pictures: the artwork is drawn when the page opens.
+Every script, style and font is local to the repository. The font files are stored once, in `demo/assets`, and the two pages under `demos/` load them from there with relative paths, so keep the three folders together. There are no pictures: the artwork is drawn when the page opens.
 
 ## What it shows
 
@@ -31,7 +31,7 @@ npm ci
 npm run demo
 ```
 
-`npm run demo` runs `vite build --config vite.demo.config.ts` three times, with `--mode poster`, `icons` and `pattern`, writing `demo/`, `demos/icons/` and `demos/pattern/`. The three pages share `demo/src`; the mode only chooses the demo and the folder. `npx tsc --noEmit -p ../demo` type-checks the page code.
+`npm run demo` runs `vite build --config vite.demo.config.ts` three times, with `--mode poster`, `icons` and `pattern`, writing `demo/`, `demos/icons/` and `demos/pattern/`. The three pages share `demo/src`; the mode only chooses the demo and the folder. Only the poster build writes font files; `formpath-demo-shared-fonts` and `renderBuiltUrl` in the config point the other two builds at `demo/assets`, so build `poster` first (`npm run demo` does). `npx tsc --noEmit -p ../demo` type-checks the page code.
 
 ## Licences
 
