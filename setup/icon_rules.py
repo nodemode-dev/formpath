@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCANNED = ("frontend/src", "frontend/public", "frontend/index.html", "backend/app", "src-tauri/src")
-SUFFIXES = (".ts", ".py", ".rs", ".css", ".html", ".svg")
+SCANNED = ("frontend/src", "frontend/public", "frontend/index.html", "backend/app", "src-tauri/src", "demo", "demos")
+SUFFIXES = (".ts", ".py", ".rs", ".css", ".html", ".svg", ".json", ".js")
 INTERFACE = ("frontend/src/ui/", "frontend/src/app.ts", "frontend/src/help/", "frontend/index.html", "frontend/public/")
 
 SIGNATURES = re.compile("\\bsparkles?\\s*:\\s*[`'\"]?\\s*<svg|\\bsparkles?\\s*:\\s*\\w+\\(|icon\\(\\s*['\"`]sparkles?['\"`]|"
@@ -126,9 +126,9 @@ def problems(root: Path = ROOT) -> list[str]:
     files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", *SCANNED], cwd=root,
                            capture_output=True, text=True, check=True).stdout.split("\n")
     for rel in sorted(set(files)):
-        if not rel.endswith(SUFFIXES) or "/i18n/" in rel or rel.endswith(".test.ts") or not (root / rel).is_file():
+        if not rel.endswith(SUFFIXES) or rel.endswith(".test.ts") or not (root / rel).is_file():
             continue
-        face = rel.startswith(INTERFACE)
+        face = rel.startswith(INTERFACE) and "/i18n/" not in rel
         for n, line in enumerate((root / rel).read_text(encoding="utf-8", errors="replace").splitlines(), 1):
             if SIGNATURES.search(line) or (face and (NAMED.search(line) or starry(line))):
                 out.append(f"{rel}:{n}: the three-star sparkle icon is banned app-wide (the owner's rule)")
