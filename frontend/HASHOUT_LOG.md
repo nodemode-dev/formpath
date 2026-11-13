@@ -4596,3 +4596,38 @@ The Export button refused any invalid Range text and focused the field, also whe
 - logged: v0.53.1 · 2026-11-10
 
 `evalNumber` stripped any letter suffix and used the number as is (10 mm in a pt field applied 10 pt), and `1,5` threw and reverted silently. It now takes the field's `.cv-unit` text: a suffix equal to it passes, a length unit converts through `UNIT_PT` to the field's length unit, anything else throws so the field reverts; a single comma in a number without a dot is the decimal point (so `1,000` reads as 1). The dash and gap fields committed through `numField` (evaluated and clamped) but `applyDashes` re-read the raw text with `parseFloat`, so `2*6` gave 2 and `-5` a negative dash; the field now passes its index and the committed value, and only the other fields are read from their (already formatted) text. Checked with `npx tsc --noEmit` and a node copy of `evalNumber`; not run in the window.
+
+### src/ui/icons.ts, src/ui/icons-vector.ts, src/ui/panels/color.ts, src/ui/panels/recolor.ts · the sparkle icon is gone
+- refers-to: icons.ts :: (removed) sparkle, magicWand; swatchAdd, dice, target; icons-vector.ts :: vMagicWand, effects
+- kind: hashed-out
+- logged: v0.54.0 · 2026-11-13
+
+The family bans the three-star sparkle. Removed: the `sparkle` key (`M12 1.5l1.5 4.5 4.5 1.5...`) and the unused `magicWand` (`M7.5 5.6L10 7 8.6 4.5...`). The title bar Assistant button draws `agent`. Add Used Colors draws the new `swatchAdd`, Recolor's random saturation and brightness button the new `dice`, and each Recolor row's base-colour button the new `target`; all three are original line drawings. `vMagicWand` was a wand with plus-shaped glints and is redrawn from formvis `tWand` (a wand with radiating dashes). `effects` was two four-point stars and is redrawn from formdeck `effects` (a square with a drop shadow). The guard is `setup/icon_rules.py` (backend log). `wandSelect` (a wand with four dots) is unused and passes the guard; it was left in place.
+
+### src/ui/home.ts, src/styles/shell.css · Home's side panel resizes and collapses, with the mark and an Agents group
+- refers-to: home.ts :: HomeScreen.sidePanel, the brand block, the Agents group, holdForDemo, building; shell.css :: --cv-home-nav-w, .cv-home*
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+`sidePanel` is ported from formdeck 0.26.1. The width lives in `--cv-home-nav-w`; the drag range is 180 to 420 px and a drag under 120 px collapses the panel; two 14 by 56 px chevron tabs hide and show it. Width and hidden state are stored as `formpath.homeNav` and `formpath.homeNavHidden` and applied in the constructor before Home is mounted, so the first paint has the saved size. In the narrow window the resizer and both tabs hide. The brand block is `brandMark(26)` then formpath by nodemode.ai. The Agents group runs the existing `claude-code`, `claude-chat` and `terminal-toggle` commands with the `agent`, `agentChat` and `terminal` icons. `holdForDemo` keeps Home up while a demo builds and `building` guards Escape and Back for that time. Known gap: older Home strings (Good morning, Projects, See all) were already missing from the language tables and still are. Checked with tsc and headless Chrome (layout, resize kept over a reload, hide tab); not run in the desktop shell.
+
+### src/demos/, src/ui/home-demos.ts, src/app.ts · three demos built through the app's own tools
+- refers-to: demos/index.ts :: buildDemo; demos/kit.ts, poster.ts, icons.ts, pattern.ts; ui/home-demos.ts; app.ts :: openDemo, demoOpening; automation/command-meta.ts :: demo-poster, demo-icons, demo-pattern, demo-open
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+No demo file ships. Each demo is a TypeScript builder that drives the app's own MCP tools through `AgentBridge.run`, so a demo is also a running check of those tools. `buildDemo` pins every step to the demo's own document and records the projects it made; a failed build closes exactly those and nothing else. Each demo opens as a new unsaved document, every name and figure is invented, and the type is the bundled Inter. Poster and type: two artboards, gradients, a gradient-mesh moon, a blend, an art brush, type on a path, area type and graphic styles. Icons and a logo: 12 icons built with Pathfinder, compound paths, Outline Stroke and Shape Crafter in its explicit merge mode (`delete: false`), plus a radial Repeat logo. Patterns and colour: Make Pattern, a blend, a flag envelope, a 3D extruded badge, a Color Guide group and Recolor Art colourways. `openDemo` allows one demo at a time and shows toasts; the bridge's status `note` is muted while `demoOpening` is set so the agent status line stays quiet. Home > Start has a Demos section with 16:9 cards drawn as inline SVG in theme tokens, and Help has a Demos submenu. `setup/i18n.py` skips `frontend/src/demos` because those strings are document content. Checked in headless Chrome: all three from their cards, under a second each, no console errors.
+
+### vite.demo.config.ts, ../demo/, ../demos/ · the demos as browser pages
+- refers-to: frontend/vite.demo.config.ts; demo/src :: main, session, links, shim/api; demo/, demos/icons/, demos/pattern/ (built output)
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+Ported from formvis. Each page is the real window bundled as one IIFE script with a shim in place of the engine API; when the window is ready the page clicks the demo's Home card. The pages open from `file://`, which cannot fetch fonts, so the Latin Inter `.woff` files are inlined. The built output is committed, as formvis does: about 14 MB a page and 756 files in all, mostly font files. `npm run demo` rebuilds them. Checked from `file://` in headless Chrome with no console errors; not run in Firefox or Safari.
+
+### src/ui/titlebar-tools.ts, src/ui/terminal-dock.ts · title bar Claude Code and Terminal buttons that light with the dock
+- refers-to: titlebar-tools.ts :: TitleTools.syncDock; terminal-dock.ts :: TerminalDock.activeKind, isShowing, show, toggleKind, onTab
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+Ported from formvis. Each button shows the dock on its kind of tab, reusing an open tab or starting one, and hides the dock when that kind is already showing. `syncDock` lights the button whose kind is the dock's active tab; the dock calls it through `onTab` on every open, hide, tab switch and last-tab close, and only those two buttons are written. The Terminal button reuses the translated Terminal key.

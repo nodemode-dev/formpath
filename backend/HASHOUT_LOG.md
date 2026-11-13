@@ -605,3 +605,17 @@ Both read the stored command catalogue from `FORMPATH_DATA`, a name nothing else
 - logged: v0.53.1 · 2026-11-10
 
 Tauri names the macOS bundle after `productName`, which is "FormPath" since 0.52.9, but `build_app` still looked for `bundle/macos/formpath.app`. On a case-sensitive volume a full build ended in "the build finished but .../formpath.app is missing" and exit 1; on the usual case-insensitive volume it worked but put the app in the disk image and in Applications as `formpath.app`. The script now reads `productName` from `tauri.conf.json`, as it reads `version`, and uses `$product.app` for the bundle, the disk image stage and the installed copy. Left as they were: `pgrep -x formpath` and `tell application "formpath" to quit`, because the running process's name depends on the bundle's executable name, which was not checked here; the quit is a courtesy and the copy goes ahead either way. Checked: `bash -n build_app`, and the read gives "FormPath". Not run on macOS.
+
+### setup/icon_rules.py · a check that keeps the sparkle icon out
+- refers-to: setup/icon_rules.py; setup/line_counts.py :: check; setup/check, setup/check.bat; .github/workflows/ci.yml :: No sparkle icon
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+The guard has three layers. Signatures: the formvis banned paths, the removed formpath paths and helper-built `sparkle:` keys, read in every source, `.json` and `.js` file and in `demo/` and `demos/`. Names: in interface code only, any key or string named sparkle. Geometry: any SVG line with two or more closed four-point stars, or three or more stars and plus-shaped glints together. It runs from `./formpath check`, `check.bat`, `counts --check` and CI. It flagged all eight old lines before they were removed and finds nothing in the current formvis or formdeck icons.
+
+### setup/mcpb.py, setup/mcp_stdio.py, setup/agents.py · the desktop extension, attach mode, the plugin manifest and attribution settings
+- refers-to: setup/mcpb.py; setup/mcpb/manifest.json; setup/mcp_stdio.py :: --attach, FORMPATH_MCP_ATTACH; setup/agents.py (mirror loop); .claude-plugin/plugin.json; .claude/settings.json
+- kind: rationale
+- logged: v0.54.0 · 2026-11-13
+
+`./formpath mcpb check` validates the manifest and `mcpb build DIR` writes `formpath-<version>.mcpb` with the version filled in from `frontend/src/version.ts`, so the manifest is not a version site. The extension runs `mcp --attach`, which never starts the engine: while it is down the bridge answers `initialize`, `tools/list` and `tools/call` itself with only a ping tool, and once the engine answers it sends `notifications/tools/list_changed`. Unknown flags to `./formpath mcp` exit 2. `agents sync` mirrors `formpath-skillset` to `.agents/skills` beside `formpath-harness`, and `sync --check` fails while either mirror drifts. `.claude/settings.json` turns Claude Code's attribution off (empty commit and pr text, no session link). Known gap: `./formpath counts --check` fails with "README.md has no line-count sentence"; the README had no such sentence before this release and CI does not run that check.
