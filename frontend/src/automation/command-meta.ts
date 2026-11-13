@@ -205,4 +205,8 @@ export const COMMAND_META: Readonly<Record<string, readonly [string, string]>> =
   'layers-locate': ['Opens the layers that contain the selection and scrolls the Layers panel to the first selected object.', 'Use when an object is selected and its row in the Layers panel is out of sight.'],
   'layers-options': ['Opens Layer Options for the active layer: name, colour, template, show, lock, print and dim.', 'Use when renaming or recolouring a layer.'],
   'swatch-info': ['Places colour cards beside the artboard describing each swatch.', 'Use when documenting a palette with its HEX, RGB and CMYK values.'],
+  'demo-poster': ['Builds the Poster and type demo as a new, unsaved document: a festival poster and its programme with gradients, a gradient mesh, a blend, type on a path, columns and graphic styles.', 'Use when showing what formpath does with colour and type, or to start from a finished poster.'],
+  'demo-icons': ['Builds the Icons and a logo demo as a new, unsaved document: twelve icons on their own artboards made with Pathfinder, Shape Crafter and compound paths, and a radial repeat logo.', 'Use when showing shape building, or to start from a finished icon set.'],
+  'demo-pattern': ['Builds the Patterns and colour demo as a new, unsaved document: a pattern swatch, a blend, an envelope, an extruded 3D badge and three Recolor Art colourways.', 'Use when showing patterns, effects and colour tools.'],
+  'demo-open': ['Builds one of the three demos (poster, icons or pattern) as a new, unsaved document; nothing open is replaced.', 'Use when an agent should open a demo by id.'],
 };

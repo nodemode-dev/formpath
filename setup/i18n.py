@@ -22,7 +22,7 @@ USAGE = """./formpath i18n <command>
   export LANG FILE.csv write English and LANG side by side for a reviewer
   import LANG FILE.csv read a reviewed CSV back into frontend/src/i18n/locales/LANG.json"""
 
-SKIP_DIRS = {"i18n", "automation"}
+SKIP_DIRS = {"i18n", "automation", "demos"}
 AGENT_TEXT = re.compile(r"\b(description|when)\s*:\s*(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|`(?:[^`\\]|\\.)*`)")
 SINGLE = re.compile(r"'((?:[^'\\\n]|\\.)*)'")
 TEMPLATE = re.compile(r"`((?:[^`\\]|\\.)*)`", re.S)
