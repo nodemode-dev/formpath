@@ -7,6 +7,6 @@ It runs in a browser against a small Python engine service, or as a desktop app 
 - New here: [Getting Started](Getting-Started).
 - How the code is laid out: [Engine](Engine), [Tools](Tools), [UI Shell](UI-Shell), [Engine Service](Engine-Service).
 - Files: [Files and Formats](Project-Format).
-- Agents: [Agents and MCP](Agents-and-MCP).
+- Agents: [Agents and MCP](Agents-and-MCP), [Terminal](Terminal).
 - Shipping: [Desktop](Desktop), [Releasing](Releasing).
 - How close to Illustrator it is: [Parity](Parity).

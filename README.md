@@ -110,6 +110,8 @@ The window, the terminal and the MCP server run the same command catalogue; the 
 ./formpath mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
 ```
 
+In the window, Window > Terminal (or the Terminal button in the title bar) opens a terminal dock with shell tabs, Claude Code tabs already connected to formpath's tools, and a Chat tab; the engine owns every process, so tabs survive a reload.
+
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. `./formpath agents install` sets them up for your user account. See [`AGENTS.md`](AGENTS.md).
 
 ## Under the hood
