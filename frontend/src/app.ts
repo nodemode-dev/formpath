@@ -316,11 +316,12 @@ export function startApp(): void {
   };
 
   enhanceAllSelects();
-  new TitleTools(q(root, '.cv-titlebar'), {
+  const titleTools = new TitleTools(q(root, '.cv-titlebar'), {
     commands,
     arrange: (w) => { dock.arrange(w.order, w.hidden); store('formpath.propsCol', w.propsColumn ? 'shown' : 'hidden'); syncPropsCol(); },
     locked: () => dock.locked,
     setLocked: (on) => { dock.locked = on; },
+    dock: (kind) => { void termDock.toggleKind(kind); },
   });
   const captionButtons = new CaptionButtons(q(root, '.cv-titlebar'), () => stored(CUSTOM_TITLE_BAR_KEY) === '1');
   dock.locked = dock.locked;
@@ -341,6 +342,8 @@ export function startApp(): void {
   const termDock = new TerminalDock();
   root.insertBefore(termDock.root, q(root, '.cv-status'));
   termDock.onFail = (err) => toast(message(err), 'error');
+  termDock.onTab = () => titleTools.syncDock(termDock.isOpen(), termDock.activeKind());
+  termDock.onTab();
   termDock.context = () => {
     const p = engine.current;
     if (!p) return 'formpath window: no document is open';
