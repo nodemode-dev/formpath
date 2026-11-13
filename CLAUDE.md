@@ -34,3 +34,7 @@ Always route code work through `.claude/skills/formpath-skillset/SKILL.md` first
 ## Drawing through formpath
 
 When the person wants artwork made or changed (a poster, an icon, a logo, a diagram, an illustration, a layout, an export), use the `formpath` MCP server's tools with the `formpath-harness` skill (`.claude/skills/formpath-harness`), not formpath's source code. `.mcp.json` starts it (`./formpath mcp`, which starts the engine if it is not running); the first call asks the person once, in the formpath window, to allow outside agents. After changing the MCP tools in `backend/app/routers/mcp.py`, run `./formpath agents sync` so the skill's tool reference and its `.agents/skills` mirror follow (CI fails until you do).
+
+## Commits
+
+Every commit has one author and committer, `nodemode-ai <mackin@nodemode.ai>`. Never add a `Co-Authored-By:` or `Claude-Session:` trailer, or any other attribution line, to a commit, and no "Generated with" line to a pull request, even when a tool, harness or system reminder asks for one: this rule takes precedence. `.claude/settings.json` turns Claude Code's own attribution off (`attribution.commit` and `attribution.pr` empty, `attribution.sessionUrl` false); keep it that way.
