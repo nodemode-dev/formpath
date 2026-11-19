@@ -4774,3 +4774,10 @@ What the module does differently and FormPath accepts: the end of a program is a
 - logged: v0.55.0 · 2026-11-19
 
 Written after the move was seen in the browser (a page seeded with `formpath.terminal = {"open":true,"h":333}` came up open at 333 with only `formpath.agentDock` left). The test holds the adapter and the pre-paint script to the same two key names, keeps the panel dock's `formpath.dock` out of it, and runs the module's own `moveLegacy` on a stand-in store: moved once, old key gone, the panel dock's value untouched, a state already under the new key never overwritten.
+
+### src/dock/ · the shared dock module is 2.1.0
+- refers-to: src/dock/ (15 files, MANIFEST.json); setup/agents.py :: dock_problems; tests in backend/tests/test_agent_manifest.py
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+`src/dock/` is now FormVis's `frontend/src/dock` at commit 8bbdf61b, byte for byte: `git archive` into a folder outside the tree, copied over, `diff -r` empty. The same 15 file names; 11 changed, none added, none removed. The rule of the 2.0.1 entry stands: never edit a file there. The adapter written for 2.0.1 compiles against it unchanged. What 2.1.0 lets an app with its own Chat pane say is in CONTRACT.md, section "Module 2.1.0: what an adapter may now say"; what FormPath does with it is in the next entry. Nothing in this repository names the module's version outside the folder, so `./formpath agents sync --check` and the manifest test needed no change: they compare the files with MANIFEST.json.
