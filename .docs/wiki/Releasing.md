@@ -1,6 +1,6 @@
 # Releasing
 
-formpath's own repository builds no release; its GitHub Actions only run the checks. Desktop releases are built by formcompiler (`nodemode-ai/formcompiler`), the release pipeline for every form* app: macOS (Apple silicon and Intel), Linux (AppImage, deb, rpm) and Windows (MSI, NSIS). formcompiler collects the bundles into a draft release named `formpath-vX.Y.Z` on its own release page. Publishing the draft there makes it the one the updater feed (`formpath-updates/latest.json` on formcompiler) points at.
+formpath's own repository builds no release; its GitHub Actions only run the checks. Desktop releases are built by formcompiler (`nodemode-dev/formcompiler`), the release pipeline for every form* app: macOS (Apple silicon and Intel), Linux (AppImage, deb, rpm) and Windows (MSI, NSIS). formcompiler collects the bundles into a draft release named `formpath-vX.Y.Z` on its own release page. Publishing the draft there makes it the one the updater feed (`formpath-updates/latest.json` on formcompiler) points at.
 
 ## One-time setup: signing secrets in formcompiler
 
