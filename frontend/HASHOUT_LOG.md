@@ -4687,3 +4687,10 @@ The boot script is the second copy of the profile table, so `amoled` is there to
 - logged: v0.55.0 · 2026-11-19
 
 All the exceptions hang on `data-oled`, never on the theme id, so another OLED profile needs only the flag. `--bg-hover` and `--border-soft` become 10% and 12% white (the usual 6% and 8% are too close to black to read). `--surface-1` (a mix of primary and tertiary: title bar, rail, tool buttons) becomes `--bg-primary`, and `--line-0` (black on black) becomes `--border-color`. The tool rail painted a gradient with two accent glows at the top and the bottom; it is a plain `--surface-1` under `data-oled`. Found by measuring: the computed backgrounds of every visible element over 3000 square pixels and pixel samples of a 1440 by 900 screenshot at the corners and centre of the title bar, rail, pasteboard, properties, layers and status bar. Menus and dialogs are translucent or opaque black already. No other theme changes.
+
+### tests/theme-boot.test.ts · the pre-paint theme table must equal the one in themes.ts
+- refers-to: tests/theme-boot.test.ts; index.html :: PROFILES, LIGHT, OLED, DEFAULT_THEME, DEFAULT_ACCENT; src/ui/themes.ts :: THEMES
+- kind: rationale
+- logged: v0.55.0 · 2026-11-18
+
+`index.html` paints the saved theme before the bundle loads and `themes.ts` owns it afterwards. A theme in one table and not the other, or a colour that differs, paints the wrong theme first and then switches: a flash. The test reads `index.html` as text, takes `PROFILES`, `LIGHT` and `OLED`, and compares them with `THEMES`: the same ids, the ten variables in `NAMES` and `--bg-node` per id, the same light and true-black themes, and the same default theme and accent. FormVis has this test in `src/ui/themes.test.ts`; FormPath keeps its tests in `tests/`. Checked by hand first with a script outside the repo: 29 themes in each table, no difference. Then in a copy outside the tree one colour of `amoled` changed by one step and the profile renamed, and each made the test fail naming the id and variable. The page's shadow strings and the saved-choice rules are not compared (the shadow is not exported from `themes.ts`).
