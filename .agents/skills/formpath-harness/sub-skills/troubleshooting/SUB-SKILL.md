@@ -16,7 +16,7 @@ None: load directly for any failure.
 ## Procedure
 
 1. **No formpath tools listed**: the MCP server is not connected. Ask the person to run `./formpath mcp` setup (`./formpath agents install`) or check the client's MCP settings, then restart the client.
-2. **A call waits, then fails with a consent message**: the formpath window is asking "Allow an outside agent to edit?". Tell the person to press Allow in the formpath window (Don't refuses; the Preferences > Plugins checkbox "Allow outside agents (MCP)" keeps the choice and only the window can change it), then retry once.
+2. **A call waits, then fails with a consent message**: the formpath window is asking whether to allow the agent, naming it and what it asked for. Tell the person to answer in the formpath window (Allow once covers that one call, Always allow covers every outside agent, Deny refuses; the Preferences > Plugins choice "Outside agents (MCP)" keeps Ask each time, Allowed or Blocked, and only the window can change it), then retry once.
 3. **The engine is not answering**: formpath is not running. `./formpath mcp` starts it; otherwise ask the person to run `./formpath boot` and open http://localhost:5230.
 4. **No window open**: tools run in the open formpath window; ask the person to open formpath in a browser or the desktop app.
 5. **No object has the id**: ids changed (Pathfinder, expand, outlines, undo, or the person edited). Call `get_document`, match by name or bounds, retry.

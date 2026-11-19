@@ -10,6 +10,7 @@
                             running it again changes nothing
 """
 
+import hashlib
 import json
 import os
 import re
@@ -23,7 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "agents" / "manifest.json"
 APP = "formpath"
-DOCK = {"present": True, "positions": ["bottom"], "tabs": ["chat", "claude", "shell"]}
+DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "claude", "codex", "cursor", "shell"]}
+DOCK_DIR = ROOT / "frontend" / "src" / "dock"
 ENGINE_FACTS = """
 import json
 from app.main import app
@@ -170,6 +172,29 @@ def manifest_drift() -> bool:
     return not MANIFEST.is_file() or MANIFEST.read_text(encoding="utf-8") != manifest_text()
 
 
+def dock_problems(folder: Path = DOCK_DIR) -> list[str]:
+    listed = folder / "MANIFEST.json"
+    try:
+        files = json.loads(listed.read_text(encoding="utf-8"))["files"]
+    except (OSError, ValueError, KeyError):
+        return [f"{listed}: missing or unreadable"]
+    out = []
+    for name, digest in sorted(files.items()):
+        path = folder / name
+        if not path.is_file():
+            out.append(f"{path}: missing")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            out.append(f"{path}: differs from MANIFEST.json (copy it again from FormVis; this folder is never edited here)")
+    for path in sorted(folder.iterdir()):
+        if path.name != "MANIFEST.json" and path.name not in files:
+            out.append(f"{path}: not in MANIFEST.json")
+        if path.suffix == ".ts":
+            for spec in re.findall(r"""(?:from|import)\s*\(?\s*['"]([^'"]+)['"]""", path.read_text(encoding="utf-8")):
+                if not (spec.startswith("@xterm/") or (spec.startswith("./") and "/" not in spec[2:])):
+                    out.append(f"{path}: imports {spec} (the dock folder imports nothing from the app)")
+    return out
+
+
 def sync(check: bool) -> int:
     ref = SKILL / "references" / "tools.md"
     want = tools_reference()
@@ -206,11 +231,14 @@ def sync(check: bool) -> int:
             if not check:
                 shutil.rmtree(dst, ignore_errors=True)
                 shutil.copytree(src, dst)
+    shared = dock_problems()
+    for line in shared:
+        print("agents: " + line)
     if check:
         print("agents: in step" if not drift else "agents: drifted: " + ", ".join(drift) + " (run ./formpath agents sync)")
-        return 1 if drift else 0
+        return 1 if drift or shared else 0
     print("agents: " + ("updated " + ", ".join(drift) if drift else "already in step"))
-    return 0
+    return 1 if shared else 0
 
 
 def _backup(path: Path, dry: bool) -> None:

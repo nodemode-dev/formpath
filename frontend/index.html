@@ -86,15 +86,22 @@
   </script>
   <script>
 (function () {
-  var r = document.documentElement, open = 0, h = 280;
+  var r = document.documentElement, open = 0, h = 280, w = 420, side = 'bottom';
   try {
-    var t = JSON.parse(localStorage.getItem('formpath.terminal') || '{}');
+    var t = JSON.parse(localStorage.getItem('formpath.agentDock') || localStorage.getItem('formpath.terminal') || '{}');
     open = t.open === true ? 1 : 0;
-    if (typeof t.h === 'number' && t.h >= 120 && t.h <= 2000) h = Math.round(t.h);
+    if (typeof t.h === 'number') h = t.h;
+    if (typeof t.w === 'number') w = t.w;
+    if (t.side === 'right' && window.innerWidth >= 1100) side = 'right';
   } catch (e) { open = 0; }
+  h = Math.round(Math.max(120, Math.min(window.innerHeight * 0.7, h)));
+  w = Math.round(Math.max(320, Math.min(window.innerWidth * 0.4, w)));
   r.setAttribute('data-ft-dock', open ? 'open' : 'closed');
+  r.setAttribute('data-ft-dock-side', side);
   r.setAttribute('data-ft-dock-h', String(h));
+  r.setAttribute('data-ft-dock-w', String(w));
   r.style.setProperty('--ft-dock-size', h + 'px');
+  r.style.setProperty('--ft-dock-wsize', w + 'px');
 })();
   </script>
   <script>
@@ -112,7 +119,9 @@
   <link rel="stylesheet" href="/src/styles/formpath.css">
   <link rel="stylesheet" href="/src/styles/light-mode.css">
   <link rel="stylesheet" href="/src/styles/scrollbars.css">
-  <link rel="stylesheet" href="/src/styles/terminal.css">
+  <link rel="stylesheet" href="/src/styles/dock-tokens.css">
+  <link rel="stylesheet" href="/src/dock/dock.css">
+  <link rel="stylesheet" href="/src/styles/dock-layout.css">
   <link rel="stylesheet" href="/src/styles/helpbar.css">
 </head>
 <body>

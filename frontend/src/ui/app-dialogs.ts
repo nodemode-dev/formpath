@@ -10,6 +10,7 @@ import { brandMark } from './brand';
 import { ANCHOR_SIZES, CHECKER_COLORS, CHECKER_SIZES, SNAP_ANGLE_SETS, loadPrefs, RECOVERY_CHOICES, savePrefs, UNIT_CHOICES, type CheckerColors, type CheckerSize, type Prefs } from './prefs';
 import { readChoice, setAccent, setIntensity, setTheme, themeSwatchesHtml, THEMES } from './themes';
 import { toast } from './toast';
+import { outsideAgents } from '../dock-adapter';
 import { ARTBOARD_PRESETS } from '../tools/view';
 import { DXF_UNITS, type DxfUnit } from '../io/dxf';
 import type { TiffCompression } from '../io/tiff';
@@ -246,9 +247,11 @@ export class SettingsDialog extends Dialog {
       grp('Guides', color('guideColor', 'Guides')),
       grp('Grid', color('gridColor', 'Grid'), num('gridSpacing', 'Gridline every (pt)', 1, 5000), num('gridSubdivisions', 'Subdivisions', 1, 64), check('gridInBack', 'Grids in back')),
       grp('Transparency', sel('checkerSize', 'Transparency grid size', CHECKER_SIZES), sel('checkerColors', 'Transparency grid colours', CHECKER_COLORS)));
-    const agents = el<HTMLInputElement>('<input type="checkbox" aria-label="Allow outside agents">');
-    agents.addEventListener('change', () => { this.change({ agentsAllowed: agents.checked }); window.dispatchEvent(new CustomEvent('formpath:agents', { detail: agents.checked })); });
-    this.ctl.agentsAllowed = agents;
+    const agents = selectOf([['ask', 'Ask each time'], ['allowed', 'Allowed'], ['blocked', 'Blocked']]);
+    agents.setAttribute('aria-label', 'Outside agents');
+    setValue(agents, outsideAgents.choice());
+    agents.addEventListener('change', () => { const v = agents.value === 'allowed' || agents.value === 'blocked' ? agents.value : 'ask'; this.change({ agentsAllowed: v === 'allowed' }); void outsideAgents.set(v); });
+    window.addEventListener('formpath:agents', () => { this.prefs = { ...this.prefs, agentsAllowed: outsideAgents.choice() === 'allowed' }; setValue(agents, outsideAgents.choice()); });
     const save = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Save</button>'), chk = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Check</button>'), forget = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Forget key</button>');
     save.addEventListener('click', () => void this.saveLlm(false));
     forget.addEventListener('click', () => void this.saveLlm(true));
@@ -261,7 +264,7 @@ export class SettingsDialog extends Dialog {
     add('Plugins',
       grp('Connected Apps', row('NodeMode address', nm)),
       grp('Prompts', row('Address', this.llmUrl), row('Model', this.llmModel, this.llmModels), row('API key', this.llmKey), row('The model reads images', this.llmVision), llmButtons, this.llmNote),
-      grp('Outside Agents', row('Allow outside agents (MCP)', agents), this.mcpNote));
+      grp('Outside Agents', row('Outside agents (MCP)', agents), nt('Ask each time: a question in the window names the agent and what it asked. Allowed: outside agents work without a question. Blocked: no agent can change anything, the Claude Code tab and Chat included.'), this.mcpNote));
     const wrap = el('<div class="cv-prefs"></div>');
     wrap.append(pages);
     this.body.appendChild(wrap);
