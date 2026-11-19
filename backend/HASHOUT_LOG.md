@@ -647,3 +647,10 @@ This replaces the single token that every shell tab carried and that sat inside 
 - logged: v0.55.0 · 2026-11-19
 
 The description ended "and 79 more tools" after nine named tools, which was 88 while the catalogue had 93; the wiki said 67 and PARITY.md 92. `sync` now reads "Covers a, b, c and N more tools." from the entry, counts the named tools, and writes N = catalogue size minus the named ones; `sync --check` reports the entry as drifted when N is wrong, so CI (which runs `agents sync --check`) fails on a stale count. The mirror in `.agents/skills` follows from the same run. The entry also now says to use `formpath-skillset` when the task is changing formpath's own code, as the skillset's entry already says the reverse.
+
+### src-tauri/src/main.rs · the shell waits at most 10 seconds for the window key, then takes the engine-did-not-start path
+- refers-to: src-tauri/src/main.rs :: setup (the key grace loop, the port match)
+- kind: fix
+- logged: v0.55.0 · 2026-11-19
+
+Once the address is known the loop polls for the key line until a deadline, which was 3 seconds and is now 10, the family value. The key line is on standard output and the address on standard error, two pipes with no order, so the key can arrive after the address; a slow start must not fail the launch. When the deadline passes with no key, the shell no longer opens the window without one (a window that cannot write is useless and looks broken): it clears the port and takes the existing branch that shows "The formpath engine failed to start. Please relaunch the app." and exits. The first loop, which waits for the address, is unchanged. Not compiled here (no WebKit libraries): the two changes are a literal and a three-line `if` on variables already in scope (`key: Option<String>`, `port: Option<u16>`, both `mut`).

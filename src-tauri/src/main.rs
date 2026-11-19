@@ -117,7 +117,7 @@ fn main() {
                         }
                     }
                 }
-                let grace = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                let grace = std::time::Instant::now() + std::time::Duration::from_secs(10);
                 while port.is_some() && key.is_none() && std::time::Instant::now() < grace {
                     match rx.try_recv() {
                         Ok(CommandEvent::Stdout(bytes)) => {
@@ -133,6 +133,9 @@ fn main() {
                             .await;
                         }
                     }
+                }
+                if key.is_none() {
+                    port = None;
                 }
                 match port {
                     Some(found) => {
