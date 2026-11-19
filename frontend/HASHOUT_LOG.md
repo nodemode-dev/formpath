@@ -4781,3 +4781,97 @@ Written after the move was seen in the browser (a page seeded with `formpath.ter
 - logged: v0.55.0 · 2026-11-19
 
 `src/dock/` is now FormVis's `frontend/src/dock` at commit 8bbdf61b, byte for byte: `git archive` into a folder outside the tree, copied over, `diff -r` empty. The same 15 file names; 11 changed, none added, none removed. The rule of the 2.0.1 entry stands: never edit a file there. The adapter written for 2.0.1 compiles against it unchanged. What 2.1.0 lets an app with its own Chat pane say is in CONTRACT.md, section "Module 2.1.0: what an adapter may now say"; what FormPath does with it is in the next entry. Nothing in this repository names the module's version outside the folder, so `./formpath agents sync --check` and the manifest test needed no change: they compare the files with MANIFEST.json.
+
+### src/dock-adapter.ts, src/ui/dock-chat.ts · the module's ask line on every tab, and the Chat pane is told when it is shown, hidden and closed
+- refers-to: src/dock-adapter.ts :: formpathDock (chat, terminal.open, placement.storage, strings); src/ui/dock-chat.ts :: DockChat.shown, hidden, closed, isBusy, send, load, listen, scroll; src/styles/dock-layout.css :: .fp-chat; src/dock/CONTRACT.md (Module 2.1.0)
+- kind: decision
+- logged: v0.55.0 · 2026-11-19
+
+The ask line. `chat: { pane, ask: 'line' }` keeps the module's ask line under every tab. On Chat the text goes to the pane's `send`. On a terminal tab, or with no tab, the module opens Claude Code with the text as `prompt` through `terminal.open('claude', ...)`; the adapter adds the document name and selection there (`${prompt} (${deps.context()})`), which is what FormPath's ask line did before the shared dock. A Claude Code tab opened without a prompt (the head button, the command, "Open in Claude Code") gets no context, as before. The Chat pane has no ask line of its own any more and no "Send to Claude Code instead" button: asking Claude Code is typing in the line while a terminal tab is in front.
+
+The pane's object is `{ send, shown, hidden, closed, busy }`. There is no `focus`: the module focuses its own line on Chat. `send` answers false while Claude is working or when the engine refuses, so the module leaves the text in the line. `busy` is the pane's own flag (true between the stream's start and done events, or when the engine's state said so at load).
+
+`shown()` is where the pane starts: the stream is connected and the conversation loaded there, not in `pane()`, so a page whose Chat was never in front asks the engine nothing. `closed()` (the tab's cross) closes the stream; the next `shown()` connects again and loads the conversation again, clearing the log in the same task as it refills it. `hidden()` keeps the stream: a reply that is being written goes on arriving while a terminal is in front or the dock is closed. Stopping it there would mean rebuilding the log at every tab switch. What `hidden()` changes is following: a hidden log has no height to measure, so while the pane is not in front new text only sets a flag, and `shown()` puts the log at its end if anything arrived. `send()` still reconnects a dropped stream when the pane has been shown (the pane before the shared dock did the same in `send`); the reconnect in `focus()` was the workaround and is gone.
+
+Seen. A layout moved from `formpath.terminal` arrives as seen (`jsonLegacy(DOCK_LEGACY, true)`): a person who has used the dock is not walked through it; a person with neither key gets the guide. The `tourChatBody` override ("the line at the bottom of Chat") is gone because the guide now points at the module's line.
+
+Seen in headless Chrome at 1440 by 900 against captures taken before the change (engine restarted with an empty data folder before each run, terminal text hidden): dock closed, 0 pixels differ; open on a terminal, 51,840 differ, which is every pixel of rows 836 to 871 (the ask line is back under terminal tabs and the terminal is 36 px shorter); open on Chat, 2,501 differ, all in rows 841 to 868 (the line is the module's: its mark and placeholder, one send button where there were two). Under 4x CPU: text typed on a shell tab opened a Claude Code tab whose program received `make the title red (formpath window: no document is open)`; on Chat the program received `draw a star (formpath window: no document is open)` and the reply showed; a second Enter while Claude was working sent nothing and the text stayed in the line; six tab switches between a shell, Claude Code and Chat recorded 297 frames with one layout (head, stage, ask line, main area and status bar boxes all the same); a reply that finished while a shell tab was in front was in view when Chat came back; the cross closed the stream and Chat again opened a new one and showed each message once.
+
+### removed: the Chat pane's own ask line and its "Send to Claude Code instead" button
+- refers-to: src/ui/dock-chat.ts; src/dock-adapter.ts; src/styles/dock-layout.css
+- kind: removed-code
+- logged: v0.55.0 · 2026-11-19
+
+Module 2.0.1 hid its ask line on every tab when an app owned the Chat pane, and told the pane nothing. 2.1.0 has `chat.ask` and `shown`, `hidden`, `closed`, `busy`, so these went:
+
+```ts
+<form class="fp-chat-ask" autocomplete="off">
+<span class="fp-chat-ask-mark">${icon('agent', 15)}</span>
+<input class="cv-input fp-chat-ask-input" type="text" spellcheck="false" placeholder="Ask Claude about the open document (Enter to send)" aria-label="Ask Claude">
+<button type="submit" class="cv-icon-btn fp-chat-ask-send" title="Send to Chat" aria-label="Send to Chat">${icon('send', 14)}</button>
+<button type="button" class="cv-icon-btn fp-chat-ask-code" title="Send to Claude Code instead" aria-label="Send to Claude Code instead">${icon('terminal', 14)}</button>
+</form>
+
+private readonly ask = q<HTMLInputElement>(this.root, '.fp-chat-ask-input');
+
+q(this.root, '.fp-chat-ask').addEventListener('submit', (e) => { e.preventDefault(); void this.submit(); });
+q(this.root, '.fp-chat-ask-code').addEventListener('click', () => this.toClaudeCode());
+
+async load(): Promise<void> {
+  this.listen();
+  if (this.loaded) return;
+
+async send(text: string): Promise<void> {
+  this.listen();
+  try { await api.chatSend(text, this.d.context(), this.d.note()); } catch (err) { this.onFail(err); }
+}
+
+focus(): void {
+  this.listen();
+  this.ask.focus({ preventScroll: true });
+}
+
+private async submit(): Promise<void> {
+  const text = this.ask.value.trim();
+  if (!text || this.busy) return;
+  this.ask.value = '';
+  await this.send(text);
+}
+
+private toClaudeCode(): void {
+  const text = this.ask.value.trim();
+  if (!text) { this.ask.focus({ preventScroll: true }); return; }
+  const extra = this.d.context();
+  this.ask.value = '';
+  this.d.claude(extra ? `${text} (${extra})` : text);
+}
+```
+
+From the adapter:
+
+```ts
+tourChatBody: 'Type what you want in the line at the bottom of Chat, for example "{example}", and press Enter. Claude does it in {app}, and every change can be undone.',
+
+storage: { key: DOCK_KEY, legacy: jsonLegacy(DOCK_LEGACY) },
+
+: kind === 'claude' ? await api.claudeOpen({ prompt: o.prompt, resume: o.resume, cols: o.cols, rows: o.rows })
+
+void chat.load();
+return { send: (text) => { void chat.send(text); }, focus: () => chat.focus() };
+```
+
+From `dock-layout.css` (the third grid row of `.fp-chat` was the ask line):
+
+```css
+.fp-chat { display: grid; grid-template-rows: var(--ctl-lg) minmax(0, 1fr) var(--ctl-lg); height: 100%; min-height: 0; }
+.fp-chat-ask { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2); background: var(--bg-secondary); border-top: 1px solid var(--border-color); }
+.fp-chat-ask-mark { display: inline-grid; place-items: center; color: var(--accent-color); }
+.fp-chat-ask-input { flex: 1; min-width: 0; user-select: text; -webkit-user-select: text; }
+```
+
+### tests/dock-storage.test.ts · a moved layout arrives as seen
+- refers-to: tests/dock-storage.test.ts; src/dock/state.ts :: jsonLegacy, moveLegacy; src/dock-adapter.ts :: formpathDock (placement.storage)
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+Written after it was seen in the browser: a page seeded with only `formpath.terminal = {"open":false,"h":333}` opened its dock with no guide and kept `{"open":true,"side":"bottom","h":333,"w":420,"tab":"","seen":true}` under `formpath.agentDock`, the old key gone; a page with neither key showed the guide ("Step 1 of 5"). The test holds the adapter to `jsonLegacy(DOCK_LEGACY, true)` and runs the module's `moveLegacy` with that reader on a stand-in store.

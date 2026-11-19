@@ -31,6 +31,14 @@ describe('the agent dock remembers its place under its own key', () => {
     expect(moveLegacy(s, KEY, jsonLegacy([OLD]), DEFAULTS)).toBe(false);
   });
 
+  it('a moved layout arrives as seen, so the guide is kept for new people', () => {
+    expect(adapter).toContain('legacy: jsonLegacy(DOCK_LEGACY, true)');
+    const s = store({ [OLD]: JSON.stringify({ open: false, h: 333 }) });
+    expect(moveLegacy(s, KEY, jsonLegacy([OLD], true), DEFAULTS)).toBe(true);
+    expect(JSON.parse(s.all.get(KEY) ?? '{}')).toEqual({ open: false, side: 'bottom', h: 333, w: 420, tab: '', seen: true });
+    expect(s.all.has(OLD)).toBe(false);
+  });
+
   it('a state already under the new key is never overwritten by an old one', () => {
     const s = store({ [KEY]: JSON.stringify({ open: false, side: 'right', h: 200, w: 500, tab: 'chat' }), [OLD]: JSON.stringify({ open: true, h: 333 }) });
     expect(moveLegacy(s, KEY, jsonLegacy([OLD]), DEFAULTS)).toBe(false);

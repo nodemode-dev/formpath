@@ -31,19 +31,15 @@ export class DockChat {
 <button type="button" class="cv-btn fp-chat-handoff" title="Continue this conversation in a Claude Code terminal tab">Open in Claude Code</button>
 <button type="button" class="cv-btn fp-chat-new">New Chat</button></div>
 <div class="fp-chat-log" role="log" aria-live="polite"><p class="fp-chat-empty cv-note">Ask Claude in the line below to draw, restyle, arrange or export the open document. It works through formpath's own tools, every change appears in the window as it happens, and each one can be undone.</p></div>
-<form class="fp-chat-ask" autocomplete="off">
-<span class="fp-chat-ask-mark">${icon('agent', 15)}</span>
-<input class="cv-input fp-chat-ask-input" type="text" spellcheck="false" placeholder="Ask Claude about the open document (Enter to send)" aria-label="Ask Claude">
-<button type="submit" class="cv-icon-btn fp-chat-ask-send" title="Send to Chat" aria-label="Send to Chat">${icon('send', 14)}</button>
-<button type="button" class="cv-icon-btn fp-chat-ask-code" title="Send to Claude Code instead" aria-label="Send to Claude Code instead">${icon('terminal', 14)}</button>
-</form>
 </div>`);
   onFail: (err: unknown) => void = () => undefined;
   private readonly log = q(this.root, '.fp-chat-log');
   private readonly empty = q(this.root, '.fp-chat-empty');
   private readonly meter = q(this.root, '.fp-chat-usage');
   private readonly stopBtn = q<HTMLButtonElement>(this.root, '.fp-chat-stop');
-  private readonly ask = q<HTMLInputElement>(this.root, '.fp-chat-ask-input');
+  private live = false;
+  private front = false;
+  private behind = false;
   private reply: HTMLElement | null = null;
   private md: MarkdownStream | null = null;
   private usage: Usage = { input: 0, output: 0, costUsd: 0, context: 0, window: 0, model: '' };
@@ -58,16 +54,40 @@ export class DockChat {
     q(this.root, '.fp-chat-new').addEventListener('click', () => void api.chatReset().catch((e) => this.onFail(e)));
     q(this.root, '.fp-chat-handoff').addEventListener('click', () => void this.handoff());
     q(this.root, '.fp-chat-adopt').addEventListener('click', () => void this.adopt());
-    q(this.root, '.fp-chat-ask').addEventListener('submit', (e) => { e.preventDefault(); void this.submit(); });
-    q(this.root, '.fp-chat-ask-code').addEventListener('click', () => this.toClaudeCode());
   }
 
-  async load(): Promise<void> {
+  shown(): void {
+    this.front = true;
+    this.live = true;
     this.listen();
+    void this.load();
+    if (this.behind) { this.behind = false; this.log.scrollTop = this.log.scrollHeight; }
+  }
+
+  hidden(): void {
+    this.front = false;
+  }
+
+  closed(): void {
+    this.front = false;
+    this.live = false;
+    this.loaded = false;
+    const socket = this.socket;
+    this.socket = null;
+    socket?.close();
+    this.setBusy(false);
+  }
+
+  isBusy(): boolean {
+    return this.busy;
+  }
+
+  private async load(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
     try {
       const s = await api.chatState<State>();
+      this.clear();
       for (const m of s.messages) {
         if (m.role === 'user') { this.user(m.text ?? '', m.note ?? ''); continue; }
         this.begin();
@@ -82,29 +102,10 @@ export class DockChat {
     } catch (err) { this.loaded = false; this.onFail(err); }
   }
 
-  async send(text: string): Promise<void> {
-    this.listen();
-    try { await api.chatSend(text, this.d.context(), this.d.note()); } catch (err) { this.onFail(err); }
-  }
-
-  focus(): void {
-    this.listen();
-    this.ask.focus({ preventScroll: true });
-  }
-
-  private async submit(): Promise<void> {
-    const text = this.ask.value.trim();
-    if (!text || this.busy) return;
-    this.ask.value = '';
-    await this.send(text);
-  }
-
-  private toClaudeCode(): void {
-    const text = this.ask.value.trim();
-    if (!text) { this.ask.focus({ preventScroll: true }); return; }
-    const extra = this.d.context();
-    this.ask.value = '';
-    this.d.claude(extra ? `${text} (${extra})` : text);
+  async send(text: string): Promise<boolean> {
+    if (this.busy) return false;
+    if (this.live) this.listen();
+    try { await api.chatSend(text, this.d.context(), this.d.note()); return true; } catch (err) { this.onFail(err); return false; }
   }
 
   private listen(): void {
@@ -112,6 +113,7 @@ export class DockChat {
     this.opening = true;
     void socketTo('/claude/chat/stream').then((socket) => {
       this.opening = false;
+      if (!this.live) { socket.close(); return; }
       this.socket = socket;
       socket.addEventListener('message', (msg) => {
         try { this.on(JSON.parse(String(msg.data)) as Event); } catch { return; }
@@ -156,6 +158,7 @@ export class DockChat {
   }
 
   private scroll(): void {
+    if (!this.front) { this.behind = true; return; }
     const l = this.log;
     if (l.scrollHeight - l.scrollTop - l.clientHeight < 80) l.scrollTop = l.scrollHeight;
   }

@@ -109,11 +109,10 @@ export function formpathDock(deps: DockDeps): DockAdapter {
     },
     strings: {
       chatAbout: `Chat with Claude about the document (${chord}H)`,
-      tourChatBody: 'Type what you want in the line at the bottom of Chat, for example "{example}", and press Enter. Claude does it in {app}, and every change can be undone.',
     },
     placement: {
       mode: 'own',
-      storage: { key: DOCK_KEY, legacy: jsonLegacy(DOCK_LEGACY) },
+      storage: { key: DOCK_KEY, legacy: jsonLegacy(DOCK_LEGACY, true) },
       sizes: { minHeight: 120, maxHeightShare: 0.7, defaultHeight: 280, minWidth: 320, maxWidthShare: 0.4, defaultWidth: 420 },
       canDockRight: () => window.innerWidth >= DOCK_RIGHT_MIN,
     },
@@ -139,7 +138,7 @@ export function formpathDock(deps: DockDeps): DockAdapter {
     terminal: {
       list: async () => (await api.terminals()).map(record),
       open: async (kind, o) => record(kind === 'shell' ? await api.openTerminal(o.cols, o.rows)
-        : kind === 'claude' ? await api.claudeOpen({ prompt: o.prompt, resume: o.resume, cols: o.cols, rows: o.rows })
+        : kind === 'claude' ? await api.claudeOpen({ prompt: o.prompt ? `${o.prompt} (${deps.context()})` : o.prompt, resume: o.resume, cols: o.cols, rows: o.rows })
           : await api.openAgent(kind, o.cols, o.rows)),
       restart: async (id) => { await api.restartTerminal(id); },
       close: (id) => api.closeTerminal(id),
@@ -152,9 +151,9 @@ export function formpathDock(deps: DockDeps): DockAdapter {
         const chat = new DockChat({ context: deps.context, note: deps.note, claude: deps.claude });
         chat.onFail = deps.fail;
         host.appendChild(chat.root);
-        void chat.load();
-        return { send: (text) => { void chat.send(text); }, focus: () => chat.focus() };
+        return { send: (text) => chat.send(text), shown: () => chat.shown(), hidden: () => chat.hidden(), closed: () => chat.closed(), busy: () => chat.isBusy() };
       },
+      ask: 'line',
     },
     consent: { subscribe: (onAdd, onWithdraw) => outsideAgents.subscribe(onAdd, onWithdraw), answer: (id, choice) => outsideAgents.answer(id, choice) },
     storedChoice: { get: () => outsideAgents.get(), set: (value) => outsideAgents.set(value) },
