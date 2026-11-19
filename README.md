@@ -120,7 +120,7 @@ In the window, Window > Terminal (or the Terminal button in the title bar) opens
 - **Service:** a FastAPI engine for projects, fonts, file import and export, and the MCP endpoint at `/mcp`.
 - **Desktop:** a Tauri 2 shell that starts the engine as a sidecar.
 - **UI:** keyed DOM patching and a pre-paint theme boot, so changes do not flash or re-render.
-- **Size:** about 60,200 lines of TypeScript, 2,200 of CSS, 6,500 of Python and 400 of Rust (product code, tests excluded; `./formpath counts --check` verifies it).
+- **Size:** about 61,900 lines of TypeScript, 2,300 of CSS, 6,600 of Python and 400 of Rust (product code, tests excluded; `./formpath counts --check` verifies it).
 - **Tested:** Vitest suites for `.fpth`, SVG, PDF, Pathfinder and type outlines, plus pytest suites for the engine guard, consent, MCP, versions and project files.
 
 ## Download
