@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """./formpath agents: drawing in formpath from Claude Code, Codex and Cursor.
 
-  sync [--check]            generate the harness skill's tool reference from the engine's MCP catalogue and mirror the
+  sync [--check]            write agents/manifest.json, generate the harness skill's tool reference from the engine's MCP catalogue and mirror the
                             harness and skillset skills from .claude/skills to .agents/skills (Codex, Cursor);
                             --check: exit 1 if drifted
   install [--dry-run] [claude|codex|cursor ...]
@@ -16,10 +16,25 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+MANIFEST = ROOT / "agents" / "manifest.json"
+APP = "formpath"
+DOCK = {"present": True, "positions": ["bottom"], "tabs": ["chat", "claude", "shell"]}
+ENGINE_FACTS = """
+import json
+from app.main import app
+from app.routers import mcp
+print(json.dumps({
+    "tools": [t["name"] for t in mcp.TOOLS],
+    "read_only": [t["name"] for t in mcp.TOOLS if t["annotations"]["readOnlyHint"]],
+    "approval_gated": list(mcp.APPROVAL_GATED),
+    "http": "post" in app.openapi().get("paths", {}).get("/mcp", {}),
+}))
+"""
 NAME = "formpath-harness"
 SKILL = ROOT / ".claude" / "skills" / NAME
 MIRRORED = (NAME, "formpath-skillset")
@@ -117,10 +132,54 @@ def _files(folder: Path) -> dict:
     return {str(p.relative_to(folder)): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
 
 
+def engine_facts() -> dict:
+    with tempfile.TemporaryDirectory(prefix="formpath-manifest-") as scratch:
+        env = {**os.environ, "FORMPATH_DATA_DIR": scratch, "PYTHONDONTWRITEBYTECODE": "1"}
+        done = subprocess.run([sys.executable, "-c", ENGINE_FACTS], cwd=ROOT / "backend", env=env, capture_output=True, text=True)
+    if done.returncode != 0:
+        raise RuntimeError("cannot read the MCP registry from the engine code (install backend/requirements.txt, then run again): " + (done.stderr.strip().splitlines() or ["no output"])[-1])
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def skill_entries() -> list[dict]:
+    base = ROOT / ".claude" / "skills"
+    out = []
+    for folder in sorted(p for p in base.iterdir() if (p / "SKILL.md").is_file()) if base.is_dir() else []:
+        subs = folder / "sub-skills"
+        names = sorted(p.name for p in subs.iterdir() if (p / "SUB-SKILL.md").is_file()) if subs.is_dir() else []
+        out.append({"name": folder.name, "sub_skills": names})
+    return out
+
+
+def manifest_text() -> str:
+    facts = engine_facts()
+    transports = (["stdio"] if (ROOT / "setup" / "mcp_stdio.py").is_file() else []) + (["http"] if facts["http"] else [])
+    body = {
+        "format": "form-agent-manifest",
+        "version": 1,
+        "app": APP,
+        "mcp": {"tools": facts["tools"], "read_only": facts["read_only"], "approval_gated": facts["approval_gated"], "transports": transports},
+        "skills": skill_entries(),
+        "dock": DOCK,
+        "extensions": None,
+    }
+    return json.dumps(body, indent=2) + "\n"
+
+
+def manifest_drift() -> bool:
+    return not MANIFEST.is_file() or MANIFEST.read_text(encoding="utf-8") != manifest_text()
+
+
 def sync(check: bool) -> int:
     ref = SKILL / "references" / "tools.md"
     want = tools_reference()
     drift = []
+    wanted = manifest_text()
+    if not MANIFEST.is_file() or MANIFEST.read_text(encoding="utf-8") != wanted:
+        drift.append(str(MANIFEST.relative_to(ROOT)))
+        if not check:
+            MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+            MANIFEST.write_text(wanted, encoding="utf-8")
     if not ref.exists() or ref.read_text(encoding="utf-8") != want:
         drift.append(str(ref.relative_to(ROOT)))
         if not check:

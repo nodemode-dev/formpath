@@ -390,6 +390,7 @@ TOOLS = [
     _tool("redo", "Steps forward through the history.", {"steps": {"type": "integer", "minimum": 1, "maximum": 100, "default": 1}}),
 ]
 NAMES = {t["name"] for t in TOOLS}
+APPROVAL_GATED = tuple(t["name"] for t in TOOLS)
 
 _pending: collections.deque = collections.deque()
 _ready: asyncio.Event | None = None
