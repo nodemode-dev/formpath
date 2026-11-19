@@ -107,7 +107,7 @@ def test_a_cursor_tab_writes_a_private_config_that_holds_placeholders_not_the_to
     text = config.read_text(encoding="utf-8")
     assert stat.S_IMODE(os.stat(config).st_mode) == 0o600
     assert token not in text
-    assert json.loads(text)["mcpServers"]["formpath"] == {"url": "${env:FORMPATH_MCP_URL}", "headers": {claude_code.INAPP_HEADER: "${env:FORMPATH_INAPP_TOKEN}"}}
+    assert json.loads(text)["mcpServers"]["formpath_tab"] == {"url": "${env:FORMPATH_MCP_URL}", "headers": {claude_code.INAPP_HEADER: "${env:FORMPATH_INAPP_TOKEN}"}}
     assert session.argv[-1].endswith("cursor-agent") and token not in session.argv[-1]
     client.delete(f"/api/terminal/{session.id}")
     assert not claude_code.is_inapp(token)
@@ -122,7 +122,7 @@ def test_the_cursor_config_keeps_other_servers_and_leaves_a_file_it_cannot_read_
     config.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}, "kept": 1}), encoding="utf-8")
     assert agent_programs.write_cursor_config(str(tmp_path)) == config
     data = json.loads(config.read_text(encoding="utf-8"))
-    assert data["kept"] == 1 and data["mcpServers"]["other"] == {"command": "x"} and data["mcpServers"]["formpath"] == agent_programs.cursor_entry()
+    assert data["kept"] == 1 and data["mcpServers"]["other"] == {"command": "x"} and data["mcpServers"]["formpath_tab"] == agent_programs.cursor_entry()
     config.write_text("not json", encoding="utf-8")
     assert agent_programs.write_cursor_config(str(tmp_path)) is None
     assert config.read_text(encoding="utf-8") == "not json"

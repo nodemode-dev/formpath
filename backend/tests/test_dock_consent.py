@@ -29,6 +29,7 @@ def clear():
     m._pending.clear()
     m._waiting.clear()
     m._delivered.clear()
+    m._questions.clear()
     m._clients.clear()
 
 
@@ -227,6 +228,56 @@ def test_a_question_nobody_answers_expires_and_is_withdrawn(app, monkeypatch):
             r = await c.post("/api/mcp/bridge/result", headers=w.headers(), json={"id": item["id"], "result": {"allowed": True}})
             assert r.status_code == 403
             assert state()._allowed is False
+    run(go())
+
+
+def test_a_window_that_reloads_is_shown_the_waiting_question_again_and_can_answer_it(app):
+    async def go():
+        async with make_client(app) as c:
+            w = Window(c)
+            await w.open()
+            item, pending = await asked(c, w, headers=await announce(c, "probe-agent"))
+            again = Window(c)
+            await again.open()
+            shown = await again.next()
+            assert shown["name"] == "__consent__" and shown["id"] == item["id"] and shown["arguments"]["client"] == "probe-agent"
+            r = await c.post("/api/mcp/bridge/result", headers=w.headers(), json={"id": item["id"], "result": {"allowed": True}})
+            assert r.status_code == 403
+            await again.answer(shown, {"allowed": True, "once": True})
+            told = await again.next()
+            assert told["name"] == "__withdrawn__" and told["arguments"] == {"request": item["id"], "reason": "answered"}
+            work = await again.next()
+            assert work["once"] is True
+            await again.answer(work, OK)
+            assert text_of(await asyncio.wait_for(pending, 10)) == "done"
+            assert state()._allowed is False
+    run(go())
+
+
+def test_a_question_whose_caller_hung_up_is_withdrawn_and_pauses_nobody(app):
+    async def go():
+        async with make_client(app) as c:
+            m = state()
+            w = Window(c)
+            await w.open()
+            first = asyncio.create_task(w.poll(False))
+            await until_live()
+            left = {"now": False}
+
+            async def gone():
+                return left["now"]
+
+            async def caller():
+                m._caller.set({"tool": "select", "client": "probe-agent", "what": "use select", "gone": gone})
+                return await m._ask_caller()
+            waiting = asyncio.create_task(caller())
+            item = await asyncio.wait_for(first, 10)
+            assert item["name"] == "__consent__"
+            left["now"] = True
+            assert await asyncio.wait_for(waiting, 10) == {"gone": True}
+            told = await w.next()
+            assert told["name"] == "__withdrawn__" and told["arguments"]["request"] == item["id"]
+            assert m._declined_until == 0.0 and not m._questions
     run(go())
 
 

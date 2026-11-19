@@ -117,7 +117,7 @@ def info(fresh: bool = False) -> dict:
 def issue() -> tuple[str, str]:
     token = secrets.token_urlsafe(32)
     path = token_dir() / f"mcp-{secrets.token_hex(8)}.json"
-    body = json.dumps({"mcpServers": {"formpath": {"type": "http", "url": terminal.engine_url() + "/mcp", "headers": {INAPP_HEADER: token}}}})
+    body = json.dumps({"mcpServers": {"formpath_tab": {"type": "http", "url": terminal.engine_url() + "/mcp", "headers": {INAPP_HEADER: token}}}})
     try:
         token_dir().mkdir(mode=0o700, parents=True, exist_ok=True)
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
@@ -174,7 +174,7 @@ def _wrap(cmd: list[str]) -> list[str]:
 
 
 def argv(path: str, mcp_file: str, prompt: str | None, resume: str | None = None) -> list[str]:
-    cmd = [path, "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath", "--append-system-prompt", NOTE]
+    cmd = [path, "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath_tab", "--append-system-prompt", NOTE]
     if resume:
         cmd += ["--resume", resume]
     if prompt:
@@ -265,7 +265,7 @@ def chat_image(name: str) -> Path | None:
 
 def _chat_argv(path: str, mcp_file: str, text: str, session: str | None) -> list[str]:
     cmd = [path, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-           "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath", "--append-system-prompt", CHAT_NOTE]
+           "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath_tab", "--append-system-prompt", CHAT_NOTE]
     if session:
         cmd += ["--resume", session]
     return _wrap(cmd + ["--", text])

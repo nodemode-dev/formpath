@@ -699,3 +699,29 @@ Engine side of the family dock contract, clauses 10 and 13; launch approach read
 How each program is pointed at formpath's MCP server with that token. Codex: one argument, `-c mcp_servers.formpath={url="<engine>/mcp",env_http_headers={"x-formpath-inapp"="FORMPATH_INAPP_TOKEN"}}`, which names the variable and replaces a `formpath` entry `agents install` may have written to the person's config for this run only; the person's `config.toml` is not written. Cursor: `<agent folder>/.cursor/mcp.json` gets `mcpServers.formpath = {url: "${env:FORMPATH_MCP_URL}", headers: {"x-formpath-inapp": "${env:FORMPATH_INAPP_TOKEN}"}}`, placeholders the client expands, mode 0600 when the engine creates the file; other servers in an existing file are kept and a file that is not a JSON object is left alone. Neither program is installed here: that Codex accepts this `-c` value and that Cursor's agent expands `${env:...}` in `url` and `headers` and prefers the project file over the user file is from their documentation and is not verified.
 
 Run on port 33001 with stand-in scripts named `claude`, `codex` and `cursor-agent` first on the engine's PATH: status found all three with versions 9.9.9, 0.99.1 and 2026.11.01-abc123 and Claude Code signed in; a second engine without them reported Codex and Cursor missing with install lines, and found the machine's real Claude Code 2.1.328, whose `auth status` answered `loggedIn` false in an empty home. Each tab kind started; `/proc/<pid>/environ` held a 43 character token, `ps -eo args` did not; a plain shell tab printed an empty variable; a call to `/mcp` carrying a tab's token reached the window with `inapp: true` and no question; after the tab closed the same token was treated as an outside agent's. The config file was 0600, merged into a file with another server, and left a non-JSON file alone. The cached status still said installed after the stand-in was moved away and `fresh=1` said missing. Write routes: 50 before, 51 after (`POST /api/terminal/agent`), all refused without the key except the two on the open list. Tests were written after.
+
+### app/routers/mcp.py · a waiting question survives a window reload, and ends when its caller hangs up
+- refers-to: app/routers/mcp.py :: _questions, _ask, _ask_caller, bridge_session, _call, _stop; tests/test_dock_consent.py
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+Found while the window was moved onto the shared dock (family dock contract, clause 15).
+
+Reload. A `__consent__` item was taken out of `_pending` when the window read it and its id was tied to that window's bridge secret. A reloaded window opens a new bridge session, so it was never sent the question again and could not have answered it: the agent waited out the 180 seconds. `_ask` now keeps each open question in `_questions`, and `bridge_session` puts every open question that is not already queued back at the front of the queue and forgets which secret held it. The old window's late answer is refused with 403 as before.
+
+Hang-up. `_call` asked the question and waited whatever the caller did. `_ask_caller` waits on the same `_ask` and looks once a second at the caller's connection (`request.is_disconnected`, kept in `_caller` as `gone`); when the caller has gone it cancels the question, which withdraws it (`__withdrawn__`, reason `expired`), and the call ends without the ten-minute pause a refusal starts, because the person refused nothing. Only the question is watched: a tool call that is already running in the window is not cancelled.
+
+Wording. The two refusals that named the old checkbox ("turn on Allow outside agents (Preferences > Plugins)") now say "set Outside agents to Allowed (Preferences > Plugins)", the control the window has after the port.
+
+Blocked stays a window matter (the bridge refuses every item while it is set); the engine has no Blocked state.
+
+Seen on port 33411 with the window in headless Chrome and a script as the agent on the real `/mcp`: with a question open the page was reloaded and the same question came up again, was answered with Always, and the call ran; a caller with a 12 second timeout hung up and its dialog closed unanswered within a few seconds, and the next call was asked about again. Tests were written after.
+
+### app/services/claude_code.py, agent_programs.py · the entry for FormPath's own tabs is named formpath_tab
+- refers-to: app/services/claude_code.py :: issue, open_terminal, _chat_argv; app/services/agent_programs.py :: codex_args, write_cursor_config; tests/test_agent_programs.py
+- kind: decision
+- logged: v0.55.0 · 2026-11-19
+
+The MCP entry the engine writes for a Claude Code tab, for Chat, for a Codex tab and for a Cursor tab was named `formpath`, the same name `./formpath agents install` gives the entry an outside agent uses. It is now `formpath_tab` everywhere the engine writes it (the 0600 token file's `mcpServers` key, `--allowedTools mcp__formpath_tab`, Codex's `-c mcp_servers.formpath_tab=...`, Cursor's `.cursor/mcp.json` key), so the two cannot be mistaken for each other and a person's own `formpath` entry is not shadowed. The entry `./formpath agents install` and `./formpath claude` write is still `formpath`. Tool names in Chat's chips therefore begin `mcp__formpath_tab__`. Two assertions in `tests/test_agent_programs.py` named the old key and were changed to the new one. A Cursor config written by an earlier build keeps its old `formpath` entry beside the new one; it points at variables only FormPath's tabs have.
+
+Seen: the token file of a started Claude Code tab held `formpath_tab`; a call with that token ran while the tab was open and was treated as an outside agent's after the tab closed.

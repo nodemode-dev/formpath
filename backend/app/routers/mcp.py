@@ -405,6 +405,7 @@ _opened_at = 0.0
 _secret: str | None = None
 _superseded: collections.deque = collections.deque(maxlen=64)
 _delivered: dict[str, str] = {}
+_questions: dict[str, dict] = {}
 BRIDGE_HEADER = "x-formpath-bridge"
 
 
@@ -545,6 +546,8 @@ async def _ask(name: str, args: dict, timeout: float, once: bool = False) -> dic
     fut = asyncio.get_running_loop().create_future()
     _waiting[rid] = fut
     item = {"id": rid, "name": name, "arguments": args, **({"inapp": True} if _inapp.get() else {}), **({"once": True} if once else {})}
+    if name == "__consent__":
+        _questions[rid] = item
     _put(item)
     try:
         return await asyncio.wait_for(fut, timeout=timeout)
@@ -553,6 +556,7 @@ async def _ask(name: str, args: dict, timeout: float, once: bool = False) -> dic
     finally:
         _waiting.pop(rid, None)
         _delivered.pop(rid, None)
+        _questions.pop(rid, None)
         try:
             _pending.remove(item)
         except ValueError:
@@ -660,6 +664,17 @@ async def _run(name: str, args: dict) -> dict:
     return await _call(name, args)
 
 
+async def _ask_caller() -> dict | None:
+    gone = _caller.get().get("gone")
+    ask = asyncio.ensure_future(_ask("__consent__", _consent_request(), CONSENT_SECONDS))
+    while not ask.done():
+        await asyncio.wait({ask}, timeout=1.0)
+        if not ask.done() and gone is not None and await gone():
+            ask.cancel()
+            return {"gone": True}
+    return ask.result()
+
+
 async def _call(name: str, args: dict) -> dict:
     global _allowed, _declined_until
     answered = False
@@ -678,8 +693,10 @@ async def _call(name: str, args: dict) -> dict:
             return _fail("formpath is not open. Start it with ./formpath boot (or open the formpath app), then retry.")
     if not _allowed and not _inapp.get():
         if time.monotonic() < _declined_until:
-            return _fail("The person chose not to allow outside agents in formpath just now. Ask them to turn on Allow outside agents (Preferences > Plugins), then retry.")
-        answer = await _ask("__consent__", _consent_request(), CONSENT_SECONDS)
+            return _fail("The person chose not to allow outside agents in formpath just now. Ask them to set Outside agents to Allowed (Preferences > Plugins), then retry.")
+        answer = await _ask_caller()
+        if (answer or {}).get("gone") is True:
+            return _fail("The agent stopped waiting before the person answered in formpath.")
         if not (answer or {}).get("allowed"):
             _declined_until = time.monotonic() + 600
             return _fail("The person did not allow outside agents in formpath. Ask them to allow it (the question in the formpath window, or Preferences > Plugins), then retry.")
@@ -727,7 +744,7 @@ async def mcp(request: Request) -> Response:
     elif method == "tools/call":
         name, args = params.get("name"), params.get("arguments") or {}
         _inapp.set(claude_code.is_inapp(request.headers.get(claude_code.INAPP_HEADER)))
-        _caller.set({"tool": str(name), "client": _who(request, meta), "what": _what(str(name), args if isinstance(args, dict) else {})})
+        _caller.set({"tool": str(name), "client": _who(request, meta), "what": _what(str(name), args if isinstance(args, dict) else {}), "gone": request.is_disconnected})
         out = _ok(req_id, await _run(name, args), modern) if name in NAMES and isinstance(args, dict) else _err(req_id, -32602, f"No tool named {name}")
     else:
         out = _err(req_id, -32601, f"Method not found: {method}")
@@ -742,6 +759,10 @@ async def bridge_session(request: Request) -> Response:
     if _secret:
         _superseded.append(_secret)
     _secret = secrets.token_urlsafe(32)
+    for rid, item in list(_questions.items()):
+        if item not in _pending:
+            _delivered.pop(rid, None)
+            _put(item, front=True)
     return Response(content=json.dumps({"secret": _secret}), media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
@@ -837,7 +858,7 @@ def _stop() -> None:
         item = _pending.popleft()
         fut = _waiting.get(item["id"])
         if fut and not fut.done():
-            fut.set_result(_fail("Outside agents were turned off in formpath. Ask the person to turn on Allow outside agents (Preferences > Plugins), then retry."))
+            fut.set_result(_fail("Outside agents were turned off in formpath. Ask the person to set Outside agents to Allowed (Preferences > Plugins), then retry."))
 
 
 @router.get("/api/mcp/status")

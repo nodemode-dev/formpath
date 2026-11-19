@@ -65,7 +65,7 @@ def status(fresh: bool = False) -> dict:
 
 def codex_args() -> list[str]:
     server = f'{{url="{terminal.engine_url()}/mcp",env_http_headers={{"{claude_code.INAPP_HEADER}"="{TOKEN_VAR}"}}}}'
-    return ["-c", f"mcp_servers.formpath={server}"]
+    return ["-c", f"mcp_servers.formpath_tab={server}"]
 
 
 def cursor_entry() -> dict:
@@ -80,9 +80,9 @@ def write_cursor_config(folder: str) -> Path | None:
         return None
     if not isinstance(data, dict) or not isinstance(data.setdefault("mcpServers", {}), dict):
         return None
-    if data["mcpServers"].get("formpath") == cursor_entry():
+    if data["mcpServers"].get("formpath_tab") == cursor_entry():
         return path
-    data["mcpServers"]["formpath"] = cursor_entry()
+    data["mcpServers"]["formpath_tab"] = cursor_entry()
     try:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as handle:
