@@ -23,6 +23,22 @@ def test_committed_manifest_is_what_sync_writes():
     assert sync_module().manifest_drift() is False
 
 
+def test_the_shared_dock_folder_is_what_its_manifest_lists_and_imports_nothing_from_the_app(tmp_path):
+    import shutil
+
+    sync = sync_module()
+    assert sync.dock_problems() == []
+    assert committed()["dock"] == {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "claude", "codex", "cursor", "shell"]}
+    copy = tmp_path / "dock"
+    shutil.copytree(sync.DOCK_DIR, copy)
+    (copy / "keys.ts").write_text((copy / "keys.ts").read_text(encoding="utf-8") + "import { api } from '../io/api';\n", encoding="utf-8")
+    (copy / "extra.ts").write_text("export const x = 1;\n", encoding="utf-8")
+    (copy / "dom.ts").unlink()
+    said = "\n".join(sync.dock_problems(copy))
+    assert "keys.ts: differs from MANIFEST.json" in said and "keys.ts: imports ../io/api" in said
+    assert "extra.ts: not in MANIFEST.json" in said and "dom.ts: missing" in said
+
+
 def test_manifest_lists_the_tools_the_server_lists():
     listed = committed()["mcp"]
     assert listed["tools"] == [t["name"] for t in tool_catalogue()]
