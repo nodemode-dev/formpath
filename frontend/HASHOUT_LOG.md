@@ -4666,3 +4666,24 @@ The harvest already found Home's greeting, Projects, See all and about a hundred
 - logged: v0.55.0 · 2026-11-19
 
 `main.ts` waits for `loadWindowKey` (alongside the language load) before `startApp`. It reads `window.__FORMPATH_WINDOW_KEY`, which the desktop shell sets for the engine's own origin only, and deletes it. Without it, a key kept in `sessionStorage` is tried first (one ticket request), and only if that fails does the page ask the engine for the key once (`POST /api/window/key`, from source); a reload of the same tab therefore does not count as a second claim. The key goes on every request through `request()` and on the four raw bridge fetches and the catalogue mirror. A socket first asks for a one-time ticket, so `socketTo` is now async and its two callers (the terminal dock's `connect` and the chat pane's `listen`) wait for it; the dock closes the socket if its tab went away meanwhile. Plug-in frames never see the key: they are sandboxed iframes that talk to the page by `postMessage` and the page runs their tool calls in-process. Verified against the Vite dev server in headless Chrome: the page boots, takes the key, every write carries it, the dock opens a terminal over a ticketed socket, and an installed plug-in registers and lists in the Plugins menu.
+
+### src/ui/themes.ts · AMOLED Black
+- refers-to: src/ui/themes.ts :: ThemeProfile.oled, THEMES.amoled, applyTheme
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+A true-black theme for OLED screens, id `amoled`, ported from FormTxt's reference with FormPath's own token names (the formvis names: `--bg-primary`, `--bg-tertiary`, `--canvas-bg`, `--grid-color`). Window, panels and pasteboard are `#000000` and are told apart by their borders (`#262626`, `#3a3a3a`); `--bg-tertiary` stays `#141414` because inputs, selects, the active tab and selected layer rows use it as their only fill and would vanish at black. Text is `#ededed`, `#a6a6a6` and `#858585` (17.9, 8.6 and 5.7 to 1 on black). The accent stays the person's own. `--grid-color` is `#262626` because the pasteboard dot grid is drawn from it. There is no `--node-shadow` (a shadow on black shows nothing). The profile has an `oled` flag; `applyTheme` sets `data-oled` on the root for an oled profile and removes it for every other, touching the attribute only when it changes. The artboard is document content and keeps its own colour. The Theme swatch grid is built from THEMES, so it lists the theme with no other change.
+
+### index.html · AMOLED Black in the pre-paint script
+- refers-to: index.html :: inline style, OLED, PROFILES.amoled, the data-oled line
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+The boot script is the second copy of the profile table, so `amoled` is there too (11 columns, the last is `--bg-node`) with an `OLED = { 'amoled': 1 }` table that sets `data-oled` beside the variables before first paint. A theme in one table and not the other would paint Studio Dark first and then switch. The critical inline style gets `html[data-oled] body { background: #000000; }` because its `body` colour (`#0a0a0a`) paints over the root's inline background until the stylesheets arrive.
+
+### src/styles/tokens.css and shell.css · rules on data-oled
+- refers-to: src/styles/tokens.css :: :root[data-oled]; src/styles/shell.css :: :root[data-oled] .cv-rail
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+All the exceptions hang on `data-oled`, never on the theme id, so another OLED profile needs only the flag. `--bg-hover` and `--border-soft` become 10% and 12% white (the usual 6% and 8% are too close to black to read). `--surface-1` (a mix of primary and tertiary: title bar, rail, tool buttons) becomes `--bg-primary`, and `--line-0` (black on black) becomes `--border-color`. The tool rail painted a gradient with two accent glows at the top and the bottom; it is a plain `--surface-1` under `data-oled`. Found by measuring: the computed backgrounds of every visible element over 3000 square pixels and pixel samples of a 1440 by 900 screenshot at the corners and centre of the title bar, rail, pasteboard, properties, layers and status bar. Menus and dialogs are translucent or opaque black already. No other theme changes.
