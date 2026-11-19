@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from app.core import window_key
 from app.routers.terminal import origin_ok, require_local
 from app.services import claude_code, terminal
 
@@ -51,6 +52,7 @@ def _guard(fn, *args, **kwargs):
 @router.get("/status")
 def status(request: Request) -> dict:
     require_local(request)
+    window_key.require(request)
     return claude_code.status()
 
 
@@ -69,6 +71,7 @@ def open_tab(body: OpenBody, request: Request) -> dict:
 @router.get("/chat")
 def chat_state(request: Request) -> dict:
     require_local(request)
+    window_key.require(request)
     return claude_code.chat_state()
 
 
@@ -93,6 +96,7 @@ def chat_reset(request: Request) -> dict:
 @router.get("/chat/sessions")
 def chat_sessions(request: Request) -> dict:
     require_local(request)
+    window_key.require(request)
     return _guard(claude_code.chat_sessions)
 
 
@@ -113,7 +117,7 @@ def chat_image(name: str, request: Request) -> FileResponse:
 
 @router.websocket("/chat/stream")
 async def chat_stream(ws: WebSocket) -> None:
-    if not origin_ok(ws.headers.get("origin"), ws.headers.get("host")):
+    if not origin_ok(ws.headers.get("origin"), ws.headers.get("host")) or not window_key.spend(ws.query_params.get("ticket")):
         await ws.close(code=4403)
         return
     await ws.accept()

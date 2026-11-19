@@ -7,7 +7,7 @@ export const LANGUAGES: Array<[string, string]> = [
 const STORE = 'formpath.lang';
 const ATTRS = ['title', 'placeholder', 'aria-label', 'alt'];
 const SKIP = [
-  'script', 'style', 'textarea', 'code', 'pre', 'canvas', '[translate="no"]', '[contenteditable="true"]', '.xterm', '.ft-chat-msg', '.ft-md',
+  'script', 'style', 'textarea', 'code', 'pre', 'canvas', '[translate="no"]', '[contenteditable="true"]', '.xterm', '.fp-chat-msg', '.ft-md', '.ft-dock-tab-title', '.ft-consent-title', '.ft-consent-what',
   '.cv-lrow-name', '.cv-tab-name', '.cv-sw-group-name', '.cv-varp-name', '.cv-linkp-name', '.cv-assetp-name', '.cv-hf-name','.cv-retypep-name', '.cv-fpd-name',
 ].join(', ');
 const loaders = import.meta.glob('./locales/*.json');

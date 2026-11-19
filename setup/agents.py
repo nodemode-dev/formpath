@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """./formpath agents: drawing in formpath from Claude Code, Codex and Cursor.
 
-  sync [--check]            generate the harness skill's tool reference from the engine's MCP catalogue and mirror the
+  sync [--check]            write agents/manifest.json, generate the harness skill's tool reference from the engine's MCP catalogue and mirror the
                             harness and skillset skills from .claude/skills to .agents/skills (Codex, Cursor);
                             --check: exit 1 if drifted
   install [--dry-run] [claude|codex|cursor ...]
@@ -10,16 +10,33 @@
                             running it again changes nothing
 """
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+MANIFEST = ROOT / "agents" / "manifest.json"
+APP = "formpath"
+DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "claude", "codex", "cursor", "shell"]}
+DOCK_DIR = ROOT / "frontend" / "src" / "dock"
+ENGINE_FACTS = """
+import json
+from app.main import app
+from app.routers import mcp
+print(json.dumps({
+    "tools": [t["name"] for t in mcp.TOOLS],
+    "read_only": [t["name"] for t in mcp.TOOLS if t["annotations"]["readOnlyHint"]],
+    "approval_gated": list(mcp.APPROVAL_GATED),
+    "http": "post" in app.openapi().get("paths", {}).get("/mcp", {}),
+}))
+"""
 NAME = "formpath-harness"
 SKILL = ROOT / ".claude" / "skills" / NAME
 MIRRORED = (NAME, "formpath-skillset")
@@ -78,6 +95,19 @@ def tools_reference() -> str:
     return "\n".join(out)
 
 
+COVERS = re.compile(r"(Covers ([^.]*?) and )(\d+)( more tools\.)")
+
+
+def description_wanted(text: str) -> str:
+    sys.path.insert(0, str(ROOT / "backend"))
+    from app.routers.mcp import TOOLS
+    found = COVERS.search(text)
+    if found is None:
+        return text
+    named = len(found.group(2).split(", "))
+    return text[:found.start(3)] + str(len(TOOLS) - named) + text[found.end(3):]
+
+
 def commands_reference() -> str | None:
     path = Path(os.environ.get("FORMPATH_DATA_DIR") or str(Path.home() / "Formpath")).expanduser() / "commands-catalogue.json"
     if not path.exists():
@@ -104,15 +134,89 @@ def _files(folder: Path) -> dict:
     return {str(p.relative_to(folder)): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
 
 
+def engine_facts() -> dict:
+    with tempfile.TemporaryDirectory(prefix="formpath-manifest-") as scratch:
+        env = {**os.environ, "FORMPATH_DATA_DIR": scratch, "PYTHONDONTWRITEBYTECODE": "1"}
+        done = subprocess.run([sys.executable, "-c", ENGINE_FACTS], cwd=ROOT / "backend", env=env, capture_output=True, text=True)
+    if done.returncode != 0:
+        raise RuntimeError("cannot read the MCP registry from the engine code (install backend/requirements.txt, then run again): " + (done.stderr.strip().splitlines() or ["no output"])[-1])
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def skill_entries() -> list[dict]:
+    base = ROOT / ".claude" / "skills"
+    out = []
+    for folder in sorted(p for p in base.iterdir() if (p / "SKILL.md").is_file()) if base.is_dir() else []:
+        subs = folder / "sub-skills"
+        names = sorted(p.name for p in subs.iterdir() if (p / "SUB-SKILL.md").is_file()) if subs.is_dir() else []
+        out.append({"name": folder.name, "sub_skills": names})
+    return out
+
+
+def manifest_text() -> str:
+    facts = engine_facts()
+    transports = (["stdio"] if (ROOT / "setup" / "mcp_stdio.py").is_file() else []) + (["http"] if facts["http"] else [])
+    body = {
+        "format": "form-agent-manifest",
+        "version": 1,
+        "app": APP,
+        "mcp": {"tools": facts["tools"], "read_only": facts["read_only"], "approval_gated": facts["approval_gated"], "transports": transports},
+        "skills": skill_entries(),
+        "dock": DOCK,
+        "extensions": None,
+    }
+    return json.dumps(body, indent=2) + "\n"
+
+
+def manifest_drift() -> bool:
+    return not MANIFEST.is_file() or MANIFEST.read_text(encoding="utf-8") != manifest_text()
+
+
+def dock_problems(folder: Path = DOCK_DIR) -> list[str]:
+    listed = folder / "MANIFEST.json"
+    try:
+        files = json.loads(listed.read_text(encoding="utf-8"))["files"]
+    except (OSError, ValueError, KeyError):
+        return [f"{listed}: missing or unreadable"]
+    out = []
+    for name, digest in sorted(files.items()):
+        path = folder / name
+        if not path.is_file():
+            out.append(f"{path}: missing")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            out.append(f"{path}: differs from MANIFEST.json (copy it again from FormVis; this folder is never edited here)")
+    for path in sorted(folder.iterdir()):
+        if path.name != "MANIFEST.json" and path.name not in files:
+            out.append(f"{path}: not in MANIFEST.json")
+        if path.suffix == ".ts":
+            for spec in re.findall(r"""(?:from|import)\s*\(?\s*['"]([^'"]+)['"]""", path.read_text(encoding="utf-8")):
+                if not (spec.startswith("@xterm/") or (spec.startswith("./") and "/" not in spec[2:])):
+                    out.append(f"{path}: imports {spec} (the dock folder imports nothing from the app)")
+    return out
+
+
 def sync(check: bool) -> int:
     ref = SKILL / "references" / "tools.md"
     want = tools_reference()
     drift = []
+    wanted = manifest_text()
+    if not MANIFEST.is_file() or MANIFEST.read_text(encoding="utf-8") != wanted:
+        drift.append(str(MANIFEST.relative_to(ROOT)))
+        if not check:
+            MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+            MANIFEST.write_text(wanted, encoding="utf-8")
     if not ref.exists() or ref.read_text(encoding="utf-8") != want:
         drift.append(str(ref.relative_to(ROOT)))
         if not check:
             ref.parent.mkdir(parents=True, exist_ok=True)
             ref.write_text(want, encoding="utf-8")
+    entry = SKILL / "SKILL.md"
+    entry_text = entry.read_text(encoding="utf-8")
+    entry_want = description_wanted(entry_text)
+    if entry_text != entry_want:
+        drift.append(str(entry.relative_to(ROOT)) + " (the tool count in the description)")
+        if not check:
+            entry.write_text(entry_want, encoding="utf-8")
     cref, cwant = SKILL / "references" / "commands.md", commands_reference()
     if cwant is None:
         print("agents: no stored command catalogue yet; skipping references/commands.md")
@@ -127,11 +231,14 @@ def sync(check: bool) -> int:
             if not check:
                 shutil.rmtree(dst, ignore_errors=True)
                 shutil.copytree(src, dst)
+    shared = dock_problems()
+    for line in shared:
+        print("agents: " + line)
     if check:
         print("agents: in step" if not drift else "agents: drifted: " + ", ".join(drift) + " (run ./formpath agents sync)")
-        return 1 if drift else 0
+        return 1 if drift or shared else 0
     print("agents: " + ("updated " + ", ".join(drift) if drift else "already in step"))
-    return 0
+    return 1 if shared else 0
 
 
 def _backup(path: Path, dry: bool) -> None:

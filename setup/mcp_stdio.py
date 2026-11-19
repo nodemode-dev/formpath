@@ -14,6 +14,7 @@ _started = False
 ATTACH = os.environ.get("FORMPATH_MCP_ATTACH", "0") == "1"
 _down = False
 _changed = False
+_client = ""
 OFFLINE = "formpath is not running. Start it with ./formpath boot (or open the formpath app), then ask again."
 PING_ONLY = [{"name": "ping", "description": "Reports whether formpath is running. It is not running now; start it with ./formpath boot, and the other tools appear.",
               "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False}, "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}}]
@@ -26,7 +27,11 @@ def forward(line: str) -> str | None:
         return json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
     params = msg.get("params") or {}
     version = (params.get("_meta") or {}).get("io.modelcontextprotocol/protocolVersion") or params.get("protocolVersion") or "2025-11-25"
-    req = urllib.request.Request(URL, data=line.encode(), method="POST", headers={"Content-Type": "application/json", "Accept": "application/json", "MCP-Protocol-Version": version})
+    global _client
+    if msg.get("method") == "initialize":
+        _client = "".join(ch for ch in str((params.get("clientInfo") or {}).get("name") or "") if " " <= ch <= "~")[:80]
+    req = urllib.request.Request(URL, data=line.encode(), method="POST", headers={"Content-Type": "application/json", "Accept": "application/json", "MCP-Protocol-Version": version,
+                                                                                **({"X-Formpath-Client": _client} if _client else {})})
     try:
         with urllib.request.urlopen(req, timeout=900) as r:
             body = r.read().decode()

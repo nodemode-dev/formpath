@@ -17,6 +17,7 @@ from app.core import config
 from app.services import claude_code
 
 _inapp: contextvars.ContextVar[bool] = contextvars.ContextVar("formpath_inapp", default=False)
+_caller: contextvars.ContextVar[dict] = contextvars.ContextVar("formpath_caller", default={})
 
 router = APIRouter()
 VERSIONS = ["2026-07-28", "2025-11-25"]
@@ -390,6 +391,7 @@ TOOLS = [
     _tool("redo", "Steps forward through the history.", {"steps": {"type": "integer", "minimum": 1, "maximum": 100, "default": 1}}),
 ]
 NAMES = {t["name"] for t in TOOLS}
+APPROVAL_GATED = tuple(t["name"] for t in TOOLS)
 
 _pending: collections.deque = collections.deque()
 _ready: asyncio.Event | None = None
@@ -403,6 +405,7 @@ _opened_at = 0.0
 _secret: str | None = None
 _superseded: collections.deque = collections.deque(maxlen=64)
 _delivered: dict[str, str] = {}
+_questions: dict[str, dict] = {}
 BRIDGE_HEADER = "x-formpath-bridge"
 
 
@@ -416,6 +419,56 @@ def _event() -> asyncio.Event:
 def _put(item: dict, front: bool = False) -> None:
     (_pending.appendleft if front else _pending.append)(item)
     _event().set()
+
+
+CONSENT_SECONDS = 180.0
+CONSENT_ANSWERS = ["deny", "once", "always"]
+CLIENT_HEADER = "x-formpath-client"
+SESSION_HEADER = "mcp-session-id"
+_clients: collections.OrderedDict = collections.OrderedDict()
+_withdrawals = False
+
+
+def _client_name(value) -> str:
+    if not isinstance(value, str):
+        return ""
+    return "".join(ch for ch in value if ch.isprintable()).strip()[:80]
+
+
+def _remember_client(name: str) -> str:
+    sid = secrets.token_urlsafe(18)
+    _clients[sid] = name
+    while len(_clients) > 256:
+        _clients.popitem(last=False)
+    return sid
+
+
+def _who(request: Request, meta: dict) -> str:
+    info = meta.get("io.modelcontextprotocol/clientInfo")
+    return (_clients.get(request.headers.get(SESSION_HEADER) or "", "") or _client_name(request.headers.get(CLIENT_HEADER))
+            or _client_name(info.get("name") if isinstance(info, dict) else None))
+
+
+def _what(tool: str, args: dict) -> str:
+    command = args.get("command") or args.get("id")
+    if tool == "run_command" and isinstance(command, str) and _client_name(command):
+        return f"run the command {_client_name(command)}"
+    return f"use {tool.replace('_', ' ')}"
+
+
+def _consent_request() -> dict:
+    caller = _caller.get()
+    return {"tool": caller.get("tool", ""), "client": caller.get("client", ""), "what": caller.get("what", ""), "answers": CONSENT_ANSWERS,
+            "alwaysCovers": "all", "seconds": CONSENT_SECONDS, "expiresAt": int((time.time() + CONSENT_SECONDS) * 1000)}
+
+
+def _withdraw(rid: str, reason: str) -> None:
+    if not _withdrawals:
+        return
+    queued = [it for it in _pending if it.get("name") == "__withdrawn__"]
+    for old in queued[:max(0, len(queued) - 63)]:
+        _pending.remove(old)
+    _put({"id": f"w{rid}", "name": "__withdrawn__", "arguments": {"request": rid, "reason": reason}})
 
 
 def _local_origin(origin: str | None) -> bool:
@@ -488,11 +541,13 @@ def _open_window() -> bool:
         return False
 
 
-async def _ask(name: str, args: dict, timeout: float) -> dict | None:
+async def _ask(name: str, args: dict, timeout: float, once: bool = False) -> dict | None:
     rid = str(next(_ids))
     fut = asyncio.get_running_loop().create_future()
     _waiting[rid] = fut
-    item = {"id": rid, "name": name, "arguments": args, **({"inapp": True} if _inapp.get() else {})}
+    item = {"id": rid, "name": name, "arguments": args, **({"inapp": True} if _inapp.get() else {}), **({"once": True} if once else {})}
+    if name == "__consent__":
+        _questions[rid] = item
     _put(item)
     try:
         return await asyncio.wait_for(fut, timeout=timeout)
@@ -501,10 +556,13 @@ async def _ask(name: str, args: dict, timeout: float) -> dict | None:
     finally:
         _waiting.pop(rid, None)
         _delivered.pop(rid, None)
+        _questions.pop(rid, None)
         try:
             _pending.remove(item)
         except ValueError:
             pass
+        if name == "__consent__":
+            _withdraw(rid, "answered" if fut.done() and not fut.cancelled() else "expired")
 
 
 _OPENABLE = {".fpth", ".svg", ".svgz", ".pdf", ".ai", ".eps", ".epsf", ".ps", ".dxf", ".dwg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".psd", ".psb", ".tif", ".tiff", ".obj", ".glb", ".gltf"}
@@ -606,8 +664,20 @@ async def _run(name: str, args: dict) -> dict:
     return await _call(name, args)
 
 
+async def _ask_caller() -> dict | None:
+    gone = _caller.get().get("gone")
+    ask = asyncio.ensure_future(_ask("__consent__", _consent_request(), CONSENT_SECONDS))
+    while not ask.done():
+        await asyncio.wait({ask}, timeout=1.0)
+        if not ask.done() and gone is not None and await gone():
+            ask.cancel()
+            return {"gone": True}
+    return ask.result()
+
+
 async def _call(name: str, args: dict) -> dict:
     global _allowed, _declined_until
+    answered = False
     if not _live() and _seen and time.monotonic() - _seen < 300:
         for _ in range(80):
             await asyncio.sleep(0.25)
@@ -623,13 +693,17 @@ async def _call(name: str, args: dict) -> dict:
             return _fail("formpath is not open. Start it with ./formpath boot (or open the formpath app), then retry.")
     if not _allowed and not _inapp.get():
         if time.monotonic() < _declined_until:
-            return _fail("The person chose not to allow outside agents in formpath just now. Ask them to turn on Allow outside agents (Preferences > Plugins), then retry.")
-        answer = await _ask("__consent__", {}, 180)
+            return _fail("The person chose not to allow outside agents in formpath just now. Ask them to set Outside agents to Allowed (Preferences > Plugins), then retry.")
+        answer = await _ask_caller()
+        if (answer or {}).get("gone") is True:
+            return _fail("The agent stopped waiting before the person answered in formpath.")
         if not (answer or {}).get("allowed"):
             _declined_until = time.monotonic() + 600
             return _fail("The person did not allow outside agents in formpath. Ask them to allow it (the question in the formpath window, or Preferences > Plugins), then retry.")
-        _allowed = True
-    out = await _ask(name, args, 600)
+        answered = True
+        if answer.get("once") is not True:
+            _allowed = True
+    out = await _ask(name, args, 600, answered)
     return out if out is not None else _fail("formpath did not answer in time: it may be busy with a long task. Check the formpath window, then retry.")
 
 
@@ -657,6 +731,8 @@ async def mcp(request: Request) -> Response:
     elif method == "initialize":
         asked = params.get("protocolVersion")
         out = _ok(req_id, {"protocolVersion": asked if asked in VERSIONS else "2025-11-25", "capabilities": {"tools": {}, "prompts": {}}, "serverInfo": server, "instructions": INSTRUCTIONS}, False)
+        info = params.get("clientInfo")
+        return Response(content=json.dumps(out), media_type="application/json", headers={"Mcp-Session-Id": _remember_client(_client_name(info.get("name") if isinstance(info, dict) else None))})
     elif method == "ping":
         out = _ok(req_id, {}, modern)
     elif method == "prompts/list":
@@ -668,6 +744,7 @@ async def mcp(request: Request) -> Response:
     elif method == "tools/call":
         name, args = params.get("name"), params.get("arguments") or {}
         _inapp.set(claude_code.is_inapp(request.headers.get(claude_code.INAPP_HEADER)))
+        _caller.set({"tool": str(name), "client": _who(request, meta), "what": _what(str(name), args if isinstance(args, dict) else {}), "gone": request.is_disconnected})
         out = _ok(req_id, await _run(name, args), modern) if name in NAMES and isinstance(args, dict) else _err(req_id, -32602, f"No tool named {name}")
     else:
         out = _err(req_id, -32601, f"Method not found: {method}")
@@ -682,6 +759,10 @@ async def bridge_session(request: Request) -> Response:
     if _secret:
         _superseded.append(_secret)
     _secret = secrets.token_urlsafe(32)
+    for rid, item in list(_questions.items()):
+        if item not in _pending:
+            _delivered.pop(rid, None)
+            _put(item, front=True)
     return Response(content=json.dumps({"secret": _secret}), media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
@@ -700,19 +781,24 @@ async def _body(request: Request) -> dict:
 
 @router.post("/api/mcp/bridge/next")
 async def bridge_next(request: Request) -> Response:
-    global _seen, _allowed, _declined_until
+    global _seen, _allowed, _declined_until, _withdrawals
     held = request.headers.get(BRIDGE_HEADER) or ""
     if _app_origin(request) and held and held in _superseded:
         return Response(status_code=205)
     refused = _bridge_refusal(request)
     if refused:
         return refused
-    allowed = (await _body(request)).get("allowed") is True
+    body = await _body(request)
+    allowed = body.get("allowed") is True
     if allowed and not _allowed:
         _declined_until = 0.0
     _allowed = allowed
+    _withdrawals = body.get("withdrawals") is True
+    if not _withdrawals:
+        for stale in [it for it in _pending if it.get("name") == "__withdrawn__"]:
+            _pending.remove(stale)
     deadline = time.monotonic() + 20
-    eligible = lambda it: allowed or it.get("name") == "__consent__" or it.get("inapp") is True
+    eligible = lambda it: allowed or it.get("name") in ("__consent__", "__withdrawn__") or it.get("inapp") is True or it.get("once") is True
     while time.monotonic() < deadline:
         if _secret != held:
             return Response(status_code=205)
@@ -732,7 +818,8 @@ async def bridge_next(request: Request) -> Response:
         if await request.is_disconnected():
             _put(found, front=True)
             return Response(status_code=204)
-        _delivered[str(found["id"])] = held
+        if found.get("name") != "__withdrawn__":
+            _delivered[str(found["id"])] = held
         return Response(content=json.dumps(found), media_type="application/json", headers={"Cache-Control": "no-store"})
     return Response(status_code=204)
 
@@ -771,9 +858,10 @@ def _stop() -> None:
         item = _pending.popleft()
         fut = _waiting.get(item["id"])
         if fut and not fut.done():
-            fut.set_result(_fail("Outside agents were turned off in formpath. Ask the person to turn on Allow outside agents (Preferences > Plugins), then retry."))
+            fut.set_result(_fail("Outside agents were turned off in formpath. Ask the person to set Outside agents to Allowed (Preferences > Plugins), then retry."))
 
 
 @router.get("/api/mcp/status")
 def status(request: Request) -> dict:
-    return {"live": _live(), "allowed": _allowed, "endpoint": f"http://127.0.0.1:{request.url.port or config.port()}/mcp", "tools": len(TOOLS)}
+    return {"live": _live(), "allowed": _allowed, "endpoint": f"http://127.0.0.1:{request.url.port or config.port()}/mcp", "tools": len(TOOLS),
+            "consent": {"answers": CONSENT_ANSWERS, "alwaysCovers": "all", "seconds": CONSENT_SECONDS, "withdrawals": True}}

@@ -1,11 +1,13 @@
 ---
 name: formpath-harness
-description: Draws and edits vector artwork in formpath, the Illustrator-style editor, through its MCP server. Use whenever someone asks to make a poster, flyer, logo, icon, badge, sticker, diagram, infographic, pattern or illustration; to combine, recolour, outline type or apply effects to vector shapes; or to open, save or export SVG, PDF, EPS, DXF, PNG or .fpth files in formpath, even when they never name formpath or MCP. Covers get_document, get_image, draw_shape, draw_path, add_text, set_paint, pathfinder, apply_effect, export_file and 79 more tools.
+description: Draws and edits vector artwork in formpath, the Illustrator-style editor, through its MCP server. Use whenever someone asks to make a poster, flyer, logo, icon, badge, sticker, diagram, infographic, pattern or illustration; to combine, recolour, outline type or apply effects to vector shapes; or to open, save or export SVG, PDF, EPS, DXF, PNG or .fpth files in formpath, even when they never name formpath or MCP. Covers get_document, get_image, draw_shape, draw_path, add_text, set_paint, pathfinder, apply_effect, export_file and 84 more tools. Not for changing formpath's code: use formpath-skillset for that.
 ---
 
 # formpath-harness
 
 formpath is a vector illustration editor that runs on this computer; its MCP server lets an agent draw in the open window with the same engine a person uses. Tool access alone produces improvised, unchecked art. This pack is the knowledge layer: how to look before drawing, plan in points, build with live shapes and Pathfinder, paint and type well, check every step by looking at it, and deliver files that stay editable.
+
+For changing formpath's own code (adding or fixing a tool, a panel, a file format, the engine service or the desktop build) use the `formpath-skillset` skill instead; this pack is only for drawing through the MCP server.
 
 ## How this pack is laid out
 

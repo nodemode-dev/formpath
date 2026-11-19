@@ -2,6 +2,24 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.55.0 · 2026-11-19
+
+- Only the FormPath window can change documents, open a terminal or choose which program Claude Code runs; the same requests from outside the app's window are refused. The command line (`./formpath cli`) counts as an outside agent and follows the choice in Preferences > Plugins.
+- When an outside agent (Claude Code, Codex, Cursor or another MCP client) wants to make changes, the question names the agent and what it asked, and can be answered Deny, Allow once or Always allow. It goes away when the agent stops waiting and comes back after a reload if it is still waiting.
+- Preferences > Plugins > Outside Agents is a choice of Ask each time, Allowed and Blocked, in place of the "Allow outside agents" checkbox.
+- A Claude Code tab or Chat started inside FormPath works without that question, and its access ends when the tab is closed.
+- The terminal panel can sit at the bottom or, in a window 1100 px wide or more, at the right. It remembers its side and size, and keeps the size it had before this version.
+- Codex and Cursor open as their own tabs in the terminal panel when they are installed.
+- The ask line under the terminal panel talks to Chat while the Chat tab is in front and asks Claude Code from any terminal tab, with the document name and selection added. Text typed while Claude is still working stays in the line.
+- The terminal panel has a short guide the first time it is opened; people who already used the panel are not shown it.
+- The terminal is loaded when the panel is first opened, not when FormPath starts.
+- In the terminal panel, a program that has ended shows as a struck-through tab, and a problem in the panel shows as a note inside it instead of a toast.
+- New theme: AMOLED Black, a true-black theme for OLED screens.
+- The desktop app waits at most 10 seconds for its engine at start, then says the engine did not start.
+- `./formpath agents sync` also writes `agents/manifest.json`, which says what FormPath offers agents, and `--check` fails when it is stale.
+- The terminal panel's new labels, its guide and the outside-agents question and choice are in English in every language for now.
+- The wiki and the agent skill say 93 tools in sixteen groups and describe how outside agents are asked; clone addresses name the nodemode-dev organisation; the README states the current code size.
+
 ## 0.54.1 · 2026-11-13
 
 - In every language except English, an error message no longer appears when FormPath starts; it came from the Asset Export panel.

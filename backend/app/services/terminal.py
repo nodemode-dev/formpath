@@ -19,8 +19,9 @@ MIN_COLS, MIN_ROWS = 10, 4
 
 
 class Session:
-    def __init__(self, sid: str, title: str, cwd: str, argv: list[str], env: dict, kind: str) -> None:
+    def __init__(self, sid: str, title: str, cwd: str, argv: list[str], env: dict, kind: str, token: str | None = None) -> None:
         self.id = sid
+        self.token = token
         self.title = title
         self.cwd = cwd
         self.argv = argv
@@ -84,8 +85,8 @@ def base_env() -> dict:
     env["FORMPATH_ENGINE_URL"] = engine_url()
     env["FORMPATH_MCP_URL"] = engine_url() + "/mcp"
     env["FORMPATH_URL"] = engine_url()
-    from app.services import claude_code
-    env["FORMPATH_INAPP_TOKEN"] = claude_code.INAPP_TOKEN
+    env.pop("FORMPATH_WINDOW_KEY_STDOUT", None)
+    env.pop("FORMPATH_INAPP_TOKEN", None)
     if not getattr(sys, "frozen", False):
         env["PATH"] = str(config.REPO_DIR) + os.pathsep + env.get("PATH", "")
     return env
@@ -132,13 +133,13 @@ def default_folder() -> str:
 
 
 def open_session(cwd: str | None = None, cols: int = 100, rows: int = 30, title: str | None = None,
-                 argv: list[str] | None = None, env: dict | None = None, kind: str = "shell") -> Session:
+                 argv: list[str] | None = None, env: dict | None = None, kind: str = "shell", token: str | None = None) -> Session:
     where = cwd or default_folder()
     if not os.path.isdir(where):
         raise FileNotFoundError(f"There is no folder {where}.")
     sid = uuid.uuid4().hex[:12]
     shells = sum(1 for s in SESSIONS.values() if s.kind == "shell")
-    session = Session(sid, title or f"Terminal {shells + 1}", where, argv or login_shell(), env or base_env(), kind)
+    session = Session(sid, title or f"Terminal {shells + 1}", where, argv or login_shell(), env or base_env(), kind, token)
     session.cols, session.rows = max(MIN_COLS, cols), max(MIN_ROWS, rows)
     _spawn(session)
     SESSIONS[sid] = session
@@ -184,6 +185,9 @@ def close(sid: str) -> None:
             session.proc.terminate(force=True)
         except Exception:
             pass
+    if session.token:
+        from app.services import claude_code
+        claude_code.revoke(session.token)
     _send(session, None)
 
 

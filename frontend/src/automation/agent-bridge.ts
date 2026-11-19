@@ -35,7 +35,7 @@ import { boundLabel, parseDataFile, VARIABLE_KINDS } from '../engine/variables';
 import { exportDataSets, showDataSet } from '../io/data-merge';
 import { VERSION } from '../version';
 import type { GraphColumnDesign, GraphData, GraphSeriesType, GraphSpec, GraphType, Variable, VariableKind } from '../engine/types';
-import { api } from '../io/api';
+import { api, type BridgeItem } from '../io/api';
 import { bakeTraced } from '../io/raster';
 import { attachPlace, gridOf, leafPlaneBounds, planeLocalRect, presetGrid, vanishing } from '../engine/perspective';
 import type { BrushDef, Doc, PerspPlane } from '../engine/types';
@@ -52,9 +52,8 @@ import { rankFonts, recognize, retypeNode, sourceFromImage, sourceFromOutlines }
 
 export interface McpResult { content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; structuredContent?: Record<string, unknown>; isError?: boolean }
 export interface AgentDeps {
-  ask(title: string, text: string): Promise<boolean>;
+  consent: { arrive(item: BridgeItem, reply: (result: Record<string, boolean>) => Promise<void>): void; gone(id: string): void; blocked(): boolean };
   note(text: string): void;
-  allow(): void;
   openFile(file: File, dxf?: Partial<DxfImportOptions> | null, password?: string): Promise<void>;
   placeFile(file: File, at: Pt | null, width: number | null, dxf?: Partial<DxfImportOptions> | null, placing?: PlaceOptions): Promise<string | null>;
   placeLinked?(path: string, at: Pt | null, width: number | null, placing?: PlaceOptions): Promise<string | null>;
@@ -116,13 +115,15 @@ export class AgentBridge {
         if (status === 205) { this.secret = null; await this.refocused(); continue; }
         if (status === 403) { this.secret = null; await sleep(1000); continue; }
         if (status === 200 && item) {
+          if (item.name === '__withdrawn__') { this.deps.consent.gone(String(item.arguments?.request ?? '')); continue; }
           if (item.name === '__consent__') {
-            const yes = this.on || await this.deps.ask('Allow an outside agent to edit?', 'An AI agent connected to formpath (such as Claude Code, Codex or Cursor) asks to draw in and edit your documents. Each change is one undoable step. You can turn this off in Preferences > Plugins.');
-            if (yes && !this.on) { this.on = true; this.deps.allow(); }
-            await api.mcpResult(secret, item.id, { allowed: yes });
+            if (this.on) await api.mcpResult(secret, item.id, { allowed: true });
+            else this.deps.consent.arrive(item, (result) => api.mcpResult(secret, item.id, result));
             continue;
           }
-          const result = this.on || item.inapp === true ? await this.run(item.name, item.arguments ?? {}, 'loop') : fail('formpath stopped taking requests.');
+          const blocked = this.deps.consent.blocked();
+          const result = blocked ? fail('Agents are blocked in formpath. Ask the person to change Outside agents in Preferences > Plugins, then retry.')
+            : this.on || item.inapp === true || item.once === true ? await this.run(item.name, item.arguments ?? {}, 'loop') : fail('formpath stopped taking requests.');
           await api.mcpResult(secret, item.id, result);
         } else if (status !== 204) await sleep(2000);
       } catch { await sleep(2000); }

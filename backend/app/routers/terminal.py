@@ -1,12 +1,13 @@
 import asyncio
 import json
+from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from app.core import config
-from app.services import terminal
+from app.core import config, window_key
+from app.services import agent_programs, terminal
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
 
@@ -38,6 +39,12 @@ class OpenBody(BaseModel):
     cwd: str | None = Field(None, max_length=4096)
 
 
+class AgentBody(BaseModel):
+    kind: Literal["codex", "cursor"]
+    cols: int = Field(100, ge=10, le=500)
+    rows: int = Field(30, ge=4, le=200)
+
+
 class SizeBody(BaseModel):
     cols: int = Field(ge=10, le=500)
     rows: int = Field(ge=4, le=200)
@@ -57,6 +64,7 @@ def _session(sid: str) -> terminal.Session:
 @router.get("")
 def list_terminals(request: Request) -> dict:
     require_local(request)
+    window_key.require(request)
     return {"terminals": terminal.listing()}
 
 
@@ -69,6 +77,26 @@ def open_terminal(body: OpenBody, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"The shell could not start: {exc}")
+
+
+@router.get("/agents")
+def agent_status(request: Request, fresh: bool = False) -> dict:
+    require_local(request)
+    window_key.require(request)
+    return agent_programs.status(fresh)
+
+
+@router.post("/agent")
+def open_agent(body: AgentBody, request: Request) -> dict:
+    require_local(request)
+    try:
+        return agent_programs.open_terminal(body.kind, body.cols, body.rows)
+    except LookupError as exc:
+        raise HTTPException(status_code=409, detail=str(exc).strip("'\""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"The program could not start: {exc}")
 
 
 @router.post("/{sid}/resize")
@@ -92,6 +120,7 @@ def write_terminal(sid: str, body: WriteBody, request: Request) -> dict:
 @router.get("/{sid}/read")
 def read_terminal(sid: str, request: Request, chars: int = 4000) -> dict:
     require_local(request)
+    window_key.require(request)
     session = _session(sid)
     return {"id": sid, "alive": session.alive, "text": terminal_text(session)[-max(1, min(chars, 200_000)):]}
 
@@ -121,7 +150,7 @@ def close_terminal(sid: str, request: Request) -> dict:
 
 @router.websocket("/{sid}/stream")
 async def attach(ws: WebSocket, sid: str) -> None:
-    if not origin_ok(ws.headers.get("origin"), ws.headers.get("host")):
+    if not origin_ok(ws.headers.get("origin"), ws.headers.get("host")) or not window_key.spend(ws.query_params.get("ticket")):
         await ws.close(code=4403)
         return
     await ws.accept()

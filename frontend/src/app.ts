@@ -64,7 +64,6 @@ import { AppearancePanel, GraphicStylesPanel } from './ui/panels/appearance';
 import { AttributesPanel } from './ui/panels/attributes';
 import { STYLE_LIBRARIES } from './engine/style-libraries';
 import { envelopeOptions } from './engine/envelope';
-import { AgentConfirmDialog } from './ui/panels/agent-confirm';
 import { AssistantPanel } from './ui/panels/assistant';
 import { ColorPanel, GradientPanel, SwatchesPanel } from './ui/panels/color';
 import { BrushLibraryPanel, keepUserBrushLibrary, keepUserSwatchLibrary, keepUserSymbolLibrary, SwatchLibraryPanel, userBrushLibraries, userSwatchLibraries, userSymbolLibraries } from './ui/panels/libraries';
@@ -112,7 +111,8 @@ import { AlignPanel, PathfinderPanel, PropertiesPanel, TransformPanel } from './
 import { Rail } from './ui/rail';
 import { Stage } from './ui/stage';
 import { StatusBar } from './ui/status';
-import { TerminalDock } from './ui/terminal-dock';
+import { Dock as AgentDock } from './dock/dock';
+import { formpathDock, outsideAgents } from './dock-adapter';
 import { Catalogue } from './automation/catalogue';
 import { SpellingDialog, resetSpellCache } from './ui/panels/spelling';
 import { SeparationsDialog } from './ui/panels/separations';
@@ -341,19 +341,23 @@ export function startApp(): void {
   new HelpBar(q(root, '.fp-helpbar'), engine);
   late.task = new TaskBar(q(document.body, '#overlay-root'), stageEl, engine, commands);
   applyUiPrefs(prefs);
-  const termDock = new TerminalDock();
-  root.insertBefore(termDock.root, q(root, '.cv-status'));
-  termDock.onFail = (err) => toast(message(err), 'error');
+  const termDock: AgentDock = new AgentDock(formpathDock({
+    context: () => {
+      const p = engine.current;
+      if (!p) return 'formpath window: no document is open';
+      const ids = engine.selectedIds();
+      const where = `formpath window: document "${p.name}"`;
+      return ids.length ? `${where}; selection: ${ids.length === 1 ? 'node id' : 'node ids'} ${ids.slice(0, 200).join(', ')}${ids.length > 200 ? ` and ${ids.length - 200} more` : ''}` : where;
+    },
+    note: () => { const n = engine.selectedIds().length; return n ? `with ${n} selected ${n === 1 ? 'object' : 'objects'}` : ''; },
+    fail: (err) => toast(message(err), 'error'),
+    claude: (prompt, resume) => { void termDock.claude(prompt, resume); },
+    openSettings: () => settings.show('Plugins'),
+    homeShown: () => home.isShown,
+  }));
   termDock.onTab = () => titleTools.syncDock(termDock.isOpen(), termDock.activeKind());
+  termDock.mount(root, q(root, '.cv-status'));
   termDock.onTab();
-  termDock.context = () => {
-    const p = engine.current;
-    if (!p) return 'formpath window: no document is open';
-    const ids = engine.selectedIds();
-    const where = `formpath window: document "${p.name}"`;
-    return ids.length ? `${where}; selection: ${ids.length === 1 ? 'node id' : 'node ids'} ${ids.slice(0, 200).join(', ')}${ids.length > 200 ? ` and ${ids.length - 200} more` : ''}` : where;
-  };
-  termDock.note = () => { const n = engine.selectedIds().length; return n ? `with ${n} selected ${n === 1 ? 'object' : 'objects'}` : ''; };
   stage.onPointerDoc = (pt) => { status.setPointer(pt); infoP.setPointer(pt); };
 
   const RECENT_KEY = 'formpath.recent';
@@ -1023,16 +1027,14 @@ export function startApp(): void {
   const shortcuts = new ShortcutsDialog(commands, () => toolList().filter((t) => t.shortcut).map((t) => ({ label: t.label, key: t.shortcut as string })));
   const about = new AboutDialog();
   const help = new HelpDialog();
-  const agentConfirm = new AgentConfirmDialog();
   const placeInput = el<HTMLInputElement>('<input type="file" accept="image/*,.svg,.svgz,.eps,.epsf,.dxf,.dwg,.obj,.mtl,.glb,.gltf,.bin,.pdf,.ai,.psd,.psb,.tif,.tiff" multiple hidden>');
   document.body.appendChild(placeInput);
   placeInput.addEventListener('change', () => { const fs = splitParts(Array.from(placeInput.files ?? [])); placeInput.value = ''; void engine.task(async () => { for (const f of fs) { try { await placeFile(f, null, null); } catch (err) { toast(`${f.name}: ${message(err)}`, 'error'); } } }); });
 
   const agents = new AgentBridge(engine, {
     userLibraries: () => ({ swatches: userSwatchLibraries(), brushes: userBrushLibraries(), symbols: userSymbolLibraries() }),
-    ask: (title, text) => agentConfirm.ask(title, text),
+    consent: outsideAgents,
     note: (t) => { if (!demoOpening) status.setEngine(t); },
-    allow: () => { savePrefs({ ...loadPrefs(), agentsAllowed: true }); window.dispatchEvent(new CustomEvent('formpath:agents', { detail: true })); },
     openFile: (f, dxf, password) => openFiles([f], dxf ?? { merge: false }, password),
     placeFile: (f, at, w, dxf, placing) => placeFile(f, at, w, dxf ?? { merge: true }, placing ?? {}),
     placeLinked: async (path, at, width, placing) => placeLinked(await links.readPath(path), at, width, placing ?? {}),
@@ -1056,7 +1058,7 @@ export function startApp(): void {
   });
   agents.commands = commands;
   agents.actions = actionsP;
-  agents.setEnabled(loadPrefs().agentsAllowed);
+  agents.setEnabled(outsideAgents.choice() === 'allowed');
   window.addEventListener('formpath:agents', (ev) => agents.setEnabled((ev as CustomEvent<boolean>).detail === true));
   const assistant = new AssistantPanel(engine, agents);
   document.body.appendChild(assistant.el);
@@ -1890,7 +1892,7 @@ export function startApp(): void {
     { id: 'terminal-toggle', label: 'Terminal', keys: ['Alt+Shift+Mod+T'], checked: () => termDock.isOpen(), run: () => termDock.toggle() },
     { id: 'terminal-new', label: 'New Terminal', run: () => void termDock.newTerminal() },
     { id: 'claude-code', label: 'Claude Code', keys: ['Alt+Shift+Mod+C'], run: () => void termDock.claude() },
-    { id: 'claude-chat', label: 'Chat with Claude', keys: ['Alt+Shift+Mod+H'], run: () => void termDock.showChat() },
+    { id: 'claude-chat', label: 'Chat with Claude', keys: ['Alt+Shift+Mod+H'], run: () => void termDock.show('chat') },
     { id: 'manage-plugins', label: 'Manage Plugins...', run: () => void pluginsDialog.show() },
     ...Object.keys(TAB_HOMES).map((tab) => ({ id: `panel-${tab}`, label: tab.replace(/-/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase()), run: () => showPanel(tab) })).filter((c) => !['panel-character', 'panel-paragraph', 'panel-glyphs', 'panel-three-d'].includes(c.id)),
     { id: 'panel-properties-col', label: 'Properties Column', checked: () => propsShown(), run: () => { store('formpath.propsCol', propsShown() ? 'hidden' : 'shown'); syncPropsCol(); } },

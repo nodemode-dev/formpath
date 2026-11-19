@@ -4659,3 +4659,219 @@ The harvest already found Home's greeting, Projects, See all and about a hundred
 - logged: v0.54.1 · 2026-11-13
 
 `read` looked each row's fields up by `aria-label` (`input[aria-label="Scale"]`, `select[aria-label="Format"]`, `input[aria-label="Suffix"]`). The page translator rewrites those labels, so in every language but English the lookup threw at startup and a red toast showed. Each row has exactly one input with a `list`, one select and one other input, so the selectors are now `input[list]`, `select` and `input:not([list])`. A lookup by a translated label is the pattern to avoid.
+
+### src/io/window-key.ts · the page takes the window key once and sends it on every write
+- refers-to: src/io/window-key.ts :: loadWindowKey, keyHeaders, streamTicket; src/io/api.ts :: request, mcpSession, mcpNext, mcpResult, mcpStop, socketTo; src/automation/catalogue.ts :: mirror; src/main.ts; src/ui/terminal-dock.ts :: connect; src/ui/chat-pane.ts :: listen
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+`main.ts` waits for `loadWindowKey` (alongside the language load) before `startApp`. It reads `window.__FORMPATH_WINDOW_KEY`, which the desktop shell sets for the engine's own origin only, and deletes it. Without it, a key kept in `sessionStorage` is tried first (one ticket request), and only if that fails does the page ask the engine for the key once (`POST /api/window/key`, from source); a reload of the same tab therefore does not count as a second claim. The key goes on every request through `request()` and on the four raw bridge fetches and the catalogue mirror. A socket first asks for a one-time ticket, so `socketTo` is now async and its two callers (the terminal dock's `connect` and the chat pane's `listen`) wait for it; the dock closes the socket if its tab went away meanwhile. Plug-in frames never see the key: they are sandboxed iframes that talk to the page by `postMessage` and the page runs their tool calls in-process. Verified against the Vite dev server in headless Chrome: the page boots, takes the key, every write carries it, the dock opens a terminal over a ticketed socket, and an installed plug-in registers and lists in the Plugins menu.
+
+### src/ui/themes.ts · AMOLED Black
+- refers-to: src/ui/themes.ts :: ThemeProfile.oled, THEMES.amoled, applyTheme
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+A true-black theme for OLED screens, id `amoled`, ported from FormTxt's reference with FormPath's own token names (the formvis names: `--bg-primary`, `--bg-tertiary`, `--canvas-bg`, `--grid-color`). Window, panels and pasteboard are `#000000` and are told apart by their borders (`#262626`, `#3a3a3a`); `--bg-tertiary` stays `#141414` because inputs, selects, the active tab and selected layer rows use it as their only fill and would vanish at black. Text is `#ededed`, `#a6a6a6` and `#858585` (17.9, 8.6 and 5.7 to 1 on black). The accent stays the person's own. `--grid-color` is `#262626` because the pasteboard dot grid is drawn from it. There is no `--node-shadow` (a shadow on black shows nothing). The profile has an `oled` flag; `applyTheme` sets `data-oled` on the root for an oled profile and removes it for every other, touching the attribute only when it changes. The artboard is document content and keeps its own colour. The Theme swatch grid is built from THEMES, so it lists the theme with no other change.
+
+### index.html · AMOLED Black in the pre-paint script
+- refers-to: index.html :: inline style, OLED, PROFILES.amoled, the data-oled line
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+The boot script is the second copy of the profile table, so `amoled` is there too (11 columns, the last is `--bg-node`) with an `OLED = { 'amoled': 1 }` table that sets `data-oled` beside the variables before first paint. A theme in one table and not the other would paint Studio Dark first and then switch. The critical inline style gets `html[data-oled] body { background: #000000; }` because its `body` colour (`#0a0a0a`) paints over the root's inline background until the stylesheets arrive.
+
+### src/styles/tokens.css and shell.css · rules on data-oled
+- refers-to: src/styles/tokens.css :: :root[data-oled]; src/styles/shell.css :: :root[data-oled] .cv-rail
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+All the exceptions hang on `data-oled`, never on the theme id, so another OLED profile needs only the flag. `--bg-hover` and `--border-soft` become 10% and 12% white (the usual 6% and 8% are too close to black to read). `--surface-1` (a mix of primary and tertiary: title bar, rail, tool buttons) becomes `--bg-primary`, and `--line-0` (black on black) becomes `--border-color`. The tool rail painted a gradient with two accent glows at the top and the bottom; it is a plain `--surface-1` under `data-oled`. Found by measuring: the computed backgrounds of every visible element over 3000 square pixels and pixel samples of a 1440 by 900 screenshot at the corners and centre of the title bar, rail, pasteboard, properties, layers and status bar. Menus and dialogs are translucent or opaque black already. No other theme changes.
+
+### tests/theme-boot.test.ts · the pre-paint theme table must equal the one in themes.ts
+- refers-to: tests/theme-boot.test.ts; index.html :: PROFILES, LIGHT, OLED, DEFAULT_THEME, DEFAULT_ACCENT; src/ui/themes.ts :: THEMES
+- kind: rationale
+- logged: v0.55.0 · 2026-11-18
+
+`index.html` paints the saved theme before the bundle loads and `themes.ts` owns it afterwards. A theme in one table and not the other, or a colour that differs, paints the wrong theme first and then switches: a flash. The test reads `index.html` as text, takes `PROFILES`, `LIGHT` and `OLED`, and compares them with `THEMES`: the same ids, the ten variables in `NAMES` and `--bg-node` per id, the same light and true-black themes, and the same default theme and accent. FormVis has this test in `src/ui/themes.test.ts`; FormPath keeps its tests in `tests/`. Checked by hand first with a script outside the repo: 29 themes in each table, no difference. Then in a copy outside the tree one colour of `amoled` changed by one step and the profile renamed, and each made the test fail naming the id and variable. The page's shadow strings and the saved-choice rules are not compared (the shadow is not exported from `themes.ts`).
+
+### src/dock/ · the family's shared dock module 2.0.1, copied whole
+- refers-to: src/dock/ (15 files, MANIFEST.json); src/dock-adapter.ts; setup/agents.py :: dock_problems
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+`src/dock/` is FormVis's `frontend/src/dock` at commit 1ee307fc, byte for byte. It is another repository's code: never edit a file there, not even for a type error. `MANIFEST.json` lists the SHA-256 of every other file; this repository only checks it (`./formpath agents sync` and `--check` exit 1 naming any file that differs, is missing or is extra, or that imports anything but `./<file>` and `@xterm/*`). Everything FormPath-specific is in `src/dock-adapter.ts`, the token map `src/styles/dock-tokens.css` and the layout `src/styles/dock-layout.css`.
+
+### src/dock-adapter.ts · FormPath's side of the shared dock
+- refers-to: src/dock-adapter.ts :: formpathDock, outsideAgents, DOCK_KEY, DOCK_LEGACY, BLOCKED_KEY, DOCK_RIGHT_MIN; src/app.ts :: termDock; src/automation/agent-bridge.ts :: loop; src/io/api.ts :: mcpNext, openAgent, agentPrograms; src/ui/app-dialogs.ts :: SettingsDialog (Outside Agents); index.html :: the dock pre-paint script
+- kind: decision
+- logged: v0.55.0 · 2026-11-19
+
+Storage. The dock's state is kept under `formpath.agentDock`. `formpath.dock` and `formpath.dock.heights` belong to the panel dock (`src/ui/dock.ts`) and must never be given to the module. The old state under `formpath.terminal` (`{open, h}`) is moved once by the module (`jsonLegacy`) and the old key removed. The pre-paint script reads the new key, then the old one, and clamps height (120 to 70 percent of the window) and width (320 to 40 percent) exactly as the module does, so the attributes do not change when the bundle starts.
+
+Sides. Bottom and right. Right is offered only at 1100 px of window width or more (`DOCK_RIGHT_MIN`, the same number in the pre-paint script and in `canDockRight`): below that the panels already collapse. The width share is 0.4, not the module's usual 0.6, because the main row also holds the tool rail, the properties column and the layers column.
+
+Chord. Alt+Shift+Ctrl+T (Opt+Shift+Cmd+T on macOS), as before. Ctrl+J and Cmd+J are Join and Alt+Mod+J is Average, so the module's default chord is not used. `passKey` is not given: the old dock let no key but its own chord out, and the app's key handler ignores text fields anyway.
+
+Chat is FormPath's own pane (`chat: { pane(host) }`, `src/ui/dock-chat.ts`), not the module's Chat. The module's Chat has no pictures under a tool chip and no place for the "From Claude Code..." button; FormPath's has both, plus Markdown, the usage meter, the line under each reply and the note in the person's bubble. `dock-chat.ts` is `chat-pane.ts` with `fp-chat-*` class names (so the module's `ft-chat-*` rules do not reach it) and its own ask line, because the module hides its ask line in every tab when an app owns the Chat pane. The second button in that line sends the text to Claude Code with the document context, which is what the old ask line did while a terminal tab was showing. The module tells an own pane nothing when its tab is shown again, so the pane reconnects its stream in `focus()` and in `send()`.
+
+Outside agents. `outsideAgents` is the one object the bridge, the module and Preferences share. The bridge no longer waits on a dialog: it hands a `__consent__` item to `arrive` with a reply function (the answer needs the bridge's secret) and keeps polling with `withdrawals: true`, so a second question and a `__withdrawn__` item can arrive while the first is open. Deny answers `{allowed: false}`, Allow once `{allowed: true, once: true}`, Always stores Allowed first (`agentsAllowed`, so the next poll says so) and then answers `{allowed: true}`; the engine keeps one yes for every outside agent, so each request says `always: 'all'`. Escape is Deny, as closing the old dialog was. Blocked is `localStorage formpath.agentsBlocked = '1'`, window only: while it is set the bridge refuses every item, those from FormPath's own tabs and Chat included, and answers a question with a refusal without showing it. The dock itself still opens. The Assistant panel (the person's own model key) does not go through the bridge loop and is not stopped by Blocked.
+
+Preferences > Plugins > Outside Agents: the checkbox "Allow outside agents (MCP)" is now a choice of Ask each time, Allowed and Blocked. It is not in `ctl` (the generic sync would write "true" into it); it follows the `formpath:agents` event.
+
+Seen in headless Chrome (1440 by 900, Vite dev server and the engine from source on private ports, stand-in programs named claude, codex and cursor-agent): closed dock, no pixel differs from before and no terminal or Claude request is made; open on a terminal 53,007 pixels differ (the head row and the ask line, which is gone from terminal tabs); open on Chat 3,074 (head buttons, the second button in the ask line). A typed command printed its output, a Claude Code tab started, Chat answered, the grip resized, the side switch kept the same terminal element and its output, AMOLED Black and back re-coloured it in place, a reload kept side and size, and the old key moved once. Under 4x CPU, a slow network and no cache, the first frame that has `.cv-app` already has the dock's row or column, at the bottom and at the right.
+
+### removed: src/ui/terminal-dock.ts, src/ui/chat-pane.ts, src/ui/panels/agent-confirm.ts, src/styles/terminal.css
+- refers-to: src/dock/dock.ts; src/ui/dock-chat.ts; src/styles/dock-layout.css
+- kind: removed-code
+- logged: v0.55.0 · 2026-11-19
+
+Replaced by the shared module. The four files left the tree one commit before the one that carries this entry: they were staged when the engine commit ("a waiting question is shown again after a reload...") was made and went in with it by mistake, so that commit alone does not build the frontend and this one completes it. Their full text is in that commit's parent. The parts that carried decisions:
+
+```ts
+const KEY = 'formpath.terminal';
+const MIN_H = 120;
+const keys = isMac ? 'Opt+Shift+Cmd+' : 'Alt+Shift+Ctrl+';
+function isToggle(e: KeyboardEvent): boolean {
+  return (isMac ? e.metaKey : e.ctrlKey) && e.altKey && e.shiftKey && e.code === 'KeyT';
+}
+this.root.addEventListener('keydown', (e) => { if (!isToggle(e)) e.stopPropagation(); });
+const h = Math.round(Math.min(window.innerHeight * 0.7, Math.max(MIN_H, bottom - ev.clientY)));
+if (ctl.type === 'exit') t.term.write(`\r\n\x1b[2m[${t.kind === 'claude' ? 'Claude Code' : 'shell'} exited · Restart runs it again]\x1b[0m\r\n`);
+if (this.active === 'chat' && this.chat) await this.chat.send(text, extra, this.note());
+else await this.claude(extra ? `${text} (${extra})` : text);
+```
+
+```ts
+export class AgentConfirmDialog extends Dialog {
+  constructor() {
+    super('An agent asks', 400);
+    this.button("Don't", 'ghost', () => this.settle(false));
+    this.button('Allow', 'primary', () => this.settle(true));
+  }
+  close(): void { const a = this.answer; this.answer = null; super.close(); a?.(false); }
+}
+const yes = this.on || await this.deps.ask('Allow an outside agent to edit?', 'An AI agent connected to formpath (such as Claude Code, Codex or Cursor) asks to draw in and edit your documents. Each change is one undoable step. You can turn this off in Preferences > Plugins.');
+if (yes && !this.on) { this.on = true; this.deps.allow(); }
+await api.mcpResult(secret, item.id, { allowed: yes });
+```
+
+```css
+:root { --ft-dock-size: 280px; --ft-dock-h: 0px; }
+:root[data-ft-dock="open"] { --ft-dock-h: min(var(--ft-dock-size), 70vh); }
+:root .cv-app { grid-template-rows: var(--cv-titlebar-h) minmax(0, 1fr) var(--ft-dock-h) var(--cv-status-h); }
+.ft-dock { display: grid; grid-template-rows: var(--ctl-lg) minmax(0, 1fr) var(--ctl-lg); }
+.ft-dock-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+.ft-dock-tab.is-claude .ft-dock-tab-title, .ft-dock-tab.is-chat .ft-dock-tab-title { color: var(--accent-ink); }
+.ft-term { position: absolute; inset: var(--space-1) var(--space-2) 0; }
+```
+
+What the module does differently and FormPath accepts: the end of a program is a struck-through tab with a tooltip, not a printed line; a dock failure is a note inside the dock, not a toast (Chat's own failures are still toasts); the hide button is the module's close icon; the accent is on a Claude or Chat tab's icon, not its title; a tab has no hover background; the chords for Chat and Claude Code are no longer in the Claude Code button's tooltip (Chat's is, through `strings.chatAbout`).
+
+### tests/dock-storage.test.ts · the dock's storage key and the one-time move
+- refers-to: tests/dock-storage.test.ts; src/dock/state.ts :: moveLegacy, readState; src/dock-adapter.ts :: DOCK_KEY, DOCK_LEGACY; index.html
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+Written after the move was seen in the browser (a page seeded with `formpath.terminal = {"open":true,"h":333}` came up open at 333 with only `formpath.agentDock` left). The test holds the adapter and the pre-paint script to the same two key names, keeps the panel dock's `formpath.dock` out of it, and runs the module's own `moveLegacy` on a stand-in store: moved once, old key gone, the panel dock's value untouched, a state already under the new key never overwritten.
+
+### src/dock/ · the shared dock module is 2.1.0
+- refers-to: src/dock/ (15 files, MANIFEST.json); setup/agents.py :: dock_problems; tests in backend/tests/test_agent_manifest.py
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+`src/dock/` is now FormVis's `frontend/src/dock` at commit 8bbdf61b, byte for byte: `git archive` into a folder outside the tree, copied over, `diff -r` empty. The same 15 file names; 11 changed, none added, none removed. The rule of the 2.0.1 entry stands: never edit a file there. The adapter written for 2.0.1 compiles against it unchanged. What 2.1.0 lets an app with its own Chat pane say is in CONTRACT.md, section "Module 2.1.0: what an adapter may now say"; what FormPath does with it is in the next entry. Nothing in this repository names the module's version outside the folder, so `./formpath agents sync --check` and the manifest test needed no change: they compare the files with MANIFEST.json.
+
+### src/dock-adapter.ts, src/ui/dock-chat.ts · the module's ask line on every tab, and the Chat pane is told when it is shown, hidden and closed
+- refers-to: src/dock-adapter.ts :: formpathDock (chat, terminal.open, placement.storage, strings); src/ui/dock-chat.ts :: DockChat.shown, hidden, closed, isBusy, send, load, listen, scroll; src/styles/dock-layout.css :: .fp-chat; src/dock/CONTRACT.md (Module 2.1.0)
+- kind: decision
+- logged: v0.55.0 · 2026-11-19
+
+The ask line. `chat: { pane, ask: 'line' }` keeps the module's ask line under every tab. On Chat the text goes to the pane's `send`. On a terminal tab, or with no tab, the module opens Claude Code with the text as `prompt` through `terminal.open('claude', ...)`; the adapter adds the document name and selection there (`${prompt} (${deps.context()})`), which is what FormPath's ask line did before the shared dock. A Claude Code tab opened without a prompt (the head button, the command, "Open in Claude Code") gets no context, as before. The Chat pane has no ask line of its own any more and no "Send to Claude Code instead" button: asking Claude Code is typing in the line while a terminal tab is in front.
+
+The pane's object is `{ send, shown, hidden, closed, busy }`. There is no `focus`: the module focuses its own line on Chat. `send` answers false while Claude is working or when the engine refuses, so the module leaves the text in the line. `busy` is the pane's own flag (true between the stream's start and done events, or when the engine's state said so at load).
+
+`shown()` is where the pane starts: the stream is connected and the conversation loaded there, not in `pane()`, so a page whose Chat was never in front asks the engine nothing. `closed()` (the tab's cross) closes the stream; the next `shown()` connects again and loads the conversation again, clearing the log in the same task as it refills it. `hidden()` keeps the stream: a reply that is being written goes on arriving while a terminal is in front or the dock is closed. Stopping it there would mean rebuilding the log at every tab switch. What `hidden()` changes is following: a hidden log has no height to measure, so while the pane is not in front new text only sets a flag, and `shown()` puts the log at its end if anything arrived. `send()` still reconnects a dropped stream when the pane has been shown (the pane before the shared dock did the same in `send`); the reconnect in `focus()` was the workaround and is gone.
+
+Seen. A layout moved from `formpath.terminal` arrives as seen (`jsonLegacy(DOCK_LEGACY, true)`): a person who has used the dock is not walked through it; a person with neither key gets the guide. The `tourChatBody` override ("the line at the bottom of Chat") is gone because the guide now points at the module's line.
+
+Seen in headless Chrome at 1440 by 900 against captures taken before the change (engine restarted with an empty data folder before each run, terminal text hidden): dock closed, 0 pixels differ; open on a terminal, 51,840 differ, which is every pixel of rows 836 to 871 (the ask line is back under terminal tabs and the terminal is 36 px shorter); open on Chat, 2,501 differ, all in rows 841 to 868 (the line is the module's: its mark and placeholder, one send button where there were two). Under 4x CPU: text typed on a shell tab opened a Claude Code tab whose program received `make the title red (formpath window: no document is open)`; on Chat the program received `draw a star (formpath window: no document is open)` and the reply showed; a second Enter while Claude was working sent nothing and the text stayed in the line; six tab switches between a shell, Claude Code and Chat recorded 297 frames with one layout (head, stage, ask line, main area and status bar boxes all the same); a reply that finished while a shell tab was in front was in view when Chat came back; the cross closed the stream and Chat again opened a new one and showed each message once.
+
+### removed: the Chat pane's own ask line and its "Send to Claude Code instead" button
+- refers-to: src/ui/dock-chat.ts; src/dock-adapter.ts; src/styles/dock-layout.css
+- kind: removed-code
+- logged: v0.55.0 · 2026-11-19
+
+Module 2.0.1 hid its ask line on every tab when an app owned the Chat pane, and told the pane nothing. 2.1.0 has `chat.ask` and `shown`, `hidden`, `closed`, `busy`, so these went:
+
+```ts
+<form class="fp-chat-ask" autocomplete="off">
+<span class="fp-chat-ask-mark">${icon('agent', 15)}</span>
+<input class="cv-input fp-chat-ask-input" type="text" spellcheck="false" placeholder="Ask Claude about the open document (Enter to send)" aria-label="Ask Claude">
+<button type="submit" class="cv-icon-btn fp-chat-ask-send" title="Send to Chat" aria-label="Send to Chat">${icon('send', 14)}</button>
+<button type="button" class="cv-icon-btn fp-chat-ask-code" title="Send to Claude Code instead" aria-label="Send to Claude Code instead">${icon('terminal', 14)}</button>
+</form>
+
+private readonly ask = q<HTMLInputElement>(this.root, '.fp-chat-ask-input');
+
+q(this.root, '.fp-chat-ask').addEventListener('submit', (e) => { e.preventDefault(); void this.submit(); });
+q(this.root, '.fp-chat-ask-code').addEventListener('click', () => this.toClaudeCode());
+
+async load(): Promise<void> {
+  this.listen();
+  if (this.loaded) return;
+
+async send(text: string): Promise<void> {
+  this.listen();
+  try { await api.chatSend(text, this.d.context(), this.d.note()); } catch (err) { this.onFail(err); }
+}
+
+focus(): void {
+  this.listen();
+  this.ask.focus({ preventScroll: true });
+}
+
+private async submit(): Promise<void> {
+  const text = this.ask.value.trim();
+  if (!text || this.busy) return;
+  this.ask.value = '';
+  await this.send(text);
+}
+
+private toClaudeCode(): void {
+  const text = this.ask.value.trim();
+  if (!text) { this.ask.focus({ preventScroll: true }); return; }
+  const extra = this.d.context();
+  this.ask.value = '';
+  this.d.claude(extra ? `${text} (${extra})` : text);
+}
+```
+
+From the adapter:
+
+```ts
+tourChatBody: 'Type what you want in the line at the bottom of Chat, for example "{example}", and press Enter. Claude does it in {app}, and every change can be undone.',
+
+storage: { key: DOCK_KEY, legacy: jsonLegacy(DOCK_LEGACY) },
+
+: kind === 'claude' ? await api.claudeOpen({ prompt: o.prompt, resume: o.resume, cols: o.cols, rows: o.rows })
+
+void chat.load();
+return { send: (text) => { void chat.send(text); }, focus: () => chat.focus() };
+```
+
+From `dock-layout.css` (the third grid row of `.fp-chat` was the ask line):
+
+```css
+.fp-chat { display: grid; grid-template-rows: var(--ctl-lg) minmax(0, 1fr) var(--ctl-lg); height: 100%; min-height: 0; }
+.fp-chat-ask { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2); background: var(--bg-secondary); border-top: 1px solid var(--border-color); }
+.fp-chat-ask-mark { display: inline-grid; place-items: center; color: var(--accent-color); }
+.fp-chat-ask-input { flex: 1; min-width: 0; user-select: text; -webkit-user-select: text; }
+```
+
+### tests/dock-storage.test.ts · a moved layout arrives as seen
+- refers-to: tests/dock-storage.test.ts; src/dock/state.ts :: jsonLegacy, moveLegacy; src/dock-adapter.ts :: formpathDock (placement.storage)
+- kind: rationale
+- logged: v0.55.0 · 2026-11-19
+
+Written after it was seen in the browser: a page seeded with only `formpath.terminal = {"open":false,"h":333}` opened its dock with no guide and kept `{"open":true,"side":"bottom","h":333,"w":420,"tab":"","seen":true}` under `formpath.agentDock`, the old key gone; a page with neither key showed the guide ("Step 1 of 5"). The test holds the adapter to `jsonLegacy(DOCK_LEGACY, true)` and runs the module's `moveLegacy` with that reader on a stand-in store.

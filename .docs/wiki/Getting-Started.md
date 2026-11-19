@@ -5,7 +5,7 @@ Requirements: Node 20.19 or newer (22 recommended), Python 3.12 or newer, git. T
 ## macOS and Linux
 
 ```bash
-git clone git@github.com:nodemode-ai/formpath.git
+git clone git@github.com:nodemode-dev/formpath.git
 cd formpath
 ./formpath install
 ./formpath boot
@@ -14,7 +14,7 @@ cd formpath
 ## Windows
 
 ```bat
-git clone git@github.com:nodemode-ai/formpath.git
+git clone git@github.com:nodemode-dev/formpath.git
 cd formpath
 formpath.bat install
 formpath.bat boot

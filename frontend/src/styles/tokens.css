@@ -162,6 +162,13 @@ body.theme-light {
   --shadow-window: 0 18px 44px rgba(96, 90, 70, 0.22);
 }
 
+:root[data-oled] {
+  --bg-hover: rgba(255, 255, 255, 0.1);
+  --border-soft: rgba(255, 255, 255, 0.12);
+  --surface-1: var(--bg-primary);
+  --line-0: var(--border-color);
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: var(--font-ui);

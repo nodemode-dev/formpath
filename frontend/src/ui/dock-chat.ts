@@ -11,28 +11,35 @@ interface Usage { input: number; output: number; costUsd: number; context: numbe
 interface State { busy: boolean; messages: Message[]; turn: number; session: string; usage?: Usage }
 type Event = Record<string, unknown> & { type: string };
 
+export interface DockChatDeps {
+  context(): string;
+  note(): string;
+  claude(prompt?: string, resume?: string): void;
+}
+
 function tokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`;
   return String(n);
 }
 
-export class ChatPane {
-  readonly root = el(`<div class="ft-chat" hidden>
-<div class="ft-chat-bar"><span class="ft-chat-status cv-note"></span><span class="ft-chat-usage" title="Memory: how much of Claude's working memory this conversation uses. Chat: everything sent and written in this conversation, and what it cost."></span><span class="ft-dock-spacer"></span>
-<button type="button" class="cv-btn ft-chat-stop" hidden>Stop</button>
-<button type="button" class="cv-btn ft-chat-adopt" title="Bring a conversation you had in a Claude Code tab into this chat">From Claude Code...</button>
-<button type="button" class="cv-btn ft-chat-handoff" title="Continue this conversation in a Claude Code terminal tab">Open in Claude Code</button>
-<button type="button" class="cv-btn ft-chat-new">New Chat</button></div>
-<div class="ft-chat-log" role="log" aria-live="polite"><p class="ft-chat-empty cv-note">Ask Claude in the line below to draw, restyle, arrange or export the open document. It works through formpath's own tools, every change appears in the window as it happens, and each one can be undone.</p></div>
+export class DockChat {
+  readonly root = el(`<div class="fp-chat">
+<div class="fp-chat-bar"><span class="fp-chat-status cv-note"></span><span class="fp-chat-usage" title="Memory: how much of Claude's working memory this conversation uses. Chat: everything sent and written in this conversation, and what it cost."></span><span class="fp-chat-spacer"></span>
+<button type="button" class="cv-btn fp-chat-stop" hidden>Stop</button>
+<button type="button" class="cv-btn fp-chat-adopt" title="Bring a conversation you had in a Claude Code tab into this chat">From Claude Code...</button>
+<button type="button" class="cv-btn fp-chat-handoff" title="Continue this conversation in a Claude Code terminal tab">Open in Claude Code</button>
+<button type="button" class="cv-btn fp-chat-new">New Chat</button></div>
+<div class="fp-chat-log" role="log" aria-live="polite"><p class="fp-chat-empty cv-note">Ask Claude in the line below to draw, restyle, arrange or export the open document. It works through formpath's own tools, every change appears in the window as it happens, and each one can be undone.</p></div>
 </div>`);
   onFail: (err: unknown) => void = () => undefined;
-  onHandoff: (session: string) => void = () => undefined;
-  onBusy: (busy: boolean) => void = () => undefined;
-  private readonly log = q(this.root, '.ft-chat-log');
-  private readonly empty = q(this.root, '.ft-chat-empty');
-  private readonly meter = q(this.root, '.ft-chat-usage');
-  private readonly stopBtn = q<HTMLButtonElement>(this.root, '.ft-chat-stop');
+  private readonly log = q(this.root, '.fp-chat-log');
+  private readonly empty = q(this.root, '.fp-chat-empty');
+  private readonly meter = q(this.root, '.fp-chat-usage');
+  private readonly stopBtn = q<HTMLButtonElement>(this.root, '.fp-chat-stop');
+  private live = false;
+  private front = false;
+  private behind = false;
   private reply: HTMLElement | null = null;
   private md: MarkdownStream | null = null;
   private usage: Usage = { input: 0, output: 0, costUsd: 0, context: 0, window: 0, model: '' };
@@ -40,20 +47,47 @@ export class ChatPane {
   private busy = false;
   private loaded = false;
   private socket: WebSocket | null = null;
+  private opening = false;
 
-  constructor() {
+  constructor(private readonly d: DockChatDeps) {
     this.stopBtn.addEventListener('click', () => void api.chatCancel().catch((e) => this.onFail(e)));
-    q(this.root, '.ft-chat-new').addEventListener('click', () => void api.chatReset().catch((e) => this.onFail(e)));
-    q(this.root, '.ft-chat-handoff').addEventListener('click', () => void this.handoff());
-    q(this.root, '.ft-chat-adopt').addEventListener('click', () => void this.adopt());
+    q(this.root, '.fp-chat-new').addEventListener('click', () => void api.chatReset().catch((e) => this.onFail(e)));
+    q(this.root, '.fp-chat-handoff').addEventListener('click', () => void this.handoff());
+    q(this.root, '.fp-chat-adopt').addEventListener('click', () => void this.adopt());
   }
 
-  async load(): Promise<void> {
+  shown(): void {
+    this.front = true;
+    this.live = true;
     this.listen();
+    void this.load();
+    if (this.behind) { this.behind = false; this.log.scrollTop = this.log.scrollHeight; }
+  }
+
+  hidden(): void {
+    this.front = false;
+  }
+
+  closed(): void {
+    this.front = false;
+    this.live = false;
+    this.loaded = false;
+    const socket = this.socket;
+    this.socket = null;
+    socket?.close();
+    this.setBusy(false);
+  }
+
+  isBusy(): boolean {
+    return this.busy;
+  }
+
+  private async load(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
     try {
       const s = await api.chatState<State>();
+      this.clear();
       for (const m of s.messages) {
         if (m.role === 'user') { this.user(m.text ?? '', m.note ?? ''); continue; }
         this.begin();
@@ -68,21 +102,24 @@ export class ChatPane {
     } catch (err) { this.loaded = false; this.onFail(err); }
   }
 
-  async send(text: string, context = '', note = ''): Promise<void> {
-    this.listen();
-    try { await api.chatSend(text, context, note); } catch (err) { this.onFail(err); }
+  async send(text: string): Promise<boolean> {
+    if (this.busy) return false;
+    if (this.live) this.listen();
+    try { await api.chatSend(text, this.d.context(), this.d.note()); return true; } catch (err) { this.onFail(err); return false; }
   }
 
-  isBusy(): boolean { return this.busy; }
-
   private listen(): void {
-    if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
-    const socket = socketTo('/claude/chat/stream');
-    this.socket = socket;
-    socket.addEventListener('message', (msg) => {
-      try { this.on(JSON.parse(String(msg.data)) as Event); } catch { return; }
-    });
-    socket.addEventListener('close', () => { if (this.socket === socket) this.socket = null; });
+    if (this.opening || (this.socket && this.socket.readyState <= WebSocket.OPEN)) return;
+    this.opening = true;
+    void socketTo('/claude/chat/stream').then((socket) => {
+      this.opening = false;
+      if (!this.live) { socket.close(); return; }
+      this.socket = socket;
+      socket.addEventListener('message', (msg) => {
+        try { this.on(JSON.parse(String(msg.data)) as Event); } catch { return; }
+      });
+      socket.addEventListener('close', () => { if (this.socket === socket) this.socket = null; });
+    }, () => { this.opening = false; });
   }
 
   private on(e: Event): void {
@@ -117,20 +154,20 @@ export class ChatPane {
   private setBusy(on: boolean): void {
     this.busy = on;
     setHidden(this.stopBtn, !on);
-    setText(q(this.root, '.ft-chat-status'), on ? 'Claude is working...' : '');
-    this.onBusy(on);
+    setText(q(this.root, '.fp-chat-status'), on ? 'Claude is working...' : '');
   }
 
   private scroll(): void {
+    if (!this.front) { this.behind = true; return; }
     const l = this.log;
     if (l.scrollHeight - l.scrollTop - l.clientHeight < 80) l.scrollTop = l.scrollHeight;
   }
 
   private user(text: string, note = ''): void {
     setHidden(this.empty, true);
-    const n = el('<div class="ft-chat-msg is-user"><span class="ft-chat-said"></span></div>');
-    setText(q(n, '.ft-chat-said'), text);
-    if (note) { const m = el('<span class="ft-chat-note"></span>'); setText(m, note); n.appendChild(m); }
+    const n = el('<div class="fp-chat-msg is-user"><span class="fp-chat-said"></span></div>');
+    setText(q(n, '.fp-chat-said'), text);
+    if (note) { const m = el('<span class="fp-chat-note"></span>'); setText(m, note); n.appendChild(m); }
     this.log.appendChild(n);
     this.scroll();
   }
@@ -138,7 +175,7 @@ export class ChatPane {
   private begin(): void {
     setHidden(this.empty, true);
     this.endText();
-    this.reply = el('<div class="ft-chat-msg is-claude"></div>');
+    this.reply = el('<div class="fp-chat-msg is-claude"></div>');
     this.log.appendChild(this.reply);
     this.setBusy(true);
     this.scroll();
@@ -146,7 +183,7 @@ export class ChatPane {
 
   private delta(text: string): void {
     if (!this.reply) this.begin();
-    if (!this.md) { this.md = new MarkdownStream('ft-chat-text ft-md'); this.reply?.appendChild(this.md.root); }
+    if (!this.md) { this.md = new MarkdownStream('fp-chat-text ft-md'); this.reply?.appendChild(this.md.root); }
     this.md.push(text);
     this.scroll();
   }
@@ -157,7 +194,7 @@ export class ChatPane {
   }
 
   private images(after: HTMLElement, names: string[]): void {
-    const row = el('<div class="ft-chat-images"></div>');
+    const row = el('<div class="fp-chat-images"></div>');
     for (const name of names.slice(0, 6)) {
       const img = el<HTMLImageElement>('<img alt="What Claude looked at" decoding="async" draggable="false">');
       img.src = api.chatImage(name);
@@ -181,7 +218,7 @@ export class ChatPane {
       const s = await api.chatState<State>();
       if (!s.session) { this.onFail(new Error('Start a conversation here first; then it can continue in Claude Code.')); return; }
       if (s.busy) { this.onFail(new Error('Wait for Claude to finish, or press Stop, before moving the conversation.')); return; }
-      this.onHandoff(s.session);
+      this.d.claude(undefined, s.session);
     } catch (err) { this.onFail(err); }
   }
 
@@ -202,9 +239,9 @@ export class ChatPane {
   private tool(p: Part): void {
     if (!this.reply) this.begin();
     this.endText();
-    const chip = el(`<div class="ft-chat-tool"><span class="ft-chat-tool-mark">${icon('terminal', 11)}</span><span class="ft-chat-tool-name"></span><span class="ft-chat-tool-input"></span></div>`);
-    setText(q(chip, '.ft-chat-tool-name'), p.name ?? '');
-    setText(q(chip, '.ft-chat-tool-input'), p.input ?? '');
+    const chip = el(`<div class="fp-chat-tool"><span class="fp-chat-tool-mark">${icon('terminal', 11)}</span><span class="fp-chat-tool-name"></span><span class="fp-chat-tool-input"></span></div>`);
+    setText(q(chip, '.fp-chat-tool-name'), p.name ?? '');
+    setText(q(chip, '.fp-chat-tool-input'), p.input ?? '');
     chip.title = p.input ?? '';
     this.status(chip, p.status ?? 'running');
     if (p.id) this.chips.set(p.id, chip);
@@ -220,14 +257,14 @@ export class ChatPane {
   private close(error: string, meta: Meta): void {
     if (!this.reply) this.begin();
     this.endText();
-    for (const c of this.reply?.querySelectorAll<HTMLElement>('.ft-chat-tool.is-running') ?? []) this.status(c, 'done');
+    for (const c of this.reply?.querySelectorAll<HTMLElement>('.fp-chat-tool.is-running') ?? []) this.status(c, 'done');
     if (error) {
-      const n = el('<div class="ft-chat-error"></div>');
+      const n = el('<div class="fp-chat-error"></div>');
       setText(n, error);
       this.reply?.appendChild(n);
     }
     if (meta.seconds !== undefined) {
-      const n = el('<div class="ft-chat-meta"></div>');
+      const n = el('<div class="fp-chat-meta"></div>');
       setText(n, `${meta.seconds} s${meta.turns ? ` · ${meta.turns} steps` : ''}${meta.costUsd ? ` · $${meta.costUsd.toFixed(3)}` : ''}`);
       this.reply?.appendChild(n);
     }

@@ -4,7 +4,7 @@ import importlib
 import httpx
 import pytest
 
-from conftest import CHANGING_TOOL, ENGINE_PORT, INAPP_HEADER, MCP_PATH, READ_TOOL, inapp_token
+from conftest import CHANGING_TOOL, ENGINE_PORT, INAPP_HEADER, MCP_PATH, READ_TOOL, inapp_token, window_headers
 
 WINDOW_ORIGIN = "http://localhost:5230"
 BRIDGE = "x-formpath-bridge"
@@ -37,7 +37,7 @@ def fresh_bridge(app):
 
 
 def make_client(app):
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=f"http://127.0.0.1:{ENGINE_PORT}")
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=f"http://127.0.0.1:{ENGINE_PORT}", headers=window_headers())
 
 
 class Window:
