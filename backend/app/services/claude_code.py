@@ -129,6 +129,12 @@ def issue() -> tuple[str, str]:
     return token, str(path)
 
 
+def issue_env() -> str:
+    token = secrets.token_urlsafe(32)
+    TOKENS[token] = token_dir() / f"env-{secrets.token_hex(8)}"
+    return token
+
+
 def revoke(token: str | None) -> None:
     path = TOKENS.pop(token, None) if token else None
     if path is not None:
