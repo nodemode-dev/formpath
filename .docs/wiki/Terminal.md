@@ -15,7 +15,7 @@ The window has a terminal dock at its foot: shell tabs, Claude Code tabs and a C
 ## Rules
 
 - Process control belongs to the engine or the Tauri shell, never to page code; the page reaches the engine only through `frontend/src/io/api.ts`.
-- A terminal is remote code execution, so every route and socket passes `origin_ok`, and the terminal, Claude Code and chat commands are window-only: `run_command` refuses them to agents (`WINDOW_ONLY` in `frontend/src/automation/catalogue.ts`).
+- A terminal is remote code execution, so every route and socket passes `origin_ok` and also needs the window key (a header on routes, a one-time ticket made with it on the two sockets), and the terminal, Claude Code and chat commands are window-only: `run_command` refuses them to agents (`WINDOW_ONLY` in `frontend/src/automation/catalogue.ts`).
 - Claude Code is the person's own install: formpath never bundles it and never reads or stores a credential.
 - Terminal output is appended to xterm's own nodes, never rebuilt, and xterm's scrollbar elements are hidden by `terminal.css`.
 - Every child ends when its tab closes or the engine exits.
