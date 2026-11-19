@@ -1,3 +1,5 @@
+import { keyHeaders, streamTicket } from './window-key';
+
 export interface Capabilities { name: string; version: string; desktop: boolean; dataDir: string; libraryDir: string; fonts: boolean }
 export interface LibraryItem { name: string; modified: number; size: number }
 export interface OpenedProject { session: string; name: string; manifest: Record<string, unknown>; images: Record<string, string>; version?: string }
@@ -17,7 +19,7 @@ export class ApiError extends Error {
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
-  try { res = await fetch(`/api${path}`, init); } catch {
+  try { res = await fetch(`/api${path}`, { ...init, headers: { ...keyHeaders(), ...((init?.headers as Record<string, string> | undefined) ?? {}) } }); } catch {
     throw new ApiError('The formpath engine is not reachable. Start it with ./formpath boot.', 0);
   }
   if (!res.ok) {
@@ -147,14 +149,14 @@ export const api = {
   },
 
   async mcpSession(): Promise<string | null> {
-    try { const res = await fetch('/api/mcp/bridge/session', { method: 'POST', cache: 'no-store' }); return res.ok ? ((await res.json()) as { secret?: string }).secret ?? null : null; } catch { return null; }
+    try { const res = await fetch('/api/mcp/bridge/session', { method: 'POST', cache: 'no-store', headers: keyHeaders() }); return res.ok ? ((await res.json()) as { secret?: string }).secret ?? null : null; } catch { return null; }
   },
   async mcpNext(secret: string, allowed: boolean): Promise<{ status: number; item: BridgeItem | null }> {
-    const res = await fetch('/api/mcp/bridge/next', { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json', [BRIDGE_HEADER]: secret }, body: JSON.stringify({ allowed }) });
+    const res = await fetch('/api/mcp/bridge/next', { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json', ...keyHeaders(), [BRIDGE_HEADER]: secret }, body: JSON.stringify({ allowed }) });
     return { status: res.status, item: res.status === 200 ? ((await res.json()) as BridgeItem) : null };
   },
-  async mcpResult(secret: string, id: string, result: unknown): Promise<void> { await fetch('/api/mcp/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json', [BRIDGE_HEADER]: secret }, body: JSON.stringify({ id, result }) }); },
-  async mcpStop(secret: string): Promise<void> { try { await fetch('/api/mcp/bridge/stop', { method: 'POST', headers: { [BRIDGE_HEADER]: secret } }); } catch { } },
+  async mcpResult(secret: string, id: string, result: unknown): Promise<void> { await fetch('/api/mcp/bridge/result', { method: 'POST', headers: { 'Content-Type': 'application/json', ...keyHeaders(), [BRIDGE_HEADER]: secret }, body: JSON.stringify({ id, result }) }); },
+  async mcpStop(secret: string): Promise<void> { try { await fetch('/api/mcp/bridge/stop', { method: 'POST', headers: { ...keyHeaders(), [BRIDGE_HEADER]: secret } }); } catch { } },
   async mcpStatus(): Promise<{ live: boolean; allowed: boolean; endpoint: string; tools: number } | null> { try { return await json(await request('/mcp/status')); } catch { return null; } },
   async terminals(): Promise<TerminalInfo[]> { return (await json<{ terminals: TerminalInfo[] }>(await request('/terminal'))).terminals; },
   async openTerminal(cols: number, rows: number, cwd?: string): Promise<TerminalInfo> { return json(await request('/terminal', post({ cols, rows, ...(cwd ? { cwd } : {}) }))); },
@@ -181,6 +183,7 @@ function post(body: unknown): RequestInit {
   return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 
-export function socketTo(path: string): WebSocket {
-  return new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api${path}`);
+export async function socketTo(path: string): Promise<WebSocket> {
+  const ticket = await streamTicket().catch(() => '');
+  return new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api${path}?ticket=${encodeURIComponent(ticket)}`);
 }

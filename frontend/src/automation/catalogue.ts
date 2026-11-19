@@ -1,5 +1,6 @@
 import type { Engine } from '../engine';
 import { COMMAND_META } from './command-meta';
+import { keyHeaders } from '../io/window-key';
 import { toolList } from '../extensions/registry';
 import type { Command, CommandParam, Commands } from '../ui/commands';
 import type { MenuDef, MenuItem } from '../ui/menu';
@@ -155,7 +156,7 @@ export class Catalogue {
     const body = JSON.stringify({ size: entries.length, commands: entries });
     if (body === this.sent) return;
     try {
-      const res = await fetch('/api/commands/catalogue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const res = await fetch('/api/commands/catalogue', { method: 'POST', headers: { 'Content-Type': 'application/json', ...keyHeaders() }, body });
       if (res.ok) this.sent = body;
     } catch { return; }
   }

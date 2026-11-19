@@ -55,7 +55,12 @@ def tool_catalogue():
 
 
 def inapp_token():
-    return importlib.import_module("app.services.claude_code").INAPP_TOKEN
+    return importlib.import_module("app.services.claude_code").issue()[0]
+
+
+def window_headers():
+    window_key = importlib.import_module("app.core.window_key")
+    return {window_key.HEADER: window_key.KEY}
 
 
 _SANDBOX = Path(tempfile.mkdtemp(prefix=f"{APP_ID}-tests-"))
@@ -89,6 +94,14 @@ def app():
 
 @pytest.fixture(scope="session")
 def client(app):
+    from fastapi.testclient import TestClient
+
+    with TestClient(app, base_url=own_origin(), headers=window_headers()) as c:
+        yield c
+
+
+@pytest.fixture(scope="session")
+def bare(app):
     from fastapi.testclient import TestClient
 
     with TestClient(app, base_url=own_origin()) as c:

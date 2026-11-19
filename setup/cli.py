@@ -16,16 +16,13 @@ USAGE = """./formpath cli <command>
   <id> [key=value ...]                   the same as run
 
 Values are read as JSON when they parse (12, true, [1,2], "text") and as text otherwise.
-The formpath window must be open; the first run asks the person to allow outside agents,
-unless this runs in formpath's own terminal dock."""
+The formpath window must be open. Like any outside agent, run follows the person's choice about
+outside agents: the first run asks them in the formpath window, and it cannot change that choice."""
 
 
 def call(method: str, path: str, body: dict | None = None) -> dict:
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(BASE + path, data=data, method=method, headers={"Content-Type": "application/json"})
-    token = os.environ.get("FORMPATH_INAPP_TOKEN")
-    if token:
-        req.add_header("x-formpath-inapp", token)
     try:
         with urllib.request.urlopen(req, timeout=900) as res:
             return json.loads(res.read() or b"{}")
@@ -40,6 +37,18 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
         raise SystemExit(f"[formpath] {detail}")
     except urllib.error.URLError:
         raise SystemExit(f"[formpath] the engine at {BASE} is not running; start formpath with ./formpath boot")
+
+
+def run_command(command: str, args: dict) -> dict:
+    message = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "run_command", "arguments": {"id": command, **({"params": args} if args else {})}}}
+    answer = call("POST", "/mcp", message)
+    if answer.get("error"):
+        raise SystemExit(f"[formpath] {answer['error'].get('message') or 'The command did not run.'}")
+    result = answer.get("result") or {}
+    text = " ".join(c.get("text", "") for c in result.get("content", []) if isinstance(c, dict))
+    if result.get("isError"):
+        raise SystemExit(f"[formpath] {text or 'The command did not run.'}")
+    return {"message": text}
 
 
 def value(raw: str):
@@ -104,7 +113,7 @@ def main(argv: list[str]) -> int:
         if not rest:
             raise SystemExit("[formpath] run needs an id")
         cmd, rest = rest[0], rest[1:]
-    r = call("POST", f"/api/commands/{urllib.parse.quote(cmd)}", params(rest))
+    r = run_command(cmd, params(rest))
     print(r.get("message") or "done")
     return 0
 

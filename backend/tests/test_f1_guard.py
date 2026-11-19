@@ -89,5 +89,6 @@ def test_foreign_websocket_closes_4403(client, headers):
 @pytest.mark.parametrize("origin", [None, own_origin(), *WINDOW_ORIGINS])
 def test_websocket_from_a_window_origin_is_accepted(client, origin):
     headers = dict(LOOPBACK_HOST, **({"origin": origin} if origin else {}))
-    with client.websocket_connect(WS_PATH, headers=headers) as ws:
+    ticket = client.post("/api/window/ticket").json()["ticket"]
+    with client.websocket_connect(f"{WS_PATH}?ticket={ticket}", headers=headers) as ws:
         ws.close()

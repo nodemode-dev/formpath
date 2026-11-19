@@ -40,6 +40,7 @@ export class ChatPane {
   private busy = false;
   private loaded = false;
   private socket: WebSocket | null = null;
+  private opening = false;
 
   constructor() {
     this.stopBtn.addEventListener('click', () => void api.chatCancel().catch((e) => this.onFail(e)));
@@ -76,13 +77,16 @@ export class ChatPane {
   isBusy(): boolean { return this.busy; }
 
   private listen(): void {
-    if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
-    const socket = socketTo('/claude/chat/stream');
-    this.socket = socket;
-    socket.addEventListener('message', (msg) => {
-      try { this.on(JSON.parse(String(msg.data)) as Event); } catch { return; }
-    });
-    socket.addEventListener('close', () => { if (this.socket === socket) this.socket = null; });
+    if (this.opening || (this.socket && this.socket.readyState <= WebSocket.OPEN)) return;
+    this.opening = true;
+    void socketTo('/claude/chat/stream').then((socket) => {
+      this.opening = false;
+      this.socket = socket;
+      socket.addEventListener('message', (msg) => {
+        try { this.on(JSON.parse(String(msg.data)) as Event); } catch { return; }
+      });
+      socket.addEventListener('close', () => { if (this.socket === socket) this.socket = null; });
+    }, () => { this.opening = false; });
   }
 
   private on(e: Event): void {

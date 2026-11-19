@@ -296,11 +296,12 @@ export class TerminalDock {
     setHidden(this.empty, true);
     term.open(host);
     if (show || !this.active) this.select(info.id);
-    this.connect(t);
+    void this.connect(t);
   }
 
-  private connect(t: Tab): void {
-    const socket = socketTo(`/terminal/${encodeURIComponent(t.id)}/stream`);
+  private async connect(t: Tab): Promise<void> {
+    const socket = await socketTo(`/terminal/${encodeURIComponent(t.id)}/stream`);
+    if (!this.tabs.has(t.id)) { socket.close(); return; }
     socket.binaryType = 'arraybuffer';
     t.socket = socket;
     socket.addEventListener('open', () => this.sendSize(t));

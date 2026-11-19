@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from app.core import config
+from app.core import config, window_key
 from app.services import terminal
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
@@ -57,6 +57,7 @@ def _session(sid: str) -> terminal.Session:
 @router.get("")
 def list_terminals(request: Request) -> dict:
     require_local(request)
+    window_key.require(request)
     return {"terminals": terminal.listing()}
 
 
@@ -92,6 +93,7 @@ def write_terminal(sid: str, body: WriteBody, request: Request) -> dict:
 @router.get("/{sid}/read")
 def read_terminal(sid: str, request: Request, chars: int = 4000) -> dict:
     require_local(request)
+    window_key.require(request)
     session = _session(sid)
     return {"id": sid, "alive": session.alive, "text": terminal_text(session)[-max(1, min(chars, 200_000)):]}
 
@@ -121,7 +123,7 @@ def close_terminal(sid: str, request: Request) -> dict:
 
 @router.websocket("/{sid}/stream")
 async def attach(ws: WebSocket, sid: str) -> None:
-    if not origin_ok(ws.headers.get("origin"), ws.headers.get("host")):
+    if not origin_ok(ws.headers.get("origin"), ws.headers.get("host")) or not window_key.spend(ws.query_params.get("ticket")):
         await ws.close(code=4403)
         return
     await ws.accept()

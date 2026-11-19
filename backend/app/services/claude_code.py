@@ -12,11 +12,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from app.core import config
+from app.core import config, seal
 from app.services import terminal
 
 INAPP_HEADER = "x-formpath-inapp"
-INAPP_TOKEN = secrets.token_urlsafe(32)
+TOKENS: dict[str, Path] = {}
 KEEP_ENV = {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CONFIG_DIR"}
 CANDIDATES = (".claude/local/claude", ".local/bin/claude", ".npm-global/bin/claude", ".bun/bin/claude", ".volta/bin/claude")
 SYSTEM_PATHS = ("/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude")
@@ -39,7 +39,7 @@ def prefs_file() -> Path:
     return config.data_dir() / "agent.json"
 
 
-def prefs() -> dict:
+def raw_prefs() -> dict:
     try:
         data = json.loads(prefs_file().read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
@@ -47,14 +47,18 @@ def prefs() -> dict:
         return {}
 
 
+def prefs() -> dict:
+    return seal.effective(raw_prefs())
+
+
 def save_prefs(values: dict) -> dict:
-    current = prefs()
+    current = {k: v for k, v in prefs().items() if k not in ("seal", "sealBroken")}
     for key in ("claudeBin", "claudeFolder", "claudeFirstMessage"):
         if key in values and isinstance(values[key], str):
             current[key] = values[key].strip()
-    prefs_file().write_text(json.dumps(current, indent=2), encoding="utf-8")
+    prefs_file().write_text(json.dumps(seal.sign(current), indent=2), encoding="utf-8")
     _cache["value"] = None
-    return current
+    return prefs()
 
 
 def _pref(key: str) -> str:
@@ -110,12 +114,43 @@ def info(fresh: bool = False) -> dict:
     return _cache["value"]
 
 
-def mcp_config() -> str:
-    return json.dumps({"mcpServers": {"formpath": {"type": "http", "url": terminal.engine_url() + "/mcp", "headers": {INAPP_HEADER: INAPP_TOKEN}}}})
+def issue() -> tuple[str, str]:
+    token = secrets.token_urlsafe(32)
+    path = token_dir() / f"mcp-{secrets.token_hex(8)}.json"
+    body = json.dumps({"mcpServers": {"formpath": {"type": "http", "url": terminal.engine_url() + "/mcp", "headers": {INAPP_HEADER: token}}}})
+    try:
+        token_dir().mkdir(mode=0o700, parents=True, exist_ok=True)
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
+            handle.write(body)
+    except OSError as exc:
+        path.unlink(missing_ok=True)
+        raise ValueError(f"Claude Code cannot be connected to formpath: {path} cannot be written ({exc.strerror or exc}).") from None
+    TOKENS[token] = path
+    return token, str(path)
+
+
+def revoke(token: str | None) -> None:
+    path = TOKENS.pop(token, None) if token else None
+    if path is not None:
+        path.unlink(missing_ok=True)
 
 
 def is_inapp(value: str | None) -> bool:
-    return bool(value) and secrets.compare_digest(value, INAPP_TOKEN)
+    if not isinstance(value, str) or not value:
+        return False
+    return any(secrets.compare_digest(value.encode("utf-8"), t.encode("utf-8")) for t in list(TOKENS))
+
+
+def token_dir() -> Path:
+    return config.data_dir() / "AgentTokens"
+
+
+def sweep() -> None:
+    try:
+        for stale in token_dir().glob("mcp-*.json"):
+            stale.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def workdir() -> Path:
@@ -132,8 +167,8 @@ def _wrap(cmd: list[str]) -> list[str]:
     return cmd if os.name == "nt" else terminal.login_shell() + ["-c", "exec " + shlex.join(cmd)]
 
 
-def argv(path: str, prompt: str | None, resume: str | None = None) -> list[str]:
-    cmd = [path, "--mcp-config", mcp_config(), "--allowedTools", "mcp__formpath", "--append-system-prompt", NOTE]
+def argv(path: str, mcp_file: str, prompt: str | None, resume: str | None = None) -> list[str]:
+    cmd = [path, "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath", "--append-system-prompt", NOTE]
     if resume:
         cmd += ["--resume", resume]
     if prompt:
@@ -149,7 +184,7 @@ def status() -> dict:
         folder = str(workdir())
     except ValueError as exc:
         folder, note = "", str(exc)
-    return info(fresh=True) | {"folder": folder, "terminal": tab, "binNote": note, "firstMessage": _pref("claudeFirstMessage")}
+    return info(fresh=True) | {"folder": folder, "terminal": tab, "binNote": note, "firstMessage": _pref("claudeFirstMessage"), "seal": prefs()["seal"], "sealBroken": prefs()["sealBroken"]}
 
 
 def open_tab(prompt: str | None = None, cols: int = 100, rows: int = 30, fresh: bool = False, resume: str | None = None) -> dict:
@@ -163,7 +198,13 @@ def open_tab(prompt: str | None = None, cols: int = 100, rows: int = 30, fresh: 
         raise LookupError(INSTALL)
     prompt = prompt or _pref("claudeFirstMessage") or None
     title = "Claude Code (from Chat)" if resume else "Claude Code"
-    session = terminal.open_session(str(workdir()), cols, rows, title, argv(found["path"], prompt, resume), child_env(), "claude")
+    folder = str(workdir())
+    token, mcp_file = issue()
+    try:
+        session = terminal.open_session(folder, cols, rows, title, argv(found["path"], mcp_file, prompt, resume), child_env(), "claude", token)
+    except BaseException:
+        revoke(token)
+        raise
     return session.describe()
 
 
@@ -216,9 +257,9 @@ def chat_image(name: str) -> Path | None:
     return path if path.is_file() else None
 
 
-def _chat_argv(path: str, text: str, session: str | None) -> list[str]:
+def _chat_argv(path: str, mcp_file: str, text: str, session: str | None) -> list[str]:
     cmd = [path, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-           "--mcp-config", mcp_config(), "--allowedTools", "mcp__formpath", "--append-system-prompt", CHAT_NOTE]
+           "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath", "--append-system-prompt", CHAT_NOTE]
     if session:
         cmd += ["--resume", session]
     return _wrap(cmd + ["--", text])
@@ -235,8 +276,10 @@ def _run(text: str, path: str, folder: str) -> None:
     started = time.time()
     result: dict | None = None
     usage = CHAT["usage"]
+    token = None
     try:
-        proc = subprocess.Popen(_chat_argv(path, text, CHAT["session"]), cwd=folder, env=child_env(), stdin=subprocess.DEVNULL,
+        token, mcp_file = issue()
+        proc = subprocess.Popen(_chat_argv(path, mcp_file, text, CHAT["session"]), cwd=folder, env=child_env(), stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
         CHAT["proc"] = proc
 
@@ -297,10 +340,11 @@ def _run(text: str, path: str, folder: str) -> None:
                 per = (ev.get("modelUsage") or {}).get(usage["model"]) or {}
                 usage["window"] = int(per.get("contextWindow") or usage["window"] or 0)
         proc.wait(timeout=30)
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
         reply["error"] = f"Claude Code could not run: {exc}"
     finally:
         CHAT["proc"] = None
+        revoke(token)
     if result is None and not reply["error"]:
         reply["error"] = "Stopped" if CHAT.get("cancelled") else "Claude Code stopped before answering" + (f": {tail[-1]}" if tail else "")
     elif result is not None and result.get("is_error"):
