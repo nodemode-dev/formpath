@@ -640,3 +640,10 @@ This replaces the single token that every shell tab carried and that sat inside 
 - logged: v0.55.0 · 2026-11-19
 
 `agent.json` holds the program path and the folder Claude Code runs in. Both are signed with an HMAC whose key lives in the system keychain (service `FormPath`, account `settings-seal`, the `keyring` package already used for the assistant's key, imported lazily). A window write signs them. If the file is changed by hand to a non-empty program or folder, the engine treats both as unset and reports `sealBroken` in the Claude status until the next window write confirms. A hand edit that only empties them is not a break, and the first launch after this update, with a value and no seal yet, asks once. With no keychain the stored values stand and the status says `seal: "unavailable"`. The consent choice itself is not stored by the engine (the window keeps it and sends it with each poll), so it has nothing to seal here.
+
+### setup/agents.py · sync also keeps the tool count in the harness skill description
+- refers-to: setup/agents.py :: description_wanted, sync; .claude/skills/formpath-harness/SKILL.md (description); tests/test_agents_count.py
+- kind: fix
+- logged: v0.55.0 · 2026-11-19
+
+The description ended "and 79 more tools" after nine named tools, which was 88 while the catalogue had 93; the wiki said 67 and PARITY.md 92. `sync` now reads "Covers a, b, c and N more tools." from the entry, counts the named tools, and writes N = catalogue size minus the named ones; `sync --check` reports the entry as drifted when N is wrong, so CI (which runs `agents sync --check`) fails on a stale count. The mirror in `.agents/skills` follows from the same run. The entry also now says to use `formpath-skillset` when the task is changing formpath's own code, as the skillset's entry already says the reverse.

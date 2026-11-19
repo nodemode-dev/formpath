@@ -78,6 +78,19 @@ def tools_reference() -> str:
     return "\n".join(out)
 
 
+COVERS = re.compile(r"(Covers ([^.]*?) and )(\d+)( more tools\.)")
+
+
+def description_wanted(text: str) -> str:
+    sys.path.insert(0, str(ROOT / "backend"))
+    from app.routers.mcp import TOOLS
+    found = COVERS.search(text)
+    if found is None:
+        return text
+    named = len(found.group(2).split(", "))
+    return text[:found.start(3)] + str(len(TOOLS) - named) + text[found.end(3):]
+
+
 def commands_reference() -> str | None:
     path = Path(os.environ.get("FORMPATH_DATA_DIR") or str(Path.home() / "Formpath")).expanduser() / "commands-catalogue.json"
     if not path.exists():
@@ -113,6 +126,13 @@ def sync(check: bool) -> int:
         if not check:
             ref.parent.mkdir(parents=True, exist_ok=True)
             ref.write_text(want, encoding="utf-8")
+    entry = SKILL / "SKILL.md"
+    entry_text = entry.read_text(encoding="utf-8")
+    entry_want = description_wanted(entry_text)
+    if entry_text != entry_want:
+        drift.append(str(entry.relative_to(ROOT)) + " (the tool count in the description)")
+        if not check:
+            entry.write_text(entry_want, encoding="utf-8")
     cref, cwant = SKILL / "references" / "commands.md", commands_reference()
     if cwant is None:
         print("agents: no stored command catalogue yet; skipping references/commands.md")
