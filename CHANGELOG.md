@@ -2,6 +2,18 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.57.0 · 2026-11-19
+
+Starting and stopping cleanly, the engine's side. Nothing in this release has run on Windows or macOS yet.
+
+- The desktop app's engine stops when the app goes away, however the app ended: within about two seconds of the app's process ending, the engine leaves by itself. An engine could stay behind after a quit, most often on Windows.
+- An engine that was left running without its app is ended and replaced the next time FormPath starts, so the app opens instead of meeting a stale engine.
+- Only one copy of the desktop app can use a data folder at a time. A second copy says that FormPath may already be open and closes; the first keeps working. Until now each copy started an engine of its own on the same folder.
+- When the app cannot start its engine, it says so before its loading window closes. On Windows the app could close without a word.
+- The engine keeps a log: `Logs/formpath-engine.log` in the FormPath data folder (`Formpath` in your home folder), with what it did at start and why it stopped. When it has nowhere to write errors, they are kept in a file beside the log.
+- Starting the engine program by itself (a double click on `formpath-engine`) opens FormPath instead of leaving an engine with no window.
+- Not in this release yet: the part of the desktop app that ends the engine together with everything it started on Windows, and a failure message that quotes the engine's last lines.
+
 ## 0.56.0 · 2026-11-19
 
 - Antigravity (Google's `agy` program) opens as its own tab in the terminal panel when it is installed, beside Claude Code, Codex and Cursor. When it is not found, the panel says where FormPath looked and how to install it.
