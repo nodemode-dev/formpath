@@ -868,3 +868,12 @@ Seen on Linux, engine from source, stand-in shells (`sleep 300`), made-up home, 
 When the engine gave no address and key, the shell closed the loading window and then showed its message. On Windows the loading window is the last window at that moment, and closing it first can end the app before the message is seen. The two statements changed places: the message, then `close_splash`, then the engine is stopped and the app exits. The sentence now says what the most likely cause is since the engine takes a lock (a copy of FormPath is already open on the same data folder) and where the engine's log is.
 
 Not compiled and not run on any system: the desktop shell cannot be built here. One string and two statements in another order. Held: the rest of the family's shell side (the Windows job object, the failure text with the engine's last lines and its exit code, a limit on the wait for the address, the same order for a window that fails to build).
+
+### app/core/startup.py · an engine that has ended but was not yet collected counts as gone where there is no /proc
+- refers-to: app/core/startup.py :: finished, gone_by; tests/test_startup.py :: test_a_holder_that_has_ended_but_was_not_collected_counts_as_gone_where_there_is_no_proc
+- kind: fix
+- logged: v0.58.0 · 2026-11-20
+
+FormCut's macOS job found it in the same file: ending a leftover engine waits until it is gone, and `_alive_posix` asks `kill(pid, 0)`, which still answers for a process that has ended and that its parent has not collected. It tells such a process apart only by reading `/proc`, which macOS does not have, so the wait ran out and the start was refused with "could not stop an engine that was left running". `finished(pid)` asks `ps -o stat= -p <pid>` where there is no `/proc` (never on Windows, never on Linux) and answers true for a state that starts with `Z`; `gone_by` stops waiting when the process is not alive or is finished. `alive` is unchanged, so the two second watch on the app starts no program.
+
+Seen on Linux with `PROC` pointed at a folder that does not exist: the new test failed with that sentence before the change (1 failed) and the file passes after it (15 passed). Not run on macOS.
