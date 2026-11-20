@@ -2,6 +2,17 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.56.0 · 2026-11-19
+
+- Antigravity (Google's `agy` program) opens as its own tab in the terminal panel when it is installed, beside Claude Code, Codex and Cursor. When it is not found, the panel says where FormPath looked and how to install it.
+- Claude Code, Codex, Cursor and Antigravity are found however FormPath was started. A window opened from the Dock, the Finder or the Start menu used to report programs installed by npm, Homebrew, a version manager or into the home folder as not installed, and a program that was found could still fail to start. FormPath now also looks in the usual install folders and in your shell's own PATH, and starts each program the way a terminal does.
+- When an agent program is missing or does not start, FormPath says where it looked, what went wrong and how to install it. A path given in Preferences for Claude Code is still used first.
+- `./formpath agents install` also adds FormPath to Antigravity (in `~/.gemini/config/mcp_config.json`), and `./formpath agents install antigravity` does only that. A server of the same name that FormPath did not write is left alone.
+- `./formpath agents install` and `./formpath claude` find Claude Code the same way the app does.
+- The engine starts when it has nowhere to write its log, the cause of a start failure a tester reported on Windows.
+- FormPath's own tests never start a real agent program.
+- The README, the manual and the agent pages name four agent programs, and the README states the current code size.
+
 ## 0.55.0 · 2026-11-19
 
 - Only the FormPath window can change documents, open a terminal or choose which program Claude Code runs; the same requests from outside the app's window are refused. The command line (`./formpath cli`) counts as an outside agent and follows the choice in Preferences > Plugins.

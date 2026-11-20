@@ -4879,7 +4879,7 @@ Written after it was seen in the browser: a page seeded with only `formpath.term
 ### src/dock-adapter.ts · a refusal in the finder's words still counts as "not installed"
 - refers-to: src/dock-adapter.ts :: formpathDock (errors.kind); backend app/services/claude_code.py :: open_tab, chat_send; backend app/services/agent_programs.py :: open_terminal
 - kind: decision
-- logged: after v0.55.0 · 2026-11-19
+- logged: v0.56.0 · 2026-11-19
 
 The engine's 409 for a program that cannot be started now carries the shared finder's sentence ("Codex was not found. Looked in: ..." or "... was found at ... but does not start: ..."), so `errors.kind` answers `notInstalled` for those two forms as well as for the old "not installed". Without it the dock would show a plain warning where it now opens its programs menu.
 

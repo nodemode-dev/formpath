@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 0.55.0" src="https://img.shields.io/badge/version-0.55.0-eef0f4?style=flat-square">
+  <img alt="version 0.56.0" src="https://img.shields.io/badge/version-0.56.0-eef0f4?style=flat-square">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript%20%2B%20Vite-vanilla-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python%20%2B%20FastAPI-engine-009688?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
@@ -120,7 +120,7 @@ In the window, Window > Terminal (or the Terminal button in the title bar) opens
 - **Service:** a FastAPI engine for projects, fonts, file import and export, and the MCP endpoint at `/mcp`.
 - **Desktop:** a Tauri 2 shell that starts the engine as a sidecar.
 - **UI:** keyed DOM patching and a pre-paint theme boot, so changes do not flash or re-render.
-- **Size:** about 61,900 lines of TypeScript, 2,300 of CSS, 6,600 of Python and 400 of Rust (product code, tests excluded; `./formpath counts --check` verifies it).
+- **Size:** about 62,000 lines of TypeScript, 2,300 of CSS, 7,100 of Python and 400 of Rust (product code, tests excluded; `./formpath counts --check` verifies it).
 - **Tested:** Vitest suites for `.fpth`, SVG, PDF, Pathfinder and type outlines, plus pytest suites for the engine guard, consent, MCP, versions and project files.
 
 ## Download
