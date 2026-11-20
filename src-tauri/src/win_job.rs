@@ -1,5 +1,3 @@
-use std::os::windows::io::AsRawHandle;
-use std::process::Child;
 use std::sync::OnceLock;
 
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
@@ -35,13 +33,6 @@ fn create() -> usize {
 fn job() -> Option<HANDLE> {
     let raw = *JOB.get_or_init(create);
     (raw != 0).then_some(raw as HANDLE)
-}
-
-pub fn hold(child: &Child) -> bool {
-    match job() {
-        Some(handle) => unsafe { AssignProcessToJobObject(handle, child.as_raw_handle() as HANDLE) != 0 },
-        None => false,
-    }
 }
 
 pub fn hold_pid(pid: u32) -> bool {
