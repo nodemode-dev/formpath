@@ -88,6 +88,7 @@ fn main() {
                 .expect("sidecar binary is bundled")
                 .env("FORMPATH_PORT", "0")
                 .env("FORMPATH_WINDOW_KEY_STDOUT", "1")
+                .env("FORMPATH_SHELL_PID", std::process::id().to_string())
                 .spawn()
                 .expect("the formpath engine failed to spawn");
             app.state::<Backend>().0.lock().unwrap().replace(child);
