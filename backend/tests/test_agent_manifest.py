@@ -39,6 +39,43 @@ def test_the_shared_dock_folder_is_what_its_manifest_lists_and_imports_nothing_f
     assert "extra.ts: not in MANIFEST.json" in said and "dom.ts: missing" in said
 
 
+LOOKUP = "backend/app/services/agent_lookup.py"
+
+
+def test_the_shared_finder_matches_the_hash_recorded_for_its_version():
+    import hashlib
+    import re
+
+    sync = sync_module()
+    version = re.search(r'^VERSION = "([^"]+)"$', (REPO / LOOKUP).read_text(encoding="utf-8"), re.M).group(1)
+    assert sync.LOOKUP_HASHES[version] == hashlib.sha256((REPO / LOOKUP).read_bytes()).hexdigest()
+    assert sync.lookup_problems() == []
+
+
+def test_the_check_names_the_shared_finder_edited_in_place_or_missing(tmp_path, monkeypatch):
+    import shutil
+
+    sync = sync_module()
+    copy = tmp_path / "repo"
+    (copy / "backend" / "app" / "services").mkdir(parents=True)
+    shutil.copy(REPO / LOOKUP, copy / LOOKUP)
+    monkeypatch.setattr(sync, "ROOT", copy)
+    monkeypatch.setattr(sync, "LOOKUP", copy / LOOKUP)
+    assert sync.lookup_problems() == []
+    with open(copy / LOOKUP, "a", encoding="utf-8") as f:
+        f.write("\n")
+    assert sync.lookup_problems() == [f"{LOOKUP}: does not match the hash recorded for version 1.0.0 (the shared finder changes only as a whole new version)"]
+    (copy / LOOKUP).unlink()
+    assert sync.lookup_problems() == [f"{LOOKUP}: missing (the shared finder for the agent programs)"]
+
+
+def test_the_shared_finder_imports_nothing_from_the_app():
+    import re
+
+    imports = set(re.findall(r"^\s*(?:from|import)\s+([\w.]+)", (REPO / LOOKUP).read_text(encoding="utf-8"), re.M))
+    assert imports == {"__future__", "dataclasses", "os", "pathlib", "re", "shutil", "signal", "subprocess", "sys", "threading", "time", "winreg"}
+
+
 def test_manifest_lists_the_tools_the_server_lists():
     listed = committed()["mcp"]
     assert listed["tools"] == [t["name"] for t in tool_catalogue()]
