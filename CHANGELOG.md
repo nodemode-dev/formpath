@@ -2,6 +2,18 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.58.0 · 2026-11-20
+
+Starting and stopping cleanly, the desktop app's side. Nothing in this release has run on Windows or macOS yet.
+
+- On Windows the engine ends together with the app however the app ends, even when the app is ended from the Task Manager or crashes.
+- When the engine cannot start, the app shows one message before its loading window closes: what went wrong, the engine's last lines, its exit code and where its log is. On Windows the app could close without a word.
+- The app waits at most 90 seconds for its engine to be ready, then says so, instead of waiting without end.
+- On Windows the engine runs with no console window of its own. Set `FORMPATH_ENGINE_WINDOWED=0` when building to keep the console.
+- On macOS, replacing an engine left behind by an earlier start works: an engine that had already ended could still look alive, so the start waited for it to go and was then refused.
+- The terminal panel's guide says that Codex, Cursor and Antigravity each get a button when they are installed.
+- The MCP note in Preferences names Claude Code, Codex, Cursor and Antigravity, in every language FormPath carries.
+
 ## 0.57.0 · 2026-11-19
 
 Starting and stopping cleanly, the engine's side. Nothing in this release has run on Windows or macOS yet.
