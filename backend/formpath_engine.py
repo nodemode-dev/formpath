@@ -1,7 +1,9 @@
 import json
+import logging
 import os
 import socket
 import sys
+from pathlib import Path
 
 if sys.stdin is None:
     sys.stdin = open(os.devnull, encoding="utf-8")
@@ -33,14 +35,53 @@ def selfcheck() -> int:
     return 0
 
 
-def main() -> int:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    if "--selfcheck" in sys.argv:
-        return selfcheck()
+def watch_shell(data) -> None:
+    from app.core import runtime, startup
+
+    shell = startup.shell_pid()
+    if shell <= 1:
+        return
+
+    def leave() -> None:
+        logging.getLogger("formpath").info("the app that started this engine is gone (process %s), stopping", shell)
+        runtime.release(data)
+        os._exit(0)
+
+    startup.watch(shell, leave)
+
+
+def serve() -> int:
     bundled = os.path.join(resource_dir(), "frontend_dist")
     if os.path.isdir(bundled):
         os.environ.setdefault("FORMPATH_DIST", bundled)
     os.environ.setdefault("FORMPATH_DESKTOP", "1")
+    from app.core import config, runtime, startup
+
+    try:
+        data = config.data_dir()
+        logs = runtime.start_logging(data).parent
+    except (OSError, RuntimeError) as err:
+        print(f"formpath cannot use its data folder: {err}", file=sys.stderr)
+        return 5
+    startup.keep_errors(logs)
+    log = logging.getLogger("formpath")
+    if startup.alone():
+        beside = startup.app_beside(Path(sys.executable))
+        if beside is not None and startup.open_app(beside):
+            log.info("started without its app, so it opened %s and stopped", beside)
+            return 0
+        log.error("started without its app, and no app program was found near %s", sys.executable)
+        print("formpath-engine is a part of FormPath and serves nothing on its own. Open FormPath instead.", file=sys.stderr)
+        return 4
+    try:
+        runtime.claim(data)
+    except runtime.AlreadyRunning as err:
+        log.error("%s", err)
+        print(err, file=sys.stderr)
+        return 2
+    watch_shell(data)
+    import signal
+
     import uvicorn
 
     from app.main import app as fastapi_app
@@ -55,8 +96,30 @@ def main() -> int:
 
     if window_key.stdout_mode():
         print(window_key.LINE + window_key.KEY, flush=True)
-    uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
-    return 0
+
+    def leave(_signum, _frame) -> None:
+        runtime.release(data)
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, leave)
+    server = uvicorn.Server(uvicorn.Config(fastapi_app, host="127.0.0.1", port=port, log_level="info"))
+    runtime.start_logging(data)
+    try:
+        server.run()
+    finally:
+        runtime.release(data)
+    return 0 if server.started else 3
+
+
+def main() -> int:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    if "--selfcheck" in sys.argv:
+        return selfcheck()
+    try:
+        return serve()
+    except Exception:
+        logging.getLogger("formpath").exception("the engine stopped on an error")
+        raise
 
 
 if __name__ == "__main__":

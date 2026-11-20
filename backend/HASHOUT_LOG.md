@@ -820,3 +820,51 @@ Seen: the whole suite run with a folder of logging decoys for all five names fir
 Wherever these say which agent programs formpath is set up for, they now say Claude Code, Codex, Cursor and Antigravity. The wiki line on `./formpath agents install` says what Antigravity gets (the server, in `~/.gemini/config/mcp_config.json`) because no skill is copied for it.
 
 Left as it is: the sentence in Preferences > Plugins ("Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; ...", `src/ui/app-dialogs.ts`) is a translated string, and a changed English string needs new translations in all 25 languages; "another MCP client" already covers Antigravity. `formpath.bat` names no programs. CHANGELOG history is not touched.
+
+### formpath_engine.py, app/core/startup.py, app/core/runtime.py, src-tauri/src/main.rs · the packaged engine takes a lock, keeps a log, leaves with its app and serves nothing on its own
+- refers-to: formpath_engine.py :: serve, watch_shell, main; app/core/startup.py (whole file); app/core/runtime.py :: start_logging, claim, release; src-tauri/src/main.rs :: the engine's start in setup; tests/test_startup.py
+- kind: decision
+- logged: after v0.56.0 · 2026-11-19
+
+The family's pattern for starting and stopping cleanly on Windows, as FormTools has it. Only the packaged entry is touched: `./formpath backend`, `serve` and `boot` run `uvicorn app.main:app` and take no lock and write no log file, as before.
+
+`app/core/startup.py` is FormTools's file (its `origin/main`) with the six names at its top changed and nothing else: `APP`, `NAMES`, `SHELL_ENV` (`FORMPATH_SHELL_PID`), `ALONE_ENV` (`FORMPATH_NO_SHELL`), `ERRORS_NAME`. It imports nothing of formpath's. `app/core/runtime.py` is new and small: the log file and the two calls around the lock.
+
+What the entry does now, in this order, before it serves:
+
+1. The data folder (`config.data_dir()`: `FORMPATH_DATA_DIR`, else `Formpath` in the home folder) and the log, `Logs/formpath-engine.log` in it, rotating at 1 MB with three kept. A folder that cannot be made is one sentence on standard error and exit code 5.
+2. `startup.keep_errors`: when the engine was started with no standard error, the stand-in from the top of the file is replaced by `Logs/formpath-engine-errors.log`, so a traceback is kept. A standard error that exists is not touched; the shell still reads its pipe.
+3. Started alone (frozen, no `FORMPATH_SHELL_PID`, no `FORMPATH_NO_SHELL=1`): it opens the app found beside it and returns 0, or says "formpath-engine is a part of FormPath and serves nothing on its own. Open FormPath instead." and returns 4. No lock, no port. formpath's engine is a one-file program beside the app in all three installs, so the `.` place is the one that matters; the other places are kept as the family has them.
+4. The lock, `engine.lock` in the data folder (formpath had none): `pid`, `started`, `born`, `shell`, `shellBorn`. A live engine whose app is alive refuses the newcomer ("formpath is already running on [folder] (engine process N).", exit code 2); an engine whose app is gone is ended and replaced; a damaged file, a process id nobody has, or a process that is not the recorded engine gives the lock away and the process is left alone.
+5. The watch: every two seconds the engine asks whether the process in `FORMPATH_SHELL_PID` is still there, and when it is not it gives up the lock and leaves with code 0. With no such variable (a run from source) nothing is watched, as before.
+6. The key line and the server. `uvicorn.run` became `uvicorn.Server(uvicorn.Config(...)).run()` with the same arguments, for two reasons: the second `start_logging` call has to come after Uvicorn has set up its own loggers (that setup removes the file handler from them), and the lock is given up in a `finally`. A SIGTERM handler gives up the lock and exits 0, because Uvicorn hands the signal back to the previous handler after its own shutdown; the default one ended the process before the `finally`.
+
+`--selfcheck` is decided before any of this and makes no folder. An error that ends the engine is written to the log before it is raised.
+
+The file handler sits on `formpath`, `uvicorn` and `uvicorn.access`, not on `uvicorn.error` as well: that logger hands its lines to `uvicorn`, and a handler on both writes every line twice.
+
+The shell: one line. The start in `src-tauri/src/main.rs` sets `FORMPATH_SHELL_PID` to the shell's own process id. Without it a packaged engine takes the started-alone branch and never serves, so the line is in this commit and not a later one. Not compiled here.
+
+A change people will meet: two copies of the app on one data folder. Until now each got its own engine and port. Now the second copy's engine is refused, and the second copy shows its "engine failed to start" message. A lock left by a 0.56.0 engine does not exist (that version wrote none), so an engine of that version left running after a quit is not found by this one; it has to be ended by hand or by the launcher once.
+
+Seen on Linux, engine from source, stand-in shells (`sleep 300`), made-up home, own data folders and ports:
+
+- started with `>&-`, `>&- 2>&-` and `<&- >&- 2>&-`: `/api/health` 200 in all three (the 0.56.0 entry too); descriptors 0, 1 and 2 are the null device; the log has "engine started, pid N, data folder ..." first and Uvicorn's lines after it; the errors file exists only when there was no standard error; after SIGTERM the exit code is 0 and the lock is gone (0.56.0: 143);
+- a second engine with another stand-in shell: exit 2 with the sentence, the first still answers, the log has the refusal;
+- the first one's stand-in shell ended: the engine left with 0 after 1.4 s, the lock gone, "the app that started this engine is gone" in the log;
+- a stopped holder (`kill -STOP`) whose shell is gone: the new engine serves after 5.8 s, the holder's exit is 137, the log has "an engine left running without its app was stopped";
+- locks holding `not json at all`, `[1, 2]`, `{"pid": "x"}` and nothing: the engine serves and the lock names it;
+- a lock naming an unrelated `sleep`: the engine serves, the `sleep` still runs;
+- started alone (the entry through `python -c` with `sys.frozen` set and `sys.executable` a stand-in path): the stand-in app beside it as `formpath` and as `FormPath`, one folder up, and in `../../MacOS`: exit 0, the app's mark appears, no lock, the port does not answer; no app near: exit 4 with the sentence; with `FORMPATH_NO_SHELL=1` it serves;
+- a data folder under a file: exit 5 with the sentence.
+
+`tests/test_startup.py` holds these as 14 tests (FormTools's 13 with formpath's names, the port file replaced by the lock and the log line, plus the second engine through the entry). Not run: Windows (`_kernel`, `_open_windows`, `_alive_windows`, `_created_windows`, `_end_windows`, the handle branch of `watch`, and in `open_app` the `SetDllDirectoryW` line and the detached flags have never run), macOS (the `ps` reading of a start time ran against Linux's `ps`), a really frozen engine.
+
+### src-tauri/src/main.rs · a failed start says its sentence before the loading window closes
+- refers-to: src-tauri/src/main.rs :: main, the `None` branch after the wait for the address and the key
+- kind: decision
+- logged: after v0.56.0 · 2026-11-19
+
+When the engine gave no address and key, the shell closed the loading window and then showed its message. On Windows the loading window is the last window at that moment, and closing it first can end the app before the message is seen. The two statements changed places: the message, then `close_splash`, then the engine is stopped and the app exits. The sentence now says what the most likely cause is since the engine takes a lock (a copy of FormPath is already open on the same data folder) and where the engine's log is.
+
+Not compiled and not run on any system: the desktop shell cannot be built here. One string and two statements in another order. Held: the rest of the family's shell side (the Windows job object, the failure text with the engine's last lines and its exit code, a limit on the wait for the address, the same order for a window that fails to build).
