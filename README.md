@@ -16,7 +16,7 @@
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python%20%2B%20FastAPI-engine-009688?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
   <img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache--2.0-3a3a3a?style=flat-square">
-  <img alt="Status: pre-release" src="https://img.shields.io/badge/status-pre--release-d69e2e?style=flat-square">
+  <img alt="Status: released" src="https://img.shields.io/badge/status-released-d69e2e?style=flat-square">
 </p>
 
 <p align="center">
@@ -159,7 +159,7 @@ cd formpath
 On Windows use `formpath.bat install` and `formpath.bat boot`. The engine listens on `127.0.0.1:8230` (API under `/api`, MCP at `/mcp`) and reads `backend/.env`, never committed (`backend/.env.example` is the template). Settings are `FORMPATH_HOST`, `FORMPATH_PORT`, `FORMPATH_DATA_DIR`, `FORMPATH_CORS_ORIGINS`, `FORMPATH_DIST` and `FORMPATH_TARGET`.
 
 > [!IMPORTANT]
-> **Status:** pre-release. The macOS and Windows desktop bundles, signing and the updater are not verified yet, and some parity rows are partial, listed in [`docs/PARITY.md`](docs/PARITY.md). PDF import skips encrypted files, `.ai` files saved without PDF compatibility and some scanned images, and reports what it left out.
+> **Status:** released. FormPath is built and bundled for macOS, Windows and Linux and has been tested on all three. Some parity rows are partial, listed in [`docs/PARITY.md`](docs/PARITY.md). PDF import skips encrypted files, `.ai` files saved without PDF compatibility and some scanned images, and reports what it left out.
 
 **Contributing:** branch from `main`, keep changes to source here, and leave packaging and releases to FormCompiler. See [`.docs/BRANCHING.md`](.docs/BRANCHING.md) and [`AGENTS.md`](AGENTS.md).
 
