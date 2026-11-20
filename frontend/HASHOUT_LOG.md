@@ -4935,3 +4935,12 @@ The engine kept a sealed place for Claude Code and told people to "give its path
 Six keys were added to `keys.json` by hand, in its order: the group name, the three program names (kept as names in every table) and the two notes. `./formpath i18n extract` was not used: run here it also brings in 68 other strings of the window that `keys.json` does not hold yet, which is another piece of work. The 25 tables were given the new rows with the repository's own `i18n import`, one CSV per language. No native speaker has read them.
 
 Seen in headless Chromium (Playwright 1.63.0) against the engine serving the built window: the four fields and the note in Preferences > Plugins, a Codex path typed in saved to `agent.json` with a seal and shown again after a reload, no console error from the window. `i18n check`: 25 languages, 4125 of 4125.
+
+### src/styles/tokens.css · every FormVis token name is defined, with FormVis's value
+- refers-to: src/styles/tokens.css :: --z-under, --z-local-2, --z-local-4, --z-local-5, --cv-tabs-h, --cv-action-blue, --cv-action-violet
+- kind: decision
+- logged: v0.59.0 · 2026-11-20
+
+The family's design alignment (FormVis's names are the family's names). formpath's token values already equal FormVis's in every shared name but one: `--z-taskbar` stays 120 (FormVis 900), because z-index values stay each app's own. Seven FormVis names were missing and are now defined with FormVis Studio Dark's values: `--z-under` -1, `--z-local-2` 2, `--z-local-4` 4, `--z-local-5` 5, `--cv-tabs-h` 34px, `--cv-action-blue` #3b82f6, `--cv-action-violet` #8b5cf6. No stylesheet uses them yet, so nothing on screen changes; formpath's own names (layout values such as `--cv-chip` or `--fp-help-h`) have no FormVis counterpart, so there is no alias to add. No rule was rewritten.
+
+Seen in headless Chromium at 1323x860 (the shell's fallback window size), the build before and after, dark and light: the resolved value of every token on `:root` (222 before, 229 after) differs only by the seven new names; the Home screen, the New Document dialog and the canvas with a new document are pixel-identical, apart from one run where 4x2 pixels at an anti-aliased edge of the canvas differed by one in one channel (the first run was identical); a cold load under 4x CPU throttle, recorded from a black page, shows no white frame in either build.
