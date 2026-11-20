@@ -1875,7 +1875,7 @@
 "Length": "Pituus",
 "Let formpath determine colors": "Anna formpathin määrittää värit",
 "Let the printer determine colors": "Anna tulostimen määrittää värit",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Antaa Claude Coden, Codexin, Cursorin tai muun MCP-asiakkaan piirtää avoimeen asiakirjaan; jokainen muutos on kumottava vaihe. Päätepiste: {0} ({1} työkalua). Claude Code: claude mcp add --transport http formpath {2} tai stdio-silta ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Antaa Claude Coden, Codexin, Cursorin, Antigravityn tai muun MCP-asiakkaan piirtää avoimeen asiakirjaan; jokainen muutos on kumottava vaihe. Päätepiste: {0} ({1} työkalua). Claude Code: claude mcp add --transport http formpath {2} tai stdio-silta ./formpath mcp.",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8,5 x 11 tuumaa)",
 "Letter spacing": "Kirjainväli",

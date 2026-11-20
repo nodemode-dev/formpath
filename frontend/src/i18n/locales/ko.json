@@ -1875,7 +1875,7 @@
 "Length": "길이",
 "Let formpath determine colors": "formpath에서 색상 결정",
 "Let the printer determine colors": "프린터에서 색상 결정",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Claude Code, Codex, Cursor 또는 다른 MCP 클라이언트가 열려 있는 문서에 그릴 수 있게 합니다. 각 변경은 실행 취소할 수 있는 한 단계입니다. 엔드포인트: {0}(도구 {1}개). Claude Code: claude mcp add --transport http formpath {2}, 또는 stdio 브리지 ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Claude Code, Codex, Cursor, Antigravity 또는 다른 MCP 클라이언트가 열려 있는 문서에 그릴 수 있게 합니다. 각 변경은 실행 취소할 수 있는 한 단계입니다. 엔드포인트: {0}(도구 {1}개). Claude Code: claude mcp add --transport http formpath {2}, 또는 stdio 브리지 ./formpath mcp.",
 "Letter": "레터",
 "Letter (8.5 x 11 in)": "레터 (8.5 x 11인치)",
 "Letter spacing": "자간",

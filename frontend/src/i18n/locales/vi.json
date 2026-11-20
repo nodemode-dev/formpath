@@ -1875,7 +1875,7 @@
 "Length": "Chiều dài",
 "Let formpath determine colors": "Để formpath xác định màu",
 "Let the printer determine colors": "Để máy in xác định màu",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Cho phép Claude Code, Codex, Cursor hoặc ứng dụng khách MCP khác vẽ trong tài liệu đang mở; mỗi thay đổi là một bước có thể hoàn tác. Điểm cuối: {0} ({1} công cụ). Claude Code: claude mcp add --transport http formpath {2}, hoặc cầu nối stdio ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Cho phép Claude Code, Codex, Cursor, Antigravity hoặc ứng dụng khách MCP khác vẽ trong tài liệu đang mở; mỗi thay đổi là một bước có thể hoàn tác. Điểm cuối: {0} ({1} công cụ). Claude Code: claude mcp add --transport http formpath {2}, hoặc cầu nối stdio ./formpath mcp.",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8,5 x 11 in)",
 "Letter spacing": "Khoảng cách chữ",

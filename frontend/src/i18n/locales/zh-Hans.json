@@ -1875,7 +1875,7 @@
 "Length": "长度",
 "Let formpath determine colors": "由 formpath 确定颜色",
 "Let the printer determine colors": "由打印机确定颜色",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "允许 Claude Code、Codex、Cursor 或其他 MCP 客户端在打开的文档中绘制;每项更改都是一个可撤销的步骤。端点:{0}({1} 个工具)。Claude Code:claude mcp add --transport http formpath {2},或使用 stdio 桥接 ./formpath mcp。",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "允许 Claude Code、Codex、Cursor、Antigravity 或其他 MCP 客户端在打开的文档中绘制;每项更改都是一个可撤销的步骤。端点:{0}({1} 个工具)。Claude Code:claude mcp add --transport http formpath {2},或使用 stdio 桥接 ./formpath mcp。",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8.5 x 11 英寸)",
 "Letter spacing": "字母间距",

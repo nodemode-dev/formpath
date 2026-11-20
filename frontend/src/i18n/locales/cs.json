@@ -1875,7 +1875,7 @@
 "Length": "Délka",
 "Let formpath determine colors": "Barvy určuje formpath",
 "Let the printer determine colors": "Barvy určuje tiskárna",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Umožňuje Claude Code, Codex, Cursoru nebo jinému klientovi MCP kreslit do otevřeného dokumentu. Každá změna je krok, který lze vrátit zpět. Koncový bod: {0} (nástrojů: {1}). Claude Code: claude mcp add --transport http formpath {2}, nebo most stdio ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Umožňuje Claude Code, Codex, Cursoru, Antigravity nebo jinému klientovi MCP kreslit do otevřeného dokumentu. Každá změna je krok, který lze vrátit zpět. Koncový bod: {0} (nástrojů: {1}). Claude Code: claude mcp add --transport http formpath {2}, nebo most stdio ./formpath mcp.",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8,5 x 11 palců)",
 "Letter spacing": "Mezery mezi písmeny",
