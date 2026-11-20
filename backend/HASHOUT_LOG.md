@@ -897,3 +897,14 @@ The shell reads the engine's lines through one channel that also carries the two
 The owner's decision D3: a Windows engine is packaged as FormWeb's is, with PyInstaller's `--noconsole`, so no console window opens beside the app. The scripts had no switch, so the family's switch is added with the default turned round: on Windows the engine is windowed unless `FORMPATH_ENGINE_WINDOWED=0`; Linux and macOS builds are unchanged. `formpath_engine.py` already puts the null device in place of a missing stream before anything prints, so `--selfcheck` still works with no console: run with `sys.stdout` and `sys.stderr` set to None it exits 0. The build's own check only runs `--selfcheck`, which serves nothing, so it still needs no `FORMPATH_NO_SHELL=1`; a check that starts the frozen engine to serve on its own must set it.
 
 Checked with `bash -n` and the `.bat` by reading; no Windows build has shown it.
+
+### app/core/seal.py, app/services/claude_code.py, app/routers/claude_code.py · a stored place for Codex, Cursor and Antigravity, sealed like Claude Code's
+- refers-to: app/core/seal.py :: LATER, SEALED, digest; app/services/claude_code.py :: SETTINGS, save_prefs, places; app/routers/claude_code.py :: PrefsBody, get_prefs
+- kind: decision
+- logged: v0.59.0 · 2026-11-20
+
+`agent.json` kept a place for Claude Code (`claudeBin`) under the settings seal, written only from the window and given to the finder first. Codex, Cursor and Antigravity now have the same: `codexBin`, `cursorBin` and `antigravityBin`, in `SEALED`, written through the same window-only route, and `SETTINGS` gives each to the finder before the development variables (`FORMPATH_*_BIN`) and the usual places. A hand edit of any of them reads as a broken seal and every sealed place as empty, as before.
+
+The digest leaves out each of the three new places while it is empty, so a file sealed by 0.58.0 gives the same body and reads whole after the update; no migration. Proved before the change with real files: 0.58.0 (ca994d3, a scratch copy) wrote `agent.json` with a Claude Code place, a first message and its seal through a file-backed keyring; the new code read the same file with the same key as `seal: ok`, the place kept and given as the setting, the three new places empty, and the file unchanged. Agent access (Ask, Allowed, Blocked) is not in this file in formpath; it lives in the window's own store and the engine's MCP gate, so the update does not touch it. `test_seal.py` writes a file of 0.58.0's shape with 0.58.0's seal formula and checks the same, then that later writes keep it sealed.
+
+`GET /api/claude/prefs` gives the four places and `sealBroken` to the window (key required, like the status), for the new fields in Preferences. The finder's sentence for a missing Codex, Cursor or Antigravity now starts with "your setting (empty)" and ends "or give its path in Preferences", as Claude Code's did; the two status tests say so.

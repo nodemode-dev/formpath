@@ -34,6 +34,9 @@ class PrefsBody(BaseModel):
     claudeBin: str | None = Field(None, max_length=4096)
     claudeFolder: str | None = Field(None, max_length=4096)
     claudeFirstMessage: str | None = Field(None, max_length=20_000)
+    codexBin: str | None = Field(None, max_length=4096)
+    cursorBin: str | None = Field(None, max_length=4096)
+    antigravityBin: str | None = Field(None, max_length=4096)
 
 
 def _guard(fn, *args, **kwargs):
@@ -54,6 +57,13 @@ def status(request: Request) -> dict:
     require_local(request)
     window_key.require(request)
     return claude_code.status()
+
+
+@router.get("/prefs")
+def get_prefs(request: Request) -> dict:
+    require_local(request)
+    window_key.require(request)
+    return claude_code.places()
 
 
 @router.post("/prefs")

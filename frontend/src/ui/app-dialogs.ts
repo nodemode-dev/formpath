@@ -180,6 +180,8 @@ export class SettingsDialog extends Dialog {
   private readonly llmKey = el<HTMLInputElement>('<input class="cv-input" type="password" autocomplete="off" aria-label="Language model key">');
   private readonly llmNote = el('<p class="cv-note" role="status">Any OpenAI-compatible service: Ollama (http://localhost:11434/v1) or LM Studio (http://localhost:1234/v1) on this computer, or OpenAI, OpenRouter and others with a key. The engine keeps the key in your system password store and never shows it.</p>');
   private readonly mcpNote = el('<p class="cv-note" role="status"></p>');
+  private readonly places = new Map<'claudeBin' | 'codexBin' | 'cursorBin' | 'antigravityBin', HTMLInputElement>();
+  private readonly placeNote = el('<p class="cv-note" role="status"></p>');
   workspaceLock: { get(): boolean; set(on: boolean): void } | null = null;
 
   constructor(private readonly onPrefs: (p: Prefs) => void) {
@@ -261,10 +263,18 @@ export class SettingsDialog extends Dialog {
     const nm = el<HTMLInputElement>('<input class="cv-input" type="url" spellcheck="false" aria-label="NodeMode address">');
     nm.addEventListener('change', () => { if (/^https?:\/\/./.test(nm.value.trim())) this.change({ nodemodeUrl: nm.value.trim() }); });
     this.ctl.nodemodeUrl = nm;
+    const placeRows = ([['claudeBin', 'Claude Code'], ['codexBin', 'Codex'], ['cursorBin', 'Cursor'], ['antigravityBin', 'Antigravity']] as const).map(([key, label]) => {
+      const c = el<HTMLInputElement>('<input class="cv-input" type="text" spellcheck="false" autocomplete="off">');
+      c.setAttribute('aria-label', label);
+      c.addEventListener('change', () => void api.claudePrefs({ [key]: c.value.trim() }).then(() => this.loadPlaces(), () => this.loadPlaces()));
+      this.places.set(key, c);
+      return row(label, c);
+    });
     add('Plugins',
       grp('Connected Apps', row('NodeMode address', nm)),
       grp('Prompts', row('Address', this.llmUrl), row('Model', this.llmModel, this.llmModels), row('API key', this.llmKey), row('The model reads images', this.llmVision), llmButtons, this.llmNote),
-      grp('Outside Agents', row('Outside agents (MCP)', agents), nt('Ask each time: a question in the window names the agent and what it asked. Allowed: outside agents work without a question. Blocked: no agent can change anything, the Claude Code tab and Chat included.'), this.mcpNote));
+      grp('Outside Agents', row('Outside agents (MCP)', agents), nt('Ask each time: a question in the window names the agent and what it asked. Allowed: outside agents work without a question. Blocked: no agent can change anything, the Claude Code tab and Chat included.'), this.mcpNote),
+      grp('Agent Programs', ...placeRows, this.placeNote));
     const wrap = el('<div class="cv-prefs"></div>');
     wrap.append(pages);
     this.body.appendChild(wrap);
@@ -317,6 +327,7 @@ export class SettingsDialog extends Dialog {
     this.paintRange();
     void this.refreshLibrary();
     void this.loadLlm();
+    void this.loadPlaces();
     void api.mcpStatus().then((s) => setText(this.mcpNote, s ? `Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: ${s.endpoint} (${s.tools} tools). Claude Code: claude mcp add --transport http formpath ${s.endpoint}, or the stdio bridge ./formpath mcp.` : 'The engine is offline: start it with ./formpath boot to connect agents.'));
     if (section && this.sections.has(section)) this.showSection(section);
     this.syncTheme();
@@ -431,6 +442,12 @@ export class SettingsDialog extends Dialog {
   private async applyLibrary(): Promise<void> {
     try { const r = await api.setLibraryFolder(this.libPath.value.trim(), this.libMove.checked); setText(this.libNow, `The library is in ${r.folder}${r.moved ? `; ${r.moved} project${r.moved === 1 ? '' : 's'} moved there` : ''}.`); }
     catch (err) { setText(this.libNow, err instanceof Error ? err.message : 'The library could not move there.'); }
+  }
+
+  private async loadPlaces(): Promise<void> {
+    const got = await api.programPlaces();
+    for (const [key, c] of this.places) setValue(c, got ? String(got[key] ?? '') : '');
+    setText(this.placeNote, got?.sealBroken ? 'These places were changed outside formpath, so they are not used. Enter them here again.' : 'Where each program is on this computer, if formpath does not find it. Leave a field empty and formpath looks in the usual places.');
   }
 
   private async loadLlm(): Promise<void> {

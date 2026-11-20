@@ -18,7 +18,7 @@ INAPP_HEADER = "x-formpath-inapp"
 TOKENS: dict[str, Path] = {}
 KEEP_ENV = agent_lookup.KEEP_ENV
 OVERRIDES = {"claude": ("FORMPATH_CLAUDE_BIN",), "codex": ("FORMPATH_CODEX_BIN",), "cursor": ("FORMPATH_CURSOR_BIN",), "antigravity": ("FORMPATH_ANTIGRAVITY_BIN",)}
-SETTINGS = {"claude": "claudeBin"}
+SETTINGS = {"claude": "claudeBin", "codex": "codexBin", "cursor": "cursorBin", "antigravity": "antigravityBin"}
 OTHERWISE = "give its path in Preferences"
 SHELL_WAIT = 10.0
 CHECK_WAIT = 15.0
@@ -54,12 +54,16 @@ def prefs() -> dict:
 
 def save_prefs(values: dict) -> dict:
     current = {k: v for k, v in prefs().items() if k not in ("seal", "sealBroken")}
-    for key in ("claudeBin", "claudeFolder", "claudeFirstMessage"):
+    for key in ("claudeBin", "claudeFolder", "claudeFirstMessage", "codexBin", "cursorBin", "antigravityBin"):
         if key in values and isinstance(values[key], str):
             current[key] = values[key].strip()
     prefs_file().write_text(json.dumps(seal.sign(current), indent=2), encoding="utf-8")
     _cache["value"] = None
     return prefs()
+
+
+def places() -> dict:
+    return {SETTINGS[kind]: _pref(SETTINGS[kind]) for kind in SETTINGS} | {"sealBroken": prefs()["sealBroken"]}
 
 
 def _pref(key: str) -> str:

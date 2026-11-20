@@ -2,6 +2,17 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.59.0 · 2026-11-20
+
+Telling FormPath where each agent program is. Nothing in this release has run on Windows or macOS yet.
+
+- Preferences > Plugins has a new Agent Programs group with a field for Claude Code, Codex, Cursor and Antigravity: where each program is on this computer, for when FormPath does not find it by itself. Leave a field empty and FormPath looks in the usual places, as before.
+- What you enter there is protected the way the Claude Code place already was: only the FormPath window can change it, and if the settings file is changed by hand, none of the places is used until you enter them again in Preferences, which then says so.
+- A Claude Code place saved by an earlier FormPath is kept after the update.
+- When Codex, Cursor or Antigravity is not found, the message now says it can be given in Preferences.
+- The new sentences are in every language FormPath carries; no native speaker has read them yet.
+- The colour and size names FormPath shares with FormVis are now all defined in FormPath too. Nothing on screen changes.
+
 ## 0.58.0 · 2026-11-20
 
 Starting and stopping cleanly, the desktop app's side. Nothing in this release has run on Windows or macOS yet.

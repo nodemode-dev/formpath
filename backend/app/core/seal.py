@@ -6,7 +6,8 @@ import secrets
 SERVICE = "FormPath"
 ACCOUNT = "settings-seal"
 FIELD = "seal"
-SEALED = ("claudeBin", "claudeFolder")
+LATER = ("codexBin", "cursorBin", "antigravityBin")
+SEALED = ("claudeBin", "claudeFolder") + LATER
 _CACHE: dict = {"tried": False, "available": False, "key": None}
 
 
@@ -39,7 +40,7 @@ def available() -> bool:
 
 
 def digest(values: dict, key: bytes) -> str:
-    body = json.dumps({k: str(values.get(k) or "").strip() for k in SEALED}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    body = json.dumps({k: str(values.get(k) or "").strip() for k in SEALED if k not in LATER or str(values.get(k) or "").strip()}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hmac.new(key, body.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
