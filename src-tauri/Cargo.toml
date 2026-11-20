@@ -1,6 +1,6 @@
 [package]
 name = "formpath"
-version = "0.57.0"
+version = "0.58.0"
 description = "formpath desktop shell"
 authors = ["nodemode-ai"]
 license = "Apache-2.0"
@@ -17,6 +17,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
 regex = "1"
 serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

@@ -317,7 +317,7 @@ export class SettingsDialog extends Dialog {
     this.paintRange();
     void this.refreshLibrary();
     void this.loadLlm();
-    void api.mcpStatus().then((s) => setText(this.mcpNote, s ? `Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: ${s.endpoint} (${s.tools} tools). Claude Code: claude mcp add --transport http formpath ${s.endpoint}, or the stdio bridge ./formpath mcp.` : 'The engine is offline: start it with ./formpath boot to connect agents.'));
+    void api.mcpStatus().then((s) => setText(this.mcpNote, s ? `Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: ${s.endpoint} (${s.tools} tools). Claude Code: claude mcp add --transport http formpath ${s.endpoint}, or the stdio bridge ./formpath mcp.` : 'The engine is offline: start it with ./formpath boot to connect agents.'));
     if (section && this.sections.has(section)) this.showSection(section);
     this.syncTheme();
     this.open();

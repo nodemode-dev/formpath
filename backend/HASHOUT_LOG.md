@@ -868,3 +868,32 @@ Seen on Linux, engine from source, stand-in shells (`sleep 300`), made-up home, 
 When the engine gave no address and key, the shell closed the loading window and then showed its message. On Windows the loading window is the last window at that moment, and closing it first can end the app before the message is seen. The two statements changed places: the message, then `close_splash`, then the engine is stopped and the app exits. The sentence now says what the most likely cause is since the engine takes a lock (a copy of FormPath is already open on the same data folder) and where the engine's log is.
 
 Not compiled and not run on any system: the desktop shell cannot be built here. One string and two statements in another order. Held: the rest of the family's shell side (the Windows job object, the failure text with the engine's last lines and its exit code, a limit on the wait for the address, the same order for a window that fails to build).
+
+### app/core/startup.py · an engine that has ended but was not yet collected counts as gone where there is no /proc
+- refers-to: app/core/startup.py :: finished, gone_by; tests/test_startup.py :: test_a_holder_that_has_ended_but_was_not_collected_counts_as_gone_where_there_is_no_proc
+- kind: fix
+- logged: v0.58.0 · 2026-11-20
+
+FormCut's macOS job found it in the same file: ending a leftover engine waits until it is gone, and `_alive_posix` asks `kill(pid, 0)`, which still answers for a process that has ended and that its parent has not collected. It tells such a process apart only by reading `/proc`, which macOS does not have, so the wait ran out and the start was refused with "could not stop an engine that was left running". `finished(pid)` asks `ps -o stat= -p <pid>` where there is no `/proc` (never on Windows, never on Linux) and answers true for a state that starts with `Z`; `gone_by` stops waiting when the process is not alive or is finished. `alive` is unchanged, so the two second watch on the app starts no program.
+
+Seen on Linux with `PROC` pointed at a folder that does not exist: the new test failed with that sentence before the change (1 failed) and the file passes after it (15 passed). Not run on macOS.
+
+### src-tauri/src/main.rs, src-tauri/src/engine_start.rs, src-tauri/src/win_job.rs · the Windows engine ends with the app, a failed start says why, and the wait for the address has a limit
+- refers-to: src-tauri/src/main.rs :: EngineStep, start_limit, engine_failed, kill_backend, main; src-tauri/src/engine_start.rs :: Failure, Wait, Tail, message, log_path; src-tauri/src/win_job.rs :: hold_pid, end; src-tauri/Cargo.toml :: windows-sys
+- kind: feature
+- logged: v0.58.0 · 2026-11-20
+
+The rest of the shell side held in 0.57.0. FormPath starts its engine through tauri-plugin-shell, so it takes FormVis's way and keeps that start: right after the start the engine's process id is put in a job object that ends the engine when the job closes (`win_job::hold_pid`, `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`), so it goes with the app however the app ends, and `kill_backend` ends the job before the child. The start was not moved to the standard library's process start because the plugin's start can be done this way and the brief says to keep it. `win_job.rs` is FormVis's file less `hold` (the form for a standard library child, which FormPath never uses since it gives the job its engine by process id) and that function's two imports, `std::os::windows::io::AsRawHandle` and `std::process::Child` (removed in f558ffd, the one warning of the Windows type check); `hold_pid` and `end` are FormVis's unchanged.
+
+The shell reads the engine's lines through one channel that also carries the two limits: 90 seconds for the address (the owner's D1; the shell had no limit before) and then 10 seconds for the window key. When the engine stops, is missing, cannot be started, or a limit runs out, and when the window cannot be built, `engine_failed` shows one dialog with the sentence for that case, the engine's last twelve lines (never the window key line), its exit code where it gave one (code 2 says another copy holds the data folder) and the log's path, before the loading window closes; then the engine is ended and the app exits. The log path follows the engine's own rule (`FORMPATH_DATA_DIR`, with `~` read the engine's way, else `Formpath` in the home folder, then `Logs/formpath-engine.log`).
+
+`windows-sys` 0.61.2, the version already in the lock, under the Windows target only. The one hand-added line in the shell's own dependency list in `Cargo.lock` was proved: the old lock and the new `Cargo.toml` in a scratch crate with stub sources, `cargo update --workspace --offline`, and its lock against ours: no difference. `cargo check --target x86_64-pc-windows-msvc` of the two files in the scratch crate passes, and `cargo test` there passes the four tests of `engine_start.rs` (6 passed in the crate). The shell itself was not compiled and `main.rs` was read line by line against FormVis's, not built. `cargo metadata --locked` does not resolve offline here.
+
+### setup/freeze_backend, setup/freeze_backend.bat · a Windows engine is packaged with no console window unless FORMPATH_ENGINE_WINDOWED=0
+- refers-to: setup/freeze_backend :: windowed; setup/freeze_backend.bat :: WINDOWED
+- kind: decision
+- logged: v0.58.0 · 2026-11-20
+
+The owner's decision D3: a Windows engine is packaged as FormWeb's is, with PyInstaller's `--noconsole`, so no console window opens beside the app. The scripts had no switch, so the family's switch is added with the default turned round: on Windows the engine is windowed unless `FORMPATH_ENGINE_WINDOWED=0`; Linux and macOS builds are unchanged. `formpath_engine.py` already puts the null device in place of a missing stream before anything prints, so `--selfcheck` still works with no console: run with `sys.stdout` and `sys.stderr` set to None it exits 0. The build's own check only runs `--selfcheck`, which serves nothing, so it still needs no `FORMPATH_NO_SHELL=1`; a check that starts the frozen engine to serve on its own must set it.
+
+Checked with `bash -n` and the `.bat` by reading; no Windows build has shown it.

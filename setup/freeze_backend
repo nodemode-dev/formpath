@@ -8,13 +8,15 @@ triple="$(fp_target_triple)" || fp_die "rustc not found; install Rust or set FOR
 cd "$FORMPATH_ROOT/backend"
 sep=":"
 root="$FORMPATH_ROOT"
+windowed=()
 if [ "$(fp_os)" = windows ]; then
   sep=";"
   root="$(cygpath -w "$FORMPATH_ROOT")"
+  [ "${FORMPATH_ENGINE_WINDOWED:-1}" = 0 ] || windowed=(--noconsole)
 fi
 ext="$(fp_exe)"
 rm -rf build/pyinstaller dist-engine
-pyinstaller --noconfirm --clean --onefile --name formpath-engine \
+pyinstaller --noconfirm --clean --onefile "${windowed[@]}" --name formpath-engine \
   --distpath dist-engine --workpath build/pyinstaller --specpath build/pyinstaller \
   --add-data "$root/frontend/dist${sep}frontend_dist" \
   --collect-submodules app --collect-submodules uvicorn --collect-submodules keyring --collect-data spellchecker --collect-submodules fontTools \

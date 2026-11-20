@@ -1875,7 +1875,7 @@
 "Length": "Uzunluk",
 "Let formpath determine colors": "Renkleri formpath belirlesin",
 "Let the printer determine colors": "Renkleri yazıcı belirlesin",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Claude Code, Codex, Cursor veya başka bir MCP istemcisinin açık belgede çizim yapmasına izin verir; her değişiklik geri alınabilir bir adımdır. Uç nokta: {0} ({1} araç). Claude Code: claude mcp add --transport http formpath {2} veya stdio köprüsü ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Claude Code, Codex, Cursor, Antigravity veya başka bir MCP istemcisinin açık belgede çizim yapmasına izin verir; her değişiklik geri alınabilir bir adımdır. Uç nokta: {0} ({1} araç). Claude Code: claude mcp add --transport http formpath {2} veya stdio köprüsü ./formpath mcp.",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8,5 x 11 inç)",
 "Letter spacing": "Harf aralığı",

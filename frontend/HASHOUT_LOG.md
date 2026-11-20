@@ -4906,3 +4906,21 @@ The adapter is `DockAdapter<'antigravity'>`, lists `antigravity` in `tabs().buil
 Left as it is: `keyHeaders`, the automation ids and the status line (steps 2 to 5 of the module's moving notes) were not taken; the rows for Claude Code, Codex and Cursor still show the module's own sentences when a program is missing.
 
 Checked: `tsc --noEmit` clean. The engine side was seen with a stand-in `agy` (backend log, same date). Not seen in a browser: the fourth button, its row in the More agents menu and the tab itself in the window were not looked at.
+
+### src/dock/ · the shared dock module is 2.2.1
+- refers-to: src/dock/strings.ts :: tourInstalledBody, tourReadyBody; src/dock/MANIFEST.json; src/dock/CONTRACT.md
+- kind: rationale
+- logged: v0.58.0 · 2026-11-20
+
+`src/dock/` is FormVis's `frontend/src/dock` at commit 23b01889, the commit the wave's dock note names: `strings.ts`, `MANIFEST.json` and `CONTRACT.md` written with `git show 23b01889:frontend/src/dock/[name]`; the other 13 files were already equal to that commit's. The first-run guide's two sentences for a computer that has Claude Code now end with "Codex, Cursor and Antigravity each get a button of their own here when they are on this computer." FormPath carries no translation of the panel's sentences, so no table changed; FormPath's own check reads the version from MANIFEST.json, so no version number elsewhere needed setting.
+
+Checked: `python3 setup/agents.py sync --check` in step; `tests/test_agent_manifest.py` 9 passed; vitest `dock-storage.test.ts` 4 passed. Not seen in a browser at this commit.
+
+### src/ui/app-dialogs.ts, src/i18n/keys.json, src/i18n/locales/ · the MCP sentence names all four agent programs
+- refers-to: src/ui/app-dialogs.ts :: mcpNote; src/i18n/keys.json; src/i18n/locales/*.json
+- kind: decision
+- logged: v0.58.0 · 2026-11-20
+
+The one sentence in the window that lists the agent programs (Preferences, the MCP note) named Claude Code, Codex and Cursor; it now names Claude Code, Codex, Cursor and Antigravity, in that order. The sentence is the lookup key of the 25 language tables, so the key in `keys.json` and every table changed together, each table's translation with Antigravity put after Cursor in that language's list (Finnish in the genitive, Hungarian with its article, Japanese and Chinese with the ideographic comma). No native speaker has read them.
+
+Checked: `python3 setup/i18n.py check` 25 languages, 4119 of 4119 translated, no changed placeholders. Not seen in a browser.

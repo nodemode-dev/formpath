@@ -1875,7 +1875,7 @@
 "Length": "Panjang",
 "Let formpath determine colors": "Biarkan formpath menentukan warna",
 "Let the printer determine colors": "Biarkan printer menentukan warna",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Memungkinkan Claude Code, Codex, Cursor, atau klien MCP lain menggambar di dokumen yang terbuka; setiap perubahan adalah satu langkah yang dapat dibatalkan. Endpoint: {0} ({1} alat). Claude Code: claude mcp add --transport http formpath {2}, atau jembatan stdio ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Memungkinkan Claude Code, Codex, Cursor, Antigravity, atau klien MCP lain menggambar di dokumen yang terbuka; setiap perubahan adalah satu langkah yang dapat dibatalkan. Endpoint: {0} ({1} alat). Claude Code: claude mcp add --transport http formpath {2}, atau jembatan stdio ./formpath mcp.",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8,5 x 11 inci)",
 "Letter spacing": "Jarak huruf",

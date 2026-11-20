@@ -1875,7 +1875,7 @@
 "Length": "Длина",
 "Let formpath determine colors": "Цвета определяет formpath",
 "Let the printer determine colors": "Цвета определяет принтер",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Позволяет Claude Code, Codex, Cursor или другому клиенту MCP рисовать в открытом документе. Каждое изменение - шаг, который можно отменить. Конечная точка: {0} (инструментов: {1}). Claude Code: claude mcp add --transport http formpath {2} или мост stdio ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Позволяет Claude Code, Codex, Cursor, Antigravity или другому клиенту MCP рисовать в открытом документе. Каждое изменение - шаг, который можно отменить. Конечная точка: {0} (инструментов: {1}). Claude Code: claude mcp add --transport http formpath {2} или мост stdio ./formpath mcp.",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8,5 x 11 дюймов)",
 "Letter spacing": "Межбуквенный интервал",

@@ -1875,7 +1875,7 @@
 "Length": "Hossz",
 "Let formpath determine colors": "A színeket a formpath határozza meg",
 "Let the printer determine colors": "A színeket a nyomtató határozza meg",
-"Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Lehetővé teszi, hogy a Claude Code, a Codex, a Cursor vagy más MCP-kliens rajzoljon a megnyitott dokumentumban; minden módosítás egy visszavonható lépés. Végpont: {0} ({1} eszköz). Claude Code: claude mcp add --transport http formpath {2}, vagy a stdio-híd: ./formpath mcp.",
+"Lets Claude Code, Codex, Cursor, Antigravity or another MCP client draw in the open document; each change is an undoable step. Endpoint: {0} ({1} tools). Claude Code: claude mcp add --transport http formpath {2}, or the stdio bridge ./formpath mcp.": "Lehetővé teszi, hogy a Claude Code, a Codex, a Cursor, az Antigravity vagy más MCP-kliens rajzoljon a megnyitott dokumentumban; minden módosítás egy visszavonható lépés. Végpont: {0} ({1} eszköz). Claude Code: claude mcp add --transport http formpath {2}, vagy a stdio-híd: ./formpath mcp.",
 "Letter": "Letter",
 "Letter (8.5 x 11 in)": "Letter (8,5 x 11 hüvelyk)",
 "Letter spacing": "Betűköz",
