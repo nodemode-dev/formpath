@@ -11,7 +11,9 @@ if not exist frontend\dist\index.html call setup\build_frontend.bat
 cd backend
 if exist build\pyinstaller rmdir /s /q build\pyinstaller
 if exist dist-engine rmdir /s /q dist-engine
-pyinstaller --noconfirm --clean --onefile --name formpath-engine --distpath dist-engine --workpath build\pyinstaller --specpath build\pyinstaller --add-data "%ROOT%\frontend\dist;frontend_dist" --collect-submodules app --collect-submodules uvicorn --collect-submodules keyring --collect-data spellchecker --collect-submodules fontTools "%ROOT%\backend\formpath_engine.py" || exit /b 1
+set "WINDOWED=--noconsole"
+if "%FORMPATH_ENGINE_WINDOWED%"=="0" set "WINDOWED="
+pyinstaller --noconfirm --clean --onefile %WINDOWED% --name formpath-engine --distpath dist-engine --workpath build\pyinstaller --specpath build\pyinstaller --add-data "%ROOT%\frontend\dist;frontend_dist" --collect-submodules app --collect-submodules uvicorn --collect-submodules keyring --collect-data spellchecker --collect-submodules fontTools "%ROOT%\backend\formpath_engine.py" || exit /b 1
 if not exist "%ROOT%\src-tauri\binaries" mkdir "%ROOT%\src-tauri\binaries"
 copy /y dist-engine\formpath-engine.exe "%ROOT%\src-tauri\binaries\formpath-engine-%TRIPLE%.exe" >nul
 "%ROOT%\src-tauri\binaries\formpath-engine-%TRIPLE%.exe" --selfcheck
