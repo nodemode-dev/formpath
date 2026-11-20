@@ -341,7 +341,7 @@ export function startApp(): void {
   new HelpBar(q(root, '.fp-helpbar'), engine);
   late.task = new TaskBar(q(document.body, '#overlay-root'), stageEl, engine, commands);
   applyUiPrefs(prefs);
-  const termDock: AgentDock = new AgentDock(formpathDock({
+  const termDock: AgentDock<'antigravity'> = new AgentDock(formpathDock({
     context: () => {
       const p = engine.current;
       if (!p) return 'formpath window: no document is open';

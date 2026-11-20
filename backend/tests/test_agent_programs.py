@@ -206,11 +206,36 @@ def test_the_cursor_config_keeps_other_servers_and_leaves_a_file_it_cannot_read_
     assert config.read_text(encoding="utf-8") == "not json"
 
 
+def test_an_antigravity_tab_gets_its_entry_in_a_folder_of_its_own_and_loses_it_at_close(client, stand_ins):
+    from app.core import config
+    from app.services import claude_code, terminal
+
+    stand_in(stand_ins / "agy", STAND_INS["codex"])
+    kept = config.data_dir() / "agent-tabs" / "antigravity" / ".agents" / "mcp_config.json"
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    seed = {"mcpServers": {"other": {"command": "x"}}, "kept": 1}
+    kept.write_text(json.dumps(seed), encoding="utf-8")
+    res = client.post("/api/terminal/agent", json={"kind": "antigravity"})
+    assert res.status_code == 200 and res.json()["kind"] == "antigravity" and res.json()["title"] == "Antigravity"
+    assert res.json()["cwd"] == str(kept.parent.parent)
+    session = terminal.SESSIONS[res.json()["id"]]
+    token = session.env["FORMPATH_INAPP_TOKEN"]
+    assert claude_code.is_inapp(token) and all(token not in part for part in session.argv)
+    assert stat.S_IMODE(os.stat(kept).st_mode) == 0o600
+    entry = {"serverUrl": session.env["FORMPATH_MCP_URL"], "headers": {claude_code.INAPP_HEADER: token}}
+    assert json.loads(kept.read_text(encoding="utf-8")) == {"mcpServers": {"other": {"command": "x"}, "formpath_tab": entry}, "kept": 1}
+    assert client.delete(f"/api/terminal/{session.id}").status_code == 200
+    assert not claude_code.is_inapp(token)
+    assert json.loads(kept.read_text(encoding="utf-8")) == seed
+    kept.unlink()
+
+
 def test_a_missing_program_or_an_unknown_kind_is_refused(client, none_found):
     res = client.post("/api/terminal/agent", json={"kind": "codex"})
     assert res.status_code == 409 and res.json()["detail"].startswith("Codex was not found. Looked in: PATH (/usr/bin:/bin); ")
     assert client.post("/api/terminal/agent", json={"kind": "vim"}).status_code == 422
-    assert client.post("/api/terminal/agent", json={"kind": "antigravity"}).status_code == 422
+    res = client.post("/api/terminal/agent", json={"kind": "antigravity"})
+    assert res.status_code == 409 and res.json()["detail"].startswith("Antigravity was not found. Looked in: PATH (/usr/bin:/bin); ")
 
 
 def test_starting_a_program_tab_needs_the_window_key(bare, stand_ins):

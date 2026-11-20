@@ -90,7 +90,7 @@ function socketChannel(socket: WebSocket): DockChannel {
   };
 }
 
-const record = (info: TerminalInfo): DockTerminal => ({ id: info.id, title: info.title, alive: info.alive, kind: info.kind, ...(info.cwd ? { tip: info.cwd } : {}) });
+const record = (info: TerminalInfo): DockTerminal<'antigravity'> => ({ id: info.id, title: info.title, alive: info.alive, kind: info.kind, ...(info.cwd ? { tip: info.cwd } : {}) });
 
 export interface DockDeps {
   context(): string;
@@ -101,7 +101,7 @@ export interface DockDeps {
   homeShown(): boolean;
 }
 
-export function formpathDock(deps: DockDeps): DockAdapter {
+export function formpathDock(deps: DockDeps): DockAdapter<'antigravity'> {
   return {
     words: {
       app: 'formpath', noun: 'document', example: 'make the title a warm gradient and add a soft drop shadow', start: './formpath boot',
@@ -118,7 +118,7 @@ export function formpathDock(deps: DockDeps): DockAdapter {
     },
     isDockChord: (e) => (isMac ? e.metaKey : e.ctrlKey) && e.altKey && e.shiftKey && e.code === 'KeyT',
     chordLabel: () => `${chord}T`,
-    tabs: () => ({ builtin: ['chat', 'shell', 'claude', 'codex', 'cursor'] }),
+    tabs: () => ({ builtin: ['chat', 'shell', 'claude', 'codex', 'cursor', 'antigravity'] }),
     classes: { iconButton: 'cv-icon-btn', button: 'cv-btn', primaryButton: 'cv-btn-primary', input: 'cv-input', select: 'cv-input', note: 'cv-note' },
     t: (_key, english) => t(english),
     onTheme: (handler) => { document.addEventListener('nm:ui-settings-changed', handler); },
@@ -145,7 +145,11 @@ export function formpathDock(deps: DockDeps): DockAdapter {
       channel: async (id) => socketChannel(await socketTo(`/terminal/${encodeURIComponent(id)}/stream`)),
       scrollback: 5000,
     },
-    agentStatus: () => api.agentPrograms(),
+    agentStatus: async () => {
+      const now = await api.agentPrograms();
+      const agy = now?.antigravity;
+      return now && agy && agy.finding !== 'runs' && typeof agy.said === 'string' ? { ...now, antigravity: { ...agy, note: agy.said } } : now;
+    },
     chat: {
       pane: (host): DockOwnChat => {
         const chat = new DockChat({ context: deps.context, note: deps.note, claude: deps.claude });

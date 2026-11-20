@@ -4,6 +4,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from app.core import config
 from app.services import agent_lookup, claude_code, terminal
 
 TOKEN_VAR = "FORMPATH_INAPP_TOKEN"
@@ -12,7 +13,8 @@ PROGRAMS = {
     "cursor": {"bin": "cursor-agent", "title": "Cursor", "install": "curl https://cursor.com/install -fsS | bash"},
     "antigravity": {"bin": "agy", "title": "Antigravity", "install": agent_lookup.install("antigravity")},
 }
-TABS = ("codex", "cursor")
+TABS = ("codex", "cursor", "antigravity")
+TAB_ENTRY = "formpath_tab"
 CACHE_SECONDS = 60.0
 _cache: dict = {"at": 0.0, "value": None}
 
@@ -73,6 +75,56 @@ def write_cursor_config(folder: str) -> Path | None:
     return path
 
 
+def tab_folder(kind: str) -> Path:
+    folder = config.data_dir() / "agent-tabs" / kind
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def _tab_file(folder: Path) -> Path:
+    return folder / ".agents" / "mcp_config.json"
+
+
+def _tab_servers(path: Path) -> dict:
+    data = json.loads(path.read_text(encoding="utf-8") or "{}") if path.exists() else {}
+    if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+        raise OSError(f"{path} is not an MCP servers file formpath can read, so it was left alone")
+    return data
+
+
+def _tab_replace(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = path.with_name(path.name + f".part-{os.getpid()}")
+    with os.fdopen(os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(data, indent=2) + "\n")
+    os.replace(part, path)
+
+
+def write_tab_entry(folder: Path, token: str) -> None:
+    path = _tab_file(folder)
+    data = _tab_servers(path)
+    data.setdefault("mcpServers", {})[TAB_ENTRY] = {"serverUrl": f"{terminal.engine_url()}/mcp", "headers": {claude_code.INAPP_HEADER: token}}
+    _tab_replace(path, data)
+
+
+def remove_tab_entry(folder: Path, token: str) -> None:
+    path = _tab_file(folder)
+    try:
+        data = _tab_servers(path)
+        entry = data.get("mcpServers", {}).get(TAB_ENTRY)
+        if not isinstance(entry, dict) or (entry.get("headers") or {}).get(claude_code.INAPP_HEADER) != token:
+            return
+        del data["mcpServers"][TAB_ENTRY]
+        _tab_replace(path, data)
+    except (OSError, ValueError):
+        return
+
+
+def forget_tab(kind: str, token: str) -> None:
+    if kind == "antigravity":
+        remove_tab_entry(config.data_dir() / "agent-tabs" / kind, token)
+
+
 def open_terminal(kind: str, cols: int = 100, rows: int = 30) -> dict:
     if kind not in TABS:
         raise ValueError(f"formpath has no agent program called {kind}.")
@@ -81,15 +133,20 @@ def open_terminal(kind: str, cols: int = 100, rows: int = 30) -> dict:
     if found.state != "runs":
         raise LookupError(claude_code.said(found))
     path = found.path
-    folder = str(claude_code.workdir())
+    own = tab_folder(kind) if kind == "antigravity" else None
+    folder = str(own or claude_code.workdir())
     if kind == "cursor":
         write_cursor_config(folder)
     token = claude_code.issue_env()
     env = claude_code.child_env(path) | {TOKEN_VAR: token}
     try:
+        if own:
+            write_tab_entry(own, token)
         session = terminal.open_session(folder, cols, rows, program["title"], claude_code._wrap([path] + (codex_args() if kind == "codex" else [])), env, kind, token)
     except BaseException:
         claude_code.revoke(token)
+        if own:
+            remove_tab_entry(own, token)
         raise
     _cache["value"] = None
     return session.describe()

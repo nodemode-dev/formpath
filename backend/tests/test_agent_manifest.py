@@ -28,7 +28,7 @@ def test_the_shared_dock_folder_is_what_its_manifest_lists_and_imports_nothing_f
 
     sync = sync_module()
     assert sync.dock_problems() == []
-    assert committed()["dock"] == {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "claude", "codex", "cursor", "shell"]}
+    assert committed()["dock"] == {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "claude", "codex", "cursor", "antigravity", "shell"]}
     copy = tmp_path / "dock"
     shutil.copytree(sync.DOCK_DIR, copy)
     (copy / "keys.ts").write_text((copy / "keys.ts").read_text(encoding="utf-8") + "import { api } from '../io/api';\n", encoding="utf-8")
@@ -69,6 +69,36 @@ def test_the_check_names_the_shared_finder_edited_in_place_or_missing(tmp_path, 
     assert sync.lookup_problems() == [f"{LOOKUP}: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)"]
     (copy / LOOKUP).unlink()
     assert sync.lookup_problems() == [f"{LOOKUP}: missing (the shared finder for the agent programs)"]
+
+
+def test_install_adds_formpath_to_antigravity_and_leaves_what_it_did_not_write(tmp_path):
+    sync = sync_module()
+    cfg = tmp_path / ".gemini" / "config" / "mcp_config.json"
+    entry = {"command": sync.LAUNCH, "args": ["mcp"]}
+    said = []
+    sync.install_antigravity(tmp_path, True, said)
+    assert said == ["Antigravity:", f"  MCP server formpath -> {cfg}"] and not cfg.exists()
+    sync.install_antigravity(tmp_path, False, said)
+    assert json.loads(cfg.read_text(encoding="utf-8")) == {"mcpServers": {"formpath": entry}}
+    said = []
+    sync.install_antigravity(tmp_path, False, said)
+    assert said == ["Antigravity:", f"  MCP server formpath already in {cfg}"] and [p.name for p in cfg.parent.iterdir()] == ["mcp_config.json"]
+    foreign = {"mcpServers": {"formpath": {"command": "/elsewhere/tool", "args": ["serve"]}, "other": {"command": "x"}}, "kept": 1}
+    cfg.write_text(json.dumps(foreign), encoding="utf-8")
+    said = []
+    sync.install_antigravity(tmp_path, False, said)
+    assert said[1].endswith("has a server named formpath that formpath did not write; left alone") and json.loads(cfg.read_text(encoding="utf-8")) == foreign
+    cfg.write_text("not json", encoding="utf-8")
+    said = []
+    sync.install_antigravity(tmp_path, False, said)
+    assert said[1].endswith("is not an MCP servers file formpath can read; left alone") and cfg.read_text(encoding="utf-8") == "not json"
+    older = tmp_path / "second" / ".gemini" / "antigravity-cli" / "mcp_config.json"
+    older.parent.mkdir(parents=True)
+    older.write_text("{}", encoding="utf-8")
+    said = []
+    sync.install_antigravity(tmp_path / "second", False, said)
+    assert said[1].startswith(f"  an older file was seen at {older} and left alone") and older.read_text(encoding="utf-8") == "{}"
+    assert json.loads((tmp_path / "second" / ".gemini" / "config" / "mcp_config.json").read_text(encoding="utf-8")) == {"mcpServers": {"formpath": entry}}
 
 
 def test_the_shared_finder_imports_nothing_from_the_app():
