@@ -101,6 +101,12 @@ def test_the_program_that_runs_as_the_agent_changes_only_with_the_key(client, ba
 
     assert claude_code.prefs().get("claudeBin", "") != "/tmp/anything"
     assert client.post("/api/claude/prefs", json={"claudeFirstMessage": ""}).status_code == 200
+    for key in ("codexBin", "cursorBin", "antigravityBin"):
+        assert bare.post("/api/claude/prefs", json={key: "/tmp/anything"}).status_code == 403, key
+        assert claude_code.prefs().get(key) in (None, ""), key
+    assert bare.get("/api/claude/prefs").status_code == 403
+    places = client.get("/api/claude/prefs").json()
+    assert set(places) == {"claudeBin", "codexBin", "cursorBin", "antigravityBin", "sealBroken"} and places["codexBin"] == ""
 
 
 def test_a_plain_terminal_gets_no_agent_token_and_no_key_flag(monkeypatch):

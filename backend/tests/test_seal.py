@@ -129,3 +129,44 @@ def test_a_keyring_package_that_cannot_be_imported_degrades_to_unavailable(seale
     monkeypatch.setitem(__import__("sys").modules, "keyring", None)
     seal.reset()
     assert claude_code.prefs()["seal"] == "unavailable"
+
+
+def test_a_file_sealed_by_0_58_0_reads_whole_and_keeps_the_claude_code_place(sealed, tmp_path):
+    import hashlib
+    import hmac
+
+    from app.core import seal
+
+    claude_code, _ = sealed
+    program = tmp_path / "claude"
+    program.write_text("#!/bin/sh\nexit 0\n")
+    program.chmod(0o755)
+    key = seal._load(True)
+    old = {"claudeBin": str(program), "claudeFolder": "", "claudeFirstMessage": "hello"}
+    body = json.dumps({k: old[k] for k in ("claudeBin", "claudeFolder")}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    claude_code.prefs_file().write_text(json.dumps({**old, "seal": hmac.new(key, body.encode("utf-8"), hashlib.sha256).hexdigest()}, indent=2), encoding="utf-8")
+    seen = claude_code.prefs()
+    assert seen["seal"] == "ok" and seen["sealBroken"] is False
+    assert seen["claudeBin"] == str(program) and claude_code.setting("claude") == str(program)
+    assert [claude_code.setting(k) for k in ("codex", "cursor", "antigravity")] == ["", "", ""]
+    claude_code.save_prefs({"claudeFirstMessage": "again"})
+    saved = claude_code.save_prefs({"codexBin": str(program)})
+    assert saved["seal"] == "ok" and saved["claudeBin"] == str(program) and saved["codexBin"] == str(program)
+
+
+@pytest.mark.parametrize("kind", ["codex", "cursor", "antigravity"])
+def test_the_other_programs_places_are_sealed_and_given_to_the_finder_first(sealed, tmp_path, kind):
+    from app.services import agent_lookup
+
+    claude_code, _ = sealed
+    program = tmp_path / kind
+    program.write_text("#!/bin/sh\nexit 0\n")
+    program.chmod(0o755)
+    saved = claude_code.save_prefs({f"{kind}Bin": str(program)})
+    assert saved["seal"] == "ok" and saved[f"{kind}Bin"] == str(program)
+    found = agent_lookup.find(kind, setting=claude_code.setting(kind), override_vars=(), env={"PATH": ""})
+    assert found.how == "setting" and found.path == str(program)
+    edit_file(claude_code, **{f"{kind}Bin": "/tmp/other-program"})
+    checked = claude_code.prefs()
+    assert checked["sealBroken"] is True and checked[f"{kind}Bin"] == "" and claude_code.setting(kind) == ""
+    assert checked["claudeBin"] == ""

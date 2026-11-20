@@ -4924,3 +4924,14 @@ Checked: `python3 setup/agents.py sync --check` in step; `tests/test_agent_manif
 The one sentence in the window that lists the agent programs (Preferences, the MCP note) named Claude Code, Codex and Cursor; it now names Claude Code, Codex, Cursor and Antigravity, in that order. The sentence is the lookup key of the 25 language tables, so the key in `keys.json` and every table changed together, each table's translation with Antigravity put after Cursor in that language's list (Finnish in the genitive, Hungarian with its article, Japanese and Chinese with the ideographic comma). No native speaker has read them.
 
 Checked: `python3 setup/i18n.py check` 25 languages, 4119 of 4119 translated, no changed placeholders. Not seen in a browser.
+
+### src/ui/app-dialogs.ts, src/io/api.ts, src/i18n/keys.json, src/i18n/locales/ · Preferences > Plugins has a field for where each agent program is
+- refers-to: src/ui/app-dialogs.ts :: placeRows, loadPlaces; src/io/api.ts :: claudePrefs, programPlaces; src/i18n/keys.json; src/i18n/locales/*.json
+- kind: decision
+- logged: v0.59.0 · 2026-11-20
+
+The engine kept a sealed place for Claude Code and told people to "give its path in Preferences", but the window had no such field. Preferences > Plugins now has an Agent Programs group with one field each for Claude Code, Codex, Cursor and Antigravity, in that order, and a note. A field is saved when it changes (the window-only route, so the engine seals it) and read back; when the seal is broken the note says the places were changed outside formpath and are not used.
+
+Six keys were added to `keys.json` by hand, in its order: the group name, the three program names (kept as names in every table) and the two notes. `./formpath i18n extract` was not used: run here it also brings in 68 other strings of the window that `keys.json` does not hold yet, which is another piece of work. The 25 tables were given the new rows with the repository's own `i18n import`, one CSV per language. No native speaker has read them.
+
+Seen in headless Chromium (Playwright 1.63.0) against the engine serving the built window: the four fields and the note in Preferences > Plugins, a Codex path typed in saved to `agent.json` with a seal and shown again after a reload, no console error from the window. `i18n check`: 25 languages, 4125 of 4125.

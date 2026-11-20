@@ -93,8 +93,8 @@ def test_the_status_names_each_program_and_how_to_get_a_missing_one(client, none
     for kind, title in (("codex", "Codex"), ("cursor", "Cursor"), ("antigravity", "Antigravity")):
         assert found[kind] == found[kind] | {"installed": False, "path": None, "version": None, "signedIn": None, "finding": "missing", "title": title}
         assert found[kind]["install"] and "\n" not in found[kind]["install"]
-        assert found[kind]["looked"][0] == "PATH (/usr/bin:/bin)" and found[kind]["looked"][-1] == "your shell (zsh, login and interactive)"
-        assert found[kind]["said"].startswith(f"{title} was not found. Looked in: PATH (/usr/bin:/bin); ~/.local/bin, ") and found[kind]["said"].endswith(f"Install it with: {found[kind]['install']}.")
+        assert found[kind]["looked"][:2] == ["your setting (empty)", "PATH (/usr/bin:/bin)"] and found[kind]["looked"][-1] == "your shell (zsh, login and interactive)"
+        assert found[kind]["said"].startswith(f"{title} was not found. Looked in: your setting (empty); PATH (/usr/bin:/bin); ~/.local/bin, ") and found[kind]["said"].endswith(f"Install it with: {found[kind]['install']}, or give its path in Preferences.")
 
 
 def test_the_status_finds_programs_a_window_started_from_the_dock_would_miss(client, none_found, home, tmp_path):
@@ -232,10 +232,10 @@ def test_an_antigravity_tab_gets_its_entry_in_a_folder_of_its_own_and_loses_it_a
 
 def test_a_missing_program_or_an_unknown_kind_is_refused(client, none_found):
     res = client.post("/api/terminal/agent", json={"kind": "codex"})
-    assert res.status_code == 409 and res.json()["detail"].startswith("Codex was not found. Looked in: PATH (/usr/bin:/bin); ")
+    assert res.status_code == 409 and res.json()["detail"].startswith("Codex was not found. Looked in: your setting (empty); PATH (/usr/bin:/bin); ")
     assert client.post("/api/terminal/agent", json={"kind": "vim"}).status_code == 422
     res = client.post("/api/terminal/agent", json={"kind": "antigravity"})
-    assert res.status_code == 409 and res.json()["detail"].startswith("Antigravity was not found. Looked in: PATH (/usr/bin:/bin); ")
+    assert res.status_code == 409 and res.json()["detail"].startswith("Antigravity was not found. Looked in: your setting (empty); PATH (/usr/bin:/bin); ")
 
 
 def test_starting_a_program_tab_needs_the_window_key(bare, stand_ins):
