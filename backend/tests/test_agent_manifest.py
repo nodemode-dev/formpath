@@ -53,6 +53,7 @@ def test_the_shared_finder_matches_the_hash_recorded_for_its_version():
 
 
 def test_the_check_names_the_shared_finder_edited_in_place_or_missing(tmp_path, monkeypatch):
+    import re
     import shutil
 
     sync = sync_module()
@@ -64,7 +65,8 @@ def test_the_check_names_the_shared_finder_edited_in_place_or_missing(tmp_path, 
     assert sync.lookup_problems() == []
     with open(copy / LOOKUP, "a", encoding="utf-8") as f:
         f.write("\n")
-    assert sync.lookup_problems() == [f"{LOOKUP}: does not match the hash recorded for version 1.0.0 (the shared finder changes only as a whole new version)"]
+    version = re.search(r'^VERSION = "([^"]+)"$', (REPO / LOOKUP).read_text(encoding="utf-8"), re.M).group(1)
+    assert sync.lookup_problems() == [f"{LOOKUP}: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)"]
     (copy / LOOKUP).unlink()
     assert sync.lookup_problems() == [f"{LOOKUP}: missing (the shared finder for the agent programs)"]
 
