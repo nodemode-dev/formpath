@@ -811,3 +811,12 @@ Seen on Linux: `python formpath_engine.py >&- 2>&-` (both streams closed, so Pyt
 The finder looks for Cursor's agent under two names, `cursor-agent` and `agent`. The session's sandbox folder of logging stand-ins held the first only, so `agent` joins the list; the five names are now the five the finder can start. Nothing else in the guard changed.
 
 Seen: the whole suite run with a folder of logging decoys for all five names first on the outer PATH and a stand-in SHELL: 177 passed, the decoys' log stayed empty (0 lines), and the run's last lines said "agent program stand-ins started 2 time(s): claude --version" (the sandbox's own stand-in, asked by the two older status tests). Not run: Windows, where the session is as before.
+
+### formpath (the launcher), README.md, AGENTS.md, docs/MANUAL.md, .docs/wiki/Agents-and-MCP.md · the list of agent programs names four
+- refers-to: formpath :: usage (mcp, agents); README.md; AGENTS.md; docs/MANUAL.md; .docs/wiki/Agents-and-MCP.md
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+Wherever these say which agent programs formpath is set up for, they now say Claude Code, Codex, Cursor and Antigravity. The wiki line on `./formpath agents install` says what Antigravity gets (the server, in `~/.gemini/config/mcp_config.json`) because no skill is copied for it.
+
+Left as it is: the sentence in Preferences > Plugins ("Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; ...", `src/ui/app-dialogs.ts`) is a translated string, and a changed English string needs new translations in all 25 languages; "another MCP client" already covers Antigravity. `formpath.bat` names no programs. CHANGELOG history is not touched.

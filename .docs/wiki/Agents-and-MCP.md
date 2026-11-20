@@ -1,6 +1,6 @@
 # Agents and MCP
 
-formpath's engine serves an MCP endpoint at `POST /mcp` (stateless JSON-RPC). `./formpath mcp` is a stdio bridge to it for Claude Code, Codex, Cursor and other clients, and starts the engine when it is not running.
+formpath's engine serves an MCP endpoint at `POST /mcp` (stateless JSON-RPC). `./formpath mcp` is a stdio bridge to it for Claude Code, Codex, Cursor, Antigravity and other clients, and starts the engine when it is not running.
 
 ```text
 agent -> ./formpath mcp (stdio) -> POST /mcp -> window long-poll POST /api/mcp/bridge/next -> AgentBridge.run() -> engine
@@ -13,7 +13,7 @@ The window side of the bridge is private to the formpath window. On load the win
 ## Setup
 
 - In this repository, `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` already point at `./formpath mcp`.
-- From anywhere else: `./formpath agents install` adds the server and the `formpath-harness` skill for Claude Code, Codex and Cursor.
+- From anywhere else: `./formpath agents install` adds the server and the `formpath-harness` skill for Claude Code, Codex and Cursor, and the server for Antigravity (in `~/.gemini/config/mcp_config.json`).
 - After changing `backend/app/routers/mcp.py`: `./formpath agents sync` regenerates the skill's `references/tools.md`, mirrors the skills to `.agents/skills` and writes `agents/manifest.json`, the file that lists the tools, the read-only tools, the tools that need the person's Allow, the skills and the transports for other family programs to read. `./formpath agents sync --check` fails when any of them is out of date.
 
 ## Tools

@@ -48,7 +48,7 @@
     <td width="25%" valign="top"><h3>Live everything</h3>Shapes, corners, effects, Trace Image and 3D stay editable after you draw them.</td>
     <td width="25%" valign="top"><h3>Real file formats</h3>Opens and writes SVG, PDF, EPS and DXF, and opens any PDF or PDF-compatible <code>.ai</code> as editable art.</td>
     <td width="25%" valign="top"><h3>Local-first</h3>Projects save as <code>.fpth</code> on your computer, with a library, conflict copies and crash recovery. No account.</td>
-    <td width="25%" valign="top"><h3>Agent-ready</h3>The same commands from the window, the terminal and an MCP server for Claude Code, Codex and Cursor.</td>
+    <td width="25%" valign="top"><h3>Agent-ready</h3>The same commands from the window, the terminal and an MCP server for Claude Code, Codex, Cursor and Antigravity.</td>
   </tr>
 </table>
 
@@ -107,7 +107,7 @@ The window, the terminal and the MCP server run the same command catalogue; the 
 ./formpath cli list                  # list the command catalogue from a terminal
 ./formpath cli describe <command>    # show one command and its arguments
 ./formpath claude                    # Claude Code with FormPath's tools attached
-./formpath mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
+./formpath mcp                       # MCP server on stdio for Claude Code, Codex, Cursor and Antigravity
 ```
 
 In the window, Window > Terminal (or the Terminal button in the title bar) opens a terminal dock with shell tabs, Claude Code tabs already connected to formpath's tools, and a Chat tab; the engine owns every process, so tabs survive a reload.
