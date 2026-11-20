@@ -188,11 +188,11 @@ fn main() {
                         check_for_updates(handle.clone());
                     }
                     None => {
-                        close_splash(&handle);
                         handle
                             .dialog()
-                            .message("The formpath engine failed to start. Please relaunch the app.")
+                            .message("FormPath could not start its engine. If FormPath is already open, use that window: only one copy can use its data folder at a time. Otherwise open FormPath again. The engine's log is Logs/formpath-engine.log in the Formpath folder of your home folder.")
                             .blocking_show();
+                        close_splash(&handle);
                         kill_backend(&handle);
                         std::process::exit(1);
                     }

@@ -859,3 +859,12 @@ Seen on Linux, engine from source, stand-in shells (`sleep 300`), made-up home, 
 - a data folder under a file: exit 5 with the sentence.
 
 `tests/test_startup.py` holds these as 14 tests (FormTools's 13 with formpath's names, the port file replaced by the lock and the log line, plus the second engine through the entry). Not run: Windows (`_kernel`, `_open_windows`, `_alive_windows`, `_created_windows`, `_end_windows`, the handle branch of `watch`, and in `open_app` the `SetDllDirectoryW` line and the detached flags have never run), macOS (the `ps` reading of a start time ran against Linux's `ps`), a really frozen engine.
+
+### src-tauri/src/main.rs · a failed start says its sentence before the loading window closes
+- refers-to: src-tauri/src/main.rs :: main, the `None` branch after the wait for the address and the key
+- kind: decision
+- logged: after v0.56.0 · 2026-11-19
+
+When the engine gave no address and key, the shell closed the loading window and then showed its message. On Windows the loading window is the last window at that moment, and closing it first can end the app before the message is seen. The two statements changed places: the message, then `close_splash`, then the engine is stopped and the app exits. The sentence now says what the most likely cause is since the engine takes a lock (a copy of FormPath is already open on the same data folder) and where the engine's log is.
+
+Not compiled and not run on any system: the desktop shell cannot be built here. One string and two statements in another order. Held: the rest of the family's shell side (the Windows job object, the failure text with the engine's last lines and its exit code, a limit on the wait for the address, the same order for a window that fails to build).
