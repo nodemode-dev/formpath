@@ -186,8 +186,9 @@ def close(sid: str) -> None:
         except Exception:
             pass
     if session.token:
-        from app.services import claude_code
+        from app.services import agent_programs, claude_code
         claude_code.revoke(session.token)
+        agent_programs.forget_tab(session.kind, session.token)
     _send(session, None)
 
 

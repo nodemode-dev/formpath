@@ -3,9 +3,8 @@ import base64
 import json
 import os
 import secrets
-import shlex
-import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -13,16 +12,18 @@ from pathlib import Path
 from typing import Any
 
 from app.core import config, seal
-from app.services import terminal
+from app.services import agent_lookup, terminal
 
 INAPP_HEADER = "x-formpath-inapp"
 TOKENS: dict[str, Path] = {}
-KEEP_ENV = {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CONFIG_DIR"}
-CANDIDATES = (".claude/local/claude", ".local/bin/claude", ".npm-global/bin/claude", ".bun/bin/claude", ".volta/bin/claude")
-SYSTEM_PATHS = ("/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude")
+KEEP_ENV = agent_lookup.KEEP_ENV
+OVERRIDES = {"claude": ("FORMPATH_CLAUDE_BIN",), "codex": ("FORMPATH_CODEX_BIN",), "cursor": ("FORMPATH_CURSOR_BIN",), "antigravity": ("FORMPATH_ANTIGRAVITY_BIN",)}
+SETTINGS = {"claude": "claudeBin"}
+OTHERWISE = "give its path in Preferences"
+SHELL_WAIT = 10.0
+CHECK_WAIT = 15.0
 INSTALL_CMD = "irm https://claude.ai/install.ps1 | iex" if os.name == "nt" else "curl -fsSL https://claude.ai/install.sh | bash"
-INSTALL = f"Claude Code is not installed. Install it ({INSTALL_CMD}, or from https://claude.com/claude-code), run claude once in a terminal to sign in, then open it here again."
-NOTE = ("You are Claude Code running inside formpath, the vector illustration editor open on this computer. "
+NOTE =("You are Claude Code running inside formpath, the vector illustration editor open on this computer. "
         "Draw and edit the open document with the formpath MCP server's tools: start with get_document, look with get_image before and after a change, "
         "and use list_commands, describe_command and run_command to reach any menu command. "
         "Every change happens live in the window the person is watching and is one undo step. Use the formpath-harness skill when it is available.")
@@ -66,51 +67,46 @@ def _pref(key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def child_env() -> dict:
-    return {k: v for k, v in terminal.base_env().items() if not k.startswith("CLAUDE") or k in KEEP_ENV}
+def child_env(path: str | None = None) -> dict:
+    front = [] if getattr(sys, "frozen", False) else [config.REPO_DIR]
+    return agent_lookup.child_env(path, base=terminal.base_env(), front=front, shell_timeout=SHELL_WAIT)
+
+
+def setting(kind: str) -> str | None:
+    return _pref(SETTINGS[kind]) if kind in SETTINGS else None
+
+
+def otherwise(kind: str) -> str:
+    return OTHERWISE if kind in SETTINGS else ""
+
+
+def located(kind: str, fresh: bool = False) -> agent_lookup.Found:
+    found = agent_lookup.find(kind, setting=setting(kind), override_vars=OVERRIDES.get(kind, ()), shell_timeout=SHELL_WAIT, fresh=fresh)
+    return agent_lookup.check(found, child_env(found.path), CHECK_WAIT, fresh)
+
+
+def usable(kind: str) -> agent_lookup.Found:
+    found = located(kind)
+    return found if found.state == "runs" else located(kind, fresh=True)
+
+
+def said(found: agent_lookup.Found) -> str:
+    return agent_lookup.sentence(found, agent_lookup.install(found.program), otherwise(found.program))
 
 
 def _runnable(path: str) -> bool:
-    p = Path(path).expanduser()
-    return p.is_file() and os.access(p, os.X_OK)
-
-
-def _from_login_shell() -> str | None:
-    if os.name == "nt":
-        return None
-    try:
-        out = subprocess.run(terminal.login_shell() + ["-c", "command -v claude"], capture_output=True, text=True, timeout=10, env=child_env())
-    except (OSError, subprocess.SubprocessError):
-        return None
-    found = out.stdout.strip().splitlines()[-1:] if out.returncode == 0 else []
-    return found[0] if found and os.path.isabs(found[0]) else None
+    return agent_lookup.runnable(path)
 
 
 def cli() -> str | None:
-    chosen = _pref("claudeBin")
-    if chosen and _runnable(chosen):
-        return str(Path(chosen).expanduser())
-    found = os.environ.get("FORMPATH_CLAUDE_BIN") or shutil.which("claude")
-    if found:
-        return found
-    home = Path.home()
-    for p in [home / c for c in CANDIDATES] + [Path(s) for s in SYSTEM_PATHS]:
-        if p.is_file() and os.access(p, os.X_OK):
-            return str(p)
-    return _from_login_shell()
+    return located("claude").path
 
 
 def info(fresh: bool = False) -> dict:
     if not fresh and _cache["value"] is not None and time.time() - _cache["at"] < 60:
         return _cache["value"]
-    path, version = cli(), None
-    if path:
-        try:
-            out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=15, env=child_env())
-            version = (out.stdout.strip().split() or [None])[0]
-        except (OSError, subprocess.SubprocessError):
-            path = None
-    _cache["value"], _cache["at"] = {"installed": bool(path), "path": path, "version": version, "install": INSTALL_CMD}, time.time()
+    found = located("claude", fresh)
+    _cache["value"], _cache["at"] = agent_lookup.answer(found, INSTALL_CMD, OTHERWISE) | {"install": INSTALL_CMD}, time.time()
     return _cache["value"]
 
 
@@ -170,7 +166,7 @@ def workdir() -> Path:
 
 
 def _wrap(cmd: list[str]) -> list[str]:
-    return cmd if os.name == "nt" else terminal.login_shell() + ["-c", "exec " + shlex.join(cmd)]
+    return agent_lookup.start_argv(cmd)
 
 
 def argv(path: str, mcp_file: str, prompt: str | None, resume: str | None = None) -> list[str]:
@@ -201,13 +197,13 @@ def open_tab(prompt: str | None = None, cols: int = 100, rows: int = 30, fresh: 
         return running.describe()
     found = info(fresh=True)
     if not found["installed"]:
-        raise LookupError(INSTALL)
+        raise LookupError(found["said"])
     prompt = prompt or _pref("claudeFirstMessage") or None
     title = "Claude Code (from Chat)" if resume else "Claude Code"
     folder = str(workdir())
     token, mcp_file = issue()
     try:
-        session = terminal.open_session(folder, cols, rows, title, argv(found["path"], mcp_file, prompt, resume), child_env(), "claude", token)
+        session = terminal.open_session(folder, cols, rows, title, argv(found["path"], mcp_file, prompt, resume), child_env(found["path"]), "claude", token)
     except BaseException:
         revoke(token)
         raise
@@ -285,7 +281,7 @@ def _run(text: str, path: str, folder: str) -> None:
     token = None
     try:
         token, mcp_file = issue()
-        proc = subprocess.Popen(_chat_argv(path, mcp_file, text, CHAT["session"]), cwd=folder, env=child_env(), stdin=subprocess.DEVNULL,
+        proc = subprocess.Popen(_chat_argv(path, mcp_file, text, CHAT["session"]), cwd=folder, env=child_env(path), stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
         CHAT["proc"] = proc
 
@@ -377,7 +373,7 @@ def chat_send(text: str, context: str = "", note: str = "") -> dict:
     prompt = f"{shown} ({context.strip()})" if context.strip() else shown
     found = info(fresh=True)
     if not found["installed"]:
-        raise LookupError(INSTALL)
+        raise LookupError(found["said"])
     folder = str(workdir())
     with _lock:
         if CHAT["busy"]:

@@ -753,7 +753,7 @@ ask it questions.
   read and run the command catalogue (every menu command and tool) on the open window; agents use the same catalogue
   through `list_commands`, `describe_command`, `run_command` and `run_commands`.
 
-- formpath runs an MCP server so agents (Claude Code, Claude Desktop, Codex, Cursor and others) can draw in the open
+- formpath runs an MCP server so agents (Claude Code, Claude Desktop, Codex, Cursor, Antigravity and others) can draw in the open
   window. Turn it on in Preferences > Plugins (Allow agents); the first call asks your permission. Connect with
   `./formpath mcp` (a stdio bridge) or the HTTP endpoint the engine prints at boot.
 - Only the formpath window hands agent requests to your document. When it opens it gets a private session from the

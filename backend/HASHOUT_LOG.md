@@ -725,3 +725,98 @@ Seen on port 33411 with the window in headless Chrome and a script as the agent 
 The MCP entry the engine writes for a Claude Code tab, for Chat, for a Codex tab and for a Cursor tab was named `formpath`, the same name `./formpath agents install` gives the entry an outside agent uses. It is now `formpath_tab` everywhere the engine writes it (the 0600 token file's `mcpServers` key, `--allowedTools mcp__formpath_tab`, Codex's `-c mcp_servers.formpath_tab=...`, Cursor's `.cursor/mcp.json` key), so the two cannot be mistaken for each other and a person's own `formpath` entry is not shadowed. The entry `./formpath agents install` and `./formpath claude` write is still `formpath`. Tool names in Chat's chips therefore begin `mcp__formpath_tab__`. Two assertions in `tests/test_agent_programs.py` named the old key and were changed to the new one. A Cursor config written by an earlier build keeps its old `formpath` entry beside the new one; it points at variables only FormPath's tabs have.
 
 Seen: the token file of a started Claude Code tab held `formpath_tab`; a call with that token ran while the tab was open and was treated as an outside agent's after the tab closed.
+
+### app/services/agent_lookup.py · the family's finder for the agent programs, copied unchanged and held to its hash
+- refers-to: app/services/agent_lookup.py (VERSION 1.0.0); setup/agents.py :: LOOKUP, LOOKUP_HASHES, lookup_problems, lookup, sync, install_claude; setup/claude_launch.py :: lookup, main; tests/test_agent_manifest.py
+- kind: decision
+- logged: after v0.55.0 · 2026-11-19
+
+`agent_lookup.py` is FormVis's file (commit 146dddd1 there), copied byte for byte: standard library only, nothing imported from the app, 443 lines, SHA-256 `252ea9bb9419d4990f174f91914f09800497bc69e98f849f5643bbf4217cc3f3`. It is never edited here; a change arrives as a whole new VERSION with a new line in `LOOKUP_HASHES`. `./formpath agents sync` (with and without `--check`) reads the file's `VERSION` line, hashes its bytes and exits 1 naming the file when the two do not agree or the file is gone. The hash is of the bytes, so the file must be checked out with LF endings, which `.gitattributes` already asks for. The hash is not in `frontend/src/dock/MANIFEST.json`: that file belongs to the dock module.
+
+`./formpath agents install` and `./formpath claude` load the file by its path (they run without the engine) and no longer ask `shutil.which("claude")`: they use `find` and `check` with the override variable `FORMPATH_CLAUDE_BIN`, start `claude mcp ...` and the launcher through `start_argv` in `child_env` (the program's own folder first on PATH), and print the finder's sentence when the program is missing or does not start. The launcher keeps every `CLAUDE*` variable of the terminal it was started from (`keep`), since it is the person's own terminal session. Neither script reads the `claudeBin` setting, which lives sealed in the engine's data folder.
+
+Removed: the line "the claude command is not installed here; once it is, run: ..." in `install_claude` and "[formpath] Claude Code is not installed: https://claude.com/claude-code" in the launcher; both now print the finder's sentence.
+
+Seen on Linux with stand-in programs, a stand-in login shell, a made-up home and PATH `/usr/bin:/bin:/usr/sbin:/sbin`: `agents sync --check` in step and exit 0; in a scratch copy with one newline added to the file, exit 1 with "does not match the hash recorded for version 1.0.0", with and without `--check`; in a copy without the file, exit 1 with "missing"; `agents install claude` found a `#!/usr/bin/env node` stand-in under `~/.local/bin` and the stand-in recorded `mcp get formpath` and `mcp add --scope user formpath -- [launcher] mcp`, each with its own folder first on PATH; `./formpath claude` started it with the MCP configuration and a kept `CLAUDE_EXTRA`; with nothing installed both printed "Claude Code was not found. Looked in: ...". The three tests were written after. Not run: Windows, macOS, the real Claude Code.
+
+### app/services/claude_code.py, agent_programs.py · every lookup and every start of an agent program goes through the finder
+- refers-to: app/services/claude_code.py :: OVERRIDES, SETTINGS, OTHERWISE, child_env, setting, otherwise, located, usable, said, _runnable, cli, info, _wrap, open_tab, _run, chat_send; app/services/agent_programs.py :: PROGRAMS, TABS, find, _claude_signed_in, status, open_terminal; tests/test_agent_programs.py
+- kind: decision
+- logged: after v0.55.0 · 2026-11-19
+
+A window started from the Dock, the Finder or the Start menu gets the system's short PATH, so `shutil.which` and one `command -v` in a login shell reported programs installed by npm, a version manager or into the home folder as not installed, and a `#!/usr/bin/env node` program that was found could still fail to start because its `node` was not on the child's PATH. The functions keep their names and what they return; their bodies call `agent_lookup`.
+
+- `located(kind, fresh)` is the one lookup: `agent_lookup.find` with the person's setting (`claudeBin` for Claude Code; the other programs have no path setting in FormPath, so `setting()` answers None and the record leaves it out), the override variable (`FORMPATH_CLAUDE_BIN`, and by the family's naming `FORMPATH_CODEX_BIN`, `FORMPATH_CURSOR_BIN`, `FORMPATH_ANTIGRAVITY_BIN`), then `agent_lookup.check`, which runs `--version` the way a tab starts. `usable(kind)` asks once more, fresh, when the first answer is not "runs".
+- `child_env(path)` is `agent_lookup.child_env` over `terminal.base_env()`: the program's own folder first on PATH, then the repository folder (not in a frozen engine, as `base_env` has it), the person's shell PATH, the known folders, the engine's PATH; `CLAUDE*` variables other than `KEEP_ENV` left out as before.
+- `_wrap(cmd)` is `agent_lookup.start_argv(cmd)`, so a Claude Code tab, Chat, a Codex tab and a Cursor tab start the same way a check does.
+- `info()` and `status()` answer the finder's fields beside the old ones: `finding` (runs, broken, missing), `how`, `looked`, `error`, `said`. `installed` is true only when `--version` ran with exit code 0, and `path` is given for a program that was found but does not start.
+- `GET /api/terminal/agents` reports a fourth program, `antigravity` (`agy`), found or not and where it looked; `signedIn` stays null. There is no Antigravity tab: `TABS` is codex and cursor, and the route's body still takes only those two kinds.
+- The refusals of `POST /api/claude/open`, `POST /api/claude/chat/send` and `POST /api/terminal/agent` (409) carry the finder's sentence. "give its path in Preferences" is offered only for Claude Code, the one program with a path setting here.
+
+Removed: `_from_login_shell`, `CANDIDATES`, `SYSTEM_PATHS` and the fixed sentence `INSTALL` ("Claude Code is not installed. Install it (...), run claude once in a terminal to sign in, then open it here again.") in `claude_code.py`; `_version` and the bare PATH search with its login-shell fallback in `agent_programs.find`; the sentence "[title] is not installed. Install it (...), then open it here again." in `open_terminal`.
+
+Tests changed, and why: the fixture in `tests/test_agent_programs.py` replaced `terminal.login_shell`, which the lookup no longer calls; it now gives the finder a stand-in login shell, a made-up home and no system folders, and clears the install-folder variables (`BUN_INSTALL` and the like), so the machine's own programs stay out. The status test expected exactly claude, codex and cursor and now expects antigravity too. The refusal test expected "is not installed" and now expects the finder's sentence.
+
+The whole suite is held to stand-ins (`tests/conftest.py`): two older tests ask the Claude Code status with nothing replaced (`test_window_key.py :: test_secret_reads_need_the_key`, `test_seal.py :: test_a_hand_edit_of_the_program_is_caught`), so a plain run on a computer with Claude Code on PATH started the real `claude --version`, before this change through `shutil.which` and after it through the finder. On macOS and Linux the session now has PATH set to a sandbox folder of logging stand-ins (`claude`, `codex`, `cursor-agent`, `agy`) and the system's four folders, SHELL set to a stand-in login shell, the install-folder variables cleared, and `agent_lookup.system_folders` replaced in every test; the run's last lines say how often a stand-in was started. Seen: a run with a logging guard `claude` first on the outer PATH left the guard's log empty and reported "agent program stand-ins started 2 time(s): claude --version". On Windows the session is as before.
+
+Seen on Linux with the engine on port 4740, its own data folder, a made-up home, a stand-in login shell and PATH exactly `/usr/bin:/bin:/usr/sbin:/sbin`, with stand-in programs only: the status route found claude and agy under `~/.local/bin` and codex under `~/.nvm/versions/node/v22.3.0/bin` (how "folder"), cursor-agent in a folder named only by the stand-in shell's interactive file (how "shell"), each with version 1.2.3 from a `#!/usr/bin/env node` script with a stand-in `node` beside it; Codex, Claude Code and Cursor tabs opened through the real routes printed "node stand-in: yes" with the program's folder first on PATH; Chat answered through the stand-in; with the programs removed the status answered "missing" with the list of places and the tab route 409 with the same sentence; a script whose interpreter is missing answered "broken" with the error line, and the Claude Code tab and Chat refused with that sentence; a path given in Preferences was used (how "setting"), and a path that cannot run fell back with the existing note. An override variable was seen only in the tests (Claude Code through `FORMPATH_CLAUDE_BIN`). The three new tests were written after. Not run: Windows, macOS, a fish shell, a frozen engine, the real Claude Code, Codex, Cursor or Antigravity; no real install of `agy` has been seen.
+
+### app/services/agent_lookup.py · the finder is version 1.0.1
+- refers-to: app/services/agent_lookup.py :: VERSION, _last_line; setup/agents.py :: LOOKUP_HASHES; tests/test_agent_manifest.py
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+The file was replaced whole by FormVis's copy at its commit ddc893ae (`git show ddc893ae:backend/app/services/agent_lookup.py`), SHA-256 `62667f9b68b7d101e1896ce617240424e33b7e498c560bc79d45f0ab26c77d51`. Against 1.0.0 two lines differ: `VERSION`, and `_last_line`, which no longer takes the hint line "use -[v]S to pass options" that `env` prints as the reason a program does not start. `LOOKUP_HASHES` holds both versions, so a checkout of either passes `./formpath agents sync --check`.
+
+Test changed, and why: `test_the_check_names_the_shared_finder_edited_in_place_or_missing` held "version 1.0.0" in its expected sentence; it now reads the version from the file, so the next version of the finder needs no change to it.
+
+Seen: `tests/test_agent_manifest.py` passes with the new file (the hash test, the edited-in-place test and the imports test among them). Not run: Windows, macOS, any real agent program.
+
+### app/services/agent_programs.py, terminal.py, routers/terminal.py · an Antigravity tab, with its entry in a folder of formpath's own
+- refers-to: app/services/agent_programs.py :: TABS, TAB_ENTRY, tab_folder, write_tab_entry, remove_tab_entry, forget_tab, open_terminal; app/services/terminal.py :: close; app/routers/terminal.py :: AgentBody; tests/test_agent_programs.py
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+`POST /api/terminal/agent` takes kind `antigravity` and starts `agy` the way it starts Codex and Cursor: found by the finder, started through `start_argv` in `child_env`, with the tab's own token in `FORMPATH_INAPP_TOKEN`. Antigravity reads its MCP servers from a file, so before the start the entry `formpath_tab` (`serverUrl` the engine's `/mcp`, `headers` with the tab's token under `x-formpath-inapp`) is written into `.agents/mcp_config.json` of the tab's working folder: every other entry and key is kept, the file is written beside itself and moved into place, mode 0600. `terminal.close` revokes the token as before and then calls `forget_tab`, which takes the entry out only while it still carries that tab's token. A file that is not an MCP servers file is left alone and the tab is refused (500 with the sentence).
+
+Decision, as the family's Antigravity notes ask to be said: formpath's Codex and Cursor tabs share one working folder (the Agent folder, or the one chosen in Preferences), and the Cursor tab's file there holds placeholders, never the token. Antigravity's file has to hold the token itself, so the Antigravity tab does not use that folder: it runs in `[data folder]/agent-tabs/antigravity`, a folder of formpath's own, and a live token is never written into a folder the person chose. Cost: `agy` does not start in the Agent folder. Two Antigravity tabs at once share the folder and the later one's entry replaces the earlier one's; not handled.
+
+Test changed, and why: `test_a_missing_program_or_an_unknown_kind_is_refused` expected 422 for kind `antigravity`; the kind is now taken, so with no `agy` it expects 409 with the finder's sentence. `test_agent_manifest.py` expected the dock's tab list without `antigravity`.
+
+Seen on Linux with the engine on port 4741, its own data folder, a made-up home, a stand-in login shell and a stand-in `agy` first on PATH (`which` printed only that one): the status answered `finding: runs`, version 9.9.9; the tab opened through the route with `cwd` the folder above and its text read "STAND-IN AGY BANNER: cwd [that folder]; token set; mcp file present"; the file, seeded with a server `other` and a key `theme`, held both beside `formpath_tab` at mode 0600; `tools/list` on `/mcp` with the tab's token answered 93 tools; after `DELETE /api/terminal/[id]` the file was byte for byte the seed. With no `agy` (port 4744): status `missing` with the places looked in, the tab route 409 with the same sentence, no file made. The test was written after. Not seen: a call with a closed tab's token being asked about or refused through `/mcp` (no window was open, so a live and a dead token both got "formpath is not open"); the token's end is held by the test through `claude_code.is_inapp`. Not run: a real `agy` (whether it reads `serverUrl` and `headers` from a workspace file, or wants the folder trusted first), a restart of the tab, Windows, macOS.
+
+### setup/agents.py · agents install adds formpath to Antigravity
+- refers-to: setup/agents.py :: install_antigravity, _ours, main, DOCK; agents/manifest.json; tests/test_agent_manifest.py
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+`./formpath agents install` takes `antigravity`, and includes it when no client is named. It writes `mcpServers.formpath = { command: [this folder's launcher], args: ["mcp"] }` into `~/.gemini/config/mcp_config.json`, the file Google documents for the Antigravity IDE and CLI: everything else in the file is kept, the file is backed up, written beside itself and moved into place, and a second run changes nothing. An entry of formpath's own at another path (the launcher's file name with `["mcp"]`) is brought up to date; a server named `formpath` that formpath did not write is left alone and reported, and so is a file that is not an MCP servers file. When only `~/.gemini/antigravity-cli/mcp_config.json` is there, the documented file is written and the result says the older one was seen and left alone. No skill is copied: nothing read says where Antigravity looks for skills. `DOCK["tabs"]` gains `antigravity`, and `agents/manifest.json` was written again by `./formpath agents sync`.
+
+Seen with made-up homes: dry run (nothing written), first run (the file as above), second run ("already in"), a foreign entry (file unchanged, reported), only the older file (documented file written, older one unchanged), a file that is not JSON (unchanged, reported), an unknown client (exit 2 naming the four). The test was written after. Not seen: an own entry at another path being brought up to date. Not run: a real `agy` reading the file.
+
+### formpath_engine.py · the engine starts when it has no output streams
+- refers-to: formpath_engine.py (the lines after the imports)
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+A frozen engine built without a console on Windows starts with `sys.stdout` and `sys.stderr` set to `None`, and the first thing that writes to them (Uvicorn's logging, the window key line) ends the start. Before anything of formpath's is imported, the entry now gives `sys.stdin`, `sys.stdout` and `sys.stderr` the system's null device wherever one is `None`, as FormWeb's entry does. Streams that exist are not touched, so the desktop shell still reads the address and the key line from standard output.
+
+Seen on Linux: `python formpath_engine.py >&- 2>&-` (both streams closed, so Python sets them to `None`) with its own port and data folder answered `GET /api/health` with 200 and kept running; started normally it printed Uvicorn's lines ("Uvicorn running on http://127.0.0.1:4743"). No test was added: the suite has no test that starts the entry script. Not run: Windows, a frozen engine.
+
+### tests/conftest.py · the stand-ins cover Cursor's second name
+- refers-to: tests/conftest.py :: AGENT_STAND_INS, only_stand_in_agent_programs
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+The finder looks for Cursor's agent under two names, `cursor-agent` and `agent`. The session's sandbox folder of logging stand-ins held the first only, so `agent` joins the list; the five names are now the five the finder can start. Nothing else in the guard changed.
+
+Seen: the whole suite run with a folder of logging decoys for all five names first on the outer PATH and a stand-in SHELL: 177 passed, the decoys' log stayed empty (0 lines), and the run's last lines said "agent program stand-ins started 2 time(s): claude --version" (the sandbox's own stand-in, asked by the two older status tests). Not run: Windows, where the session is as before.
+
+### formpath (the launcher), README.md, AGENTS.md, docs/MANUAL.md, .docs/wiki/Agents-and-MCP.md · the list of agent programs names four
+- refers-to: formpath :: usage (mcp, agents); README.md; AGENTS.md; docs/MANUAL.md; .docs/wiki/Agents-and-MCP.md
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+Wherever these say which agent programs formpath is set up for, they now say Claude Code, Codex, Cursor and Antigravity. The wiki line on `./formpath agents install` says what Antigravity gets (the server, in `~/.gemini/config/mcp_config.json`) because no skill is copied for it.
+
+Left as it is: the sentence in Preferences > Plugins ("Lets Claude Code, Codex, Cursor or another MCP client draw in the open document; ...", `src/ui/app-dialogs.ts`) is a translated string, and a changed English string needs new translations in all 25 languages; "another MCP client" already covers Antigravity. `formpath.bat` names no programs. CHANGELOG history is not touched.

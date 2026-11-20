@@ -4875,3 +4875,34 @@ From `dock-layout.css` (the third grid row of `.fp-chat` was the ask line):
 - logged: v0.55.0 · 2026-11-19
 
 Written after it was seen in the browser: a page seeded with only `formpath.terminal = {"open":false,"h":333}` opened its dock with no guide and kept `{"open":true,"side":"bottom","h":333,"w":420,"tab":"","seen":true}` under `formpath.agentDock`, the old key gone; a page with neither key showed the guide ("Step 1 of 5"). The test holds the adapter to `jsonLegacy(DOCK_LEGACY, true)` and runs the module's `moveLegacy` with that reader on a stand-in store.
+
+### src/dock-adapter.ts · a refusal in the finder's words still counts as "not installed"
+- refers-to: src/dock-adapter.ts :: formpathDock (errors.kind); backend app/services/claude_code.py :: open_tab, chat_send; backend app/services/agent_programs.py :: open_terminal
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+The engine's 409 for a program that cannot be started now carries the shared finder's sentence ("Codex was not found. Looked in: ..." or "... was found at ... but does not start: ..."), so `errors.kind` answers `notInstalled` for those two forms as well as for the old "not installed". Without it the dock would show a plain warning where it now opens its programs menu.
+
+Left as it is: the panel's own sentences for a missing program (`notInstalled`, `programMissing` in `src/dock/strings.ts`) are the dock module's, and nothing in `src/dock/` is edited here. Showing the finder's sentence (`said` in the status answer) in their place needs the adapter to keep the last status and answer from its `t(key, english)`, as FormVis's adapter does; that is more than one change and was not made. The status answer carries `said`, `finding`, `how` and `looked` for each program, and a fourth program, `antigravity`, which the window does not read yet.
+
+Checked: `tsc --noEmit` clean, vitest 61 passed and 1 skipped; the pattern was tried in node against the two sentences the engine gave and against "Claude is still answering; wait or press Stop." (no match). Not seen in a browser.
+
+### src/dock/ · the shared dock module is 2.2.0
+- refers-to: src/dock/ (16 entries with MANIFEST.json; agents.ts is new); setup/agents.py :: dock_problems; tests in backend/tests/test_agent_manifest.py
+- kind: rationale
+- logged: v0.56.0 · 2026-11-19
+
+`src/dock/` is now FormVis's `frontend/src/dock` at commit ddc893ae, byte for byte: each file written with `git show ddc893ae:frontend/src/dock/[name]`, and every file's SHA-256 equal to the one MANIFEST.json lists. 10 files changed, `agents.ts` added, none removed. The rule stands: never edit a file there. In 2.2.0 the agent kinds are a list (`agents.ts`: Claude Code, Codex, Cursor, Antigravity) and a kind is shown when the adapter lists it in `tabs().builtin` and `agentStatus()` reports it; the module's own notes are in CONTRACT.md, section "Module 2.2.0". Known differences in the DOM, not in the look: every control carries `data-dock-part`, agent tabs carry `is-program`.
+
+Checked: `tsc --noEmit` clean with the adapter below; `./formpath agents sync --check` in step. Not seen in a browser at this commit.
+
+### src/dock-adapter.ts, src/io/api.ts, src/app.ts · Antigravity is the fourth agent tab
+- refers-to: src/dock-adapter.ts :: formpathDock (tabs, agentStatus), record; src/io/api.ts :: openAgent, agentPrograms, TerminalInfo; src/app.ts :: termDock
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+The adapter is `DockAdapter<'antigravity'>`, lists `antigravity` in `tabs().builtin`, and `terminal.open('antigravity', ...)` goes to the same route as Codex and Cursor (`api.openAgent`). `agentStatus()` passes the engine's answer through and, when Antigravity is missing or does not start, gives the engine's sentence (`said`: where it looked and how to install it) as the row's `note`. `api.agentPrograms` and `TerminalInfo` name the fourth kind; the dock is held as `Dock<'antigravity'>`.
+
+Left as it is: `keyHeaders`, the automation ids and the status line (steps 2 to 5 of the module's moving notes) were not taken; the rows for Claude Code, Codex and Cursor still show the module's own sentences when a program is missing.
+
+Checked: `tsc --noEmit` clean. The engine side was seen with a stand-in `agy` (backend log, same date). Not seen in a browser: the fourth button, its row in the More agents menu and the tab itself in the window were not looked at.

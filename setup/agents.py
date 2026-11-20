@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""./formpath agents: drawing in formpath from Claude Code, Codex and Cursor.
+"""./formpath agents: drawing in formpath from Claude Code, Codex, Cursor and Antigravity.
 
   sync [--check]            write agents/manifest.json, generate the harness skill's tool reference from the engine's MCP catalogue and mirror the
                             harness and skillset skills from .claude/skills to .agents/skills (Codex, Cursor);
                             --check: exit 1 if drifted
-  install [--dry-run] [claude|codex|cursor ...]
-                            set the three up for this user account (all by default): the MCP server (./formpath mcp at
+  install [--dry-run] [claude|codex|cursor|antigravity ...]
+                            set them up for this user account (all by default): the MCP server (./formpath mcp at
                             this folder's absolute path) and the harness skill; files backed up before changing;
-                            running it again changes nothing
+                            running it again changes nothing. Antigravity gets the MCP server only, in
+                            ~/.gemini/config/mcp_config.json; a server named formpath that formpath did not write is
+                            left alone
 """
 
 import hashlib
@@ -24,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "agents" / "manifest.json"
 APP = "formpath"
-DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "claude", "codex", "cursor", "shell"]}
+DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "claude", "codex", "cursor", "antigravity", "shell"]}
 DOCK_DIR = ROOT / "frontend" / "src" / "dock"
 ENGINE_FACTS = """
 import json
@@ -195,6 +197,26 @@ def dock_problems(folder: Path = DOCK_DIR) -> list[str]:
     return out
 
 
+LOOKUP = ROOT / "backend" / "app" / "services" / "agent_lookup.py"
+LOOKUP_HASHES = {
+    "1.0.0": "252ea9bb9419d4990f174f91914f09800497bc69e98f849f5643bbf4217cc3f3",
+    "1.0.1": "62667f9b68b7d101e1896ce617240424e33b7e498c560bc79d45f0ab26c77d51",
+}
+
+
+def lookup_problems() -> list[str]:
+    rel = LOOKUP.relative_to(ROOT).as_posix()
+    try:
+        raw = LOOKUP.read_bytes()
+    except OSError:
+        return [f"{rel}: missing (the shared finder for the agent programs)"]
+    said = re.search(rb'^VERSION = "([^"\r\n]+)"\r?$', raw, re.M)
+    version = said.group(1).decode("ascii", "replace") if said else "unknown"
+    if LOOKUP_HASHES.get(version) != hashlib.sha256(raw).hexdigest():
+        return [f"{rel}: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)"]
+    return []
+
+
 def sync(check: bool) -> int:
     ref = SKILL / "references" / "tools.md"
     want = tools_reference()
@@ -231,7 +253,7 @@ def sync(check: bool) -> int:
             if not check:
                 shutil.rmtree(dst, ignore_errors=True)
                 shutil.copytree(src, dst)
-    shared = dock_problems()
+    shared = dock_problems() + lookup_problems()
     for line in shared:
         print("agents: " + line)
     if check:
@@ -257,21 +279,33 @@ def _copy_skill(to: Path, dry: bool, said: list) -> None:
         shutil.copytree(SKILL, to)
 
 
+def lookup():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("formpath_agent_lookup", LOOKUP)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def install_claude(home: Path, dry: bool, said: list) -> None:
     said.append("Claude Code:")
-    claude = shutil.which("claude")
+    finder = lookup()
+    found = finder.check(finder.find("claude", override_vars=("FORMPATH_CLAUDE_BIN",), home=home))
+    claude = found.path if found.state == "runs" else None
     if claude:
-        have = subprocess.run([claude, "mcp", "get", "formpath"], capture_output=True, text=True)
+        env = finder.child_env(claude, home=home)
+        have = finder.run([claude, "mcp", "get", "formpath"], env, 60)
         if have.returncode == 0 and LAUNCH in have.stdout:
             said.append("  MCP server formpath already set (user scope)")
         else:
             said.append(f"  claude mcp add --scope user formpath -- {LAUNCH} mcp")
             if not dry:
                 if have.returncode == 0:
-                    subprocess.run([claude, "mcp", "remove", "formpath", "--scope", "user"], capture_output=True)
-                subprocess.run([claude, "mcp", "add", "--scope", "user", "formpath", "--", LAUNCH, "mcp"], check=True, capture_output=True)
+                    finder.run([claude, "mcp", "remove", "formpath", "--scope", "user"], env, 60)
+                finder.run([claude, "mcp", "add", "--scope", "user", "formpath", "--", LAUNCH, "mcp"], env, 60).check_returncode()
     else:
-        said.append(f"  the claude command is not installed here; once it is, run: claude mcp add --scope user formpath -- {LAUNCH} mcp")
+        said.append(f"  {finder.sentence(found, finder.install('claude'))} Once it runs: claude mcp add --scope user formpath -- {LAUNCH} mcp")
     _copy_skill(home / ".claude" / "skills" / NAME, dry, said)
 
 
@@ -311,6 +345,40 @@ def install_cursor(home: Path, dry: bool, said: list) -> None:
     _copy_skill(home / ".agents" / "skills" / NAME, dry, said)
 
 
+def _ours(entry: object) -> bool:
+    return isinstance(entry, dict) and entry.get("args") == ["mcp"] and Path(str(entry.get("command", ""))).name == Path(LAUNCH).name
+
+
+def install_antigravity(home: Path, dry: bool, said: list) -> None:
+    said.append("Antigravity:")
+    cfg = home / ".gemini" / "config" / "mcp_config.json"
+    older = home / ".gemini" / "antigravity-cli" / "mcp_config.json"
+    if older.exists() and not cfg.exists():
+        said.append(f"  an older file was seen at {older} and left alone; the documented file is {cfg}")
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8") or "{}") if cfg.exists() else {}
+    except ValueError:
+        data = None
+    if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+        said.append(f"  {cfg} is not an MCP servers file formpath can read; left alone")
+        return
+    entry = {"command": LAUNCH, "args": ["mcp"]}
+    have = data.get("mcpServers", {}).get("formpath")
+    if have == entry:
+        said.append(f"  MCP server formpath already in {cfg}")
+    elif have is not None and not _ours(have):
+        said.append(f"  {cfg} has a server named formpath that formpath did not write; left alone")
+    else:
+        said.append(f"  MCP server formpath -> {cfg}")
+        if not dry:
+            _backup(cfg, dry)
+            data.setdefault("mcpServers", {})["formpath"] = entry
+            cfg.parent.mkdir(parents=True, exist_ok=True)
+            part = cfg.with_name(cfg.name + f".part-{os.getpid()}")
+            part.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            os.replace(part, cfg)
+
+
 def main(argv: list[str]) -> int:
     cmd = argv[0] if argv else "install"
     rest = argv[1:]
@@ -318,14 +386,14 @@ def main(argv: list[str]) -> int:
         return sync("--check" in rest)
     if cmd == "install":
         dry = "--dry-run" in rest
-        which = [a for a in rest if not a.startswith("--")] or ["claude", "codex", "cursor"]
-        bad = [w for w in which if w not in ("claude", "codex", "cursor")]
+        which = [a for a in rest if not a.startswith("--")] or ["claude", "codex", "cursor", "antigravity"]
+        bad = [w for w in which if w not in ("claude", "codex", "cursor", "antigravity")]
         if bad:
-            print(f"agents: unknown client {', '.join(bad)} (claude, codex or cursor)", file=sys.stderr)
+            print(f"agents: unknown client {', '.join(bad)} (claude, codex, cursor or antigravity)", file=sys.stderr)
             return 2
         home, said = Path(os.environ.get("HOME", str(Path.home()))), []
         for w in which:
-            {"claude": install_claude, "codex": install_codex, "cursor": install_cursor}[w](home, dry, said)
+            {"claude": install_claude, "codex": install_codex, "cursor": install_cursor, "antigravity": install_antigravity}[w](home, dry, said)
         print(("Would do (dry run):\n" if dry else "") + "\n".join(said))
         if not dry:
             print("\nRestart the clients. The first drawing asks you once, in the formpath window, to allow outside agents.")

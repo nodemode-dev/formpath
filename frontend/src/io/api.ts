@@ -164,8 +164,8 @@ export const api = {
   async readTerminal(id: string, chars = 4000): Promise<{ id: string; alive: boolean; text: string }> { return json(await request(`/terminal/${encodeURIComponent(id)}/read?chars=${chars}`)); },
   async restartTerminal(id: string): Promise<TerminalInfo> { return json(await request(`/terminal/${encodeURIComponent(id)}/restart`, { method: 'POST' })); },
   async closeTerminal(id: string): Promise<void> { await request(`/terminal/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
-  async openAgent(kind: 'codex' | 'cursor', cols: number, rows: number): Promise<TerminalInfo> { return json(await request('/terminal/agent', post({ kind, cols, rows }))); },
-  async agentPrograms(): Promise<Partial<Record<'claude' | 'codex' | 'cursor', { installed: boolean; version: string | null; install: string; signedIn: boolean | null }>> | null> { try { return await json(await request('/terminal/agents')); } catch { return null; } },
+  async openAgent(kind: 'codex' | 'cursor' | 'antigravity', cols: number, rows: number): Promise<TerminalInfo> { return json(await request('/terminal/agent', post({ kind, cols, rows }))); },
+  async agentPrograms(): Promise<Partial<Record<'claude' | 'codex' | 'cursor' | 'antigravity', { installed: boolean; version: string | null; install: string; signedIn: boolean | null; finding?: string; said?: string }>> | null> { try { return await json(await request('/terminal/agents')); } catch { return null; } },
   async claudeStatus(): Promise<ClaudeStatus> { return json(await request('/claude/status')); },
   async claudePrefs(values: Partial<Record<'claudeBin' | 'claudeFolder' | 'claudeFirstMessage', string>>): Promise<Record<string, string>> { return json(await request('/claude/prefs', post(values))); },
   async claudeOpen(body: { prompt?: string; cols?: number; rows?: number; fresh?: boolean; resume?: string }): Promise<TerminalInfo> { return json(await request('/claude/open', post(body))); },
@@ -178,7 +178,7 @@ export const api = {
   chatImage(name: string): string { return `/api/claude/chat/image/${encodeURIComponent(name)}`; },
 };
 
-export interface TerminalInfo { id: string; title: string; cwd: string; alive: boolean; kind: 'shell' | 'claude' | 'codex' | 'cursor' }
+export interface TerminalInfo { id: string; title: string; cwd: string; alive: boolean; kind: 'shell' | 'claude' | 'codex' | 'cursor' | 'antigravity' }
 export interface ClaudeStatus { installed: boolean; path: string | null; version: string | null; install: string; folder: string; terminal: TerminalInfo | null; binNote: string; firstMessage: string }
 
 function post(body: unknown): RequestInit {
