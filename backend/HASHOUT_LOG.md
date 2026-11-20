@@ -802,3 +802,12 @@ Seen with made-up homes: dry run (nothing written), first run (the file as above
 A frozen engine built without a console on Windows starts with `sys.stdout` and `sys.stderr` set to `None`, and the first thing that writes to them (Uvicorn's logging, the window key line) ends the start. Before anything of formpath's is imported, the entry now gives `sys.stdin`, `sys.stdout` and `sys.stderr` the system's null device wherever one is `None`, as FormWeb's entry does. Streams that exist are not touched, so the desktop shell still reads the address and the key line from standard output.
 
 Seen on Linux: `python formpath_engine.py >&- 2>&-` (both streams closed, so Python sets them to `None`) with its own port and data folder answered `GET /api/health` with 200 and kept running; started normally it printed Uvicorn's lines ("Uvicorn running on http://127.0.0.1:4743"). No test was added: the suite has no test that starts the entry script. Not run: Windows, a frozen engine.
+
+### tests/conftest.py · the stand-ins cover Cursor's second name
+- refers-to: tests/conftest.py :: AGENT_STAND_INS, only_stand_in_agent_programs
+- kind: decision
+- logged: v0.56.0 · 2026-11-19
+
+The finder looks for Cursor's agent under two names, `cursor-agent` and `agent`. The session's sandbox folder of logging stand-ins held the first only, so `agent` joins the list; the five names are now the five the finder can start. Nothing else in the guard changed.
+
+Seen: the whole suite run with a folder of logging decoys for all five names first on the outer PATH and a stand-in SHELL: 177 passed, the decoys' log stayed empty (0 lines), and the run's last lines said "agent program stand-ins started 2 time(s): claude --version" (the sandbox's own stand-in, asked by the two older status tests). Not run: Windows, where the session is as before.

@@ -75,7 +75,7 @@ os.environ["FORMPATH_OPEN_WINDOW"] = "0"
 tempfile.tempdir = str(_SANDBOX / "tmp")
 for _key in [k for k in os.environ if k.startswith(f"{ENV_PREFIX}_") and k not in (DATA_ENV, PORT_ENV, "FORMPATH_OPEN_WINDOW")]:
     os.environ.pop(_key)
-AGENT_STAND_INS = ("claude", "codex", "cursor-agent", "agy")
+AGENT_STAND_INS = ("claude", "codex", "cursor-agent", "agent", "agy")
 AGENT_CALLS = _SANDBOX / "agent-calls.log"
 AGENT_SHELL = """#!/bin/sh
 login=0; inter=0; script=""
