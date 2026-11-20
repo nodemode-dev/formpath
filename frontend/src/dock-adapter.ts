@@ -131,7 +131,7 @@ export function formpathDock(deps: DockDeps): DockAdapter {
         if (err.status === 0 || err.status === 502 || err.status === 503 || err.status === 504) return 'unreachable';
         if (err.status === 403) return 'refused';
         if ((err.status === 404 || err.status === 405) && /^(Not Found|Method Not Allowed)$/i.test(err.message)) return 'oldEngine';
-        return err.status === 409 && /not installed/i.test(err.message) ? 'notInstalled' : null;
+        return err.status === 409 && /not installed|was not found\. Looked in|but does not start/i.test(err.message) ? 'notInstalled' : null;
       },
     },
     firstRun: () => !deps.homeShown(),

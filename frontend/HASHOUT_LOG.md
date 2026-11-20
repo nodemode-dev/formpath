@@ -4875,3 +4875,14 @@ From `dock-layout.css` (the third grid row of `.fp-chat` was the ask line):
 - logged: v0.55.0 · 2026-11-19
 
 Written after it was seen in the browser: a page seeded with only `formpath.terminal = {"open":false,"h":333}` opened its dock with no guide and kept `{"open":true,"side":"bottom","h":333,"w":420,"tab":"","seen":true}` under `formpath.agentDock`, the old key gone; a page with neither key showed the guide ("Step 1 of 5"). The test holds the adapter to `jsonLegacy(DOCK_LEGACY, true)` and runs the module's `moveLegacy` with that reader on a stand-in store.
+
+### src/dock-adapter.ts · a refusal in the finder's words still counts as "not installed"
+- refers-to: src/dock-adapter.ts :: formpathDock (errors.kind); backend app/services/claude_code.py :: open_tab, chat_send; backend app/services/agent_programs.py :: open_terminal
+- kind: decision
+- logged: after v0.55.0 · 2026-11-19
+
+The engine's 409 for a program that cannot be started now carries the shared finder's sentence ("Codex was not found. Looked in: ..." or "... was found at ... but does not start: ..."), so `errors.kind` answers `notInstalled` for those two forms as well as for the old "not installed". Without it the dock would show a plain warning where it now opens its programs menu.
+
+Left as it is: the panel's own sentences for a missing program (`notInstalled`, `programMissing` in `src/dock/strings.ts`) are the dock module's, and nothing in `src/dock/` is edited here. Showing the finder's sentence (`said` in the status answer) in their place needs the adapter to keep the last status and answer from its `t(key, english)`, as FormVis's adapter does; that is more than one change and was not made. The status answer carries `said`, `finding`, `how` and `looked` for each program, and a fourth program, `antigravity`, which the window does not read yet.
+
+Checked: `tsc --noEmit` clean, vitest 61 passed and 1 skipped; the pattern was tried in node against the two sentences the engine gave and against "Claude is still answering; wait or press Stop." (no match). Not seen in a browser.
