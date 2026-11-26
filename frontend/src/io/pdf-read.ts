@@ -347,9 +347,11 @@ class FontNames {
   private readonly postscript = new Map<string, { family: string; style: string }>();
   readonly substituted = new Map<string, string>();
   readonly outlined = new Set<string>();
+  private readonly localized = new Map<string, { family: string; style: string }>();
   constructor(list: string[], installed: InstalledFont[]) {
     for (const f of list) if (!this.known.has(squash(f))) this.known.set(squash(f), f);
     for (const f of installed) if (f.postscript) this.postscript.set(squash(f.postscript), { family: f.family, style: f.style });
+    for (const f of installed) for (const a of f.aliases ?? []) if (/[^\x00-\x7f]/.test(a) && !this.localized.has(a)) this.localized.set(a, { family: f.family, style: f.style });
   }
 
   resolve(name: string, charset?: string): { family: string; style: string; shown: string } {
@@ -360,6 +362,8 @@ class FontNames {
     const s = `${stylePart} ${famPart}`;
     const weight = /Black|Heavy/i.test(s) ? 'Black' : /Semi ?bold|Demi/i.test(s) ? 'Semibold' : /Bold/i.test(s) ? 'Bold' : /Medium/i.test(s) ? 'Medium' : /Light/i.test(s) ? 'Light' : '';
     const italic = /Ital|Obli/i.test(s), style = weight && italic ? `${weight} Italic` : weight || (italic ? 'Italic' : 'Regular');
+    const local = this.localized.get(raw) ?? this.localized.get(famPart);
+    if (local) return { family: local.family, style: this.localized.has(raw) ? local.style : style, shown: local.family };
     const core = famPart.replace(/(PSMT|PS|MT)$/, '').replace(/(Bold|Italic|Oblique|Black|Light|Medium|Semibold|Regular)+$/i, '') || 'Helvetica';
     const key = squash(core), alias = FONT_ALIAS[key];
     const found = this.known.get(alias ? squash(alias) : key) ?? this.known.get(key.replace(/^lm/, 'latinmodern').replace(/\d+$/, '')) ?? this.known.get(key.replace(/\d+$/, ''));

@@ -5078,3 +5078,12 @@ Tried on real files, in the built window, against 0.59.1 and 0.60.0 built side b
 `npm test` 61 pass.
 
 Still left out, by name: type in a composite font with no program in the file and no usable CMap (`noembed-identity.pdf`: Ryumin, Identity-H, Japan1, nothing embedded; reading it needs Adobe's character collection tables); type under a CMap stream in the file (`perf_text_cmap_mixed.pdf`). Not done: the same for a simple font, whose program is Type 1, TrueType or name-keyed CFF and whose glyph is chosen by an encoding (LibreOffice writes CJK that way; such a file with broken ToUnicode entries is left out with the sentence); `/W2`; `/ActualText`.
+
+### src/io/pdf-read.ts · a PDF that names a font by its Chinese, Japanese or Korean name finds the installed font
+- refers-to: src/io/pdf-read.ts :: FontNames (localized, resolve)
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`FontNames` matched a `/BaseFont` against the installed families through `squash`, which keeps only `a-z0-9`, so every name written in another script squashed to nothing and went to the Helvetica fallback. The font listing now carries each face's other names (`aliases`, see the font service entry); `FontNames` keeps the ones with a character outside ASCII in `localized`, and `resolve` tries the whole name and then its family part there before the Latin rules. A name in ASCII goes the way it always did.
+
+Seen in the built window: the hand-built test PDF with its Big5 font named 文泉驛正黑 (a name of WenQuanYi Zen Hei, which is installed here) no longer lists that font under "Fonts not installed", and its line is set in WenQuanYi Zen Hei.
