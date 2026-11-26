@@ -73,7 +73,7 @@ export function slider(engine: Engine, label: string, min: number, max: number, 
   r.addEventListener('pointercancel', end);
   r.addEventListener('input', () => change(Number(r.value)));
   t.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') t.blur(); });
-  t.addEventListener('change', () => { const v = parseFloat(t.value); if (!Number.isFinite(v)) { t.value = r.value; return; } const c = Math.min(max, Math.max(min, v)); r.value = String(c); t.value = fmtNum(c); change(c); });
+  t.addEventListener('change', () => { let v: number; try { v = evalNumber(t.value, o.unit ?? ''); } catch { v = NaN; } if (!Number.isFinite(v)) { t.value = r.value; return; } const c = Math.min(max, Math.max(min, v)); r.value = String(c); t.value = fmtNum(c); change(c); });
   return { el: n, set: (v) => { const s = fmtNum(v); setValue(r, s); setValue(t, s); }, enable: (on) => { setDisabled(r, !on); setDisabled(t, !on); } };
 }
 

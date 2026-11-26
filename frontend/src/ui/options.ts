@@ -75,7 +75,7 @@ export class OptionsBar {
         const range = q<HTMLInputElement>(n, 'input[type="range"]');
         const num = q<HTMLInputElement>(n, 'input[type="number"]');
         range.addEventListener('input', () => spec.set(Number(range.value)));
-        num.addEventListener('change', () => { const v = Number(num.value); if (Number.isFinite(v)) spec.set(Math.min(spec.max, Math.max(spec.min, v))); num.blur(); });
+        num.addEventListener('change', () => { const v = num.value.trim() ? Number(num.value) : NaN; if (Number.isFinite(v)) spec.set(Math.min(spec.max, Math.max(spec.min, v))); else num.value = String(Math.round(spec.get() * 100) / 100); num.blur(); });
         num.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') num.blur(); });
         sync.push(() => { const v = String(Math.round(spec.get() * 100) / 100); setValue(range, v); setValue(num, v); });
         node.appendChild(n);
