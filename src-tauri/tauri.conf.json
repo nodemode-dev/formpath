@@ -42,6 +42,10 @@
       "hardenedRuntime": true,
       "entitlements": "entitlements.plist"
     },
+    "linux": {
+      "deb": { "desktopTemplate": "linux/formpath.desktop", "files": { "/usr/share/mime/packages/formpath.xml": "linux/formpath-mime.xml" } },
+      "rpm": { "desktopTemplate": "linux/formpath.desktop", "files": { "/usr/share/mime/packages/formpath.xml": "linux/formpath-mime.xml" } }
+    },
     "fileAssociations": [
       { "ext": ["fpth"], "name": "formpath Project", "description": "formpath vector illustration project", "role": "Editor", "mimeType": "application/x-formpath" }
     ],
