@@ -195,6 +195,12 @@ async function bundledFallback(family: string, style: string, ch: string): Promi
   return null;
 }
 
+const namesOf = new WeakMap<FontInfo[], Set<string>>();
+function installedNames(list: FontInfo[]): Set<string> {
+  let s = namesOf.get(list);
+  if (!s) { s = new Set(list.flatMap((f) => [f.family, ...(f.aliases ?? [])].map((n) => n.toLowerCase()))); namesOf.set(list, s); }
+  return s;
+}
 const fallbacks = new Map<string, Promise<FallbackGlyph | null>>();
 export function fallbackGlyph(ch: string, family: string, style: string): Promise<FallbackGlyph | null> {
   if (invisibleChar(ch) || colourEmoji(ch)) return Promise.resolve(null);
@@ -205,11 +211,15 @@ export function fallbackGlyph(ch: string, family: string, style: string): Promis
       const own = await bundledFallback(family, style, ch);
       if (own) return own;
       const cp = ch.codePointAt(0) ?? 0, order = isCjk(cp) ? [...hanFirst(family), ...CJK_FALLBACKS, ...GENERAL_FALLBACKS] : [...GENERAL_FALLBACKS, ...CJK_FALLBACKS];
-      for (const fam of [...new Set(order)].filter((f) => f !== family)) {
+      const have = installedNames(await systemFonts().catch((): FontInfo[] => []));
+      for (const fam of [...new Set(order)].filter((f) => f !== family && (!have.size || have.has(f.toLowerCase())))) {
         const font = await fontFor(fam, style).catch(() => null), gid = covers(font, ch);
         if (font && gid) return { font, gid, family: fam, source: fam };
       }
-      return family === 'Inter' ? null : bundledFallback('Inter', style, ch);
+      const inter = family === 'Inter' ? null : await bundledFallback('Inter', style, ch);
+      if (inter) return inter;
+      const hit = await api.coverFont(cp, isCjk(cp) ? hanFirst(family) : []), font = hit ? await fontFor(hit.family, style).catch(() => null) : null, gid = covers(font, ch);
+      return hit && font && gid ? { font, gid, family: hit.family, source: hit.family } : null;
     })();
     fallbacks.set(key, p);
   }
