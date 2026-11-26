@@ -18,7 +18,8 @@ import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } f
 import { exportPdf, readPdfNative } from './io/pdf';
 import { buildPrintPdf, printPdf } from './io/print';
 import { PrintDialog } from './ui/print-dialog';
-import { DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
+import { decodeDxf, DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
+import { decodeText } from './io/text-decode';
 import { exportDwg } from './io/dwg-write';
 import { DwgUnsupportedError, parseDwg } from './io/dwg';
 import { exportEps, readEpsNative } from './io/eps';
@@ -442,8 +443,8 @@ export function startApp(): void {
   }
 
   async function svgText(f: File): Promise<string> {
-    if (/\.svgz$/i.test(f.name) && typeof DecompressionStream !== 'undefined') return new Response(f.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    return f.text();
+    const bytes = new Uint8Array(/\.svgz$/i.test(f.name) && typeof DecompressionStream !== 'undefined' ? await new Response(f.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer() : await f.arrayBuffer());
+    return decodeText(bytes, /^\s*<\?xml[^>]*encoding=["']([\w.:-]+)/.exec(new TextDecoder('latin1').decode(bytes.subarray(0, 200)))?.[1]);
   }
 
   async function imageSize(blob: Blob): Promise<{ w: number; h: number }> { const b = await createImageBitmap(blob); const s = { w: b.width, h: b.height }; b.close(); return s; }
@@ -479,7 +480,7 @@ export function startApp(): void {
           file = parseDxf(conv.text);
           how = ` through ${conv.converter}`;
         }
-      } else file = parseDxf(await f.text());
+      } else file = parseDxf(decodeDxf(new Uint8Array(await f.arrayBuffer())));
       const o = await dxfOptions(file, dxf);
       if (!o) return null;
       const r = dxfToDoc(file, o, title);

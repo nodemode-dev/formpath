@@ -99,6 +99,7 @@ frontend/
     │   ├── svg-refs.ts         SVG import: patterns, masks, clip paths and markers
     │   ├── svg-filter.ts       SVG import: filter chains to live effects
     │   ├── svg-text.ts         SVG import: text, tspans and text on a path to live type
+    │   ├── text-decode.ts      bytes of a text file to a string: byte order marks, UTF-8, then a legacy charset
     │   ├── pdf.ts              PDF writer and native reader
     │   ├── raster.ts           region rendering, PNG, JPEG, WebP, screens zip
     │   ├── trace.ts            image trace: options, presets, worker run, nodes
@@ -194,6 +195,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/svg-refs.ts
 - src/io/svg-filter.ts
 - src/io/svg-text.ts
+- src/io/text-decode.ts
 - src/io/pdf.ts
 - src/io/pdf-read.ts
 - src/io/pdf-crypt.ts
@@ -5031,3 +5033,20 @@ In `itemsOf`, a run that goes through the shaper (features, a glyph alternate or
 `tsc` clean, `npm test` 61 pass. Not run: the order on a Windows or macOS machine with those faces; a variable font with Chinese in it on screen.
 
 Found and not changed here: type whose font is not installed is left out of a PDF, an EPS and an outlined SVG without a word (`outlineText` returns null when `fontFor` does, and the exporters then write nothing for that object), and the PDF reader names Helvetica as the nearest match for every font it does not know, a family Windows does not have. Create Outlines says so; the exporters do not. That is the next change in this area.
+
+### src/io/text-decode.ts, src/io/dxf.ts, src/app.ts, src/ui/panels/variables.ts, src/ui/panels/graph-data.ts · a text file that is not UTF-8 is read in its own charset (issue 17)
+- refers-to: src/io/text-decode.ts :: decodeText, fileText, localeLabel; src/io/dxf.ts :: decodeDxf, CODE_PAGES; src/app.ts :: svgText, the DXF branch of the opener; src/ui/panels/variables.ts :: the data file import; src/ui/panels/graph-data.ts :: the data import
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+`Blob.text()` is UTF-8 and nothing else: any byte that is not UTF-8 becomes U+FFFD, with no error. Four readers used it for files that are often not UTF-8.
+
+- Variables (data merge) and Graph Data read a CSV or TSV. Excel's plain "CSV" on a Traditional Chinese Windows is Big5, on a Japanese one Shift-JIS, and its "Unicode Text" is UTF-16LE: every cell with such text came in as replacement characters.
+- A DXF up to AutoCAD 2004, and one from several other CAD programs on Chinese, Japanese and Korean Windows, holds its text in the code page named by `$DWGCODEPAGE` (ANSI_950, ANSI_936, ANSI_932, ANSI_949, ANSI_1251 and so on).
+- An SVG saved as UTF-16, or with `encoding="Big5"` or `ISO-8859-1` in its XML declaration.
+
+`decodeText` is the one place for it: a byte order mark decides (UTF-8, UTF-16LE, UTF-16BE); else UTF-8 when the bytes are valid UTF-8; else the charset the caller names (the DXF's code page, the SVG's declared encoding), strictly; else the legacy charset of the language the system is set to (`localeLabel`: Big5 for zh-TW and zh-HK, GB18030 for other Chinese, Shift-JIS, EUC-KR, the Windows code pages for Cyrillic, Greek, Turkish, Hebrew, Arabic, Thai, Vietnamese, Central European and Baltic), strictly; else windows-1252, which cannot fail. A file that is UTF-8 is read exactly as before. `decodeDxf` reads `$ACADVER` and `$DWGCODEPAGE` from the first 64 KB; from AC1021 (2007) on a DXF is UTF-8 and no code page is given.
+
+The module has no DOM and no imports. Run outside the repository (a scratch vitest file): Big5 with the hint, UTF-8 with an emoji, UTF-16LE with its mark, the language table, and a DXF header naming ANSI_950 followed by Big5 text. `tsc` clean. Not run: the Variables and Graph Data pickers with a real Excel file in the window.
+
+Left: the `\M+` multibyte escapes and `%%` codes of DXF text; the native DWG reader, which reads every drawing older than 2007 as windows-1252; `zip.ts` entry names without the UTF-8 flag; OBJ and MTL files; a PSD layer name with no Unicode block.

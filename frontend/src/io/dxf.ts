@@ -10,6 +10,7 @@ import { instanceArt } from '../engine/symbolism';
 import { fill as fillItem, gradientAt, linearGradient, resolvePaint, stop, stroke as strokeItem, toRgb } from '../engine/paint';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText } from '../engine/text';
 import type { Anchor, Color, Doc, LayerNode, Mat, PathData, Pt, Project, Rect, SubPath, TextNode, VNode } from '../engine';
+import { decodeText } from './text-decode';
 
 export type DxfUnit = 'unitless' | 'in' | 'ft' | 'yd' | 'mi' | 'mm' | 'cm' | 'm' | 'km' | 'pt' | 'px';
 export const DXF_UNITS: ReadonlyArray<readonly [DxfUnit, string]> = [['mm', 'Millimeters'], ['cm', 'Centimeters'], ['m', 'Meters'], ['km', 'Kilometers'], ['in', 'Inches'], ['ft', 'Feet'], ['yd', 'Yards'], ['mi', 'Miles'], ['pt', 'Points'], ['px', 'Pixels']];
@@ -28,6 +29,14 @@ export interface DxfImportOptions { units: DxfUnit; scale: number; layout: strin
 const g = (e: Ent, code: number, d = ''): string => { for (const [k, v] of e.c) if (k === code) return v; return d; };
 const gn = (e: Ent, code: number, d = 0): number => { for (const [k, v] of e.c) if (k === code) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; } return d; };
 const has = (e: Ent, code: number): boolean => e.c.some(([k]) => k === code);
+
+const CODE_PAGES: Record<string, string> = { ANSI_874: 'windows-874', ANSI_932: 'shift_jis', ANSI_936: 'gbk', ANSI_949: 'euc-kr', ANSI_950: 'big5', ANSI_1250: 'windows-1250', ANSI_1251: 'windows-1251', ANSI_1252: 'windows-1252', ANSI_1253: 'windows-1253', ANSI_1254: 'windows-1254', ANSI_1255: 'windows-1255', ANSI_1256: 'windows-1256', ANSI_1257: 'windows-1257', ANSI_1258: 'windows-1258' };
+
+export function decodeDxf(bytes: Uint8Array): string {
+  const head = new TextDecoder('latin1').decode(bytes.subarray(0, 65536));
+  const version = /\$ACADVER\s*\r?\n\s*1\s*\r?\n\s*AC(\d{4})/.exec(head)?.[1], page = /\$DWGCODEPAGE\s*\r?\n\s*3\s*\r?\n\s*(\w+)/.exec(head)?.[1]?.toUpperCase();
+  return decodeText(bytes, version && Number(version) >= 1021 ? null : CODE_PAGES[page ?? ''] ?? null);
+}
 
 export function parseDxf(text: string): DxfFile {
   if (text.startsWith('AutoCAD Binary DXF')) throw new Error('This is a binary DXF. Save it as an ASCII DXF from your CAD program, then open it.');

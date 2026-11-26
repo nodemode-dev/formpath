@@ -1,5 +1,6 @@
 import { cleanData, parseGrid, parseNumber, parseTable } from '../../engine/graph';
 import type { Engine, GraphData } from '../../engine';
+import { fileText } from '../../io/text-decode';
 import { el, patchList, q, setClass, setDisabled, setHidden, setText, setValue } from '../dom';
 import { icon } from '../icons';
 
@@ -32,7 +33,7 @@ export class GraphDataWindow {
     const [imp, trans, swap, revert, apply] = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.cv-gdw-tools button'));
     const file = q<HTMLInputElement>(this.el, 'input[type="file"]');
     imp.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void f.text().then((t) => { this.draft = this.normal(gridOf(parseTable(t))); this.touch(); }); });
+    file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void fileText(f).then((t) => { this.draft = this.normal(gridOf(parseTable(t))); this.touch(); }); });
     trans.addEventListener('click', () => { const w = Math.max(...this.draft.map((r) => r.length)); this.draft = this.normal(Array.from({ length: w }, (_, c) => this.draft.map((r) => r[c] ?? ''))); this.touch(); });
     swap.addEventListener('click', () => { this.draft = this.draft.map((r) => [r[0] ?? '', ...this.swapPairs(r.slice(1))]); this.touch(); });
     revert.addEventListener('click', () => { this.load(true); });
