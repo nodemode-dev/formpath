@@ -8,7 +8,7 @@ from app.core import config
 from app.services import dwg
 
 router = APIRouter(prefix="/api/io", tags=["io"])
-SAFE = re.compile(r"[^A-Za-z0-9 ._()-]+")
+SAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]+')
 MAX = 512 * 1024 * 1024
 
 

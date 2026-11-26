@@ -713,7 +713,7 @@ export function startApp(): void {
     if (!p || !raw || n.linked) return false;
     const ext = raw.type === 'image/jpeg' ? 'jpg' : raw.type === 'image/webp' ? 'webp' : 'png';
     const blob = ext === 'png' && raw.type !== 'image/png' ? await (async () => { const b = await createImageBitmap(raw), c = new OffscreenCanvas(b.width, b.height); c.getContext('2d')?.drawImage(b, 0, 0); b.close(); return c.convertToBlob({ type: 'image/png' }); })() : raw;
-    const base = (n.name ?? n.link ?? 'Image').replace(/\.[a-z0-9]+$/i, '').replace(/[^A-Za-z0-9 ._()-]+/g, '_').trim() || 'Image', fname = `${base}.${ext}`;
+    const base = (n.name ?? n.link ?? 'Image').replace(/\.[a-z0-9]+$/i, '').replace(/[\\/:*?"<>|\x00-\x1f\x7f]+/g, '_').trim() || 'Image', fname = `${base}.${ext}`;
     let f: LinkFile | null = null;
     if (caps && !useHandles()) {
       const lib = (await api.libraryFolder())?.folder ?? caps.libraryDir;

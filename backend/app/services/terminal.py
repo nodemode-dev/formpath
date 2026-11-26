@@ -12,7 +12,11 @@ from app.core import config
 if os.name == "nt":
     from winpty import PtyProcess
 else:
-    from ptyprocess import PtyProcessUnicode as PtyProcess
+    from ptyprocess import PtyProcessUnicode
+
+    class PtyProcess(PtyProcessUnicode):
+        def __init__(self, pid, fd, encoding="utf-8", codec_errors="replace"):
+            super().__init__(pid, fd, encoding, codec_errors)
 
 SCROLLBACK = 256 * 1024
 MIN_COLS, MIN_ROWS = 10, 4
@@ -87,6 +91,8 @@ def base_env() -> dict:
     env["FORMPATH_URL"] = engine_url()
     env.pop("FORMPATH_WINDOW_KEY_STDOUT", None)
     env.pop("FORMPATH_INAPP_TOKEN", None)
+    if os.name != "nt" and not (env.get("LC_ALL") or env.get("LC_CTYPE") or env.get("LANG")):
+        env["LANG"] = "en_US.UTF-8"
     if not getattr(sys, "frozen", False):
         env["PATH"] = str(config.REPO_DIR) + os.pathsep + env.get("PATH", "")
     return env

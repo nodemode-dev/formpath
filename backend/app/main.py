@@ -1,8 +1,10 @@
+import json
 import mimetypes
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core import config
@@ -28,7 +30,12 @@ async def lifespan(_: FastAPI):
     terminals.close_all()
 
 
-app = FastAPI(title=config.APP_NAME, version=config.VERSION, lifespan=lifespan)
+class AsciiJSON(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(content, ensure_ascii=True, allow_nan=False, separators=(",", ":")).encode("ascii")
+
+
+app = FastAPI(title=config.APP_NAME, version=config.VERSION, lifespan=lifespan, default_response_class=AsciiJSON)
 app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins(), allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(WindowKeyGuard)
 app.add_middleware(LocalGuard, origins=config.window_origins())

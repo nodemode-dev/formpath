@@ -10,7 +10,7 @@ from app.core import config
 from app.routers.mcp import _app_origin
 
 router = APIRouter(tags=["batch"])
-SAFE = re.compile(r"[^A-Za-z0-9 ._()\[\]+&,'@-]+")
+SAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]+')
 SET_NAME = re.compile(r"^[^\\/:*?\"<>|\x00-\x1f]{1,80}$")
 READABLE = {".fpth", ".svg", ".svgz", ".pdf", ".ai", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".psd", ".psb", ".tif", ".tiff", ".csv", ".tsv", ".txt", ".json", ".xml", ".fpaction"}
 WRITABLE = {".fpth", ".svg", ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".txt", ".csv", ".json", ".fpaction", ".zip"}
