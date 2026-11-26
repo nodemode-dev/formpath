@@ -2,6 +2,28 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.63.0 · 2026-11-26
+
+What 0.62.0 listed as not in the release under issue 17, and the small things found on the way. Tried in a Chromium window on Linux, on public PDFs and PDFs made here, against the browser's own drawing of the same text, and for the Windows launchers under Wine; nothing in this release has run on real Windows or macOS, and no real input method was used.
+
+- Vertical type: Arabic, Hebrew, Devanagari and the other scripts that run sideways are joined, turned a quarter and set in reading order down the column. They were unjoined and reversed before. Chinese, Japanese and Korean columns are unchanged.
+- Right-to-left paragraphs: list numbers sit on the right, tab stops count from the right edge and indents land on the mirrored sides.
+- Letters the chosen font lacks are taken from a font that has them and arrive already joined, so Urdu set in a font with only Arabic reads as Urdu.
+- An Arabic word with one letter in another colour or weight stays joined and is not split across lines.
+- Arrow keys move the way they point on type on a path and at the ends of lines that mix directions, where the caret could jump back or get stuck. A path too short for its text keeps the beginning of the text.
+- If the shaping engine fails to load, it is tried again by itself with the next such text.
+- Opening a PDF: a line written one letter at a time opens as one line of type, as a browser's print to PDF writes it. A line whose words are in different fonts is still one object per font.
+- Opening a PDF: Chinese, Japanese and Korean type that has no font in the file and no table of characters is read by its character collection, using Adobe's public mapping files, where it was left out before.
+- Agents exporting through the MCP tools are told which fonts were replaced or outlined and which characters no font draws.
+- The export notes about a missing font, a licence that forbids embedding, and characters no installed font has show in your language.
+- A first message with line breaks sent to a running Claude Code tab arrives whole.
+- Package names the copied fonts whose licence restricts embedding, so you can check the licence before passing the package on. No font is left out.
+- Exporting a PDF: a font whose licence forbids subsetting or allows only bitmap embedding is drawn as shapes, with the licence note, instead of being embedded as a subset.
+- Windows: `formpath.bat` and `setup\python.bat` run when an argument opens a quote without closing it, and pass it on as typed.
+- New part, listed in NOTICE.md: Adobe's CID to Unicode mapping files for the Chinese, Japanese and Korean collections (BSD-3-Clause), read only when a PDF needs them.
+- Not in this release: the terminal panel can still take the caret from a field after a slow start, and it gives an emoji or a wide sign one cell; both are in the panel's shared files, which are not changed here. Justified Arabic is stretched by its word spaces, not by lengthening letters; the bidirectional data is Unicode 13, so some newer Arabic letters and symbols are ordered as older software orders them; in one PDF reader, text copied from Hebrew with points puts each point on a line of its own; the message after opening a PDF is in English in every language; `.ai` titles and gradient names outside ASCII are written as before, since no file was found that shows how they should be stored.
+- The three demos are not rebuilt and still say 0.59.0.
+
 ## 0.62.0 · 2026-11-26
 
 The five things 0.61.0 left open under issue 17. Tried in a Chromium window on Linux, on the desktop app under a virtual display on Linux, on public files, and for the Windows parts under Wine; nothing in this release has run on real Windows or macOS, and no real input method has typed into it.
