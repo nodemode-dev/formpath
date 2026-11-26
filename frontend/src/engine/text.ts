@@ -151,7 +151,7 @@ export function glyphShape(g: Glyph): PathData | null {
 }
 export function fontHasFeature(st: CharStyle, feature: string): boolean { return !!shaping?.has(st, feature); }
 
-interface Item { ch: string; st: CharStyle; index: number; gid?: number; adv?: number; up?: boolean; vadv?: number; vorg?: number; syn?: boolean }
+interface Item { ch: string; st: CharStyle; index: number; gid?: number; adv?: number; up?: boolean; vadv?: number; vorg?: number; syn?: boolean; len?: number; j?: boolean }
 const EM_ORG = 0.88;
 const UPRIGHT: ReadonlyArray<readonly [number, number]> = [[0xa7, 0xa7], [0xa9, 0xa9], [0xae, 0xae], [0xb1, 0xb1], [0xbc, 0xbe], [0xd7, 0xd7], [0xf7, 0xf7], [0x1100, 0x11ff], [0x2030, 0x2031], [0x203b, 0x203b], [0x2100, 0x218f], [0x2460, 0x24ff], [0x25a0, 0x27bf], [0x2e80, 0xa4cf], [0xa960, 0xa97f], [0xac00, 0xd7ff], [0xe000, 0xfaff], [0xfe10, 0xfe1f], [0xfe30, 0xfe6f], [0xff00, 0xff60], [0xffe0, 0xffe7], [0x1f000, 0x1faff], [0x20000, 0x3ffff]];
 const TURNED: ReadonlyArray<readonly [number, number]> = [[0x2329, 0x232a], [0x3008, 0x3011], [0x3014, 0x301f], [0x3030, 0x3030], [0x30a0, 0x30a0], [0x30fc, 0x30fc], [0xfe59, 0xfe5e], [0xff08, 0xff09], [0xff0d, 0xff0d], [0xff1c, 0xff1e], [0xff3b, 0xff3b], [0xff3d, 0xff3d], [0xff3f, 0xff3f], [0xff5b, 0xff60], [0xffe3, 0xffe3]];
@@ -160,9 +160,37 @@ export function verticalClass(ch: string): 'upright' | 'rotated' | 'turned' {
   const cp = ch.codePointAt(0) ?? 0;
   return inRanges(cp, TURNED) ? 'turned' : inRanges(cp, UPRIGHT) ? 'upright' : 'rotated';
 }
-const NO_START = /^[、。，．・：；？！）」』】〕〉》ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ]$/;
+const NO_START = /^[、。，．・：；？！）」』】〕〉》ーぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶㇰ-ㇿ”’〗〙］｝…‥々〻ゝゞヽヾ〜％‰℃｡｣､･ｰ)\]},.:;!?%"']$/;
+const NO_END = /^[「『（【〔〈《〖〘［｛‘“([{"'‍]$/;
+const JOINS = /^[\p{M}ำຳ‌‍︀-️\u{e0020}-\u{e007f}\u{e0100}-\u{e01ef}\u{1f3fb}-\u{1f3ff}]/u;
+const joinsCh = (ch: string): boolean => { const c = ch.charCodeAt(0); return c >= 0x300 && !(c >= 0x3400 && c <= 0xa4cf) && !(c >= 0xac00 && c <= 0xd7af) && JOINS.test(ch); };
+const joins = (it: Item | undefined): boolean => !!it?.j;
+const glued = (a: Item | undefined, b: Item | undefined): boolean => joins(b) || a?.ch === '‍';
+const isCjk = (ch: string): boolean => (ch.codePointAt(0) ?? 0) >= 0x2e80 && verticalClass(ch) !== 'rotated';
 function cjkBreakAfter(ch: string, next: string | undefined): boolean {
-  return (ch.codePointAt(0) ?? 0) >= 0x2e80 && verticalClass(ch) !== 'rotated' && !/^[「『（【〔〈《]$/.test(ch) && !NO_START.test(next ?? '');
+  return (isCjk(ch) || (next !== undefined && isCjk(next))) && !NO_END.test(ch) && !NO_START.test(next ?? '');
+}
+const isSea = (c: number): boolean => (c >= 0xe00 && c <= 0xeff) || (c >= 0x1780 && c <= 0x17ff);
+let wordSeg: Intl.Segmenter | null | undefined;
+const wordCache = new Map<string, number[]>();
+function seaBreaks(p: Item[]): Uint8Array | null {
+  if (!p.some((x) => isSea(x.ch.charCodeAt(0)))) return null;
+  if (wordSeg === undefined) wordSeg = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'word' }) : null;
+  if (!wordSeg) return null;
+  const s = p.map((x) => x.ch).join('');
+  let offs = wordCache.get(s);
+  if (!offs) {
+    offs = [];
+    for (const w of wordSeg.segment(s)) if (w.index > 0 && isSea(s.charCodeAt(w.index - 1)) && isSea(s.charCodeAt(w.index))) offs.push(w.index);
+    if (wordCache.size > 256) wordCache.clear();
+    wordCache.set(s, offs);
+  }
+  const out = new Uint8Array(p.length + 1);
+  for (let k = 0, o = 0, q = 0; k < p.length && q < offs.length; o += p[k].ch.length, k++) {
+    while (q < offs.length && offs[q] < o) q++;
+    if (offs[q] === o) out[k] = 1;
+  }
+  return out;
 }
 function orient(out: Item[]): Item[] {
   for (const it of out) {
@@ -194,7 +222,7 @@ function itemsOf(spans: Span[]): Item[] {
     const feats = smcp ? [...st.features, 'smcp'] : st.features;
     for (const piece of text.split(/(\r\n|\r|\n)/)) {
       if (!piece) continue;
-      if (piece === '\n' || piece === '\r' || piece === '\r\n') { out.push({ ch: '\n', st, index: i }); i += piece.length; continue; }
+      if (piece === '\n' || piece === '\r' || piece === '\r\n') { out.push(piece.length > 1 ? { ch: '\n', st, index: i, len: piece.length } : { ch: '\n', st, index: i }); i += piece.length; continue; }
       const shaped = (feats.length || st.alt !== undefined || hasAxes(st)) && shaping ? shaping.shape(st, piece, feats) : null;
       if (shaped) {
         let k = 0;
@@ -208,6 +236,7 @@ function itemsOf(spans: Span[]): Item[] {
       }
     }
   }
+  for (const it of out) if (joinsCh(it.ch)) it.j = true;
   return out;
 }
 
@@ -215,13 +244,13 @@ function effSize(st: CharStyle): number { return st.position === 'normal' ? st.s
 function effShift(st: CharStyle): number { return st.baseline + (st.position === 'super' ? -st.size * 0.333 : st.position === 'sub' ? st.size * 0.15 : 0); }
 
 function advance(it: Item, next: Item | undefined): number {
-  const size = effSize(it.st), opt = next && it.st.kerning === 'optical' && !next.syn ? opticalKern(it.st, it.ch, next.st, next.ch) : null;
-  if (it.adv !== undefined) return (it.adv + (opt ?? 0)) * size * (it.st.hscale / 100) + (it.st.tracking / 1000) * it.st.size;
+  const size = effSize(it.st), opt = next && it.st.kerning === 'optical' && !next.syn ? opticalKern(it.st, it.ch, next.st, next.ch) : null, tr = glued(it, next) ? 0 : (it.st.tracking / 1000) * it.st.size;
+  if (it.adv !== undefined) return (it.adv + (opt ?? 0)) * size * (it.st.hscale / 100) + tr;
   const font = cssFont(it.st, size);
   let w = charWidth(font, it.ch) * (it.st.hscale / 100);
   if (opt !== null) w += opt * size * (it.st.hscale / 100);
   else if (next && next.st === it.st && it.st.kerning !== 'none') w += pairKern(font, it.ch, next.ch) * (it.st.hscale / 100);
-  return w + (it.st.tracking / 1000) * it.st.size;
+  return w + tr;
 }
 
 function leadingOf(st: CharStyle): number { return st.leading ?? st.size * 1.2; }
@@ -232,7 +261,7 @@ function uprightWidth(it: Item): number {
 }
 function vAdvance(it: Item, next: Item | undefined): number {
   if (!it.up) return advance(it, next);
-  return (it.vadv ?? 1) * effSize(it.st) * (it.st.vscale / 100) + (it.st.tracking / 1000) * it.st.size;
+  return (it.vadv ?? 1) * effSize(it.st) * (it.st.vscale / 100) + (glued(it, next) ? 0 : (it.st.tracking / 1000) * it.st.size);
 }
 function lineMetrics(st: CharStyle, size: number, vertical: boolean): { ascent: number; descent: number } {
   return vertical ? { ascent: size / 2, descent: size / 2 } : metrics(st, size);
@@ -342,8 +371,8 @@ function layoutLines(n: TextNode): TextLayout {
   const vertical = !!n.vertical, all = items(n.spans, vertical), para = n.para, frame = n.mode === 'area' && n.frame ? n.frame : null;
   const cells: Cell[] = frame ? areaCells(n.area, frame, vertical) : [{ x: 0, w: Infinity, top: 0, bottom: Infinity }];
   const lines: Line[] = [];
-  const paragraphs: Item[][] = [[]];
-  for (const it of all) { if (it.ch === '\n' || it.ch === '\r') paragraphs.push([]); else paragraphs[paragraphs.length - 1].push(it); }
+  const paragraphs: Item[][] = [[]], brks: Item[] = [];
+  for (const it of all) { if (it.ch === '\n' || it.ch === '\r') { paragraphs.push([]); brks.push(it); } else paragraphs[paragraphs.length - 1].push(it); }
   let y = 0, col = 0, first = true, overflowAt = -1;
   const startCol = (c: number): number => (frame ? cells[c].x : 0);
   const step = (it: Item, next: Item | undefined): number => (vertical ? vAdvance(it, next) : advance(it, next));
@@ -369,7 +398,7 @@ function layoutLines(n: TextNode): TextLayout {
     const b = step(it, next);
     if (!J) return { w: b, shrink: 0 };
     if (it.ch === ' ') return { w: (b * J.wordDes) / 100, shrink: (b * Math.max(0, J.wordDes - J.wordMin)) / 100 };
-    const sw = spaceW(it.st);
+    const sw = glued(it, next) ? 0 : spaceW(it.st);
     return { w: (b * J.glyphDes) / 100 + (sw * J.letterDes) / 100, shrink: (b * Math.max(0, J.glyphDes - J.glyphMin)) / 100 + (sw * Math.max(0, J.letterDes - J.letterMin)) / 100 };
   };
   const tabAt = (p: Item[], k: number, rel: number): { w: number; stop: TabStop | null } => {
@@ -393,6 +422,7 @@ function layoutLines(n: TextNode): TextLayout {
     const marker: Item[] = list ? Array.from(listMarker(list, (list.start ?? 1) + listNo - 1), (ch) => ({ ch, st: mst, index: pIndex, syn: true })) : [];
     const markerW = marker.reduce((s, it, k) => s + step(it, marker[k + 1]), 0), markerGap = marker.length ? mst.size * 0.5 : 0;
     let i = 0, lineNo = 0, hyphRun = 0;
+    const wb = seaBreaks(p);
     do {
       const st0 = p[i]?.st ?? tail, lead0 = leadingOf(st0), m0 = lm(st0, st0.size), fb0 = frame ? firstBase(n.area, st0, st0.size, lead0, vertical) : 0;
       let ly = first ? (frame ? cells[col].top + fb0 : 0) : y + lead0, fromTop = first && !!frame;
@@ -424,9 +454,13 @@ function layoutLines(n: TextNode): TextLayout {
         while (j < p.length) {
           const it = p[j], m = it.ch === '\t' ? { w: tabAt(p, j, lineAt + width).w, shrink: 0 } : measure(it, p[j + 1]);
           if (width + m.w - (justified ? shrink + m.shrink : 0) > availW && j > i) {
-            if (it.ch === ' ' || it.ch === '\t') end = j + 1;
+            if ((it.ch === ' ' || it.ch === '\t') && !glued(it, p[j + 1])) end = j + 1;
             else {
               end = lastBreak > i ? lastBreak : j;
+              if (end === j && glued(p[j - 1], p[j])) {
+                while (end > i + 1 && glued(p[end - 1], p[end])) end--;
+                if (glued(p[end - 1], p[end])) { end = j; while (end < p.length && glued(p[end - 1], p[end])) end++; }
+              }
               if (H && (H.limit <= 0 || hyphRun < H.limit) && isLetter(it)) {
                 const at = (k: number): number => (k === j ? width : cum[k - i]), atS = (k: number): number => (k === j ? shrink : cumS[k - i]);
                 if (justified || H.zone <= 0 || lastBreak <= i || availW - at(lastBreak) >= H.zone) {
@@ -445,7 +479,7 @@ function layoutLines(n: TextNode): TextLayout {
           }
           cum.push(width); cumS.push(shrink);
           width += m.w; shrink += m.shrink;
-          if (it.ch === ' ' || it.ch === '\t' || it.ch === '-' || cjkBreakAfter(it.ch, p[j + 1]?.ch)) lastBreak = j + 1;
+          if ((it.ch === ' ' || it.ch === '\t' || it.ch === '-' || cjkBreakAfter(it.ch, p[j + 1]?.ch) || wb?.[j + 1] === 1) && !glued(it, p[j + 1])) lastBreak = j + 1;
           j++;
         }
         const li = p.slice(i, end), lineFirst = i;
@@ -473,9 +507,10 @@ function layoutLines(n: TextNode): TextLayout {
           let slack = availW - lineW;
           const sp: number[] = [], letters: number[] = [];
           visible.forEach((x, k) => { if (x.ch === ' ') sp.push(k); else if (x.ch !== '\t') letters.push(k); });
-          const gaps = letters.filter((k) => k < visible.length - 1 || !!hy);
-          if (!J) { if (sp.length) for (const k of sp) extra[k] = slack / sp.length; }
-          else if (!sp.length && J.single !== 'justify') alignAs = J.single;
+          const gaps = letters.filter((k) => (k < visible.length - 1 || !!hy) && !glued(visible[k], visible[k + 1]));
+          const dense = !sp.length && visible.some((x) => isCjk(x.ch) || isSea(x.ch.charCodeAt(0)));
+          if (!J) { if (sp.length) for (const k of sp) extra[k] = slack / sp.length; else if (dense) { const cg = gaps.filter((k) => k < visible.length - 1), wg = wb ? cg.filter((k) => wb[lineFirst + k + 1] === 1) : [], ks = wg.length ? wg : cg; for (const k of ks) extra[k] = slack / ks.length; } }
+          else if (!sp.length && J.single !== 'justify' && !dense) alignAs = J.single;
           else {
             const grow = slack >= 0, base = visible.map((x, k) => step(x, visible[k + 1]));
             const take = (ks: number[], cap: (k: number) => number): number => {
@@ -528,7 +563,7 @@ function layoutLines(n: TextNode): TextLayout {
       y = lineY;
     } while (i < p.length);
     y += para.spaceAfter;
-    paraStart = pIndex + p.reduce((s, it) => s + it.ch.length, 0) + 1;
+    paraStart = pIndex + p.reduce((s, it) => s + it.ch.length, 0) + (brks[pi]?.len ?? 1);
   }
   if (!lines.length) {
     const st = n.spans[0]?.style ?? DEFAULT_CHAR;
