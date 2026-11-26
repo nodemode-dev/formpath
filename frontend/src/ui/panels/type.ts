@@ -377,7 +377,7 @@ export class GlyphsPanel {
 
   private async syncAlts(): Promise<void> {
     const ed = typing.editor, n = ed?.node(), r = ed?.range() ?? null;
-    const ch = n && r && r[1] - r[0] === 1 ? plainText(n).slice(r[0], r[1]) : '';
+    const picked = n && r ? plainText(n).slice(r[0], r[1]) : '', ch = Array.from(picked).length === 1 ? picked : '';
     const st = n && ch && r ? styleAt(n.spans, r[0]) : null;
     const key = st && r && n ? `${n.id}|${r[0]}|${ch}|${st.font}|${st.style}|${st.alt ?? ''}` : '';
     if (key === this.altKey) return;

@@ -855,6 +855,9 @@ export function setPlainText(n: TextNode, text: string): Span[] {
 }
 
 export function styleSpans(spans: Span[], start: number, end: number, patch: Partial<CharStyle>): Span[] {
+  const all = spans.map((s) => s.text).join(''), split = (k: number): boolean => k > 0 && k < all.length && /[\udc00-\udfff]/.test(all[k]) && /[\ud800-\udbff]/.test(all[k - 1]);
+  if (split(start)) start--;
+  if (split(end)) end++;
   const out: Span[] = [];
   let pos = 0;
   for (const sp of spans) {

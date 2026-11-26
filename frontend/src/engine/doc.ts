@@ -189,7 +189,7 @@ export function nodeLabel(n: VNode): string {
     case 'group': return n.clip ? 'Clip Group' : 'Group';
     case 'path': return n.live ? ({ rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', star: 'Star', line: 'Line' }[n.live.kind]) : n.guide ? 'Guide' : 'Path';
     case 'compound': return 'Compound Path';
-    case 'text': { const t = n.spans.map((s) => s.text).join('').replace(/\s+/g, ' ').trim(); return t ? (t.length > 28 ? t.slice(0, 28) + '…' : t) : 'Type'; }
+    case 'text': { const t = n.spans.map((s) => s.text).join('').replace(/\s+/g, ' ').trim(); return t ? (t.length > 28 ? t.slice(0, /[\ud800-\udbff]/.test(t[27]) ? 27 : 28) + '…' : t) : 'Type'; }
     case 'image': return 'Image';
     case 'symbol': return 'Symbol';
     case 'blend': return 'Blend';

@@ -158,7 +158,7 @@ function touchOptions(e: Engine): OptionSpec[] {
   const num = (label: string, key: keyof CharTouch, unit: string, min: number, max: number): OptionSpec => ({ kind: 'number', label, unit, min, max, step: 1, get: () => { const c = cur(); return c ? Math.round(c[key] * 100) / 100 : null; }, set: (v) => put({ [key]: v }) });
   return [
     { kind: 'title', text: 'Glyph Touch' },
-    { kind: 'readout', label: 'Character', get: () => { const n = TT.id ? e.nodeById(TT.id) : null; return n?.kind === 'text' && TT.index >= 0 ? `“${plainText(n).slice(TT.index, TT.index + 1)}”` : 'None'; } },
+    { kind: 'readout', label: 'Character', get: () => { const n = TT.id ? e.nodeById(TT.id) : null; return n?.kind === 'text' && TT.index >= 0 ? `“${String.fromCodePoint(plainText(n).codePointAt(TT.index) ?? 32)}”` : 'None'; } },
     num('X', 'x', 'pt', -10000, 10000), num('Y', 'y', 'pt', -10000, 10000), num('H', 'sx', '%', 1, 10000), num('V', 'sy', '%', 1, 10000), num('Rotate', 'r', '°', -180, 180),
     { kind: 'button', label: 'Reset', run: () => { if (TT.id && TT.index >= 0) e.setCharTouch(TT.id, TT.index, null, 'Reset Glyph Touch'); } },
   ];

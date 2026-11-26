@@ -1380,17 +1380,17 @@ export function startApp(): void {
         if (!/\.fpth$/i.test(f.name)) throw new Error('Symbol libraries are formpath projects (.fpth).');
         const d = await libraryDoc(f);
         if (!d.symbols.length) throw new Error(`${f.name} holds no symbols.`);
-        showSymbolLib(symbolLibraryFromDoc(d, name, `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`));
+        showSymbolLib(symbolLibraryFromDoc(d, name, `file_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`));
         return;
       }
       if (kind === 'brush') {
         if (!/\.fpth$/i.test(f.name)) throw new Error('Brush libraries are formpath projects (.fpth).');
         const d = await libraryDoc(f);
         if (!d.brushes.length) throw new Error(`${f.name} holds no brushes.`);
-        showBrushLib({ id: `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: d.brushes.map(({ id: _id, ...b }) => { void _id; return b; }), user: true });
+        showBrushLib({ id: `file_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`, name, brushes: d.brushes.map(({ id: _id, ...b }) => { void _id; return b; }), user: true });
         return;
       }
-      const lib = /\.ase$/i.test(f.name) ? readAse(await f.arrayBuffer(), f.name) : libraryFromDoc(await libraryDoc(f), name, `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`);
+      const lib = /\.ase$/i.test(f.name) ? readAse(await f.arrayBuffer(), f.name) : libraryFromDoc(await libraryDoc(f), name, `file_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`);
       if (!lib.groups.length) throw new Error(`${f.name} holds no swatches.`);
       showSwatchLib(lib);
     } catch (err) { toast(message(err), 'error'); }
@@ -1454,7 +1454,7 @@ export function startApp(): void {
     const v = await askForm('Save Brushes', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Brushes` }, { kind: 'note', text: 'Saves the document’s brushes as a formpath project to open later with Open Brush Library; it also appears under User Defined.' }], { ok: 'Save' });
     if (!v) return;
     const name = String(v.name).trim() || 'Brushes';
-    keepUserBrushLibrary({ id: `user_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: p.doc.brushes.map(({ id: _id, ...b }) => { void _id; return b; }) });
+    keepUserBrushLibrary({ id: `user_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`, name, brushes: p.doc.brushes.map(({ id: _id, ...b }) => { void _id; return b; }) });
     await deliver(await libraryProject(name, { brushes: p.doc.brushes }), `${name}.fpth`);
   }
 

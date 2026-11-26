@@ -5000,3 +5000,21 @@ Three small things for the same people, in the same files:
 Run in headless Chrome, 4x CPU throttled, slow network: a layer renamed with a composition stays in the field after a 229 Enter and is committed by the real one; a full-width "123.5" in X moves the object to 123.5; the font button's tooltip reads the family. Layout shift 0, no console error. Not run: each of the other guarded fields one by one; WebKit.
 
 Looked at and left: the Content panel's head, the status bar's selection and the Appearance panel's head show a text object's own words through the translation walker, so an object reading "Copy" is shown translated there. Skipping those three elements would also stop "No Document" and "3 Objects" from being translated, so they need a `translate="no"` set with the label, which is its own change. The numeric fields of the options bar and the zoom field keep their handlers.
+
+### src/engine/text.ts, src/engine/doc.ts, library ids, src/io/psd-write.ts · characters outside the basic plane and names outside Latin are kept whole (issue 17)
+- refers-to: src/engine/text.ts :: styleSpans (split); src/engine/doc.ts :: nodeLabel; src/tools/type.ts :: the Glyph Touch readout; src/ui/panels/type.ts :: the one-character test; src/app.ts :: the `file_` and `user_` library ids; src/engine/swatch-libraries.ts :: libraryFromDoc; src/engine/symbol-libraries.ts :: symbolLibraryFromDoc; src/io/ase.ts :: readAse; src/io/psd-write.ts :: the `luni` block
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+A character past U+FFFF is two UTF-16 units (the rarer Chinese characters of Hong Kong and Taiwan names, and every emoji). Four places counted or cut by unit:
+
+- `touchSpans` styles `index` to `index + 1`, which put the first half of such a character in one span and the second half in the next; each half then drew as a replacement glyph and was saved that way. `styleSpans` now widens a range edge that falls between the two halves, so no caller can split a pair.
+- `nodeLabel` cut a text object's name at 28 units; when the 28th was a first half, the Layers row, the Content panel and the status bar ended in a replacement character. It cuts at 27 there.
+- The Glyph Touch readout and the Character panel's one-character test took one unit; they take one code point.
+- The PSD writer's Unicode layer name (`luni`) gave its length in code points but wrote UTF-16 units, so Photoshop read a name with such a character one unit short.
+
+A library made from a document or an .ase file got its id from its name with everything but `a-z0-9` turned into `_`, so every name in Chinese, Japanese, Korean, Cyrillic, Greek or Thai came to the same id (`user__`), and saving a second library replaced the first. The seven places keep letters and digits of any script (`\p{L}\p{N}`). A name in plain ASCII gets the id it had; a name with accented letters gets a new one, so a library saved under such a name before stays in the list beside a newly saved one.
+
+Run outside the repository (a scratch vitest file importing these functions): a touch on either half of an astral character, and a range ending inside it, leave every span well formed; a label cut at a pair is well formed. `tsc` clean. Not run: the PSD in Photoshop.
+
+Left: other cuts by unit that only shorten a name for display or a file stem (`engine/index.ts` 1069 and 2141, `engine/variables.ts` 124, `ui/panels/actions.ts` 70, `ui/panels/generative.ts` 222, `automation/agent-bridge.ts` 637, `io/width-profiles.ts` 25, `io/gen-options.ts` 205).

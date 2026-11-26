@@ -114,6 +114,6 @@ export function symbolLibrary(key: string, extra: SymbolLibrary[] = []): SymbolL
   return [...SYMBOL_LIBRARIES, ...extra].find((l) => l.id === k || l.id === key || l.name.toLowerCase() === key.trim().toLowerCase());
 }
 
-export function symbolLibraryFromDoc(doc: Doc, name: string, id = `user_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`): SymbolLibrary {
+export function symbolLibraryFromDoc(doc: Doc, name: string, id = `user_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`): SymbolLibrary {
   return { id, name, user: true, symbols: doc.symbols.map((s) => ({ name: s.name, art: s.art, type: s.type ?? 'static', slice: s.slice ?? null })) };
 }

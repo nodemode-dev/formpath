@@ -125,7 +125,7 @@ export function encodePsd(o: PsdOpts): Blob {
       const extra = new Out();
       extra.u32(0); extra.u32(0); extra.bytes(pascal(L.name));
       const uni = new Out(), name = Array.from(L.name);
-      uni.u32(name.length);
+      uni.u32(L.name.length);
       for (const c of name) { const code = c.codePointAt(0) ?? 63; if (code > 0xffff) { const v = code - 0x10000; uni.u16(0xd800 + (v >> 10)); uni.u16(0xdc00 + (v & 0x3ff)); } else uni.u16(code); }
       uni.pad(4);
       extra.tag('8BIM'); extra.tag('luni'); extra.u32(uni.n); extra.bytes(uni.done());

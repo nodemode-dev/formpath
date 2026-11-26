@@ -46,7 +46,7 @@ export function readAse(data: ArrayBuffer, name = 'Library'): SwatchLibrary {
     }
     at = body + len;
   }
-  const id = `user_${name.toLowerCase().replace(/\.ase$/, '').replace(/[^a-z0-9]+/g, '_')}`;
+  const id = `user_${name.toLowerCase().replace(/\.ase$/, '').replace(/[^\p{L}\p{N}]+/gu, '_')}`;
   return { id, name: name.replace(/\.ase$/i, ''), groups: groups.filter((g) => g.swatches.length), user: true };
 }
 
