@@ -995,3 +995,12 @@ The summary was `json.dumps(...)[:4000]`. Each Chinese character of a missing li
 - logged: v0.61.0 · 2026-11-26
 
 A font with CFF2 outlines (the variable builds of Source Han and Noto CJK among them) was refused by the subsetter, so its type went into a PDF as outlines. The instancer is now asked to downgrade CFF2, and a static CFF2 font is saved, reloaded and converted with fontTools' `convertCFF2ToCFF`. Run on fontTools' own variable CFF2 test font: the outlines and widths match the instancer's reference at two weights and draw in a PDF. No CFF2 font of Chinese, Japanese or Korean is installed here to try.
+
+### app/services/outlines.py, app/routers/outlines.py · outlines by character code for one-byte fonts, and Type 1 programs
+- refers-to: app/services/outlines.py :: _base, _type1, Program (builtin, cmaps, unicode, _simple, code, outline), glyphs (kind code, chars), SYMBOL_PAGES; app/routers/outlines.py :: font_outlines (enc)
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+`POST /api/fonts/outlines` takes a third kind, `code`, for a PDF's one-byte fonts, with `enc`: the base encoding's name, whether the font is flagged symbolic, and the `Differences` names by code. The answer holds an outline for each of the 256 codes that has one and, in `chars`, the character of each whose glyph name has a Unicode value in the Adobe glyph list (private use and control values are left out; the Latin ligatures are spelt as their letters). Finding the glyph follows the PDF rules: for a Type 1 or name-keyed CFF program the `Differences` name, then the base encoding's name, then the program's own encoding; for a TrueType program the name's Unicode value through the Unicode cmap, the Macintosh cmap, or the glyph's own name, and for a symbolic one the (3,0) cmap at 0xF000 plus the code first, then the (1,0) cmap.
+
+Type 1 programs (`FontFile`) are read with fontTools' `t1Lib` from memory: PFB segment headers are taken off, the encrypted part is found and the font parsed without a file on disk. A TrueType program whose `hmtx` table is cut short, which subsetters produce, no longer fails: its glyphs are drawn straight from `glyf`. Run directly on the embedded programs of 13 public PDFs (Type 1, Type 1C, multiple master, TrueType with and without a cmap) and through the window. A Type 1 font is a small PostScript program; fontTools reads it with its own limited interpreter, every failure is caught and answered as 422, and the 64 MiB limit applies.
