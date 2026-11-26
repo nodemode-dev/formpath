@@ -68,6 +68,16 @@ def resolve_fonts(wanted: list[dict], bundled: dict[str, tuple[str, bytes]] | No
     return found, missing
 
 
+def restricted(src: Path | tuple[str, bytes]) -> bool:
+    try:
+        from fontTools.ttLib import TTFont
+        with TTFont(io.BytesIO(src[1]) if isinstance(src, tuple) else src, fontNumber=0, lazy=True) as font:
+            os2 = font["OS/2"] if "OS/2" in font else None
+            return os2 is not None and bool(os2.fsType & (0x030E if os2.version >= 2 else 0x000E))
+    except Exception:
+        return False
+
+
 def relink(node: object, mapping: dict[str, str]) -> None:
     if isinstance(node, dict):
         linked = node.get("linked")
@@ -128,7 +138,7 @@ def build(
         plan.add("", f"{stem} report.txt", report.encode("utf-8"))
     summary = {
         "links": len(links), "fonts": len(fonts), "missingLinks": missing_links, "missingFonts": missing_fonts,
-        "files": [rel for rel, _ in plan.entries],
+        "restricted": [f"{family} {style}" for family, style, src in fonts if restricted(src)], "files": [rel for rel, _ in plan.entries],
     }
     if destination is None:
         out = io.BytesIO()

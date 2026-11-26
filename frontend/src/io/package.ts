@@ -14,7 +14,7 @@ export interface PackageOptions {
   report: boolean;
   zip?: boolean;
 }
-export interface PackageResult { links: number; fonts: number; missingLinks: string[]; missingFonts: string[]; missingMore?: number; files?: string[]; folder?: string; zip?: Blob }
+export interface PackageResult { links: number; fonts: number; missingLinks: string[]; missingFonts: string[]; restricted?: string[]; missingMore?: number; files?: string[]; folder?: string; zip?: Blob }
 
 export async function packageProject(p: Project, o: PackageOptions): Promise<PackageResult> {
   const { manifest, files } = serialize(p);

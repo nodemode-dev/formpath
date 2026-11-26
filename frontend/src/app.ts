@@ -1493,8 +1493,9 @@ export function startApp(): void {
     await engine.task(async () => {
       try {
         const r = await packageProject(p, { folder: String(v.folder).trim(), copyLinks: !!v.links, copyFonts: !!v.fonts, separateLinks: !!v.separate, relink: !!v.relink, report: !!v.report });
-        const miss = r.missingLinks.length + r.missingFonts.length;
-        toast(`Packaged ${r.links} ${r.links === 1 ? 'link' : 'links'} and ${r.fonts} ${r.fonts === 1 ? 'font' : 'fonts'} to ${r.folder ?? 'the Exports folder'}${miss ? `. Missing: ${[...r.missingLinks, ...r.missingFonts].join(', ')}` : '.'}`, miss ? 'error' : 'info');
+        const miss = r.missingLinks.length + r.missingFonts.length, held = r.restricted ?? [];
+        const told = !held.length ? '' : held.length === 1 ? ` The licence of ${held[0]} restricts embedding it in documents; check that it also lets you pass the font on before you share the package.` : ` The licences of ${held.join(', ')} restrict embedding them in documents; check that they also let you pass the fonts on before you share the package.`;
+        toast(`Packaged ${r.links} ${r.links === 1 ? 'link' : 'links'} and ${r.fonts} ${r.fonts === 1 ? 'font' : 'fonts'} to ${r.folder ?? 'the Exports folder'}${miss ? `. Missing: ${[...r.missingLinks, ...r.missingFonts].join(', ')}${told ? '.' : ''}` : '.'}${told}`, miss ? 'error' : 'info');
       } catch (err) { toast(message(err), 'error'); }
     });
   }
