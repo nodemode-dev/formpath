@@ -521,7 +521,8 @@ function layoutLines(n: TextNode): TextLayout {
     const list = para.list && p.length ? para.list : null;
     if (list) listNo++;
     const mst = p.length ? plainSt(p[0].st) : tail;
-    const marker: Item[] = list ? Array.from(listMarker(list, (list.start ?? 1) + listNo - 1), (ch) => ({ ch, st: mst, index: pIndex, syn: true })) : [];
+    const prtl = ((p[0]?.pl ?? 0) & 1) === 1, mtext = list ? listMarker(list, (list.start ?? 1) + listNo - 1) : '', sep = list && list.kind !== 'bullet' ? list.sep ?? '.' : '';
+    const marker: Item[] = Array.from(prtl && sep && mtext.endsWith(sep) ? [...sep].reverse().join('') + mtext.slice(0, mtext.length - sep.length) : mtext, (ch) => { const mir = prtl && sep.includes(ch) ? shaping?.mirror?.(ch) : null; return { ch, st: mst, index: pIndex, syn: true, ...(mir ? { mir } : {}) }; });
     const markerW = marker.reduce((s, it, k) => s + step(it, marker[k + 1]), 0), markerGap = marker.length ? mst.size * 0.5 : 0;
     let i = 0, lineNo = 0, hyphRun = 0;
     const wb = seaBreaks(p);
@@ -550,7 +551,7 @@ function layoutLines(n: TextNode): TextLayout {
         const firstLine = lineNo === 0, mIndent = para.indentLeft + para.indentFirst;
         const indent = firstLine ? (marker.length ? Math.max(para.indentLeft, mIndent + markerW + markerGap) : mIndent) : para.indentLeft;
         const availW = frame ? sx1 - sx0 - indent - para.indentRight : Infinity;
-        const lineAt = (frame ? sx0 - cells[col].x : startCol(col)) + indent, justified = !!frame && para.align.startsWith('justify');
+        const lineAt = (frame ? (prtl ? cells[col].x + cells[col].w - sx1 : sx0 - cells[col].x) : startCol(col)) + indent, justified = !!frame && para.align.startsWith('justify');
         let j = i, width = 0, shrink = 0, lastBreak = -1, end = p.length, hyphen = false;
         const cum: number[] = [], cumS: number[] = [];
         while (j < p.length) {
@@ -603,7 +604,7 @@ function layoutLines(n: TextNode): TextLayout {
         });
         const hyW = hy ? measure(hy, undefined).w : 0, lineW = acc + hyW;
         const lastLine = i >= p.length;
-        let x0 = (frame ? sx0 : startCol(col)) + indent, gx = J ? J.glyphDes / 100 : 1, alignAs: string = para.align;
+        let x0 = (frame ? sx0 : startCol(col)) + (prtl ? para.indentRight : indent), gx = J ? J.glyphDes / 100 : 1, alignAs: string = para.align;
         const align = para.align, extra = widths.map(() => 0);
         if (justified && (!lastLine || align === 'justify_all')) {
           let slack = availW - lineW;
@@ -640,7 +641,7 @@ function layoutLines(n: TextNode): TextLayout {
         }
         const glyphs: Glyph[] = [];
         if (firstLine && si === 0 && marker.length) {
-          let mx = x0 - (indent - mIndent);
+          let mx = prtl ? x0 + lineSpan + indent - mIndent - markerW : x0 - (indent - mIndent);
           marker.forEach((it, k) => { const w = step(it, marker[k + 1]); glyphs.push(place(it, mx, w, lineY, vertical)); mx += w; });
         }
         const pl = p[0]?.pl ?? 0, bidi = pl > 0 || visible.some((x) => !!x.lv || !!x.parts), ord = bidi ? visualOrder(visible, pl) : visible.map((_, k) => k);
