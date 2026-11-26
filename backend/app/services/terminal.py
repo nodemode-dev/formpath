@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import shutil
 import sys
 import threading
@@ -20,6 +21,7 @@ else:
 
 SCROLLBACK = 256 * 1024
 MIN_COLS, MIN_ROWS = 10, 4
+_MODE = re.compile(r"\x1b\[\?([\d;]+)([hl])")
 
 
 class Session:
@@ -40,6 +42,8 @@ class Session:
         self.gen = 0
         self.cols = 100
         self.rows = 30
+        self.paste = False
+        self.tail = ""
 
     def describe(self) -> dict:
         return {"id": self.id, "title": self.title, "cwd": self.cwd, "alive": self.alive, "kind": self.kind}
@@ -108,6 +112,14 @@ def _send(session: Session, text: str | None) -> None:
     call_in_loop(_deliver, session, text)
 
 
+def _modes(session: Session, text: str) -> None:
+    seen = session.tail + text
+    for m in _MODE.finditer(seen):
+        if "2004" in m.group(1).split(";"):
+            session.paste = m.group(2) == "h"
+    session.tail = seen[-32:]
+
+
 def _pump(session: Session, proc, gen: int) -> None:
     while True:
         try:
@@ -118,6 +130,7 @@ def _pump(session: Session, proc, gen: int) -> None:
             continue
         if session.gen != gen:
             return
+        _modes(session, text)
         session.keep(text)
         _send(session, text)
     if session.gen != gen:
@@ -130,6 +143,7 @@ def _spawn(session: Session) -> None:
     where = session.cwd if os.path.isdir(session.cwd) else str(Path.home())
     proc = PtyProcess.spawn(session.argv, cwd=where, env=session.env, dimensions=(session.rows, session.cols))
     session.proc = proc
+    session.paste, session.tail = False, ""
     session.alive = True
     threading.Thread(target=_pump, args=(session, proc, session.gen), name=f"pty-{session.id}-{session.gen}", daemon=True).start()
 
@@ -172,6 +186,15 @@ def write(sid: str, data: str) -> None:
     session = get(sid)
     if session.proc is not None and session.alive:
         session.proc.write(data)
+
+
+def type_line(sid: str, text: str) -> None:
+    session = get(sid)
+    if session.paste:
+        write(sid, "\x1b[200~" + text.replace("\x1b[201~", "") + "\x1b[201~")
+    else:
+        write(sid, re.sub(r"\s*(\r\n|\r|\n)\s*", " ", text).strip())
+    write(sid, "\r")
 
 
 def resize(sid: str, cols: int, rows: int) -> None:

@@ -203,7 +203,7 @@ def open_tab(prompt: str | None = None, cols: int = 100, rows: int = 30, fresh: 
     running = next((s for s in terminal.SESSIONS.values() if s.kind == "claude" and s.alive), None)
     if running is not None and not fresh and not resume:
         if prompt:
-            terminal.write(running.id, prompt + "\r")
+            terminal.type_line(running.id, prompt)
         return running.describe()
     found = info(fresh=True)
     if not found["installed"]:
