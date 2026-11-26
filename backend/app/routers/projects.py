@@ -10,11 +10,12 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from app.core import config
+from app.core.forms import LargeFormRoute
 from app.services import package as pkg
 from app.services import project_format as pf
 from app.services import sessions
 
-router = APIRouter(tags=["projects"])
+router = APIRouter(tags=["projects"], route_class=LargeFormRoute)
 NAME = re.compile(r"^[^/\\:*?\"<>|\x00-\x1f]{1,120}$")
 EXT = ".fpth"
 SUFFIXES = (EXT, ".zip")

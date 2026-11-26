@@ -908,3 +908,18 @@ Checked with `bash -n` and the `.bat` by reading; no Windows build has shown it.
 The digest leaves out each of the three new places while it is empty, so a file sealed by 0.58.0 gives the same body and reads whole after the update; no migration. Proved before the change with real files: 0.58.0 (ca994d3, a scratch copy) wrote `agent.json` with a Claude Code place, a first message and its seal through a file-backed keyring; the new code read the same file with the same key as `seal: ok`, the place kept and given as the setting, the three new places empty, and the file unchanged. Agent access (Ask, Allowed, Blocked) is not in this file in formpath; it lives in the window's own store and the engine's MCP gate, so the update does not touch it. `test_seal.py` writes a file of 0.58.0's shape with 0.58.0's seal formula and checks the same, then that later writes keep it sealed.
 
 `GET /api/claude/prefs` gives the four places and `sealBroken` to the window (key required, like the status), for the new fields in Preferences. The finder's sentence for a missing Codex, Cursor or Antigravity now starts with "your setting (empty)" and ends "or give its path in Preferences", as Claude Code's did; the two status tests say so.
+
+### app/core/forms.py, app/routers/projects.py · a document over 1024 KB saves
+- refers-to: app/core/forms.py :: LargeFormRequest, LargeFormRoute; app/routers/projects.py :: router, save, package, _manifest; app/core/config.py :: MAX_MANIFEST_BYTES
+- kind: fix
+- logged: v0.59.1 · 2026-11-26
+
+The owner: saving is broken and stops at 1024 KB. The window sends a save as a form with the whole document as one text field (`manifest`) and each image as a file part. The web framework under the engine reads a form's text fields with a ceiling of 1024 KB each, and answers "Part exceeded maximum size of 1024KB." above it. File parts have no such ceiling, which is why images of any size went through and the document itself did not. Nothing in formpath set that number; `_manifest` has always allowed 64 MiB. A drawing with a few thousand objects is past 1024 KB of text.
+
+Reproduced on the engine before the change: a document of 1,200 objects (659 KB of text) saved; one of 4,000 objects (2,199 KB) was refused with that sentence.
+
+`LargeFormRoute` is the route class of the projects router. It hands each request to the route as a `LargeFormRequest`, whose `form()` reads fields up to twice `MAX_MANIFEST_BYTES`. The engine's own check in `_manifest` then decides, with its own sentence and status (413, "The document is too large.") at 64 MiB. The ceiling is twice the limit and not equal to it so that the engine's sentence is the one a person sees just past the limit, not the framework's. Save, both package routes and every other form in this router get the same reading; what the window sends does not change, so an older window and this engine still understand each other.
+
+After the change, same engine, same test: 4,000 objects (2,199 KB) and 30,000 objects (16,652 KB) save, and the file read back holds the same document that was sent; 64 MiB and 10 bytes is refused with the engine's own sentence; the package route takes the 2,199 KB document.
+
+Not changed here: where a project is saved. Save still writes into the library folder by name, and an export still goes to the exports folder. Choosing a place in the system's own file window, and saving again to that place, is the next change.

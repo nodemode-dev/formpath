@@ -2,6 +2,12 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.59.1 · 2026-11-26
+
+- Saving a large drawing works. Save stopped with "Part exceeded maximum size of 1024KB." once the drawing itself, without its images, passed 1024 KB of data, which a few thousand objects do. The limit came from the web framework under the engine, not from FormPath, whose own limit for a drawing is 64 MiB and is now the one that applies. Collecting a project into a package had the same stop and is fixed with it.
+- Where a project is saved has not changed in this version: Save writes into the library folder, and an export goes to the exports folder. Choosing a place in the system's own file window is the next change.
+- Engine only. The three demos are not rebuilt and still say 0.59.0.
+
 ## 0.59.0 · 2026-11-20
 
 Telling FormPath where each agent program is. Nothing in this release has run on Windows or macOS yet.
