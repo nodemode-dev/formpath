@@ -895,10 +895,10 @@ function buildDefs(rd: Reader, doc: Doc): string[] {
   const listed = defs.filter((d) => d.kind === 'stylelist').flatMap((d) => tokenize(d.lines.join('\n')).filter((t) => t.t === 's').map((t) => (t.t === 's' ? t.v : '')));
   const gstyles: Doc['styles'] = [];
   for (const nm of listed) {
-    const st = rd.styles.get(nm);
-    if (!st || nm === '[Default]' || gstyles.some((g) => g.name === nm) || (!st.ap.items.length && !st.ap.effects.length)) continue;
+    const st = rd.styles.get(nm), shown = psUni(nm, rd.meta.cs);
+    if (!st || nm === '[Default]' || gstyles.some((g) => g.name === shown) || (!st.ap.items.length && !st.ap.effects.length)) continue;
     if (st.missing.length) sk.add(`graphic style effects with no equivalent (${[...new Set(st.missing)].join(', ')})`);
-    gstyles.push({ id: newId('gs'), name: nm, ap: st.ap, opacity: st.opacity, blend: st.blend });
+    gstyles.push({ id: newId('gs'), name: shown, ap: st.ap, opacity: st.opacity, blend: st.blend });
   }
   doc.styles = [...doc.styles, ...gstyles];
   doc.patterns = [...doc.patterns, ...patterns];
