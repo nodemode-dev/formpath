@@ -1,6 +1,6 @@
 import { parse, type Font, type PathCommand } from 'opentype.js';
 import { anchor, mul, transformPath } from '../engine/geometry';
-import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, setShaping, weightOf } from '../engine/text';
+import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, scriptOf, setShaping, weightOf, type BidiLevels, type ComplexRun } from '../engine/text';
 import type { Anchor, CharStyle, Mat, PathData, SubPath, TextNode } from '../engine';
 import { api, type FontInfo, type SimilarFont } from './api';
 
@@ -585,8 +585,99 @@ function featureGlyphs(font: Font, st: CharStyle, text: string, features: string
   return gs;
 }
 
+type Hb = typeof import('harfbuzzjs');
+type HbFont = InstanceType<Hb['Font']>;
+type BidiApi = ReturnType<typeof import('bidi-js').default>;
+let hb: Hb | null = null, hbBuf: InstanceType<Hb['Buffer']> | null = null, bidiApi: BidiApi | null = null, shaperLoad: Promise<void> | null = null;
+function loadShaper(): void {
+  if (shaperLoad) return;
+  shaperLoad = Promise.all([import('harfbuzzjs'), import('bidi-js')]).then(([h, b]) => { hb = h; hbBuf = new h.Buffer(); bidiApi = b.default(); fontsChanged(); onFace?.(); }).catch(() => undefined);
+}
+const isSfnt = (font: Font): boolean => { const b = rawData.get(font); if (!b || b.byteLength < 12) return false; const s = new DataView(b).getUint32(0); return s === 0x00010000 || s === 0x4f54544f || s === 0x74727565; };
+const hbFonts = new WeakMap<Font, { font: HbFont; upem: number } | null>();
+function hbFontOf(font: Font): { font: HbFont; upem: number } | null {
+  if (!hb) return null;
+  if (hbFonts.has(font)) return hbFonts.get(font) ?? null;
+  let out: { font: HbFont; upem: number } | null = null;
+  const buf = rawData.get(font);
+  if (buf && isSfnt(font)) { try { const face = new hb.Face(new hb.Blob(buf), 0); out = { font: new hb.Font(face), upem: face.upem || font.unitsPerEm || 1000 }; } catch { out = null; } }
+  hbFonts.set(font, out);
+  return out;
+}
+const SCRIPT_FONTS: Record<string, string[]> = {
+  Arab: ['Noto Naskh Arabic', 'Noto Sans Arabic', 'Geeza Pro', 'Segoe UI', 'Arial', 'Tahoma', 'Times New Roman', 'DejaVu Sans'],
+  Hebr: ['Noto Sans Hebrew', 'Arial Hebrew', 'Segoe UI', 'Arial', 'Times New Roman', 'DejaVu Sans'],
+  Syrc: ['Noto Sans Syriac', 'Estrangelo Edessa', 'Segoe UI Historic'],
+  Thaa: ['Noto Sans Thaana', 'MV Boli'],
+  Nkoo: ['Noto Sans NKo', 'Ebrima'],
+  Deva: ['Noto Sans Devanagari', 'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Nirmala UI', 'Mangal', 'Lohit Devanagari'],
+  Beng: ['Noto Sans Bengali', 'Kohinoor Bangla', 'Bangla Sangam MN', 'Nirmala UI', 'Vrinda', 'Lohit Bengali'],
+  Guru: ['Noto Sans Gurmukhi', 'Gurmukhi Sangam MN', 'Nirmala UI', 'Raavi', 'Lohit Gurmukhi'],
+  Gujr: ['Noto Sans Gujarati', 'Gujarati Sangam MN', 'Nirmala UI', 'Shruti', 'Lohit Gujarati'],
+  Orya: ['Noto Sans Oriya', 'Oriya Sangam MN', 'Nirmala UI', 'Kalinga', 'Lohit Odia'],
+  Taml: ['Noto Sans Tamil', 'Tamil Sangam MN', 'Nirmala UI', 'Latha', 'Lohit Tamil'],
+  Telu: ['Noto Sans Telugu', 'Telugu Sangam MN', 'Nirmala UI', 'Gautami', 'Lohit Telugu'],
+  Knda: ['Noto Sans Kannada', 'Kannada Sangam MN', 'Nirmala UI', 'Tunga', 'Lohit Kannada'],
+  Mlym: ['Noto Sans Malayalam', 'Malayalam Sangam MN', 'Nirmala UI', 'Kartika', 'Lohit Malayalam'],
+  Sinh: ['Noto Sans Sinhala', 'Sinhala Sangam MN', 'Nirmala UI', 'Iskoola Pota'],
+  Thai: ['Noto Sans Thai', 'Thonburi', 'Leelawadee UI', 'Tahoma'],
+  Laoo: ['Noto Sans Lao', 'Lao Sangam MN', 'Leelawadee UI', 'Lao UI'],
+  Khmr: ['Noto Sans Khmer', 'Khmer Sangam MN', 'Leelawadee UI', 'Khmer UI'],
+  Mymr: ['Noto Sans Myanmar', 'Myanmar Sangam MN', 'Myanmar Text'],
+  Tibt: ['Noto Serif Tibetan', 'Kokonor', 'Microsoft Himalaya'],
+  Mong: ['Noto Sans Mongolian', 'Mongolian Baiti'],
+};
+interface ScriptFace { font: Font; style: CharStyle }
+const scriptFaces = new Map<string, ScriptFace | null>(), facesPending = new Set<string>();
+async function resolveScriptFace(st: CharStyle, script: string, ch: string): Promise<ScriptFace | null> {
+  const ok = (f: Font | null): f is Font => !!f && isSfnt(f) && covers(f, ch) > 0;
+  const own = await fontFor(st.font, st.style).catch(() => null);
+  if (ok(own)) return { font: own, style: st };
+  const have = installedNames(await systemFonts().catch((): FontInfo[] => []));
+  for (const fam of (SCRIPT_FONTS[script] ?? []).filter((f) => f !== st.font && (!have.size || have.has(f.toLowerCase())))) {
+    const f = await fontFor(fam, st.style).catch(() => null);
+    if (ok(f)) return { font: f, style: { ...st, font: fam, axes: undefined } };
+  }
+  const hit = await api.coverFont(ch.codePointAt(0) ?? 0, []), f = hit ? await fontFor(hit.family, st.style).catch(() => null) : null;
+  return hit && ok(f) ? { font: f, style: { ...st, font: hit.family, axes: undefined } } : null;
+}
+function scriptFace(st: CharStyle, script: string, ch: string): ScriptFace | null {
+  const key = `${st.font}|${st.style}|${axesKey(st)}|${script}`, hit = scriptFaces.get(key);
+  if (hit !== undefined) return hit;
+  if (!facesPending.has(key)) {
+    facesPending.add(key);
+    void resolveScriptFace(st, script, ch).catch(() => null).then((p) => { scriptFaces.set(key, p); facesPending.delete(key); if (!p) return; ready.set(`${p.style.font}|${p.style.style}`, p.font); fontsChanged(); onFace?.(); });
+  }
+  return null;
+}
+function shapeComplex(st: CharStyle, text: string, start: number, end: number, rtl: boolean, script: string, features: string[]): ComplexRun | null {
+  const h = hb, buf = hbBuf;
+  if (!h || !buf) { loadShaper(); return null; }
+  let ch = '';
+  for (const c of text.slice(start, end)) if (scriptOf(c.codePointAt(0) ?? 0) === script) { ch = c; break; }
+  const pick = ch ? scriptFace(st, script, ch) : null, hf = pick ? hbFontOf(pick.font) : null;
+  if (!pick || !hf) return null;
+  hf.font.setVariations(hasAxes(pick.style) ? Object.entries(pick.style.axes ?? {}).map(([t, v]) => new h.Variation(t, v)) : []);
+  buf.reset();
+  buf.addText(text, start, end - start);
+  buf.setDirection(rtl ? h.Direction.RTL : h.Direction.LTR);
+  if (script !== 'Zzzz') buf.setScript(script);
+  buf.guessSegmentProperties();
+  h.shape(hf.font, buf, [...features.filter((f) => /^[a-z0-9]{4}$/.test(f)).map((f) => new h.Feature(f, 1)), ...(st.kerning === 'none' ? [new h.Feature('kern', 0)] : [])]);
+  const k = 1 / hf.upem;
+  return { face: pick.style, glyphs: buf.getGlyphInfosAndPositions().map((g) => ({ gid: g.codepoint, cl: g.cluster, ax: (g.xAdvance ?? 0) * k, dx: (g.xOffset ?? 0) * k, dy: (g.yOffset ?? 0) * k })) };
+}
+function bidiLevels(text: string): BidiLevels | null {
+  if (!bidiApi) { loadShaper(); return null; }
+  const r = bidiApi.getEmbeddingLevels(text);
+  return { levels: r.levels, paras: r.paragraphs };
+}
+
 export function installShaping(): void {
   setShaping({
+    complex: shapeComplex,
+    bidi: bidiLevels,
+    mirror: (ch) => bidiApi?.getMirroredCharacter(ch) ?? null,
     vertical: (st, text, features) => {
       const font = fontNow(st);
       if (!font) return null;
