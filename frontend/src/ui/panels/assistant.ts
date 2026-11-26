@@ -31,7 +31,7 @@ export class AssistantPanel {
     this.send.addEventListener('click', () => void this.ask());
     this.stop.addEventListener('click', () => { this.stopped = true; });
     this.undoTurn.addEventListener('click', () => this.undo());
-    this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void this.ask(); } e.stopPropagation(); });
+    this.input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void this.ask(); } });
   }
 
   toggle(on = this.el.hidden): void { setHidden(this.el, !on); if (on) this.input.focus(); }

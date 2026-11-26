@@ -1550,7 +1550,7 @@ export function startApp(): void {
   type Screen = 'standard' | 'menu' | 'full';
   let screen: Screen = 'standard', panelsHidden = false;
   const applyScreen = (): void => { root.classList.toggle('is-screen-menu', screen === 'menu'); root.classList.toggle('is-screen-full', screen === 'full'); root.classList.toggle('is-panels-hidden', panelsHidden || screen === 'full'); window.dispatchEvent(new Event('resize')); };
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && screen === 'full' && !anyDialogOpen()) { screen = 'standard'; applyScreen(); e.preventDefault(); } }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.isComposing && e.keyCode !== 229 && screen === 'full' && !anyDialogOpen()) { screen = 'standard'; applyScreen(); e.preventDefault(); } }, true);
 
   const toolCmd = (id: string): string => `tool-${id}`;
   for (const t of toolList()) commands.add({ id: toolCmd(t.id), label: t.label, run: () => engine.setTool(t.id) });

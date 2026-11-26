@@ -125,7 +125,7 @@ export class OptionsBar {
           if (box.value !== '' && Number.isFinite(v)) spec.set(v);
         };
         box.addEventListener('change', commit);
-        box.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { commit(); box.blur(); } else if (e.key === 'Escape') { box.value = committed; box.blur(); } });
+        box.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { commit(); box.blur(); } else if (e.key === 'Escape') { box.value = committed; box.blur(); } });
         sync.push(() => {
           const v = spec.get(), text = v === null ? '' : String(Math.round(v * 100) / 100);
           if (document.activeElement === box) return;

@@ -261,7 +261,7 @@ export class LayersPanel {
       name.textContent = nodeLabel(n);
       if (ok && v && v !== n.name) { if (n.kind === 'layer') this.engine.setLayer(n.id, { name: v }); else this.engine.setObjectProps({ name: v }, [n.id]); }
     };
-    input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') finish(true); if (ev.key === 'Escape') finish(false); });
+    input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.isComposing || ev.keyCode === 229) return; if (ev.key === 'Enter') finish(true); if (ev.key === 'Escape') finish(false); });
     input.addEventListener('blur', () => finish(true));
   }
 

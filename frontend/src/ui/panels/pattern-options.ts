@@ -34,7 +34,7 @@ export class PatternOptionsPanel {
     this.idle.append(empty('Select artwork and choose Object > Pattern > Make, or double-click a pattern swatch, to edit a pattern here.'), row(btn('Make Pattern', 'make-pattern')));
     const nameField = el('<label class="cv-props-field is-wide"><span class="cv-pf-label">Name</span></label>');
     nameField.appendChild(this.name);
-    this.name.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') this.name.blur(); });
+    this.name.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') this.name.blur(); });
     this.name.addEventListener('change', () => { const v = this.name.value.trim(); if (v) set({ name: v }); });
     this.type = selectCtl('Tile Type', TYPES, (v) => set({ type: v as PatternType }));
     this.brick = selectCtl('Brick Offset', BRICK, (v) => set({ brick: Number(v) }));

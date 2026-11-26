@@ -18,7 +18,7 @@ export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string
   const host = document.getElementById('overlay-root');
   if (host) host.appendChild(pop); else document.body.appendChild(pop);
   let picked = 0;
-  const label = (): void => { setText(btn.querySelector('.cv-dd-label') as HTMLElement, select.selectedOptions[0]?.textContent ?? ''); btn.disabled = select.disabled; };
+  const label = (): void => { const s = select.selectedOptions[0]?.textContent ?? '', tip = select.title || s; setText(btn.querySelector('.cv-dd-label') as HTMLElement, s); if (btn.title !== tip) btn.title = tip; btn.disabled = select.disabled; };
 
   const proto = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value') as PropertyDescriptor;
   Object.defineProperty(select, 'value', { configurable: true, get() { return proto.get?.call(select); }, set(v) { proto.set?.call(select, v); label(); } });
@@ -65,6 +65,7 @@ export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string
   btn.addEventListener('click', () => (pop.hidden ? open() : close()));
   search?.addEventListener('input', fill);
   pop.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
     const items = Array.from(list.querySelectorAll<HTMLElement>('.cv-dd-item'));
     if (e.key === 'Escape') { e.preventDefault(); close(); btn.focus(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (items.length) { picked = (picked + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; mark(); items[picked].scrollIntoView({ block: 'nearest' }); } return; }

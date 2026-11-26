@@ -27,7 +27,7 @@ export class HelpDialog extends Dialog {
     this.search.addEventListener('input', () => this.filter());
     const go = el<HTMLButtonElement>('<button type="button" class="cv-btn cv-btn-ghost">Ask</button>');
     go.addEventListener('click', () => void this.ask());
-    this.question.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void this.ask(); } e.stopPropagation(); });
+    this.question.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); void this.ask(); } });
     const askRow = el('<div class="cv-improve"></div>'); askRow.append(this.question, go);
     const body = el('<div class="cv-help"></div>'), side = el('<div class="cv-help-side"></div>');
     side.append(this.search, this.nav);

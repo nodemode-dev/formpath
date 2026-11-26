@@ -17,7 +17,7 @@ export class AttributesPanel {
   constructor(private readonly engine: Engine) {
     this.rule = seg([{ id: 'nonzero', label: 'Use Non-Zero Winding Fill Rule', icon: 'fillNonZero' }, { id: 'evenodd', label: 'Use Even-Odd Fill Rule', icon: 'fillEvenOdd' }], (v) => engine.setFillRule(v as FillRule), 'cv-attrp-rule');
     this.reverse = iconButton('reversePath', 'Reverse Path Direction', () => engine.pathOp('reverse'));
-    this.note.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { this.note.blur(); this.sync(); } });
+    this.note.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Escape') { this.note.blur(); this.sync(); } });
     this.note.addEventListener('change', () => { const v = this.note.value.trim(); engine.setObjectProps({ note: v || undefined }); });
     this.overFill = check('Overprint Fill', (v) => engine.setOverprint('fill', v));
     this.overStroke = check('Overprint Stroke', (v) => engine.setOverprint('stroke', v));

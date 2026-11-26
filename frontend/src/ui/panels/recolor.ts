@@ -96,7 +96,7 @@ export class RecolorDialog extends Dialog {
       b.addEventListener('click', () => this.applyGenerated(i));
       this.genStrips.push(b); strips.appendChild(b);
     }
-    this.genPrompt.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') void this.generatePalettes(); });
+    this.genPrompt.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') void this.generatePalettes(); });
     this.genGo.addEventListener('click', () => void this.generatePalettes());
     const genRow = el('<div class="cv-rc-gen-row"></div>');
     genRow.append(this.genPrompt, this.genGo);

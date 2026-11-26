@@ -4982,3 +4982,21 @@ The issue's picture shows a two-character text object in Noto Sans CJK TC whose 
 Seen in the built window with the test file: before, one object reading U+FFFD U+FFFD and two lines of type missing; after, no U+FFFD or unpaired surrogate in any object, the Big5 line and the UTF-16 line present, the font named in Chinese in the sentence, and the left-out sentence for the two fonts with unmapped codes. `npm test`: 61 pass.
 
 Not done, and the right next step once the reporter's file is here: drawing type that cannot be read as outlines from the font program embedded in the file (the reader never opens `FontFile`, `FontFile2` or `FontFile3`), so its shapes stay on the page; `/ActualText`; variable-length codes under a ToUnicode table.
+
+### src/ui/ fields, dialogs and pickers · a key the input method is using is left to it (issue 17)
+- refers-to: src/ui/dialogs.ts :: Dialog (the scrim's keydown), PromptDialog; src/ui/layers.ts :: rename; src/ui/file-dialog.ts; src/ui/titlebar-tools.ts :: the command search (keydown, fill); src/ui/dropdown.ts :: enhanceSelect (pop keydown, label); src/ui/options.ts; src/ui/rail.ts; src/app.ts :: the Escape that leaves full screen; src/ui/panels/ assistant.ts, help.ts, recolor.ts, generative.ts, pattern-options.ts, type.ts, spelling.ts, attributes.ts, graph-data.ts, kit.ts :: numField, slider, evalNumber
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+No key handler outside the canvas editor asked whether the key belonged to a composition. With a Chinese, Japanese or Korean input method the Enter that picks a candidate also sent the half-typed prompt (Assistant, Help, Recolor, AI Patterns), committed a half-typed name (a layer, a pattern, a tab stop's leader, Save As, the spelling change), ran the highlighted command in the title bar search, picked the highlighted font, or closed and accepted the dialog; Escape closed the dialog or the flyout instead of cancelling the composition. Each handler now returns first when `e.isComposing` is set or `e.keyCode` is 229 (WebKit sends the confirming Enter after `compositionend`, with 229 and no `isComposing`; WebView2 sends "Process", which never matched). The expression is written out at each site; there is no helper, so a reader of any one handler sees the whole rule.
+
+`Dialog`'s own scrim listener is registered before those of its subclasses, so there it also calls `stopImmediatePropagation`: the Enter handlers that `FormDialog`, New Document and Place put on the same scrim do not run for such a key. The Password prompt is not guarded; a password is not composed.
+
+Three small things for the same people, in the same files:
+- `evalNumber` reads full-width digits, point, comma, signs, brackets and units (an input method in its full-width mode types them): the text is normalised with NFKC first. Before, such an entry was thrown away and the field went back to the old value.
+- The title bar search also matches a command's label in the language shown (`t(label)`); typing the Chinese word for Undo found nothing, because only the English label was compared.
+- A menu button's tooltip is its current choice unless the select has a title of its own, so a font name cut short in the options bar (Noto Sans CJK TC, SC, JP and KR all read "Noto Sans C...") can be read in full. `label` writes `title` only when it differs.
+
+Run in headless Chrome, 4x CPU throttled, slow network: a layer renamed with a composition stays in the field after a 229 Enter and is committed by the real one; a full-width "123.5" in X moves the object to 123.5; the font button's tooltip reads the family. Layout shift 0, no console error. Not run: each of the other guarded fields one by one; WebKit.
+
+Looked at and left: the Content panel's head, the status bar's selection and the Appearance panel's head show a text object's own words through the translation walker, so an object reading "Copy" is shown translated there. Skipping those three elements would also stop "No Document" and "3 Objects" from being translated, so they need a `translate="no"` set with the label, which is its own change. The numeric fields of the options bar and the zoom field keep their handlers.

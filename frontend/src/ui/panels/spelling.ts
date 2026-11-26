@@ -71,7 +71,7 @@ export class SpellingDialog extends Dialog {
     this.button('Done', 'ghost', () => this.close()).classList.add('cv-btn-apart');
     this.list.addEventListener('click', (e) => { const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-list-row'); if (r?.dataset.key) { this.input.value = r.dataset.key; this.markSelected(); } });
     this.list.addEventListener('dblclick', () => void this.change(false));
-    this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void this.change(false); } });
+    this.input.addEventListener('keydown', (e) => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); void this.change(false); } });
   }
 
   async start(): Promise<void> {

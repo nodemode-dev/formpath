@@ -264,7 +264,7 @@ export class RetypePanel extends ModelPanel {
   constructor(engine: Engine, private readonly ensureFace: (family: string, style: string) => Promise<void>) {
     super(engine);
     this.keep = check('Keep the image under the live text', (v) => { this.keepImage = v; });
-    this.text.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') void this.find(); });
+    this.text.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') void this.find(); });
     this.go.addEventListener('click', () => void this.find());
     this.apply.addEventListener('click', () => void this.applyPicked());
     this.list.addEventListener('click', (e) => { const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-retypep-row'); if (r?.dataset.key) { this.picked = this.matches.findIndex((m) => `${m.family}|${m.style}` === r.dataset.key); this.sync(); } });

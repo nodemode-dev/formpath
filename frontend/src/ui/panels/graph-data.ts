@@ -39,7 +39,7 @@ export class GraphDataWindow {
     apply.addEventListener('click', () => this.apply());
     q(this.el, '[data-close]').addEventListener('click', () => this.close());
     this.entry.addEventListener('input', () => { this.set(this.at.r, this.at.c, this.entry.value); const cell = this.cell(this.at.r, this.at.c); if (cell) cell.value = this.entry.value; });
-    this.entry.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.focus(this.at.r + (e.shiftKey ? -1 : 1), this.at.c); } });
+    this.entry.addEventListener('keydown', (e) => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); this.focus(this.at.r + (e.shiftKey ? -1 : 1), this.at.c); } });
     this.grid.addEventListener('input', (e) => { const t = e.target as HTMLInputElement; const r = Number(t.dataset.r), c = Number(t.dataset.c); this.set(r, c, t.value); setValue(this.entry, t.value); });
     this.grid.addEventListener('focusin', (e) => { const t = e.target as HTMLInputElement; if (!t.dataset.r) return; this.at = { r: Number(t.dataset.r), c: Number(t.dataset.c) }; this.entry.value = t.value; this.mark(); });
     this.grid.addEventListener('keydown', (e) => {

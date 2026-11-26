@@ -64,7 +64,7 @@ export class Rail {
     box.appendChild(more);
     this.applyHidden();
     document.addEventListener('pointerdown', (e) => { if (!this.flyout.hidden && !this.flyout.contains(e.target as Node)) this.closeFlyout(); }, true);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.flyout.hidden) { e.preventDefault(); this.closeFlyout(); } }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.isComposing && e.keyCode !== 229 && !this.flyout.hidden) { e.preventDefault(); this.closeFlyout(); } }, true);
 
     const colors = q(root, '.cv-colors');
     colors.classList.add('cv-fs');

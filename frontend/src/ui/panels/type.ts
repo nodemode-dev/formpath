@@ -281,7 +281,7 @@ export class TabsPanel {
       const n = el(`<label class="cv-props-field"><span class="cv-pf-label"></span><span class="cv-num"><input type="text" maxlength="${max}" spellcheck="false"></span></label>`);
       setText(q(n, '.cv-pf-label'), label); n.title = title;
       const input = q<HTMLInputElement>(n, 'input');
-      input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') input.blur(); });
+      input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') input.blur(); });
       input.addEventListener('change', () => change(input.value));
       return { el: n, input };
     };
