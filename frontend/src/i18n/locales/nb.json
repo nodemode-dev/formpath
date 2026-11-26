@@ -2246,6 +2246,8 @@
 "No document is open.": "Ingen dokumenter er åpne.",
 "No errors recorded this session.": "Ingen feil registrert i denne økten.",
 "No files match the filter.": "Ingen filer samsvarer med filteret.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Ingen skrift på denne datamaskinen har {0}, så det vises som en tom boks. Installer en skrift med det tegnet og eksporter på nytt.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Ingen skrift på denne datamaskinen har {0}, så de vises som en tom boks. Installer en skrift med de tegnene og eksporter på nytt.",
 "No gap detection": "Ingen gapdeteksjon",
 "No installed font matched.": "Ingen installert skrift samsvarte.",
 "No installed fonts could be read for comparison.": "Ingen installerte skrifter kunne leses for sammenligning.",

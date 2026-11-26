@@ -2246,6 +2246,8 @@
 "No document is open.": "Nessun documento aperto.",
 "No errors recorded this session.": "Nessun errore registrato in questa sessione.",
 "No files match the filter.": "Nessun file corrisponde al filtro.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Nessun font su questo computer contiene {0}, quindi appare come un riquadro vuoto. Installa un font con quel carattere ed esporta di nuovo.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Nessun font su questo computer contiene {0}, quindi appaiono come un riquadro vuoto. Installa un font con quei caratteri ed esporta di nuovo.",
 "No gap detection": "Nessun rilevamento spazi",
 "No installed font matched.": "Nessun font installato corrispondente.",
 "No installed fonts could be read for comparison.": "Impossibile leggere alcun font installato per il confronto.",

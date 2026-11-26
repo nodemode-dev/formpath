@@ -2246,6 +2246,8 @@
 "No document is open.": "열려 있는 문서가 없습니다.",
 "No errors recorded this session.": "이 세션에서 기록된 오류가 없습니다.",
 "No files match the filter.": "필터와 일치하는 파일이 없습니다.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "이 컴퓨터의 어떤 글꼴에도 {0}이(가) 없으므로 빈 상자로 표시됩니다. 이 문자가 있는 글꼴을 설치하고 다시 내보내십시오.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "이 컴퓨터의 어떤 글꼴에도 {0}이(가) 없으므로 빈 상자로 표시됩니다. 이 문자들이 있는 글꼴을 설치하고 다시 내보내십시오.",
 "No gap detection": "간격 감지 안 함",
 "No installed font matched.": "일치하는 설치된 글꼴이 없습니다.",
 "No installed fonts could be read for comparison.": "비교할 설치된 글꼴을 읽을 수 없었습니다.",

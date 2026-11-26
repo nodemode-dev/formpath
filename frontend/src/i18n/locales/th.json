@@ -2246,6 +2246,8 @@
 "No document is open.": "ไม่มีเอกสารที่เปิดอยู่",
 "No errors recorded this session.": "ไม่มีข้อผิดพลาดที่บันทึกในเซสชันนี้",
 "No files match the filter.": "ไม่มีไฟล์ที่ตรงกับตัวกรอง",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "ไม่มีฟอนต์ใดในคอมพิวเตอร์เครื่องนี้ที่มี {0} จึงแสดงเป็นกล่องว่าง ให้ติดตั้งฟอนต์ที่มีอักขระนั้นแล้วส่งออกอีกครั้ง",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "ไม่มีฟอนต์ใดในคอมพิวเตอร์เครื่องนี้ที่มี {0} จึงแสดงเป็นกล่องว่าง ให้ติดตั้งฟอนต์ที่มีอักขระเหล่านั้นแล้วส่งออกอีกครั้ง",
 "No gap detection": "ไม่ตรวจจับช่องว่าง",
 "No installed font matched.": "ไม่มีฟอนต์ที่ติดตั้งอยู่ที่ตรงกัน",
 "No installed fonts could be read for comparison.": "ไม่สามารถอ่านฟอนต์ที่ติดตั้งเพื่อเปรียบเทียบได้",

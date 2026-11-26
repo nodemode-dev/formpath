@@ -2246,6 +2246,8 @@
 "No document is open.": "Není otevřen žádný dokument.",
 "No errors recorded this session.": "V této relaci nebyly zaznamenány žádné chyby.",
 "No files match the filter.": "Filtru neodpovídají žádné soubory.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Žádné písmo v tomto počítači nemá znak {0}, proto se zobrazí jako prázdný rámeček. Nainstalujte písmo s tímto znakem a exportujte znovu.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Žádné písmo v tomto počítači nemá znaky {0}, proto se zobrazí jako prázdný rámeček. Nainstalujte písmo s těmito znaky a exportujte znovu.",
 "No gap detection": "Bez zjišťování mezer",
 "No installed font matched.": "Žádné nainstalované písmo neodpovídá.",
 "No installed fonts could be read for comparison.": "Nainstalovaná písma nelze přečíst pro porovnání.",

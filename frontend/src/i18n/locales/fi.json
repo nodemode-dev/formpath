@@ -2246,6 +2246,8 @@
 "No document is open.": "Mitään asiakirjaa ei ole avoinna.",
 "No errors recorded this session.": "Tässä istunnossa ei ole kirjattu virheitä.",
 "No files match the filter.": "Mikään tiedosto ei vastaa suodatinta.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Millään tämän tietokoneen fontilla ei ole merkkiä {0}, joten se näkyy tyhjänä ruutuna. Asenna fontti, jossa merkki on, ja vie uudelleen.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Millään tämän tietokoneen fontilla ei ole merkkejä {0}, joten ne näkyvät tyhjinä ruutuina. Asenna fontti, jossa merkit ovat, ja vie uudelleen.",
 "No gap detection": "Ei aukkojen tunnistusta",
 "No installed font matched.": "Asennettua fonttia ei löytynyt.",
 "No installed fonts could be read for comparison.": "Asennettuja fontteja ei voitu lukea vertailua varten.",

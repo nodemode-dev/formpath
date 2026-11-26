@@ -2246,6 +2246,8 @@
 "No document is open.": "Tidak ada dokumen yang terbuka.",
 "No errors recorded this session.": "Tidak ada kesalahan tercatat pada sesi ini.",
 "No files match the filter.": "Tidak ada file yang cocok dengan filter.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Tidak ada font di komputer ini yang memiliki {0}, jadi karakter itu tampil sebagai kotak kosong. Pasang font dengan karakter tersebut lalu ekspor lagi.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Tidak ada font di komputer ini yang memiliki {0}, jadi karakter-karakter itu tampil sebagai kotak kosong. Pasang font dengan karakter-karakter tersebut lalu ekspor lagi.",
 "No gap detection": "Tanpa deteksi celah",
 "No installed font matched.": "Tidak ada font terpasang yang cocok.",
 "No installed fonts could be read for comparison.": "Tidak ada font terpasang yang dapat dibaca untuk perbandingan.",

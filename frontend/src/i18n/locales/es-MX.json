@@ -2246,6 +2246,8 @@
 "No document is open.": "No hay ningún documento abierto.",
 "No errors recorded this session.": "No se registró ningún error en esta sesión.",
 "No files match the filter.": "Ningún archivo coincide con el filtro.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Ninguna fuente de esta computadora tiene {0}, así que aparece como un cuadro vacío. Instale una fuente con ese carácter y vuelva a exportar.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Ninguna fuente de esta computadora tiene {0}, así que aparecen como un cuadro vacío. Instale una fuente con esos caracteres y vuelva a exportar.",
 "No gap detection": "Sin detección de huecos",
 "No installed font matched.": "Ninguna fuente instalada coincide.",
 "No installed fonts could be read for comparison.": "No se pudo leer ninguna fuente instalada para compararla.",

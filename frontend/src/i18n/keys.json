@@ -2297,6 +2297,8 @@
 "No document is open.",
 "No errors recorded this session.",
 "No files match the filter.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.",
 "No gap detection",
 "No Illustrator artwork found in this file",
 "No installed font matched.",

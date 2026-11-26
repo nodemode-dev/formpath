@@ -2246,6 +2246,8 @@
 "No document is open.": "開いているドキュメントがありません。",
 "No errors recorded this session.": "このセッションで記録されたエラーはありません。",
 "No files match the filter.": "フィルターに一致するファイルはありません。",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "このコンピューターには {0} を含むフォントがないため、空の四角で表示されます。この文字を含むフォントをインストールして、もう一度書き出してください。",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "このコンピューターには {0} を含むフォントがないため、空の四角で表示されます。これらの文字を含むフォントをインストールして、もう一度書き出してください。",
 "No gap detection": "隙間を検出しない",
 "No installed font matched.": "一致するインストール済みフォントがありません。",
 "No installed fonts could be read for comparison.": "比較用にインストール済みフォントを読み取れませんでした。",

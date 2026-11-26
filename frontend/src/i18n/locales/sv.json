@@ -2246,6 +2246,8 @@
 "No document is open.": "Inget dokument är öppet.",
 "No errors recorded this session.": "Inga fel registrerade under den här sessionen.",
 "No files match the filter.": "Inga filer matchar filtret.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Inget typsnitt på den här datorn har {0}, så det visas som en tom ruta. Installera ett typsnitt med det tecknet och exportera igen.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Inget typsnitt på den här datorn har {0}, så de visas som en tom ruta. Installera ett typsnitt med de tecknen och exportera igen.",
 "No gap detection": "Ingen gapavkänning",
 "No installed font matched.": "Inget installerat typsnitt matchade.",
 "No installed fonts could be read for comparison.": "Inga installerade typsnitt kunde läsas för jämförelse.",

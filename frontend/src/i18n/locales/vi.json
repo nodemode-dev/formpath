@@ -2246,6 +2246,8 @@
 "No document is open.": "Không có tài liệu nào đang mở.",
 "No errors recorded this session.": "Phiên này chưa ghi nhận lỗi nào.",
 "No files match the filter.": "Không có tệp nào khớp với bộ lọc.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Không phông chữ nào trên máy tính này có {0}, nên ký tự đó hiển thị thành ô trống. Hãy cài một phông chữ có ký tự đó rồi xuất lại.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Không phông chữ nào trên máy tính này có {0}, nên các ký tự đó hiển thị thành ô trống. Hãy cài một phông chữ có các ký tự đó rồi xuất lại.",
 "No gap detection": "Không phát hiện khe hở",
 "No installed font matched.": "Không có phông chữ đã cài nào khớp.",
 "No installed fonts could be read for comparison.": "Không thể đọc phông chữ đã cài nào để so sánh.",

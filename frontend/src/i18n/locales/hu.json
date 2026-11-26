@@ -2246,6 +2246,8 @@
 "No document is open.": "Nincs megnyitott dokumentum.",
 "No errors recorded this session.": "Ebben a munkamenetben nem rögzítettek hibát.",
 "No files match the filter.": "Egy fájl sem felel meg a szűrőnek.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Ezen a számítógépen egyik betűtípusban sincs meg a(z) {0} karakter, ezért üres négyzetként jelenik meg. Telepítsen egy betűtípust, amelyben megvan ez a karakter, majd exportáljon újra.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Ezen a számítógépen egyik betűtípusban sincsenek meg a(z) {0} karakterek, ezért üres négyzetként jelennek meg. Telepítsen egy betűtípust, amelyben megvannak ezek a karakterek, majd exportáljon újra.",
 "No gap detection": "Nincs hézagérzékelés",
 "No installed font matched.": "Egyetlen telepített betűtípus sem egyezett.",
 "No installed fonts could be read for comparison.": "Egyetlen telepített betűtípust sem lehetett beolvasni az összehasonlításhoz.",

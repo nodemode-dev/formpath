@@ -2246,6 +2246,8 @@
 "No document is open.": "没有打开的文档。",
 "No errors recorded this session.": "本次会话未记录任何错误。",
 "No files match the filter.": "没有与筛选条件匹配的文件。",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "此计算机上没有任何字体包含 {0}，因此它显示为空框。请安装包含该字符的字体并重新导出。",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "此计算机上没有任何字体包含 {0}，因此它们显示为空框。请安装包含这些字符的字体并重新导出。",
 "No gap detection": "不检测间隙",
 "No installed font matched.": "没有匹配的已安装字体。",
 "No installed fonts could be read for comparison.": "无法读取已安装的字体进行比较。",

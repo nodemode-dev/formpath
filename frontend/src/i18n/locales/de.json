@@ -2246,6 +2246,8 @@
 "No document is open.": "Es ist kein Dokument geöffnet.",
 "No errors recorded this session.": "In dieser Sitzung wurden keine Fehler aufgezeichnet.",
 "No files match the filter.": "Keine Dateien entsprechen dem Filter.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Keine Schrift auf diesem Computer enthält {0}, daher erscheint es als leeres Kästchen. Installieren Sie eine Schrift mit diesem Zeichen und exportieren Sie erneut.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Keine Schrift auf diesem Computer enthält {0}, daher erscheinen sie als leeres Kästchen. Installieren Sie eine Schrift mit diesen Zeichen und exportieren Sie erneut.",
 "No gap detection": "Keine Lückenerkennung",
 "No installed font matched.": "Keine installierte Schrift gefunden.",
 "No installed fonts could be read for comparison.": "Es konnten keine installierten Schriften zum Vergleich gelesen werden.",

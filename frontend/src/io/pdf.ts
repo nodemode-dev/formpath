@@ -759,7 +759,7 @@ export function glyphNotes(missing: string[]): string[] {
   const emoji = missing.filter(colourEmoji), other = missing.filter((ch) => !colourEmoji(ch));
   return [
     ...(emoji.length ? [emoji.length === 1 ? `Colour emoji cannot be embedded in a PDF, so ${listed(emoji)} shows as an empty box. Use a character from a symbol font instead.` : `Colour emoji cannot be embedded in a PDF, so ${listed(emoji)} show as an empty box. Use a character from a symbol font instead.`] : []),
-    ...(other.length ? [`No font on this computer has ${listed(other)}, so ${other.length === 1 ? 'it shows' : 'they show'} as an empty box. Install a font with ${other.length === 1 ? 'that character' : 'those characters'} and export again.`] : []),
+    ...(other.length ? [other.length === 1 ? `No font on this computer has ${listed(other)}, so it shows as an empty box. Install a font with that character and export again.` : `No font on this computer has ${listed(other)}, so they show as an empty box. Install a font with those characters and export again.`] : []),
   ];
 }
 

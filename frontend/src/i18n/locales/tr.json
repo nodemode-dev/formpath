@@ -2246,6 +2246,8 @@
 "No document is open.": "Açık belge yok.",
 "No errors recorded this session.": "Bu oturumda kaydedilen hata yok.",
 "No files match the filter.": "Filtreyle eşleşen dosya yok.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Bu bilgisayardaki hiçbir yazı tipinde {0} yok, bu nedenle boş bir kutu olarak görünür. Bu karakteri içeren bir yazı tipi yükleyip yeniden dışa aktarın.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Bu bilgisayardaki hiçbir yazı tipinde {0} yok, bu nedenle boş kutular olarak görünürler. Bu karakterleri içeren bir yazı tipi yükleyip yeniden dışa aktarın.",
 "No gap detection": "Boşluk algılama yok",
 "No installed font matched.": "Eşleşen yüklü yazı tipi yok.",
 "No installed fonts could be read for comparison.": "Karşılaştırma için hiçbir yüklü yazı tipi okunamadı.",

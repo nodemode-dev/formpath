@@ -2246,6 +2246,8 @@
 "No document is open.": "Нет открытого документа.",
 "No errors recorded this session.": "В этом сеансе ошибок не зарегистрировано.",
 "No files match the filter.": "Нет файлов, подходящих под фильтр.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Ни в одном шрифте на этом компьютере нет символа {0}, поэтому он отображается как пустой прямоугольник. Установите шрифт с этим символом и экспортируйте снова.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Ни в одном шрифте на этом компьютере нет символов {0}, поэтому они отображаются как пустой прямоугольник. Установите шрифт с этими символами и экспортируйте снова.",
 "No gap detection": "Без обнаружения зазоров",
 "No installed font matched.": "Подходящих установленных шрифтов нет.",
 "No installed fonts could be read for comparison.": "Не удалось прочитать установленные шрифты для сравнения.",
