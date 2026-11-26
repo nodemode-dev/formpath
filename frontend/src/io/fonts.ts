@@ -637,9 +637,9 @@ interface ScriptFace { font: Font; style: CharStyle }
 const scriptFaces = new Map<string, ScriptFace | null>(), facesPending = new Set<string>();
 async function resolveScriptFace(st: CharStyle, script: string, ch: string): Promise<ScriptFace | null> {
   const ok = (f: Font | null): f is Font => !!f && isSfnt(f) && covers(f, ch) > 0;
-  const own = await fontFor(st.font, st.style).catch(() => null);
-  if (ok(own)) return { font: own, style: st };
   const have = installedNames(await systemFonts().catch((): FontInfo[] => []));
+  const own = !have.size || have.has(st.font.toLowerCase()) ? await fontFor(st.font, st.style).catch(() => null) : null;
+  if (ok(own)) return { font: own, style: st };
   for (const fam of (SCRIPT_FONTS[script] ?? []).filter((f) => f !== st.font && (!have.size || have.has(f.toLowerCase())))) {
     const f = await fontFor(fam, st.style).catch(() => null);
     if (ok(f)) return { font: f, style: { ...st, font: fam, axes: undefined } };

@@ -315,7 +315,7 @@ const JOINS: Join[] = ['miter', 'round', 'bevel'];
 const WIN: Record<number, string> = { 128: '€', 130: '‚', 131: 'ƒ', 132: '„', 133: '…', 134: '†', 135: '‡', 136: 'ˆ', 137: '‰', 138: 'Š', 139: '‹', 140: 'Œ', 142: 'Ž', 145: '‘', 146: '’', 147: '“', 148: '”', 149: '•', 150: '–', 151: '\u2014', 152: '˜', 153: '™', 154: 'š', 155: '›', 156: 'œ', 158: 'ž', 159: 'Ÿ' };
 const GLYPH: Record<string, string> = { space: ' ', exclam: '!', quotedbl: '"', numbersign: '#', dollar: '$', percent: '%', ampersand: '&', quotesingle: "'", quoteright: '’', quoteleft: '‘', parenleft: '(', parenright: ')', asterisk: '*', plus: '+', comma: ',', hyphen: '-', minus: '−', period: '.', slash: '/', zero: '0', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', colon: ':', semicolon: ';', less: '<', equal: '=', greater: '>', question: '?', at: '@', bracketleft: '[', backslash: '\\', bracketright: ']', asciicircum: '^', underscore: '_', grave: '`', braceleft: '{', bar: '|', braceright: '}', asciitilde: '~', bullet: '•', endash: '–', emdash: '\u2014', quotedblleft: '“', quotedblright: '”', fi: 'fi', fl: 'fl', ff: 'ff', ffi: 'ffi', ffl: 'ffl', ellipsis: '…', copyright: '©', registered: '®', trademark: '™', degree: '°', dagger: '†', daggerdbl: '‡', section: '§', paragraph: '¶', periodcentered: '·', guillemotleft: '«', guillemotright: '»', nbspace: ' ' };
 
-const MARKS: Record<string, string> = { grave: '̀', acute: '́', circumflex: '̂', tilde: '̃', macron: '̄', breve: '̆', dotaccent: '̇', dieresis: '̈', ring: '̊', hungarumlaut: '̋', caron: '̌', cedilla: '̧', ogonek: '̨', commaaccent: '̧' };
+const MARKS: Record<string, number> = { grave: 0x300, acute: 0x301, circumflex: 0x302, tilde: 0x303, macron: 0x304, breve: 0x306, dotaccent: 0x307, dieresis: 0x308, ring: 0x30a, hungarumlaut: 0x30b, caron: 0x30c, cedilla: 0x327, ogonek: 0x328, commaaccent: 0x327 };
 const LETTERS: Record<string, string> = { AE: 'Æ', ae: 'æ', OE: 'Œ', oe: 'œ', Oslash: 'Ø', oslash: 'ø', Lslash: 'Ł', lslash: 'ł', Eth: 'Ð', eth: 'ð', Thorn: 'Þ', thorn: 'þ', germandbls: 'ß', dotlessi: 'ı', Dcroat: 'Đ', dcroat: 'đ', exclamdown: '¡', questiondown: '¿', cent: '¢', sterling: '£', yen: '¥', Euro: '€', currency: '¤', florin: 'ƒ', multiply: '×', divide: '÷', plusminus: '±', mu: 'µ', ordfeminine: 'ª', ordmasculine: 'º', quotesinglbase: '‚', quotedblbase: '„', guilsinglleft: '‹', guilsinglright: '›', perthousand: '‰', fraction: '⁄', onequarter: '¼', onehalf: '½', threequarters: '¾', onesuperior: '¹', twosuperior: '²', threesuperior: '³', brokenbar: '¦', logicalnot: '¬', dieresis: '¨', acute: '´', cedilla: '¸', macron: '¯', circumflex: 'ˆ', tilde: '˜', caron: 'ˇ', breve: '˘', dotaccent: '˙', ring: '˚', ogonek: '˛', hungarumlaut: '˝', Scommaaccent: 'Ș', scommaaccent: 'ș', Tcommaaccent: 'Ţ', tcommaaccent: 'ţ' };
 
 function glyphChar(name: string): string {
@@ -325,7 +325,7 @@ function glyphChar(name: string): string {
   const u = /^uni([0-9A-Fa-f]{4})$/.exec(name) ?? /^u([0-9A-Fa-f]{4,6})$/.exec(name);
   if (u) { const cp = parseInt(u[1], 16); return cp < 32 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xf8ff) || cp >= 0xf0000 ? '' : String.fromCodePoint(cp); }
   const m = /^([A-Za-z]|dotlessi)([a-z]+)$/.exec(name), mark = m ? MARKS[m[2]] : undefined;
-  if (m && mark) { const made = ((m[1] === 'dotlessi' ? 'i' : m[1]) + mark).normalize('NFC'); if (made.length === 1) return made; }
+  if (m && mark) { const made = ((m[1] === 'dotlessi' ? 'i' : m[1]) + String.fromCharCode(mark)).normalize('NFC'); if (made.length === 1) return made; }
   if (name.includes('_')) { const parts = name.split('.')[0].split('_').map(glyphChar); return parts.every(Boolean) ? parts.join('') : ''; }
   const base = name.split('.')[0];
   return base !== name ? glyphChar(base) : '';
@@ -841,16 +841,18 @@ class Painter {
       return next;
     }
     const act = this.actual;
-    if (act && lost && act.t.trim()) { if (act.used) return next; act.used = true; text = act.t; ink = adv; lost = 0; gaps.clear(); }
+    const spoken = !!act && lost > 0 && !!act.t.trim();
+    if (act && spoken) { if (act.used) return next; act.used = true; text = act.t; ink = adv; lost = 0; gaps.clear(); }
     if (lost && (await this.shapes(f, glyphs, gs, start, size))) return next;
     if (lost) this.skipped.add(`characters of type in ${f.shown} that the file gives no Unicode value for`);
     if (!text.trim()) return next;
     const xf = mul(gs.ctm, mul(start, [gs.th, 0, 0, -1, 0, gs.rise]));
     const filled = gs.tr === 1 || gs.tr === 5 ? NONE : gs.fill, stroked = gs.tr === 1 || gs.tr === 2 || gs.tr === 5 || gs.tr === 6 ? gs.stroke : NONE;
     const base: CharStyle = { ...DEFAULT_CHAR, font: f.family, style: f.style, size, fill: filled, stroke: stroked, strokeWidth: stroked.type === 'none' ? 0 : gs.lw, tracking: gs.tc ? Math.round((gs.tc / Math.max(0.01, size)) * 1000) : 0 };
-    const body = text.replace(/\s+$/, ''), space = emOf(cssFont(base, 100), ' '), spans: Span[] = [];
+    const turned = hasRtl(text) && !spoken ? readingOrder(text.replace(/\s+$/, ''), gaps) : null;
+    const body = turned ? turned.text : text.replace(/\s+$/, ''), space = emOf(cssFont(base, 100), ' '), spans: Span[] = [];
     let from = 0;
-    for (const [at, em] of gaps) {
+    for (const [at, em] of turned ? turned.gaps : gaps) {
       if (at >= body.length) break;
       if (at > from) spans.push({ text: body.slice(from, at), style: base });
       spans.push({ text: ' ', style: { ...base, tracking: Math.round((em - space) * 1000) } });
@@ -1280,6 +1282,49 @@ function outlineOf(cmds: Array<string | number>): PathData {
   }
   flush();
   return out;
+}
+
+const MIRROR: Record<string, string> = { '(': ')', ')': '(', '[': ']', ']': '[', '{': '}', '}': '{', '<': '>', '>': '<' };
+const rtl = (c: string): boolean => { const u = c.charCodeAt(0); return (u >= 0x590 && u <= 0x8ff) || (u >= 0xfb1d && u <= 0xfdff) || (u >= 0xfe70 && u <= 0xfefc); };
+const hasRtl = (s: string): boolean => { for (let i = 0; i < s.length; i++) if (rtl(s[i])) return true; return false; };
+const FORMS = new Map<string, number>();
+for (let q = 0xfe80, base = '', k = 0; q <= 0xfefc; q++) { const c = String.fromCharCode(q), b = c.normalize('NFKC'); k = b === base ? k + 1 : 0; base = b; FORMS.set(c, k); }
+
+function readingOrder(seen: string, gaps: Map<number, number>): { text: string; gaps: Map<number, number> } {
+  const cps = Array.from(seen), n = cps.length, kind = cps.map((c) => (rtl(c) ? 2 : /\p{Nd}/u.test(c) ? 1 : /\p{L}/u.test(c) ? 3 : /\s/.test(c) ? 4 : 0)), order = cps.map((_, i) => i), turn = cps.map(() => false);
+  const flip = (a: number, b: number): void => { for (; a < b; a++, b--) { const t = order[a]; order[a] = order[b]; order[b] = t; } };
+  const spans = (lo: number, hi: number, is: (k: number) => boolean, mid: (k: number) => boolean, each: (a: number, b: number) => void): void => {
+    for (let a = lo; a <= hi; a++) {
+      if (!is(kind[order[a]])) continue;
+      let b = a;
+      for (let c = a + 1; c <= hi && (is(kind[order[c]]) || mid(kind[order[c]])); c++) if (is(kind[order[c]])) b = c;
+      each(a, b);
+      a = b;
+    }
+  };
+  let strong = 0;
+  for (let i = n - 1; i >= 0 && !strong; i--) if (kind[i] === 2 || kind[i] === 3) strong = kind[i];
+  const back = (a: number, b: number): void => { flip(a, b); for (let i = a; i <= b; i++) turn[order[i]] = false; };
+  if (strong === 2) {
+    flip(0, n - 1);
+    turn.fill(true);
+    spans(0, n - 1, (k) => k === 1 || k === 3, (k) => k === 0 || k === 4, (a, b) => { if (order.slice(a, b + 1).some((i) => kind[i] === 3)) back(a, b); else spans(a, b, (k) => k === 1, (k) => k === 0, back); });
+  } else {
+    spans(0, n - 1, (k) => k === 2, (k) => k !== 3, (a, b) => { flip(a, b); for (let i = a; i <= b; i++) turn[order[i]] = true; spans(a, b, (k) => k === 1, (k) => k === 0, flip); });
+  }
+  const from: number[] = [], to: number[] = [], out = new Map<number, number>();
+  let at = 0, text = '';
+  for (const c of cps) { from.push(at); at += c.length; }
+  const whole = !order.some((i, p) => {
+    const u = cps[i].charCodeAt(0), form = FORMS.get(cps[i]);
+    if (u >= 0xfb50 && u <= 0xfdff) return true;
+    if (form === undefined) return false;
+    const before = p > 0 && kind[order[p - 1]] === 2, after = p + 1 < n && kind[order[p + 1]] === 2;
+    return ((form === 1 || form === 3) && !before) || ((form === 2 || form === 3) && !after);
+  });
+  for (const i of order) { to[i] = text.length; text += turn[i] && MIRROR[cps[i]] ? MIRROR[cps[i]] : whole && kind[i] === 2 && cps[i].charCodeAt(0) >= 0xfb1d ? cps[i].normalize('NFKC') : cps[i]; }
+  for (const [old, em] of [...gaps].map(([g, em]) => [to[from.indexOf(g)], em]).filter(([g]) => g !== undefined).sort((x, y) => x[0] - y[0])) out.set(old, em);
+  return { text, gaps: out };
 }
 
 const codeBytes = (space: number[][], b: Uint8Array, i: number): number => (space.some((s) => s[0] === 1 && b[i] >= s[1] && b[i] <= s[2]) ? 1 : space.some((s) => s[0] === 2) && i + 1 < b.length ? 2 : 1);
