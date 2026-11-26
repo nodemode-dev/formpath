@@ -893,7 +893,7 @@ dependencies = [
 
 [[package]]
 name = "formpath"
-version = "0.59.1"
+version = "0.60.0"
 dependencies = [
  "objc2",
  "objc2-app-kit",

@@ -2,6 +2,35 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.60.0 · 2026-11-26
+
+Typing and reading text that is not English: Chinese, Japanese, Korean and other scripts (issue 17). Run in a Chromium window on Linux with composition events sent by a test driver; no real input method on Windows, macOS or Linux has typed into this build yet.
+
+- Type tool: the words you are composing with an input method (Bopomofo, Cangjie, Pinyin, Japanese, Hangul and others) now show at the caret while you type them, in the text's own size. Before, nothing showed until the words were confirmed.
+- Type tool: the candidate window follows the caret and the size of the text, also after a click, a zoom or a pan.
+- Type tool: the keys an input method is using are left to it. On macOS and Linux the Enter that confirms a word also added a new line, and Backspace, the arrows, Tab and Escape acted on the text as well.
+- Type tool: words still being composed are kept when you click elsewhere or change tool. They were thrown away.
+- Type tool: choosing a font or a style while editing no longer ends the edit, and the next keys go into the text. Opening the font menu ended it, and the keys that followed switched tools or deleted the object.
+- Type tool: Backspace removes a whole emoji (a family, a flag) in one press; a double click selects a word in Chinese, Japanese and accented text; AltGr letters (Polish and others) no longer run Select All or Undo; pasted text that arrives decomposed is joined.
+- Opening a PDF or a PDF-compatible .ai file: characters the file gives no Unicode value for are no longer set as replacement characters (the two question marks in a diamond). The message after opening says that characters were left out, and for which font. Their shapes are not drawn yet.
+- Opening a PDF: type in fonts that use the older Chinese, Japanese and Korean encodings (Big5, GB, Shift-JIS, EUC, KS) and the UTF-16 ones is read. It came in empty or wrong.
+- Opening a PDF: a font named in Chinese, Japanese or Korean is named readably in the message about fonts that are not installed, and layer names in UTF-8 or UTF-16LE are read.
+- Names, prompts and number fields: Enter and Escape are left to an input method that is composing, so confirming a word no longer sends the prompt, commits a half-typed name or closes the dialog. Number fields read full-width digits.
+- The search in the title bar also finds a command by its name in the language shown.
+- A font name cut short in the options bar shows in full when the pointer rests on it.
+- A character past the common range (rarer Chinese characters, emoji) is no longer cut in half by Glyph Touch or in a long object name, which showed as a replacement character.
+- Libraries of swatches, symbols and brushes named in Chinese, Japanese, Korean, Cyrillic, Greek or Thai no longer replace one another when saved.
+- When a font lacks a character, outlines for Traditional Chinese, Hong Kong, Japanese and Korean text use a font of that region first. Type with OpenType features or variable axes no longer shows an empty box for such a character.
+- Exported files keep their names. A file named in Chinese was written as `_.pdf` by the desktop app, and a batch of such files could overwrite one another.
+- A project that holds half of a split character opens again. It saved and then failed to open.
+- The terminal no longer freezes when a program prints bytes that are not UTF-8, and on macOS and Linux a shell started by the app with no language set uses UTF-8.
+- Check Spelling no longer marks Chinese, Japanese, Thai or Cyrillic words as misspelt.
+- Variables and Graph Data read a CSV or TSV that is not UTF-8 (Big5, Shift-JIS, GBK, UTF-16 as Excel writes them); a DXF with a code page and an SVG that declares another encoding are read in it. They came in as replacement characters.
+- Agents on Windows: `./formpath mcp` reads and writes UTF-8, so text in Chinese sent by an outside agent no longer ends the connection or arrives as other characters.
+- A PSD layer named with an emoji or a rarer Chinese character keeps its last character.
+- Not in this release: Arabic and Hebrew still run left to right, Indic scripts are not shaped, and Thai has no word breaking; type whose font is not installed is still left out of a PDF without a message; shortcuts are still matched by key position, so AZERTY and QWERTZ keep that behaviour.
+- The three demos are not rebuilt and still say 0.59.0.
+
 ## 0.59.1 · 2026-11-26
 
 - Saving a large drawing works. Save stopped with "Part exceeded maximum size of 1024KB." once the drawing itself, without its images, passed 1024 KB of data, which a few thousand objects do. The limit came from the web framework under the engine, not from FormPath, whose own limit for a drawing is 64 MiB and is now the one that applies. Collecting a project into a package had the same stop and is fixed with it.
