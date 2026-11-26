@@ -12,9 +12,9 @@ def config() -> str:
     return json.dumps({"mcpServers": {"formpath": server}})
 
 
-def lookup():
+def lookup(name: str = "agent_lookup"):
     import importlib.util
-    spec = importlib.util.spec_from_file_location("formpath_agent_lookup", os.path.join(ROOT, "backend", "app", "services", "agent_lookup.py"))
+    spec = importlib.util.spec_from_file_location("formpath_" + name, os.path.join(ROOT, "backend", "app", "services", name + ".py"))
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -31,7 +31,8 @@ def main(argv: list[str]) -> int:
         print(config())
         return 0
     env = finder.child_env(found.path, keep=frozenset(k for k in os.environ if k.startswith("CLAUDE")))
-    return subprocess.call(finder.start_argv([found.path, "--mcp-config", config(), "--allowedTools", "mcp__formpath", *argv], env), env=env)
+    cmd = lookup("agent_shim").unshim([found.path, "--mcp-config", config(), "--allowedTools", "mcp__formpath", *argv], env.get("PATH"))
+    return subprocess.call(finder.start_argv(cmd, env), env=env)
 
 
 if __name__ == "__main__":
