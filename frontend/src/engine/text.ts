@@ -226,7 +226,7 @@ function seaBreaks(p: Item[]): Uint8Array | null {
 }
 function orient(out: Item[]): Item[] {
   for (const it of out) {
-    if (it.ch === '\n') continue;
+    if (it.ch === '\n' || it.parts) continue;
     const cls = verticalClass(it.ch), vs = shaping?.vertical?.(it.st, it.ch, it.st.features)?.[0];
     const up = !!it.st.upright || cls === 'upright' || (cls === 'turned' && !!vs?.sub && vs.gid > 0);
     it.up = up;
@@ -243,7 +243,7 @@ function smallOf(st: CharStyle): CharStyle {
   return s;
 }
 function items(spans: Span[], vertical = false): Item[] {
-  return vertical ? orient(itemsOf(spans)) : itemsOf(spans, true);
+  return vertical ? orient(itemsOf(spans, true, true)) : itemsOf(spans, true);
 }
 interface BidiText extends BidiLevels { text: string }
 function bidiOf(spans: Span[]): BidiText | null {
@@ -266,7 +266,7 @@ function segmentsOf(bx: BidiText, at: number, len: number): Seg[] {
   }
   return out;
 }
-function itemsOf(spans: Span[], complex = false): Item[] {
+function itemsOf(spans: Span[], complex = false, vertical = false): Item[] {
   const out: Item[] = [];
   const bx = complex ? bidiOf(spans) : null;
   let i = 0;
@@ -292,7 +292,7 @@ function itemsOf(spans: Span[], complex = false): Item[] {
       if (piece === '\n' || piece === '\r' || piece === '\r\n') { out.push(piece.length > 1 ? { ch: '\n', st, index: i, len: piece.length } : { ch: '\n', st, index: i }); i += piece.length; continue; }
       if (!bx) { plain(piece); continue; }
       for (const sg of segmentsOf(bx, i, piece.length)) {
-        const run = sg.shape && shaping?.complex && !(st.caps === 'small' && !smcp && /\p{Ll}/u.test(bx.text.slice(sg.a, sg.b))) ? shaping.complex(st, bx.text, sg.a, sg.b, sg.lv % 2 === 1, sg.script, feats) : null;
+        const run = sg.shape && shaping?.complex && !(vertical && st.upright) && !(st.caps === 'small' && !smcp && /\p{Ll}/u.test(bx.text.slice(sg.a, sg.b))) ? shaping.complex(st, bx.text, sg.a, sg.b, sg.lv % 2 === 1, sg.script, feats) : null;
         if (!run) { plain(bx.text.slice(sg.a, sg.b)); continue; }
         const by = new Map<number, GlyphPart[]>(), adv = new Map<number, number>(), fc = new Map<number, CharStyle>();
         for (const g of run.glyphs) {
@@ -317,7 +317,8 @@ function itemsOf(spans: Span[], complex = false): Item[] {
   }
   for (const it of out) if (joinsCh(it.ch)) it.j = true;
   if (bx) for (const it of out) {
-    it.lv = bx.levels[it.index] ?? 0; it.pl = bx.paras.find((p) => it.index >= p.start && it.index <= p.end)?.level ?? 0;
+    const flat = vertical && !!it.st.upright;
+    it.lv = flat ? 0 : bx.levels[it.index] ?? 0; it.pl = flat ? 0 : bx.paras.find((p) => it.index >= p.start && it.index <= p.end)?.level ?? 0;
     const m = it.lv % 2 && !it.parts && it.gid === undefined ? shaping?.mirror?.(it.ch) : null;
     if (m) it.mir = m;
   }
@@ -924,7 +925,6 @@ function bidiIndexAt(l: Line, x: number): number {
   return after && at >= last ? l.end : at;
 }
 export function stepVisual(n: TextNode, caret: number, dir: 1 | -1): number | null {
-  if (n.vertical) return null;
   const lay = layoutText(n), path = n.mode === 'path', li = lay.lines.findIndex((x) => caret >= x.start && caret <= x.end), l = lay.lines[li];
   if (path ? !lay.complex : !l?.bidi) return null;
   const gs = path ? lay.glyphs : l.glyphs, stops = new Set<number>(path ? [] : [l.start, l.end]);
