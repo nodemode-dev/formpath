@@ -2,6 +2,25 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.62.0 · 2026-11-26
+
+The five things 0.61.0 left open under issue 17. Tried in a Chromium window on Linux, on the desktop app under a virtual display on Linux, on public files, and for the Windows parts under Wine; nothing in this release has run on real Windows or macOS, and no real input method has typed into it.
+
+- Arabic, Persian, Urdu, Hebrew, Devanagari, Bengali, Tamil and the other Indian scripts, Thai with marks, Khmer, Myanmar and Tibetan are joined, ligated and reordered, and right-to-left text reads right to left with numbers and brackets in place. When the chosen font does not have the script, an installed font that has it is used. The caret, clicks, selection and the arrow keys follow such text. Text in other scripts sets exactly as before.
+- Exporting such text: PDF, SVG, EPS and DXF look like the canvas, and text copied from the PDF comes out in reading order.
+- Opening a PDF: unreadable type in one-byte fonts is kept as shapes too. That is how LibreOffice writes Chinese, so a label like the one in issue 17 made that way is drawn, where 0.61.0 left it out. Type whose glyphs carry names that say nothing was shown as wrong characters and is now drawn as shapes. Fonts under a CMap inside the file are read, vertical metrics are followed, and a file's ActualText supplies the characters where it has them.
+- Opening a PDF: accented letters named in the file's own encoding are read ("Rozúčtování" lost five of its letters), and Arabic and Hebrew are stored in reading order.
+- Double clicking a project, or choosing Open With, opens it in FormPath, also when its name or folder is in Chinese or has spaces. It did nothing before. On Windows and Linux, opening a project while FormPath is running opens it in the running window instead of an error about the engine. A file that is missing or is not a project gives a clear message.
+- Windows: `formpath.bat` passes `key=value`, empty and quoted arguments to its commands as typed.
+- Windows: a Chat message with several lines, quotes, `%` or Chinese text reaches Claude Code whole, and can no longer start another program.
+- Windows: Chinese, Japanese and Korean text in the terminal panel uses the system's font for that language.
+- Pressing Escape to close an input method's suggestions no longer closes the panel guide.
+- Exporting a PDF: a font whose licence forbids embedding is no longer put into the file. Its type is drawn as shapes in that font, and the export says so.
+- Graphic style names in an .ai file show in their own script, and Find Similar Fonts says a font is not installed in your language.
+- New parts, all under MIT or Apache-2.0 and listed in NOTICE.md: harfbuzzjs and bidi-js for shaping (loaded only when a document has such text; nothing is fetched from outside the app), and the Tauri single-instance plugin on Windows and Linux.
+- Not in this release: vertical type is not shaped; a PDF that places every letter on its own, as a browser's print to PDF does, still opens as one object per letter; the terminal panel can still take the caret from a field after a slow start, and it measures emoji one cell too narrow (both are in the module the Form apps share, and a change note for it is written).
+- The three demos are not rebuilt and still say 0.59.0.
+
 ## 0.61.0 · 2026-11-26
 
 The rest of issue 17: what 0.60.0 found and left. Tried on public PDFs of the pdf.js test corpus and on PDFs made here with real embedded Chinese fonts, in a Chromium window on Linux; nothing in this release has run on Windows or macOS yet, and no real input method has typed into it.
