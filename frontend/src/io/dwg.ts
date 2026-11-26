@@ -25,8 +25,8 @@ const num = (v: number): string => String(v);
 const deg = (r: number): number => (r * 180) / Math.PI;
 
 class Rd {
-  constructor(readonly b: Bits, readonly s: Bits | null, readonly h: Bits, readonly ver: number) {}
-  t(): string { return this.ver >= 21 ? (this.s ? this.s.tuStr() : '') : this.b.tvCp(); }
+  constructor(readonly b: Bits, readonly s: Bits | null, readonly h: Bits, readonly ver: number, readonly cp?: string) {}
+  t(): string { return this.ver >= 21 ? (this.s ? this.s.tuStr() : '') : this.b.tvCp(this.cp); }
 }
 
 interface Common {
@@ -153,7 +153,7 @@ function build(sec: Sections, classes: Map<number, ClassInfo>, omap: Map<number,
       if (!entity && !isTable) continue;
       if (hs > end || hs < b0.pos) throw new DwgError('Bad handle stream position.');
       const str = ver >= 21 ? stringStream(d, hs, base) : null;
-      const r = new Rd(new Bits(d, hs, b0.pos), str, new Bits(d, end, hs), ver);
+      const r = new Rd(new Bits(d, hs, b0.pos), str, new Bits(d, end, hs), ver, sec.cp);
       const c = common(r, handle, entity);
       commonHandles(r, c);
       if (isTable) { table(r, kind, c, handle, tables); continue; }
@@ -465,7 +465,7 @@ function assemble(sec: Sections, recs: Rec[], t: Tables, unreadable: number, fai
   const hdr = readHeader(sec);
   const layerName = (h: number): string => t.layers.get(h)?.name ?? '0';
   const file: DwgFile = {
-    version: sec.tag, units: hdr.units, metric: hdr.metric, layers: new Map(), styles: new Map(), blocks: new Map(), ents: [], layouts: ['Model'],
+    version: sec.tag, units: hdr.units, metric: hdr.metric, layers: new Map(), styles: new Map(), blocks: new Map(), ents: [], layouts: ['Model'], codepage: sec.cp,
     linetypes: new Map(), lineScale: hdr.ltscale, extents: hdr.extents, native: { version: sec.tag, objects: recs.length, unreadable, failures },
   };
   for (const L of t.layers.values()) file.layers.set(L.name, { name: L.name, color: Math.abs(L.color) || 7, rgb: L.rgb, lw: L.lw, off: L.off || L.frozen });

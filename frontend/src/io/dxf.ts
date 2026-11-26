@@ -10,7 +10,7 @@ import { instanceArt } from '../engine/symbolism';
 import { fill as fillItem, gradientAt, linearGradient, resolvePaint, stop, stroke as strokeItem, toRgb } from '../engine/paint';
 import { DEFAULT_CHAR, DEFAULT_PARA, layoutText } from '../engine/text';
 import type { Anchor, Color, Doc, LayerNode, Mat, PathData, Pt, Project, Rect, SubPath, TextNode, VNode } from '../engine';
-import { decodeText } from './text-decode';
+import { cadEscapes, decodeText } from './text-decode';
 
 export type DxfUnit = 'unitless' | 'in' | 'ft' | 'yd' | 'mi' | 'mm' | 'cm' | 'm' | 'km' | 'pt' | 'px';
 export const DXF_UNITS: ReadonlyArray<readonly [DxfUnit, string]> = [['mm', 'Millimeters'], ['cm', 'Centimeters'], ['m', 'Meters'], ['km', 'Kilometers'], ['in', 'Inches'], ['ft', 'Feet'], ['yd', 'Yards'], ['mi', 'Miles'], ['pt', 'Points'], ['px', 'Pixels']];
@@ -23,7 +23,7 @@ type Pair = [number, string];
 interface Ent { type: string; c: Pair[] }
 interface Layer { name: string; color: number; rgb: number | null; lw: number; off: boolean }
 interface Block { name: string; base: Pt; ents: Ent[] }
-export interface DxfFile { version: string; units: DxfUnit; metric: boolean; layers: Map<string, Layer>; styles: Map<string, string>; blocks: Map<string, Block>; ents: Ent[]; layouts: string[] }
+export interface DxfFile { version: string; units: DxfUnit; metric: boolean; layers: Map<string, Layer>; styles: Map<string, string>; blocks: Map<string, Block>; ents: Ent[]; layouts: string[]; codepage?: string }
 export interface DxfImportOptions { units: DxfUnit; scale: number; layout: string; merge: boolean; fit: 'actual' | 'artboard' }
 
 const g = (e: Ent, code: number, d = ''): string => { for (const [k, v] of e.c) if (k === code) return v; return d; };
@@ -45,7 +45,7 @@ export function parseDxf(text: string): DxfFile {
   for (let i = 0; i + 1 < lines.length; i += 2) {
     const code = parseInt(lines[i].trim(), 10);
     if (!Number.isFinite(code)) { i--; continue; }
-    pairs.push([code, lines[i + 1].replace(/\s+$/, '').replace(/\\U\+([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))]);
+    pairs.push([code, cadEscapes(lines[i + 1].replace(/\s+$/, ''))]);
   }
   if (!pairs.some(([k, v]) => k === 0 && v === 'SECTION')) throw new Error('This file is not a readable DXF.');
   const file: DxfFile = { version: '', units: 'unitless', metric: false, layers: new Map(), styles: new Map(), blocks: new Map(), ents: [], layouts: ['Model'] };
@@ -73,6 +73,7 @@ export function parseDxf(text: string): DxfFile {
           if (v === '$ACADVER') file.version = val.trim();
           if (v === '$INSUNITS') file.units = INSUNITS[parseInt(val, 10)] ?? 'unitless';
           if (v === '$MEASUREMENT') file.metric = parseInt(val, 10) === 1;
+          if (v === '$DWGCODEPAGE') file.codepage = CODE_PAGES[val.trim().toUpperCase()];
         }
       } else if (name === 'TABLES') {
         for (const r of records(i + 2, j)) {
@@ -211,11 +212,11 @@ function bspline(deg: number, knots: number[], ctrl: Pt[], weights: number[], cl
 }
 
 function mtextPlain(s: string): string {
-  return s.replace(/\\P/g, '\n').replace(/\\~/g, ' ').replace(/\\S([^;]*);/g, (_, x: string) => x.replace(/[#^]/g, '/'))
-    .replace(/\\[fFHWQTACcp][^;]*;/g, '').replace(/\\[LlOoKkNX]/g, '').replace(/\\U\+([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+  return cadEscapes(s.replace(/\\P/g, '\n').replace(/\\~/g, ' ').replace(/\\S([^;]*);/g, (_, x: string) => x.replace(/[#^]/g, '/'))
+    .replace(/\\[fFHWQTACcp][^;]*;/g, '').replace(/\\[LlOoKkNX]/g, ''))
     .replace(/\\\\/g, '\u0000').replace(/[{}]/g, '').replace(/\u0000/g, '\\');
 }
-const textPlain = (s: string): string => s.replace(/%%[cC]/g, 'Ø').replace(/%%[dD]/g, '°').replace(/%%[pP]/g, '±').replace(/%%[uUoOkK]/g, '').replace(/%%%/g, '%').replace(/\\U\+([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+const textPlain = (s: string, cp?: string): string => cadEscapes(s, cp, true);
 
 function fontFrom(file: string): string {
   if (/times/.test(file)) return 'Times New Roman';
@@ -336,7 +337,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
           const at = useAlign ? { x: gn(e, 11), y: gn(e, 21) } : { x: gn(e, 10), y: gn(e, 20) };
           const dy = v === 2 ? -height / 2 : v === 3 ? -height : v === 1 ? height * 0.25 : 0;
           const rot = gn(e, 50, 0), ra = (rot * Math.PI) / 180;
-          text(e, ctx, textPlain(g(e, 1)), { x: at.x - Math.sin(ra) * dy, y: at.y + Math.cos(ra) * dy }, height, rot, h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left', Math.round(gn(e, 41, 1) * 100));
+          text(e, ctx, textPlain(g(e, 1), file.codepage), { x: at.x - Math.sin(ra) * dy, y: at.y + Math.cos(ra) * dy }, height, rot, h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left', Math.round(gn(e, 41, 1) * 100));
           break;
         }
         case 'MTEXT': {
@@ -419,7 +420,7 @@ export function dxfToDoc(file: DxfFile, o: DxfImportOptions, title: string): { d
             const local = mul(mul(mul([1, 0, 0, 1, gn(e, 10), gn(e, 20)], R), [1, 0, 0, 1, cI * dx, r * dy]), mul([sx, 0, 0, sy, 0, 0], [1, 0, 0, 1, -b.base.x, -b.base.y]));
             run(b.ents, { ...sub, m: mul(mul(ctx.m, ocs(e)), local) }, false);
           }
-          for (const at of attribs) if ((gn(at, 70, 0) & 1) === 0) { const h = gn(at, 72, 0), useAlign = h !== 0 && h !== 3 && h !== 5 && has(at, 11); text(at, ctx, textPlain(g(at, 1)), useAlign ? { x: gn(at, 11), y: gn(at, 21) } : { x: gn(at, 10), y: gn(at, 20) }, gn(at, 40, 2.5), gn(at, 50, 0), h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left'); }
+          for (const at of attribs) if ((gn(at, 70, 0) & 1) === 0) { const h = gn(at, 72, 0), useAlign = h !== 0 && h !== 3 && h !== 5 && has(at, 11); text(at, ctx, textPlain(g(at, 1), file.codepage), useAlign ? { x: gn(at, 11), y: gn(at, 21) } : { x: gn(at, 10), y: gn(at, 20) }, gn(at, 40, 2.5), gn(at, 50, 0), h === 1 || h === 4 ? 'center' : h === 2 ? 'right' : 'left'); }
           break;
         }
         case 'POINT': skip('points'); break;
