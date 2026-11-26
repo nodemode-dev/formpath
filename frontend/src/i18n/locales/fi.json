@@ -3567,6 +3567,7 @@
 "The library is in {0}": "Kirjasto on sijainnissa {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Kirjasto on sijainnissa {0}, asetettu muuttujalla FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Kirjasto on sijainnissa {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Fontin {0} lisenssi ei salli sen upottamista asiakirjaan, joten sen teksti piirrettiin ääriviivoina fontilla {1}. Se näyttää samalta, mutta sitä ei voi valita eikä hakea tekstinä.",
 "The manual says nothing about that. Try other words, or search it.": "Käyttöohje ei kerro tästä mitään. Kokeile muita sanoja tai hae siitä.",
 "The menus go to the menu bar from the next start.": "Valikot siirtyvät valikkoriville seuraavasta käynnistyksestä alkaen.",
 "The menus stay in the window from the next start.": "Valikot pysyvät ikkunassa seuraavasta käynnistyksestä alkaen.",
@@ -4124,5 +4125,7 @@
 "x Height": "x-korkeus",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "Fonttia {0} ei ole asennettu tähän tietokoneeseen"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Fontteja {0} ei ole tässä tietokoneessa, joten niiden teksti ladottiin fontilla {1} samoihin kirjainten kohtiin ja merkit, joita fontissa {2} ei ole, muilla fonteilla. Asenna fontit ja vie uudelleen, niin niiden oma ulkoasu säilyy.",
+"{0} is not installed on this computer": "Fonttia {0} ei ole asennettu tähän tietokoneeseen",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Fonttia {0} ei ole tässä tietokoneessa, joten sen teksti ladottiin fontilla {1} samoihin kirjainten kohtiin ja merkit, joita fontissa {2} ei ole, muilla fonteilla. Asenna fontti ja vie uudelleen, niin sen oma ulkoasu säilyy."
 }

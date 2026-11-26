@@ -3567,6 +3567,7 @@
 "The library is in {0}": "Biblioteket ligger i {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Biblioteket ligger i {0}, satt av FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Biblioteket ligger i {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Lisensen for {0} tillater ikke at den bygges inn i et dokument, så teksten ble tegnet som konturer i {1}. Den ser lik ut, men kan ikke merkes eller søkes i som tekst.",
 "The manual says nothing about that. Try other words, or search it.": "Håndboken sier ingenting om det. Prøv andre ord, eller søk i den.",
 "The menus go to the menu bar from the next start.": "Menyene flyttes til menylinjen fra neste oppstart.",
 "The menus stay in the window from the next start.": "Menyene blir værende i vinduet fra neste oppstart.",
@@ -4124,5 +4125,7 @@
 "x Height": "x-høyde",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "Skriften {0} er ikke installert på denne datamaskinen"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Skriftene {0} finnes ikke på denne datamaskinen, så teksten ble satt med {1} på de samme bokstavposisjonene, med andre skrifter for tegn som {2} mangler. Installer dem og eksporter på nytt for å beholde deres eget utseende.",
+"{0} is not installed on this computer": "Skriften {0} er ikke installert på denne datamaskinen",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Skriften {0} finnes ikke på denne datamaskinen, så teksten ble satt med {1} på de samme bokstavposisjonene, med andre skrifter for tegn som {2} mangler. Installer den og eksporter på nytt for å beholde dens eget utseende."
 }

@@ -3567,6 +3567,7 @@
 "The library is in {0}": "Библиотека находится в {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Библиотека находится в {0}, задано через FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Библиотека находится в {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Лицензия шрифта {0} не разрешает встраивать его в документ, поэтому его текст нарисован контурами шрифта {1}. Он выглядит так же, но его нельзя выделить или найти как текст.",
 "The manual says nothing about that. Try other words, or search it.": "В руководстве об этом ничего нет. Попробуйте другие слова или воспользуйтесь поиском.",
 "The menus go to the menu bar from the next start.": "Меню переместятся в строку меню со следующего запуска.",
 "The menus stay in the window from the next start.": "Меню останутся в окне со следующего запуска.",
@@ -4124,5 +4125,7 @@
 "x Height": "x-высота",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "Шрифт {0} не установлен на этом компьютере"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Шрифтов {0} нет на этом компьютере, поэтому их текст набран шрифтом {1} с теми же позициями букв, а символы, которых нет в {2}, взяты из других шрифтов. Установите эти шрифты и экспортируйте снова, чтобы сохранить их собственный вид.",
+"{0} is not installed on this computer": "Шрифт {0} не установлен на этом компьютере",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Шрифта {0} нет на этом компьютере, поэтому его текст набран шрифтом {1} с теми же позициями букв, а символы, которых нет в {2}, взяты из других шрифтов. Установите шрифт и экспортируйте снова, чтобы сохранить его собственный вид."
 }

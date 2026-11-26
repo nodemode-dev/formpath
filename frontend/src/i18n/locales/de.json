@@ -3567,6 +3567,7 @@
 "The library is in {0}": "Die Bibliothek befindet sich in {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Die Bibliothek befindet sich in {0}, festgelegt durch FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Die Bibliothek befindet sich in {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Die Lizenz von {0} erlaubt nicht, sie in ein Dokument einzubetten, daher wurde ihr Text als Pfade in {1} gezeichnet. Er sieht gleich aus, lässt sich aber nicht als Text auswählen oder durchsuchen.",
 "The manual says nothing about that. Try other words, or search it.": "Das Handbuch sagt dazu nichts. Versuchen Sie andere Wörter oder suchen Sie darin.",
 "The menus go to the menu bar from the next start.": "Die Menüs wandern ab dem nächsten Start in die Menüleiste.",
 "The menus stay in the window from the next start.": "Die Menüs bleiben ab dem nächsten Start im Fenster.",
@@ -4124,5 +4125,7 @@
 "x Height": "x-Höhe",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "Die Schrift {0} ist auf diesem Computer nicht installiert"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Die Schriften {0} sind nicht auf diesem Computer, daher wurde ihr Text in {1} an denselben Buchstabenpositionen gesetzt, mit anderen Schriften für Zeichen, die {2} fehlen. Installieren Sie sie und exportieren Sie erneut, um ihr eigenes Aussehen zu behalten.",
+"{0} is not installed on this computer": "Die Schrift {0} ist auf diesem Computer nicht installiert",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Die Schrift {0} ist nicht auf diesem Computer, daher wurde ihr Text in {1} an denselben Buchstabenpositionen gesetzt, mit anderen Schriften für Zeichen, die {2} fehlen. Installieren Sie sie und exportieren Sie erneut, um ihr eigenes Aussehen zu behalten."
 }

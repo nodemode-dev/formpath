@@ -3567,6 +3567,7 @@
 "The library is in {0}": "La bibliothèque se trouve dans {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "La bibliothèque se trouve dans {0}, défini par FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "La bibliothèque se trouve dans {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "La licence de {0} ne permet pas de l’incorporer dans un document : son texte a donc été vectorisé en contours avec {1}. Il a le même aspect, mais ne peut être ni sélectionné ni recherché comme texte.",
 "The manual says nothing about that. Try other words, or search it.": "Le manuel ne dit rien à ce sujet. Essayez d’autres mots, ou lancez une recherche.",
 "The menus go to the menu bar from the next start.": "Les menus passeront dans la barre des menus au prochain démarrage.",
 "The menus stay in the window from the next start.": "Les menus resteront dans la fenêtre au prochain démarrage.",
@@ -4124,5 +4125,7 @@
 "x Height": "Hauteur d’x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "La police {0} n'est pas installée sur cet ordinateur"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Les polices {0} ne sont pas sur cet ordinateur : leur texte a donc été composé en {1} aux mêmes positions de lettres, avec d’autres polices pour les caractères absents de {2}. Installez-les et exportez à nouveau pour conserver leur apparence.",
+"{0} is not installed on this computer": "La police {0} n'est pas installée sur cet ordinateur",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "La police {0} n’est pas sur cet ordinateur : son texte a donc été composé en {1} aux mêmes positions de lettres, avec d’autres polices pour les caractères absents de {2}. Installez-la et exportez à nouveau pour conserver son apparence."
 }

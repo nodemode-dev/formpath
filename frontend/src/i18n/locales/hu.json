@@ -3567,6 +3567,7 @@
 "The library is in {0}": "A könyvtár helye: {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "A könyvtár helye: {0}, a FORMPATH_LIBRARY_DIR állítja be.",
 "The library is in {0}.": "A könyvtár helye: {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "A(z) {0} licence nem engedi, hogy dokumentumba ágyazzák, ezért a szövege körvonalként lett megrajzolva {1} betűtípussal. Ugyanúgy néz ki, de szövegként nem jelölhető ki és nem kereshető.",
 "The manual says nothing about that. Try other words, or search it.": "A kézikönyv nem szól erről. Próbálkozzon más szavakkal, vagy keressen benne.",
 "The menus go to the menu bar from the next start.": "A menük a következő indítástól a menüsorba kerülnek.",
 "The menus stay in the window from the next start.": "A menük a következő indítástól az ablakban maradnak.",
@@ -4124,5 +4125,7 @@
 "x Height": "x-magasság",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "A(z) {0} betűtípus nincs telepítve ezen a számítógépen"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "A(z) {0} betűtípusok nincsenek ezen a számítógépen, ezért a szövegük {1} betűtípussal lett szedve ugyanazokon a betűpozíciókon, a(z) {2} betűtípusból hiányzó karakterek pedig más betűtípusokkal. Telepítse őket, majd exportáljon újra, hogy megmaradjon a saját megjelenésük.",
+"{0} is not installed on this computer": "A(z) {0} betűtípus nincs telepítve ezen a számítógépen",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "A(z) {0} betűtípus nincs ezen a számítógépen, ezért a szövege {1} betűtípussal lett szedve ugyanazokon a betűpozíciókon, a(z) {2} betűtípusból hiányzó karakterek pedig más betűtípusokkal. Telepítse, majd exportáljon újra, hogy megmaradjon a saját megjelenése."
 }

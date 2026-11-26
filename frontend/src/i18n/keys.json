@@ -3639,6 +3639,7 @@
 "The library is in {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.",
 "The manual says nothing about that. Try other words, or search it.",
 "The menus go to the menu bar from the next start.",
 "The menus stay in the window from the next start.",
@@ -4124,5 +4125,7 @@
 "Zoom with the scroll wheel",
 "Zoom: type a percent and press Enter",
 "ZStandard compressed art ({0})",
-"{0} is not installed on this computer"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.",
+"{0} is not installed on this computer",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look."
 ]

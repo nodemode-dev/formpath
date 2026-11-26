@@ -256,8 +256,8 @@ export const faceGlyph = (face: ExportFace, ch: string, gid?: number): number =>
 export function substituteNotes(swapped: Iterable<string>): string[] {
   const fams = [...new Set(swapped)].filter(Boolean);
   if (!fams.length) return [];
-  const named = fams.length === 1 ? fams[0] : `${fams.slice(0, -1).join(', ')} and ${fams[fams.length - 1]}`;
-  return [`${named} ${fams.length === 1 ? 'is' : 'are'} not on this computer, so ${fams.length === 1 ? 'its' : 'their'} type was set in ${SUBSTITUTE_FAMILY} at the same letter positions, with other fonts for characters ${SUBSTITUTE_FAMILY} lacks. Install ${fams.length === 1 ? 'it' : 'them'} and export again to keep ${fams.length === 1 ? 'its' : 'their'} own look.`];
+  if (fams.length === 1) return [`${fams[0]} is not on this computer, so its type was set in ${SUBSTITUTE_FAMILY} at the same letter positions, with other fonts for characters ${SUBSTITUTE_FAMILY} lacks. Install it and export again to keep its own look.`];
+  return [`${fams.join(', ')} are not on this computer, so their type was set in ${SUBSTITUTE_FAMILY} at the same letter positions, with other fonts for characters ${SUBSTITUTE_FAMILY} lacks. Install them and export again to keep their own look.`];
 }
 
 export async function missingGlyphs(n: TextNode, swapped?: Set<string>): Promise<string[]> {

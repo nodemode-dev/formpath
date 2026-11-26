@@ -3567,6 +3567,7 @@
 "The library is in {0}": "Biblioteka znajduje się w {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Biblioteka znajduje się w {0}, ustawiono przez FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Biblioteka znajduje się w {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Licencja czcionki {0} nie pozwala na osadzenie jej w dokumencie, więc jej tekst narysowano jako kontury w {1}. Wygląda tak samo, ale nie można go zaznaczyć ani wyszukać jako tekstu.",
 "The manual says nothing about that. Try other words, or search it.": "Podręcznik nic o tym nie mówi. Spróbuj innych słów lub przeszukaj go.",
 "The menus go to the menu bar from the next start.": "Menu przeniosą się na pasek menu od następnego uruchomienia.",
 "The menus stay in the window from the next start.": "Menu pozostaną w oknie od następnego uruchomienia.",
@@ -4124,5 +4125,7 @@
 "x Height": "Wysokość x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "Czcionka {0} nie jest zainstalowana na tym komputerze"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Czcionek {0} nie ma na tym komputerze, więc ich tekst złożono czcionką {1} w tych samych pozycjach liter, a znaki, których brakuje w {2}, innymi czcionkami. Zainstaluj je i wyeksportuj ponownie, aby zachować ich własny wygląd.",
+"{0} is not installed on this computer": "Czcionka {0} nie jest zainstalowana na tym komputerze",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Czcionki {0} nie ma na tym komputerze, więc jej tekst złożono czcionką {1} w tych samych pozycjach liter, a znaki, których brakuje w {2}, innymi czcionkami. Zainstaluj ją i wyeksportuj ponownie, aby zachować jej własny wygląd."
 }

@@ -3567,6 +3567,7 @@
 "The library is in {0}": "De bibliotheek staat in {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "De bibliotheek staat in {0}, ingesteld door FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "De bibliotheek staat in {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "De licentie van {0} staat niet toe dat het in een document wordt ingesloten, dus de tekst is als contouren in {1} getekend. Het ziet er hetzelfde uit, maar kan niet als tekst worden geselecteerd of doorzocht.",
 "The manual says nothing about that. Try other words, or search it.": "De handleiding zegt er niets over. Probeer andere woorden of zoek erin.",
 "The menus go to the menu bar from the next start.": "De menu's gaan vanaf de volgende start naar de menubalk.",
 "The menus stay in the window from the next start.": "De menu's blijven vanaf de volgende start in het venster.",
@@ -4124,5 +4125,7 @@
 "x Height": "x-hoogte",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "Lettertype {0} is niet geïnstalleerd op deze computer"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Lettertypen {0} staan niet op deze computer, dus de tekst is gezet in {1} op dezelfde letterposities, met andere lettertypen voor tekens die {2} mist. Installeer ze en exporteer opnieuw om hun eigen uiterlijk te behouden.",
+"{0} is not installed on this computer": "Lettertype {0} is niet geïnstalleerd op deze computer",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Lettertype {0} staat niet op deze computer, dus de tekst is gezet in {1} op dezelfde letterposities, met andere lettertypen voor tekens die {2} mist. Installeer het en exporteer opnieuw om het eigen uiterlijk te behouden."
 }

@@ -3567,6 +3567,7 @@
 "The library is in {0}": "Pustaka ada di {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Pustaka ada di {0}, diatur oleh FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Pustaka ada di {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Lisensi {0} tidak mengizinkannya disematkan dalam dokumen, jadi teksnya digambar sebagai kontur dalam {1}. Tampilannya sama, tetapi tidak dapat dipilih atau dicari sebagai teks.",
 "The manual says nothing about that. Try other words, or search it.": "Panduan tidak membahas hal itu. Coba kata lain, atau cari di panduan.",
 "The menus go to the menu bar from the next start.": "Menu pindah ke bilah menu mulai peluncuran berikutnya.",
 "The menus stay in the window from the next start.": "Menu tetap di jendela mulai peluncuran berikutnya.",
@@ -4124,5 +4125,7 @@
 "x Height": "Tinggi x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "Font {0} tidak terpasang di komputer ini"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Font {0} tidak ada di komputer ini, jadi teksnya disusun dengan {1} pada posisi huruf yang sama, dengan font lain untuk karakter yang tidak dimiliki {2}. Pasang font-font tersebut lalu ekspor lagi untuk mempertahankan tampilan aslinya.",
+"{0} is not installed on this computer": "Font {0} tidak terpasang di komputer ini",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Font {0} tidak ada di komputer ini, jadi teksnya disusun dengan {1} pada posisi huruf yang sama, dengan font lain untuk karakter yang tidak dimiliki {2}. Pasang font tersebut lalu ekspor lagi untuk mempertahankan tampilan aslinya."
 }

@@ -3567,6 +3567,7 @@
 "The library is in {0}": "A biblioteca está em {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "A biblioteca está em {0}, definida por FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "A biblioteca está em {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "A licença de {0} não permite que ela seja incorporada em um documento, então o texto foi desenhado como contornos em {1}. A aparência é a mesma, mas ele não pode ser selecionado nem pesquisado como texto.",
 "The manual says nothing about that. Try other words, or search it.": "O manual não diz nada sobre isso. Tente outras palavras ou pesquise.",
 "The menus go to the menu bar from the next start.": "Os menus irão para a barra de menus a partir da próxima inicialização.",
 "The menus stay in the window from the next start.": "Os menus ficarão na janela a partir da próxima inicialização.",
@@ -4124,5 +4125,7 @@
 "x Height": "Altura do x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
 "xMidYMid meet": "xMidYMid meet",
-"{0} is not installed on this computer": "A fonte {0} não está instalada neste computador"
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "As fontes {0} não estão neste computador, então o texto foi composto em {1} nas mesmas posições das letras, com outras fontes para os caracteres que faltam em {2}. Instale-as e exporte novamente para manter a aparência própria delas.",
+"{0} is not installed on this computer": "A fonte {0} não está instalada neste computador",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "A fonte {0} não está neste computador, então o texto foi composto em {1} nas mesmas posições das letras, com outras fontes para os caracteres que faltam em {2}. Instale-a e exporte novamente para manter a aparência própria dela."
 }
