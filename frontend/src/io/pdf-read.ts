@@ -296,7 +296,11 @@ class PdfFile {
   }
 }
 
-interface FontInfo { family: string; style: string; widths: Map<number, number>; dw: number; two: boolean; uni: Map<number, string> | null; enc: Map<number, string> | null; type3: { matrix: Mat; procs: PDict; res: PDict | null; names: Map<number, string> } | null }
+const strict = (b: Uint8Array, label: string): string | null => { try { return new TextDecoder(label, { fatal: true }).decode(b); } catch { return null; } };
+const BYTE_CMAPS: Array<[RegExp, string]> = [[/^(B5pc|ETen-B5|ETenms-B5|HKscs-B5|HKdl[ab]-B5|HKgccs-B5|HKm\d+-B5)-/, 'big5'], [/^(GBK-EUC|GBKp-EUC|GBK2K|GB-EUC|GBpc-EUC)-/, 'gb18030'], [/^(90msp?-RKSJ|90pv-RKSJ|83pv-RKSJ|Add-RKSJ|Ext-RKSJ)-/, 'shift_jis'], [/^EUC-/, 'euc-jp'], [/^(KSCms-UHC|KSC-EUC|KSCpc-EUC)-/, 'euc-kr']];
+const ORDERINGS: Record<string, string> = { CNS1: 'big5', GB1: 'gbk', Japan1: 'shift_jis', Korea1: 'euc-kr' };
+const BROKEN = /�|[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/;
+interface FontInfo { family: string; style: string; widths: Map<number, number>; dw: number; two: boolean; direct: boolean; bytes: string; uni: Map<number, string> | null; enc: Map<number, string> | null; type3: { matrix: Mat; procs: PDict; res: PDict | null; names: Map<number, string> } | null }
 interface GS {
   ctm: Mat; fill: Paint; stroke: Paint; fa: number; sa: number; lw: number; cap: Cap; join: Join; miter: number; dash: number[]; phase: number; blend: BlendMode;
   fcs: Val[]; scs: Val[]; target: VNode[]; sm: { g: GroupNode; outer: VNode[] } | null; font: FontInfo | null; size: number; tc: number; tw: number; th: number; tl: number; rise: number; tr: number;
@@ -345,7 +349,8 @@ class FontNames {
     for (const f of installed) if (f.postscript) this.postscript.set(squash(f.postscript), { family: f.family, style: f.style });
   }
 
-  resolve(base: string): { family: string; style: string } {
+  resolve(name: string, charset?: string): { family: string; style: string } {
+    const bytes = /[\x80-\xff]/.test(name) ? Uint8Array.from(name, (c) => c.charCodeAt(0) & 255) : null, base = (bytes && (strict(bytes, 'utf-8') ?? (charset ? strict(bytes, charset) : null))) || name;
     const raw = base.replace(/^[A-Z]{6}\+/, ''), exact = this.postscript.get(squash(raw));
     if (exact) return exact;
     const [famPart, stylePart = ''] = raw.split(/[-,]/);
@@ -512,8 +517,9 @@ interface OcgInfo { name: string; hidden: boolean; printable: boolean }
 
 const pdfText = (s: Uint8Array): string => {
   if (s.length >= 2 && s[0] === 0xfe && s[1] === 0xff) return new TextDecoder('utf-16be').decode(s.subarray(2));
+  if (s.length >= 2 && s[0] === 0xff && s[1] === 0xfe) return new TextDecoder('utf-16le').decode(s.subarray(2));
   if (s.length >= 3 && s[0] === 0xef && s[1] === 0xbb && s[2] === 0xbf) return new TextDecoder().decode(s.subarray(3));
-  return new TextDecoder('latin1').decode(s);
+  return strict(s, 'utf-8') ?? new TextDecoder('latin1').decode(s);
 };
 
 /** The optional content groups of the catalog with their names, whether the default configuration turns them off (BaseState, ON and OFF lists) and whether their Print usage is off. */
@@ -776,16 +782,21 @@ class Painter {
     const f = gs.font, size = gs.size;
     if (!f) return tm;
     const t3 = f.type3;
-    let text = '', adv = 0, ink = 0;
+    let text = '', adv = 0, ink = 0, lost = 0;
     const start = tm, glyphs: Array<{ code: number; at: number }> = [], gaps = new Map<number, number>();
     const css = !t3 && !f.two && !f.widths.size ? cssFont({ ...DEFAULT_CHAR, font: f.family, style: f.style }, 100) : '';
     for (const it of items) {
       if (typeof it === 'number') { adv += (-it / 1000) * size * gs.th; if (-it / 1000 > 0.18 && text && !text.endsWith(' ')) { gaps.set(text.length, -it / 1000); text += ' '; } continue; }
       if (!(it instanceof Str)) continue;
-      const b = it.b;
+      const b = it.b, whole = f.bytes ? strict(b, f.bytes) : null;
+      if (whole !== null && !BROKEN.test(whole)) {
+        for (const ch of whole) { const cp = ch.codePointAt(0) as number; text += ch; adv += ((cp < 0x100 || (cp >= 0xff61 && cp <= 0xff9f) ? 0.5 : 1) * size + gs.tc + (cp === 32 ? gs.tw : 0)) * gs.th; if (ch.trim()) ink = adv; }
+        continue;
+      }
       for (let i = 0; i < b.length; i += f.two ? 2 : 1) {
         const code = f.two ? (b[i] << 8) | (b[i + 1] ?? 0) : b[i];
-        const ch = f.uni?.get(code) ?? f.enc?.get(code) ?? (f.two ? '' : code >= 32 && code < 127 ? String.fromCharCode(code) : WIN[code] ?? (code >= 160 ? String.fromCharCode(code) : ''));
+        const ch = f.uni?.get(code) ?? f.enc?.get(code) ?? (f.two ? (f.direct ? String.fromCharCode(code) : '') : code >= 32 && code < 127 ? String.fromCharCode(code) : WIN[code] ?? (code >= 160 ? String.fromCharCode(code) : ''));
+        if (!ch && f.two) lost++;
         text += ch;
         if (t3) glyphs.push({ code, at: adv });
         const w = t3 ? (f.widths.get(code) ?? 0) * t3.matrix[0] : css ? emOf(css, ch || ' ') : (f.widths.get(code) ?? f.dw) / 1000;
@@ -804,6 +815,7 @@ class Painter {
       }
       return next;
     }
+    if (lost) this.skipped.add(`characters of type in ${f.family} that the file gives no Unicode value for`);
     if (!text.trim()) return next;
     const xf = mul(gs.ctm, mul(start, [gs.th, 0, 0, -1, 0, gs.rise]));
     const filled = gs.tr === 1 || gs.tr === 5 ? NONE : gs.fill, stroked = gs.tr === 1 || gs.tr === 2 || gs.tr === 5 || gs.tr === 6 ? gs.stroke : NONE;
@@ -854,7 +866,8 @@ class Painter {
     const hit = this.fonts.get(d);
     if (hit) return hit;
     const sub = nameOf(d.get('Subtype')), two = sub === 'Type0', desc = two ? pdf.dict(pdf.arr(d.get('DescendantFonts'))[0]) : null;
-    const { family, style } = this.names.resolve(nameOf(d.get('BaseFont')) || nameOf(desc?.get('BaseFont')) || 'Helvetica');
+    const ordering = pdf.get(pdf.dict(desc?.get('CIDSystemInfo'))?.get('Ordering'));
+    const { family, style } = this.names.resolve(nameOf(d.get('BaseFont')) || nameOf(desc?.get('BaseFont')) || 'Helvetica', ordering instanceof Str ? ORDERINGS[latin(ordering.b)] : undefined);
     const widths = new Map<number, number>();
     let dw = 500;
     if (two && desc) {
@@ -878,7 +891,8 @@ class Painter {
       for (const x of pdf.arr(e.get('Differences'))) { const v = pdf.get(x); if (typeof v === 'number') code = v; else if (v instanceof Name) { names.set(code, v.v); const ch = glyphChar(v.v); if (ch) enc.set(code, ch); code++; } }
     }
     const t3 = sub === 'Type3' ? { matrix: mat6(pdf.nums(d.get('FontMatrix'))) ?? ([0.001, 0, 0, 0.001, 0, 0] as Mat), procs: pdf.dict(d.get('CharProcs')) ?? new Map(), res: pdf.dict(d.get('Resources')) ?? res, names } : null;
-    const info: FontInfo = { family, style, widths, dw, two, uni: null, enc, type3: t3 };
+    const cmap = two && e instanceof Name ? e.v : '';
+    const info: FontInfo = { family, style, widths, dw, two, direct: /-(UCS2|UTF16)-/.test(cmap), bytes: BYTE_CMAPS.find(([re]) => re.test(cmap))?.[1] ?? '', uni: null, enc, type3: t3 };
     this.fonts.set(d, info);
     return info;
   }
@@ -1172,13 +1186,14 @@ function evalFn(pdf: PdfFile, f: PDict, x: number[]): number[] | null {
 
 function parseCMap(src: string): Map<number, string> {
   const out = new Map<number, string>(), hex = (h: string): number => parseInt(h, 16);
-  const uni = (h: string): string => { let s = ''; for (let i = 0; i + 4 <= h.length; i += 4) s += String.fromCharCode(parseInt(h.slice(i, i + 4), 16)); if (h.length === 2) s = String.fromCharCode(parseInt(h, 16)); return s; };
-  for (const block of src.match(/beginbfchar([\s\S]*?)endbfchar/g) ?? []) for (const m of block.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]*)>/g)) out.set(hex(m[1]), uni(m[2]));
+  const uni = (raw: string): string => { const h = raw.replace(/\s/g, ''); let s = ''; for (let i = 0; i + 4 <= h.length; i += 4) s += String.fromCharCode(parseInt(h.slice(i, i + 4), 16)); if (h.length === 2) s = String.fromCharCode(parseInt(h, 16)); return s; };
+  const put = (code: number, s: string): void => { if (s && !BROKEN.test(s)) out.set(code, s); };
+  for (const block of src.match(/beginbfchar([\s\S]*?)endbfchar/g) ?? []) for (const m of block.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F\s]*)>/g)) put(hex(m[1]), uni(m[2]));
   for (const block of src.match(/beginbfrange([\s\S]*?)endbfrange/g) ?? []) {
-    for (const m of block.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*(?:<([0-9a-fA-F]*)>|\[([^\]]*)\])/g)) {
+    for (const m of block.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*(?:<([0-9a-fA-F\s]*)>|\[([^\]]*)\])/g)) {
       const a = hex(m[1]), b = hex(m[2]);
-      if (m[3] !== undefined) { const base = m[3], head = base.slice(0, -4), tail = parseInt(base.slice(-4) || '0', 16); for (let c = a; c <= b && c - a < 65536; c++) out.set(c, uni(head + (tail + c - a).toString(16).padStart(4, '0'))); }
-      else [...(m[4] ?? '').matchAll(/<([0-9a-fA-F]*)>/g)].forEach((x, k) => out.set(a + k, uni(x[1])));
+      if (m[3] !== undefined) { const points = Array.from(uni(m[3])), last = points.pop()?.codePointAt(0); if (last !== undefined) for (let c = a; c <= b && c - a < 65536 && last + c - a <= 0x10ffff; c++) put(c, points.join('') + String.fromCodePoint(last + c - a)); }
+      else [...(m[4] ?? '').matchAll(/<([0-9a-fA-F\s]*)>/g)].forEach((x, k) => put(a + k, uni(x[1])));
     }
   }
   return out;
