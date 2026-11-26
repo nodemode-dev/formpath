@@ -592,7 +592,9 @@ async def _write(path: Path, out: dict) -> dict:
         return out if out.get("isError") else _fail("formpath gave nothing to write.")
     blob = base64.b64decode(data)
     await asyncio.to_thread(path.write_bytes, blob)
-    return {"content": [{"type": "text", "text": f"Wrote {path} ({len(blob):,} bytes)."}], "structuredContent": {"path": str(path), "bytes": len(blob)}}
+    notes = [str(n) for n in (out.get("structuredContent") or {}).get("notes") or [] if str(n).strip()]
+    said = "".join(f" {n}" for n in notes)
+    return {"content": [{"type": "text", "text": f"Wrote {path} ({len(blob):,} bytes).{said}"}], "structuredContent": {"path": str(path), "bytes": len(blob), **({"notes": notes} if notes else {})}}
 
 
 def _model_parts(path: Path) -> list:

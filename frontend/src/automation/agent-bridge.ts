@@ -789,7 +789,7 @@ export class AgentBridge {
           const notes: string[] = [];
           const blob = await this.deps.exportBlob(fmt, { notes: (n) => notes.push(n), scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, raster, scale: has('ppi') ? Math.max(1, Math.min(2400, num('ppi', 72))) / 72 : Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
           const note = notes.length ? ` ${notes.join(' ')}` : '';
-          return blob ? text(`Exported ${fmt.toUpperCase()}.${note}`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
+          return blob ? text(`Exported ${fmt.toUpperCase()}.${note}`, { data: await b64(blob), notes }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {
           const q = has('index') ? e.projects[Math.round(num('index', 0))] : e.projects.find((x) => x.name === str('name'));
