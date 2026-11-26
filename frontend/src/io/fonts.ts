@@ -217,13 +217,32 @@ export async function glyphOrFallback(ch: string, st: CharStyle, font: Font, gid
   return hit ? { ...hit, style: { ...st, font: hit.family, axes: undefined }, missing: false, skip: false } : { ...own, missing: true };
 }
 
-export async function missingGlyphs(n: TextNode): Promise<string[]> {
+export const SUBSTITUTE_FAMILY = 'Inter';
+export interface ExportFace { font: Font; style: CharStyle; own: boolean }
+export async function exportFace(st: CharStyle, swapped?: Set<string>): Promise<ExportFace | null> {
+  const font = await fontFor(st.font, st.style);
+  if (font) return { font, style: st, own: true };
+  if (!swapped) return null;
+  const sub = await fontFor(SUBSTITUTE_FAMILY, st.style);
+  if (!sub) return null;
+  swapped.add(st.font);
+  return { font: sub, style: { ...st, font: SUBSTITUTE_FAMILY, axes: undefined }, own: false };
+}
+export const faceGlyph = (face: ExportFace, ch: string, gid?: number): number => (face.own ? gid ?? face.font.charToGlyph(ch).index : face.font.charToGlyph(ch).index);
+export function substituteNotes(swapped: Iterable<string>): string[] {
+  const fams = [...new Set(swapped)].filter(Boolean);
+  if (!fams.length) return [];
+  const named = fams.length === 1 ? fams[0] : `${fams.slice(0, -1).join(', ')} and ${fams[fams.length - 1]}`;
+  return [`${named} ${fams.length === 1 ? 'is' : 'are'} not on this computer, so ${fams.length === 1 ? 'its' : 'their'} type was set in ${SUBSTITUTE_FAMILY} at the same letter positions, with other fonts for characters ${SUBSTITUTE_FAMILY} lacks. Install ${fams.length === 1 ? 'it' : 'them'} and export again to keep ${fams.length === 1 ? 'its' : 'their'} own look.`];
+}
+
+export async function missingGlyphs(n: TextNode, swapped?: Set<string>): Promise<string[]> {
   const out = new Set<string>();
   for (const g of layoutText(n).glyphs) {
     if (!g.ch.trim() || g.ch.charCodeAt(0) < 32 || invisibleChar(g.ch)) continue;
-    const font = await fontFor(g.style.font, g.style.style);
-    if (!font) continue;
-    const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
+    const face = await exportFace(g.style, swapped);
+    if (!face) continue;
+    const pick = await glyphOrFallback(g.ch, face.style, face.font, faceGlyph(face, g.ch, g.gid));
     if (pick.missing) out.add(g.ch);
   }
   return [...out];
@@ -283,14 +302,14 @@ function commandsToPath(cmds: PathCommand[], m: Mat): PathData {
   return transformPath(out, m);
 }
 
-export async function outlineText(n: TextNode): Promise<PathData | null> {
+export async function outlineText(n: TextNode, swapped?: Set<string>): Promise<PathData | null> {
   const lay = layoutText(n);
   const out: SubPath[] = [];
   for (const g of lay.glyphs) {
     if (g.ch === ' ' || g.ch === '\t') continue;
-    const font = await fontFor(g.style.font, g.style.style);
-    if (!font) return null;
-    const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
+    const face = await exportFace(g.style, swapped);
+    if (!face) return null;
+    const pick = await glyphOrFallback(g.ch, face.style, face.font, faceGlyph(face, g.ch, g.gid));
     if (pick.skip) continue;
     const local: Mat = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]);
     out.push(...transformPath(variedGlyph(pick.font, pick.gid, pick.style).d, n.mode === 'path' ? local : mul(n.xf, local)));

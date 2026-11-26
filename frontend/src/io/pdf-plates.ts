@@ -21,13 +21,13 @@ export async function exportPlates(p: Project, o: PlateOptions): Promise<Blob> {
   await document.fonts.ready.catch(() => undefined);
   const plates = platesOf(p.doc, true);
   if (!plates.length) throw new Error('Every ink is set not to print. Turn one on in the Ink Manager and try again.');
-  const pdf = new PdfFile(), outlines = new Map<string, PathData>(), live = new LiveFonts(), plans = new Map<string, LiveText>();
+  const pdf = new PdfFile(), outlines = new Map<string, PathData>(), live = new LiveFonts(), plans = new Map<string, LiveText>(), swapped = new Set<string>();
   const visit = async (n: VNode, plain: boolean): Promise<void> => {
     if (n.kind === 'text') {
-      const d = await outlineText(n);
+      const d = await outlineText(n, swapped);
       if (d) {
         outlines.set(n.id, d);
-        const plan = !plain ? await live.plan(p.doc, n) : null;
+        const plan = !plain ? await live.plan(p.doc, n, swapped) : null;
         if (plan) plans.set(n.id, plan);
       }
     }

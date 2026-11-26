@@ -14,7 +14,7 @@ import { hex, solid, defaultGradient, NONE, toRgb, toCmyk, fill as fillItem, str
 import { fontsChanged, plainText, textNode } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
-import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
+import { ensureFace, installShaping, onFontsLoaded, outlineText, substituteNotes, systemFonts } from './io/fonts';
 import { exportPdf, readPdfNative } from './io/pdf';
 import { buildPrintPdf, printPdf } from './io/print';
 import { PrintDialog } from './ui/print-dialog';
@@ -822,27 +822,28 @@ export function startApp(): void {
     const p = engine.current;
     if (!p) return null;
     typing.end();
-    const scope = c.scope, ab = c.artboard;
+    const scope = c.scope, ab = c.artboard, swapped = new Set<string>();
+    const told = <T>(v: T): T => { for (const s of substituteNotes(swapped)) (c.notes ?? ((note: string) => toast(note, 'info')))(s); return v; };
     if (c.format === 'svg') {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
-      return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
+      return told(new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids, swapped })], { type: 'image/svg+xml' }));
     }
     if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, aiPrivate: c.format === 'ai', ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : true, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined, notes: c.notes ?? ((note) => toast(note, 'info')) });
     if (c.format === 'eps') {
-      const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
+      const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION, swapped });
       if (scope === 'all' && p.doc.artboards.length > 1) {
         const files: Array<{ name: string; blob: Blob }> = [];
         for (const a of p.doc.artboards) files.push({ name: `${p.name}-${a.name}.eps`.replace(/[\\/:*?"<>|]+/g, '-'), blob: await one(a, `${p.name} ${a.name}`) });
-        return zipFiles(files);
+        return told(await zipFiles(files));
       }
       const r = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : exportRegion(p, ab);
-      return r ? one(r, p.name) : null;
+      return r ? told(await one(r, p.name)) : null;
     }
     if (c.format === 'dxf' || c.format === 'dwg') {
       const cad = c.cad ?? { version: '2000', units: 'mm', scale: 1, text: 'text', lineweights: false };
       const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
       if (!region) return null;
-      return (c.format === 'dwg' ? exportDwg : exportDxf)(p, { region, ...cad, ids: scope === 'selection' ? engine.targetIds() : undefined }, async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n); });
+      return told(await (c.format === 'dwg' ? exportDwg : exportDxf)(p, { region, ...cad, ids: scope === 'selection' ? engine.targetIds() : undefined }, async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n, swapped); }));
     }
     const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
     if (!region) return null;
@@ -884,11 +885,12 @@ export function startApp(): void {
     await engine.task(async () => {
       try {
         if (c.artboards && c.artboards.length > 1 && c.format !== 'pdf' && c.format !== 'ai') {
-          const files: Array<{ name: string; blob: Blob }> = [];
+          const files: Array<{ name: string; blob: Blob }> = [], said = new Set<string>();
           for (const i of c.artboards) {
-            const one = await exportBlob({ ...c, artboard: i, artboards: undefined });
+            const one = await exportBlob({ ...c, artboard: i, artboards: undefined, notes: c.notes ?? ((s) => said.add(s)) });
             if (one) files.push({ name: `${p.name}-${i + 1}.${rasterExt(c.format)}`.replace(/[\\/:*?"<>|]+/g, '-'), blob: one });
           }
+          for (const s of said) toast(s, 'info');
           if (!files.length) { toast('There is nothing to export there.', 'error'); return; }
           await deliver(await zipFiles(files), `${p.name}.zip`.replace(/[\\/:*?"<>|]+/g, '-'));
           return;

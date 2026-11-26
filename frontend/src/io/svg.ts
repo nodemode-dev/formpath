@@ -21,7 +21,7 @@ import { cssFilterEffects, filterChain, filterEffects, filterPrimitives, type Fi
 import { clipOf, fitViewBox, markers, maskOf, patternPaint, refId, userBox, type MarkerOut, type RefCtx } from './svg-refs';
 import { importText, textFromHint, type TextEnv } from './svg-text';
 
-export interface SvgOptions { artboard: number | 'all' | 'art'; outlineText: boolean; preserve: boolean; precision: number; ids?: string[] }
+export interface SvgOptions { artboard: number | 'all' | 'art'; outlineText: boolean; preserve: boolean; precision: number; ids?: string[]; swapped?: Set<string> }
 const BLEND_CSS = new Map(BLEND_MODES.map((b) => [b.id, b.css === 'source-over' ? 'normal' : b.css]));
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -376,7 +376,7 @@ export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
   for (const key of textureImageKeys(p.doc)) { const b = p.assets.get(key); if (b && !p.bitmaps.has(key)) try { p.bitmaps.set(key, await createImageBitmap(b)); } catch { } }
   const outlines = new Map<string, PathData>();
   if (o.outlineText) {
-    const visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
+    const swapped = o.swapped ?? new Set<string>(), visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n, swapped); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
     for (const l of p.doc.layers) await visit(l);
   }
   const w = new Writer(p, o, images, outlines);

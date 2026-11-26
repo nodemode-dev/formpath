@@ -5,7 +5,7 @@ import { resolvePaint } from '../engine/paint';
 import { axesKey, glyphMat, hasAxes, layoutText } from '../engine/text';
 import type { CharStyle, Doc, Mat, Paint, TextNode } from '../engine';
 import { api } from './api';
-import { fontFor, fontSource, glyphAdvance, glyphOrFallback } from './fonts';
+import { exportFace, faceGlyph, fontFor, fontSource, glyphAdvance, glyphOrFallback } from './fonts';
 
 export interface PdfSink { add(dict: string, stream?: Uint8Array): number }
 export interface Ink { fill: string | null; stroke: string | null; width: number }
@@ -77,17 +77,17 @@ export class LiveFonts {
     return !has3d(n) && !n.ap.effects.length && !n.ap.items.some((i) => i.visible) && !(n.mask && !n.mask.disabled);
   }
 
-  async plan(doc: Doc, n: TextNode): Promise<LiveText | null> {
+  async plan(doc: Doc, n: TextNode, swapped?: Set<string>): Promise<LiveText | null> {
     if (!this.capable(doc, n)) return null;
     const lay = layoutText(n), staged: Array<{ key: string; font: Font; style: CharStyle; gid: number; ch: string; tm: Mat; fallback: boolean }> = [];
     for (const g of lay.glyphs) {
       const code = g.ch.charCodeAt(0);
       if (code < 32) continue;
-      const st = g.style, hasStroke = st.stroke.type !== 'none' && st.strokeWidth > 0;
-      if (!solidOrNone(doc, st.fill) || (hasStroke && !solidOrNone(doc, st.stroke))) return null;
-      const font = await fontFor(st.font, st.style);
-      if (!font) return null;
-      const own = g.gid ?? font.charToGlyph(g.ch).index;
+      const hasStroke = g.style.stroke.type !== 'none' && g.style.strokeWidth > 0;
+      if (!solidOrNone(doc, g.style.fill) || (hasStroke && !solidOrNone(doc, g.style.stroke))) return null;
+      const face = await exportFace(g.style, swapped);
+      if (!face) return null;
+      const st = face.style, font = face.font, own = faceGlyph(face, g.ch, g.gid);
       if (own === 0 && /\s/.test(g.ch)) continue;
       const pick = await glyphOrFallback(g.ch, st, font, own), ps = pick.style;
       if (pick.skip) continue;

@@ -16,7 +16,7 @@ import { outlineText } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
 
-export interface EpsOptions { region: Rect; cmyk: boolean; preserve: boolean; ppi: number; title?: string; version?: string }
+export interface EpsOptions { region: Rect; cmyk: boolean; preserve: boolean; ppi: number; title?: string; version?: string; swapped?: Set<string> }
 
 const f = (v: number): string => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? '0' : String(r); };
 const EMBED_BEGIN = '%FormpathDocument-Begin', EMBED_END = '%FormpathDocument-End', EMBED_LINE = '%FPTH:';
@@ -273,7 +273,7 @@ const PROLOG = [
 
 export async function exportEps(p: Project, o: EpsOptions): Promise<Blob> {
   const outlines = new Map<string, PathData>();
-  const visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
+  const swapped = o.swapped ?? new Set<string>(), visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n, swapped); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
   for (const l of p.doc.layers) await visit(l);
   for (const s of p.doc.symbols) await visit(s.art);
   const painter = new PsPainter(p, o, outlines);

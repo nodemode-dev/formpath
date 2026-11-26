@@ -15,7 +15,7 @@ import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../eng
 import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
 import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, PatternDef, Project, Rect, StrokeItem, VNode } from '../engine';
-import { colourEmoji, missingGlyphs, outlineText } from './fonts';
+import { colourEmoji, missingGlyphs, outlineText, substituteNotes } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
 import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
@@ -609,14 +609,14 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   if (refusal) throw new Error(refusal);
   const pdf = new PdfFile();
   const outlines = new Map<string, PathData>();
-  const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false, missing = new Set<string>();
+  const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false, missing = new Set<string>(), swapped = new Set<string>();
   const visit = async (n: VNode, plain: boolean): Promise<void> => {
     if (n.kind === 'text') {
-      const d = await outlineText(n);
+      const d = await outlineText(n, swapped);
       if (d) {
         outlines.set(n.id, d);
-        for (const ch of await missingGlyphs(n)) missing.add(ch);
-        const plan = wantLive && !plain ? await live.plan(p.doc, n) : null;
+        for (const ch of await missingGlyphs(n, swapped)) missing.add(ch);
+        const plan = wantLive && !plain ? await live.plan(p.doc, n, swapped) : null;
         if (plan) plans.set(n.id, plan);
       }
     }
@@ -749,7 +749,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names}${extra} >>`);
   const info = pdf.add(`<< /Title ${pdfTextString(title)} /Producer ${pdfString(producer)} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
   const blob = await pdf.build(root, info, rules.header, docId, sealer, (o.compression ?? DEFAULT_COMPRESSION).flate !== false);
-  for (const note of glyphNotes([...missing])) o.notes?.(note);
+  for (const note of [...substituteNotes(swapped), ...glyphNotes([...missing])]) o.notes?.(note);
   return blob;
 }
 
