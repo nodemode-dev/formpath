@@ -89,7 +89,7 @@ def wanted(s: str) -> bool:
         return False
     if re.fullmatch(r"[\w-]+", s) and not re.match(r"[A-Z]", s):
         return False
-    if re.search(r"\b(var|const|let|return|import|export|class|new)\b\s", s) and re.search(r"[=(){};]", s):
+    if re.search(r"\b(var|const|let|return|import|export|class|new)\b\s", s) and re.search(r"[=(){};]", re.sub(r"\{\d+\}", "", s)):
         return False
     return True
 
