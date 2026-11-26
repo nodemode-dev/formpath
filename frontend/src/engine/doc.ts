@@ -198,3 +198,5 @@ export function nodeLabel(n: VNode): string {
     case 'repeat': return `Repeat ${n.spec.kind[0].toUpperCase()}${n.spec.kind.slice(1)}`;
   }
 }
+
+export const ownLabel = (n: VNode): boolean => !!n.name || (n.kind === 'text' && n.spans.some((s) => /\S/.test(s.text)));

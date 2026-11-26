@@ -1,10 +1,10 @@
-import { nodeLabel } from '../engine/doc';
+import { nodeLabel, ownLabel } from '../engine/doc';
 import { firstFill, firstStroke } from '../engine/paint';
 import type { Engine, Rect, ShapeMode, Units } from '../engine';
 import { PanelGroup } from './panel-group';
 import type { AlignAction } from '../engine/ops/objects';
 import type { PathfinderOp } from '../engine/ops/paths';
-import { el, q, setClass, setDisabled, setHidden, setHtml, setStyleVar, setText } from './dom';
+import { el, q, setClass, setDisabled, setHidden, setHtml, setOwnText, setStyleVar, setText } from './dom';
 import { icon } from './icons';
 import { paintCss } from './rail';
 import { check, iconButton, numField, row, section, seg, selectCtl, slider } from './panels/kit';
@@ -193,7 +193,7 @@ export class PropertiesPanel {
     for (const b of this.docButtons) setDisabled(b, !p);
     const tile = q(this.head, '.cv-props-tile');
     setHtml(tile, icon(!p ? 'newFile' : !has ? 'pArtboards' : sel.length > 1 ? 'layers' : n.kind === 'text' ? 'vType' : n.kind === 'group' ? 'folder' : n.kind === 'image' ? 'image' : n.kind === 'symbol' ? 'pSymbols' : 'vPen', 18), !p ? 'none' : !has ? 'doc' : sel.length > 1 ? 'many' : n.kind);
-    setText(q(this.head, '.cv-props-name'), !p ? 'No Document' : !has ? 'Document' : sel.length > 1 ? `${sel.length} Objects` : nodeLabel(n));
+    setOwnText(q(this.head, '.cv-props-name'), !p ? 'No Document' : !has ? 'Document' : sel.length > 1 ? `${sel.length} Objects` : nodeLabel(n), !!p && sel.length === 1 && ownLabel(n));
     if (has) {
       this.xform.sync();
       setHidden(this.shapeHead, !this.shape.sync());

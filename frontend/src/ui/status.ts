@@ -1,7 +1,7 @@
-import { allNodes, nodeLabel } from '../engine/doc';
+import { allNodes, nodeLabel, ownLabel } from '../engine/doc';
 import type { Engine, Pt } from '../engine';
 import { getTool } from '../extensions/registry';
-import { el, pendingClass, q, setClass, setDisabled, setText, setTitle, setValue, type Disposer } from './dom';
+import { el, pendingClass, q, setClass, setDisabled, setOwnText, setText, setTitle, setValue, type Disposer } from './dom';
 import { t } from '../i18n';
 import { icon } from './icons';
 
@@ -187,7 +187,7 @@ export class StatusBar {
     this.syncInfo();
     this.syncHint();
     const sel = e.selected();
-    setText(this.sel, sel.length === 1 ? nodeLabel(sel[0]) : sel.length ? `${sel.length} objects` : '');
+    setOwnText(this.sel, sel.length === 1 ? nodeLabel(sel[0]) : sel.length ? `${sel.length} objects` : '', sel.length === 1 && ownLabel(sel[0]));
     this.syncPos();
   }
 }
