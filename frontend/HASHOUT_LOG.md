@@ -5281,3 +5281,63 @@ Arabic presentation forms (the file's ToUnicode often gives them) are spelt as t
 `MARKS` now holds code points, not literal combining characters, so the table can be read and edited. `resolveScriptFace` no longer asks the engine for the chosen font when the font listing says it is not installed (a 404 in the console for every style of a substituted font).
 
 Seen in the built window: the public Arabic file reads "انواع الخطوط العربية" word by word, as `pdftotext` gives it, and draws joined; a page printed to PDF from a browser with Arabic, Hebrew and mixed lines looks as it did in 0.61.0; 27 other PDFs are unchanged. Not done: a file that places each letter with its own operator still opens as one object per letter, as before, so its Arabic is not one editable word; mixed lines are put in reading order by this rule of thumb, not by undoing the full bidirectional algorithm.
+
+### src/engine/text.ts, src/io/fonts.ts · complex scripts are shaped and runs follow the bidirectional algorithm
+- refers-to: src/engine/text.ts :: itemsOf, segmentsOf, visualOrder, partsShape, scriptOf; src/io/fonts.ts :: shapeComplex, scriptFace, loadShaper, SCRIPT_FONTS
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+Layout was one character at a time, so Arabic was isolated letters in left-to-right order, Hebrew ran backwards and Indic scripts were not shaped. Text that needs it is split into runs by bidi level and script; HarfBuzz (harfbuzzjs 1.6.4, MIT, WebAssembly, loaded only when a document has such text) shapes each run with the whole text as context; each cluster becomes one item drawn from outlines; lines are reordered by UAX 9 rules L1 and L2 through bidi-js 1.1.0 (MIT, Unicode 13 data). `align: left` stays left. Brackets the font lacks are mirrored when drawn. The face is the chosen font if it covers the script, else a list per script (Noto Naskh Arabic, Noto Sans Hebrew, Noto Sans Devanagari and others), else `GET /api/fonts/cover`.
+
+Text that needs neither shaping nor reordering is untouched: 3,608 layouts (164,251 glyph records: point, area, path and vertical type, tracking, the kerning modes, features, caps, justified lines, tabs and lists, in Latin, Greek, Cyrillic, Chinese, Japanese, Korean, unmarked Thai and emoji) are equal on the 0.61.0 tree and on this one. Against native HarfBuzz 15, 11 of 12 single-direction samples have the same glyph ids and positions; the twelfth differs only where bidi keeps digits left to right. bidi-js passes all 91,699 cases of BidiCharacterTest 13.0.0. Ink overlap with one browser `fillText` of the same string in the same font is 0.96 to 0.996 over 18 samples in Arabic, Persian, Urdu, Hebrew with and without points, Devanagari, Bengali, Tamil, Thai and mixed lines (0.11 to 0.95 before). The always-loaded bundle grows by 8,460 bytes; on demand, `harfbuzz.wasm` is 444,394 bytes, its script 42,161 and bidi-js 12,356. Nothing is fetched from outside the app.
+
+Not done: vertical type is not shaped; clusters the chosen font lacks fall back to drawing character by character; in a right-to-left paragraph list markers and tab stops stay on the left; no hyphenation or kashida justification for such text; tracking is suppressed inside joined Arabic words; small caps are ignored in shaped runs; a failed load of the shaper is not retried; the macOS and Windows font names in the script lists are untried.
+
+### src/engine/text.ts, src/ui/text-editor.ts · the caret on bidirectional lines
+- refers-to: src/engine/text.ts :: caretAt, indexAt, stepLine, stepVisual; src/ui/text-editor.ts :: key
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The caret assumed that the order on screen is the order in the text. On a mixed-direction line `caretAt`, `indexAt` and `stepLine` work on cluster edges and each glyph's direction, and `stepVisual` drives the arrow keys so they move the way they point. The stored text stays in reading order, and a caret inside a ligature or cluster sits at its edge. Driven in the built window under 4x CPU throttling: typing, arrows, Shift with arrows, Backspace, inserting inside Arabic and Hebrew words, Home and End, a selection across a change of direction; the stored text was right each time and layout shift was 0. On a path the arrow keys still step in reading order.
+
+### src/io/pdf-text.ts, src/io/svg.ts, src/io/fonts.ts, src/io/dxf.ts · exports of shaped type
+- refers-to: src/io/pdf-text.ts :: LiveFonts.plan, liveStream; src/io/fonts.ts :: outlineText; src/io/svg.ts; src/io/dxf.ts :: exportDxf
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+PDF keeps live type: glyphs in the order they are seen, with ToUnicode; the mapping of a right-to-left ligature is stored reversed because poppler and PDFium both reverse it; ActualText is written only on left-to-right clusters (conjuncts, reordered vowels). SVG writes clusters as paths and the other glyphs of such a line one by one, because renderers reorder per-character positions. DXF and DWG outline shaped text instead of writing TEXT entities. Create Outlines and EPS draw the shaped pieces. Against the canvas: the PDF through `pdftoppm` overlaps 0.914, the SVG through rsvg 0.952. `pdftotext` gives Arabic and Devanagari in reading order. An export of Latin, Chinese, Japanese, Korean and Thai text is unchanged (SVG, EPS and DXF byte for byte after ids and dates are normalized; the PDF's objects equal as a set). In poppler, Hebrew points come out on a line of their own; PDFium keeps them in place. EPS was not rasterized (no Ghostscript here). PSD type layers carry the reading-order string; untried in Photoshop.
+
+### src/io/pdf-text.ts, src/io/pdf.ts · the person's own restricted font is outlined, with a note
+- refers-to: src/io/pdf-text.ts :: restricted, LiveFonts.withheld, LiveFonts.build; src/io/pdf.ts :: exportPdf
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+This reverses the 0.53.2 decision not to check the style's own font. `build` now fails every face whose `fsType` forbids embedding, so its type is drawn from the outlines `exportPdf` already made in that font. Families that are not fallbacks go into `withheld`, and `exportPdf` adds one note for each. `restricted` reads bits 1 to 3: bit 1 counts only when neither 4 nor 8 is set. That is the least-restrictive rule the OpenType specification states for OS/2 versions 0 to 2 and says applications may assume for later versions; it is applied to every version. Checked with fontTools copies of DejaVu Sans at `fsType` 2, 0 and 6 in the built window: `pdffonts` lists only the two permitted ones as embedded and `pdftoppm` draws all three lines; on 0.61.0 all three were embedded and nothing was said. Not done: the bitmap-only and no-subsetting bits, and Package, which still copies font files.
+
+### src/io/ai-legacy.ts · graphic style names in their own script
+- refers-to: src/io/ai-legacy.ts :: buildDefs
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+A style's name is shown through `psUni`; the `rd.styles` keys stay raw. Checked by putting UTF-8 names into a public sample's private data. The writer's title and gradient names still go through `ps`: all 22 public samples write them in plain ASCII, so the form for other scripts is still unknown, and guessing it could make a file Illustrator refuses.
+
+### src/i18n · the not-installed sentence of Find Similar Fonts
+- refers-to: src/i18n/keys.json; src/i18n/locales/*.json
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+"{0} is not installed on this computer" was added by hand as the last row of `keys.json` and of each of the 25 locales, in each file's own words for font and installed. The key starts with a placeholder, and `extract`'s CODEISH rule rejects strings that begin with `{`, so the next `extract` then `prune` will drop the row unless that rule changes. Still in English because they are built from parts the mechanism does not cover: the substitute-font export note, "Type the file gives no characters for was kept as shapes", the left-out item for glyph-number type, and the agent note about characters no font draws.
+
+### index.html, src/styles/dock-tokens.css · the terminal names Windows faces before the generic monospace
+- refers-to: index.html :: the dock pre-paint script (data-fp-win); src/styles/dock-tokens.css :: --dock-font-mono under :root[data-fp-win] and :lang(zh, zh-TW, ja, ko)
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The shared dock module reads `--dock-font-mono`, and its stack had no Windows face, so Windows chose the face for Chinese, Japanese and Korean. The pre-paint script marks Windows with `data-fp-win`. Under that mark the stack keeps today's names, gains Consolas, then that language's Windows face (Microsoft YaHei, Microsoft JhengHei, Yu Gothic, Malgun Gothic), then the other three. macOS and Linux get the same token as before: Yu Gothic also exists on macOS and would have changed what it shows. `--font-mono` itself is unchanged. Seen in Chrome on Linux and with the platform emulated as Win32. Not run on Windows.
+
+### src/dock-adapter.ts · Escape that belongs to a composition leaves the guide open
+- refers-to: src/dock-adapter.ts :: imeEscape, formpathDock; src/dock/tour.ts :: Tour.onKey (read only)
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The guide's capture-phase Escape listener in the shared module ignores composition, so closing an input method's candidates with Escape ended the guide. The module cannot be edited here. `imeEscape`, registered on window in the capture phase, acts only while `.ft-tour` is shown, only on Escape, only when the key belongs to a composition (`isComposing` or `keyCode` 229): it relabels that event's `key` as `Process`, the value Chrome on Windows already sends for such keys. Nothing is stopped or prevented; the terminal's own textarea still receives the event. Seen at 4x CPU throttling with DevTools compositions; typing Chinese still works in the terminal, Chat, the Type tool and a panel field. Remove it when the module carries the fix. Two findings in the module cannot be reached from outside and are open until the module changes: the dock taking focus from a field being typed in (seen: about 3 seconds after a slow start, focus left a Character field in mid-composition), and terminal widths for Unicode 11 (measured: emoji take 1 cell in the terminal against 2 in the C library). The change note for the module is in the planning sidecar.
