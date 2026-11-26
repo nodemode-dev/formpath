@@ -30,6 +30,11 @@ export function countObjects(doc: Doc, cap: number): number {
   return n;
 }
 
+export function hasText(doc: Doc): boolean {
+  const walk = (nodes: VNode[]): boolean => nodes.some((c) => { const k = childrenOf(c); return c.kind === 'text' || (!!k && walk(k as VNode[])); });
+  return doc.layers.some((l) => walk(l.children as VNode[]));
+}
+
 async function shot(doc: Doc, assets: Map<string, Blob>, i: number, w: number, h: number | null): Promise<ImageData | null> {
   const a = doc.artboards[i];
   if (!a) return null;
@@ -79,6 +84,6 @@ export async function guardAi(read: AiRead, data: ArrayBuffer, title: string, pa
       boards.push(a ? differing(a, b) : 1);
     }
   } catch (err) { return done({ pdf: null, diff: 0, skipped: true, boards, why: `render failed: ${err instanceof Error ? err.message : String(err)}` }); }
-  const diff = Math.max(0, ...boards);
-  return done({ pdf: diff > GUARD_LIMIT ? pdf : null, diff, skipped: false, boards, why: '' });
+  const diff = Math.max(0, ...boards), lost = hasText(pdf.doc) && !hasText(read.doc);
+  return done({ pdf: diff > GUARD_LIMIT || lost ? pdf : null, diff, skipped: false, boards, why: lost ? 'type only on the page' : '' });
 }

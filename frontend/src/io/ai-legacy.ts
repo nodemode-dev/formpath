@@ -936,6 +936,7 @@ export interface AiBuildOpts { boxes?: number[][]; names?: string[]; rasters?: s
 export async function buildAi(text: string, title: string, early: Set<string>, opts: AiBuildOpts): Promise<AiRead> {
   const prep = prepare(text, opts.rasters), meta = prep.meta;
   for (const s of early) meta.skipped.add(s);
+  if (/^(%_)?\/AI11Text :/m.test(text)) meta.skipped.add('type');
   const boxes: number[][] = opts.boxes?.length ? opts.boxes : meta.artboards.length ? meta.artboards : meta.tile ? [meta.tile] : meta.bbox ? [meta.bbox] : [[0, 0, 612, 792]];
   const ox = Math.min(...boxes.map((b) => b[0])), oy = Math.max(...boxes.map((b) => b[3]));
   const rd = new Reader(meta, prep.datas, ox, oy);
