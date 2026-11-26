@@ -1034,3 +1034,38 @@ The `%1` and `shift` loop split arguments at `=`, `,` and `;`, stopped at an emp
 - logged: v0.62.0 · 2026-11-26
 
 On Windows a program installed by npm is a `.cmd` shim that ran through `cmd /c`, which cuts a command line at a line break and acts on `%`, `&` and quotes in it; `list2cmdline` leaves an argument without spaces unquoted, so a message of `x&pwn` ran `pwn`. A shim of the current npm template is now read and started as `node` and its script, or as the `.exe` it points at; only that template is accepted. Where a program would still start through `cmd`, Chat gives the message on standard input as UTF-8, which the program reads as its prompt, and a terminal tab refuses a first message that `cmd` would change, with a sentence that says why. Nothing changes on macOS and Linux. Checked under Wine with shims written from the npm template and compiled stand-ins; on Linux with the tests' stand-in agent program, and with the real program against a local capture server, where the message as an argument and on standard input give the same bytes. Not run: real Windows, real `cmd.exe`, a real npm install on Windows. Left: the shim's PATHEXT change for `node`; typing a message into a running tab followed by Enter, where a line break sends the message early on every system. Shims made by other package managers fall to the standard input and refusal paths.
+
+### app/routers/mcp.py, frontend/src/automation/agent-bridge.ts · export notes reach outside agents
+- refers-to: app/routers/mcp.py :: _write; frontend/src/automation/agent-bridge.ts :: __export
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+`_write` threw away the text the bridge returned with an export, so an agent exporting through the MCP tools was never told that a font was replaced, outlined, or lacked a character. The bridge now returns `notes` beside `data`; `_write` keeps "Wrote ... (n bytes)." as the first line, puts the notes after it, and adds a `notes` field to the result only when there are notes. Nothing is renamed or removed. Seen on the real `/mcp` route in a built window, exporting type in a font that is not installed: before, the one line; after, the same line followed by the stand-in font sentence. SVG, PNG and Save Project are unchanged. The notes reach an agent in English, since translation happens when text is shown in the window.
+
+### setup/i18n.py · extract keeps a sentence that begins with a placeholder
+- refers-to: setup/i18n.py :: CODEISH, wanted
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+The rule that skips code and data beginning with a brace or bracket also skipped "{0} is not installed on this computer", so `prune` would have deleted its translations. `[` is still always skipped; `{` is skipped unless the string is a placeholder followed by at least four lowercase words. A second rule (a keyword next to code punctuation) took a placeholder's braces for code in a sentence that says "export" or "new", and no longer does. Tried on copies of the tree: extract then prune keep the sentence and its rows, and nothing the old rule found is lost; 19 strings newly found are real sentences that have no translations yet. Already wrong before this change and left: extract on the untouched tree adds 186 keys and drops 8 that are in use, so `prune` is not safe to run without reading its list.
+
+### app/services/terminal.py, app/services/claude_code.py · a first message typed into a running tab arrives whole
+- refers-to: app/services/terminal.py :: _modes, type_line; app/services/claude_code.py :: open_tab
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+The item 0.62.0 left: a message with a line break typed into a running tab was sent at the first break. A terminal program that accepts pasted text says so by switching bracketed paste on. `terminal.py` now watches each tab's output for that switch (whole or split across reads, cleared on restart), and `type_line` sends the message between paste brackets, then Enter, when it is on; when it is off, line breaks become spaces and one line is sent. Stand-in programs on a real pseudo-terminal: before, both received "line one" early; after, the one with paste on received one message byte for byte and the one with paste off received one line and no stray brackets. The real agent program against a local capture server, with a message holding CRLF: three turns before, one turn with its line breaks after. Not run: Windows, where whether ConPTY passes the switch through is not known.
+
+### setup/python.bat, formpath.bat · an argument with an open quote reaches the command
+- refers-to: setup/python.bat; formpath.bat :: install, desktop, counts, clean
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+Both launchers expanded `%*` or `%2` to `%9` inside a parenthesised block. `cmd` expands them before it parses the line, so an unbalanced quote hid the closing parenthesis: in `python.bat` the argument gained a trailing space or the rest of the line, and in `formpath.bat` the rest of the file was read as part of a false block, so nothing ran and nothing was said. Python now runs on a line of its own, `where py || goto` became `if errorlevel 1 goto`, and the four `formpath.bat` commands jump to labels at the end of the file where each call stands alone on its line. Under Wine 9.0: `"C:\dir\" tail` and `"abc` arrive exact, the three open-quote cases at the `formpath.bat` level arrive as typed, and the twelve cases that already passed are unchanged. The two `%` cases reach Python under Wine with `%` lost to Wine's second expansion; on real `cmd.exe` they are reasoned to arrive whole. Not run: real Windows; exit codes are lost under Wine before and after.
+
+### app/services/package.py, frontend/src/io/package.ts, frontend/src/app.ts · Package names fonts whose licence restricts embedding
+- refers-to: app/services/package.py :: restricted, build; frontend/src/io/package.ts; frontend/src/app.ts :: packageDialog
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+Package copied every font the document uses and said nothing about licences. It now names the copied fonts whose `fsType` restricts embedding and asks the person to check that the licence also lets them pass the font on before they share the package. No font is ever dropped: a package without its fonts opens wrong on the next computer, and whether a licence allows passing the file on is the person's reading to make, not the app's.

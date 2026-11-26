@@ -5365,3 +5365,79 @@ The last case of unreadable PDF type that was left out with a sentence: a Chines
 Deliberately not used when the font program is in the file: such type is kept as shapes, as since 0.61.0. Two public files claim the Japan1 collection for an embedded TrueType font whose codes are plainly its own glyph numbers (`arial_unicode_en_cidfont.pdf`, `vertical.pdf`); reading them by the collection would have turned English into wrong Japanese, and the shapes are exact.
 
 Seen: `noembed-identity.pdf` reads "あいうえお" where it had the left-out sentence, `noembed-identity-2.pdf` reads "あAbstract012" (poppler cannot draw either without its language pack); the two files above still open as shapes.
+
+### src/io/fonts.ts, src/io/pdf.ts, src/i18n · the export notes about fonts and characters are translated
+- refers-to: src/io/fonts.ts :: substituteNotes; src/io/pdf.ts :: glyphNotes; src/i18n/keys.json; src/i18n/locales/*.json
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+Text is translated when it is shown, by matching a whole sentence against keys with placeholders. The notes about a font set in a stand-in, a licence that forbids embedding, and characters no font on this computer has were glued together from pieces for one or several, so no key could match and they showed in English in every language. `substituteNotes` and `glyphNotes` now each return one of two whole sentences (one; several, joined with commas), with five keys in `keys.json` and hand translations in all 25 languages. Seen in the window in German, Japanese and English, the last with CJK extension characters no font here has (U+31350, U+31351, U+2EBF0). Left: the "and N more" suffix stays English, as in the colour emoji note; the message after opening a PDF is one joined message and that whole family is English by design.
+
+### src/io/pdf-text.ts · a font that forbids subsetting or allows only bitmaps is outlined
+- refers-to: src/io/pdf-text.ts :: restricted
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+`restricted` read only the embedding level of `fsType`. It now also treats bit 8 (no subsetting) and bit 9 (bitmap embedding only) as forbidding embedding, and only for OS/2 version 2 or later, since the specification has readers ignore bits 4 to 15 in a version 0 or 1 table. No subsetting: the exporter embeds subsets only, and embedding the whole file would need a new engine path, so the font is not embedded at all. Bitmap only: the writer cannot embed bitmap strikes, so the font counts as one that cannot be embedded. In both cases the type is drawn as outlines with the licence note, as for a restricted font. Whether paths in the page count as "outline data" under a bitmap-only licence is the owner's ruling to make. Tried with copies of DejaVu Sans whose bits were set with fontTools, and a version 1 control with both bits: before, subsets of the two fonts were embedded; after, only permitted fonts are embedded and every line still draws.
+
+### src/io/fonts.ts · a failed load of the shaper is tried again
+- refers-to: src/io/fonts.ts :: loadShaper, HB_WASM, shaperAfter
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+A failed load left `shaperLoad` set for good, so complex scripts stayed unshaped until a reload. `loadShaper` now fetches the wasm file itself first (`?url`, the same hashed asset the library then reads from the disk cache); a failure clears the promise and holds off the next try for three seconds, and the try comes with the next shaped layout. In the built window with one blocked request for the wasm: 0.62.0 never recovered and logged three errors from the library; now the next text is shaped and the only console line is the browser's own failed request. Limit: when a script chunk fails, the browser caches the failed `import()`, and only a reload clears that.
+
+### src/engine/text.ts · joins across a style change; small caps in shaped runs
+- refers-to: src/engine/text.ts :: itemsOf
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+Fault fixed: a letter in another colour or weight inside an Arabic word starts a new span, and the first cluster of the new span was not marked as joined to the one before, so the join was drawn broken and a line could break inside the word. A cluster now joins the previous one when it starts where that one ends and both are in the same cursive script. Two behaviours are now deliberate. Tracking: a joined cursive word takes none, and the space takes it, which is what the browser does. Small caps: scripts without case are unaffected; a shaped run that holds lowercase letters in a font without `smcp` is drawn unshaped with the made small capitals, as Latin always was.
+
+### src/io/fonts.ts, src/engine/text.ts · letters the font lacks are shaped in a font that has them
+- refers-to: src/io/fonts.ts :: shapeComplex, scriptFace, ComplexRun; src/engine/text.ts :: itemsOf
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+A complex-script letter missing from the chosen font came back from the shaper as glyph 0 and was then drawn one letter at a time from a fallback, in its isolated form. `shapeComplex` now cuts out each run of clusters that came back as glyph 0 and shapes it again, with the whole text as context, in a face found for the first missing letter of that script (`scriptFace` with `exact`); each cluster carries its own face. Punctuation and digits keep the old fallback. Ink overlap with the browser's drawing: Urdu set in DejaVu Sans 0.198 to 0.986; Arabic with alef wasla 0.935 to 0.957; the exported PDF's text reads in order.
+
+### src/engine/text.ts · arrows and overflow on a path, and at the visual end of a line
+- refers-to: src/engine/text.ts :: layoutOnPath, stepVisual
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+On a path the amount of text that fits was decided after reordering, so a path too short for its text could keep its end and thread its beginning. What fits is now a logical prefix, which is then reordered, and the overflow is logical. `stepVisual` covers paths, so the caret moves one way under Right and one way under Left through right-to-left words, where it used to jump back and forth. At the visual end of a mixed-direction line an arrow key now goes on to the nearest stop of the next line; before, it returned a stop inside the same line and the caret could loop there.
+
+### src/engine/text.ts · right-to-left paragraphs mirror the marker, tab stops and indents
+- refers-to: src/engine/text.ts :: layoutLines
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+For a paragraph whose base direction is right to left: the list marker sits after the line's right end and reads with its separator first and brackets mirrored, as the browser draws it; tab positions count from the right edge; the first-line and left indents land on the right and the right indent on the left. `align` keeps its literal meaning, so 'left' is still left. Decision to confirm: tab alignments mirror with the positions, so a 'left' stop means the start side. Left-to-right paragraphs are unchanged.
+
+### src/engine/text.ts · vertical type shapes the scripts that run sideways
+- refers-to: src/engine/text.ts :: items, itemsOf, orient, stepVisual
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+Vertical type skipped shaping, so Arabic was unjoined and reversed and Indic clusters were broken. `itemsOf` now shapes for vertical type too: shaped clusters skip `orient` and are placed turned a quarter, the way Latin is, in bidirectional order down the column; spans set upright stay unshaped at level 0 as before. Ink overlap with the browser's `vertical-rl` for three mixed columns: 0.504, 0.423, 0.753 (0.62.0: 0.264, 0.236, 0.368); a column of CJK alone is 0.928 on both, and 160 further vertical CJK layouts are identical to 0.62.0. The gap left is how turned runs are centred in the column, which was already so. Exported text reads in order. One difference from the browser: a column whose first strong letter is Arabic is a right-to-left paragraph, as horizontal type already is.
+
+### src/engine/text.ts, src/io/pdf-text.ts, src/io/fonts.ts · three things looked at and left as they are
+- refers-to: src/engine/text.ts :: layoutLines (justify); src/io/pdf-text.ts (Hebrew points); src/io/fonts.ts :: loadShaper (bidi-js)
+- kind: rationale
+- logged: v0.63.0 · 2026-11-26
+
+Kashida. Justified Arabic reaches both edges by its word spaces and matches the browser's justify line for line; shaped clusters are never hyphenated. Stretching by tatweel is not done: the shaper has no call for it, and doing it correctly means shaping each line again after it is broken, choosing where a tatweel may go for each font, and remapping clusters, the caret and the exported text.
+
+Hebrew points in one reader. In an exported PDF each point is written before its letter, the order that both common readers reverse into correct text. One reader starts a new word for a zero-width point that does not overlap the glyph before it and puts that word on its own line when text is extracted. Writing the letter first keeps the points inline there but makes both readers put each point before its letter; a spoken-text entry per cluster is reversed by one reader and not the other. Left as it is, since the other reader extracts it correctly today and no order satisfies both.
+
+Bidirectional data. bidi-js 1.1.0 is the newest release and its data is Unicode 13. Against Unicode 17, 1,207 assigned code points differ: Arabic Extended-B letters are treated as plain right-to-left, so numbers after them are not Arabic numbers; newer Arabic marks are not marks; some ornate signs are letters; about 700 newer symbols and emoji are left-to-right, so in Arabic text they act as Latin; mirroring is missing for U+2E55 to U+2E5C. No newer data can be dropped in without replacing the library, so it stays, and this is the list of what it gets wrong.
+
+Proof that nothing else moved: 3,608 layouts with no complex script give byte-identical results before and after; the 18 typed samples score what they scored in 0.62.0.
+
+### src/dock/ · the shared dock module stays at 2.2.1 in this version
+- refers-to: src/dock/ (unchanged since 0.62.0); src/dock-adapter.ts :: imeEscape
+- kind: rationale
+- logged: v0.63.0 · 2026-11-26
+
+Two faults found under issue 17 are inside the shared dock module: after a slow start the panel takes focus from a field that is being typed in, and the terminal counts an emoji or a wide sign as one cell. FormPath carries the module byte for byte and never edits it, and this version's work was FormPath's alone, so both are still there. The fix belongs to the module's home; what to change is written up in the planning sidecar's change note. Until a new module version is copied in, `imeEscape` in the adapter stays: it is the guard 0.62.0 added from outside so that an Escape belonging to a composition does not end the guide.
