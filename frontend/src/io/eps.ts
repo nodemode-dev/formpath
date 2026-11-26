@@ -19,6 +19,7 @@ import { serialize } from './project-io';
 export interface EpsOptions { region: Rect; cmyk: boolean; preserve: boolean; ppi: number; title?: string; version?: string; swapped?: Set<string> }
 
 const f = (v: number): string => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? '0' : String(r); };
+const inkName = (s: string): string => (!s ? '/Spot' : /^[A-Za-z0-9_.-]+$/.test(s) ? `/${s}` : `(${[...new TextEncoder().encode(s)].map((b) => (b < 32 || b > 126 || b === 40 || b === 41 || b === 92 ? `\\${b.toString(8).padStart(3, '0')}` : String.fromCharCode(b))).join('')}) cvn`);
 const EMBED_BEGIN = '%FormpathDocument-Begin', EMBED_END = '%FormpathDocument-End', EMBED_LINE = '%FPTH:';
 
 async function deflate(data: Uint8Array): Promise<Uint8Array> {
@@ -119,7 +120,7 @@ class PsPainter {
     const reg = sw?.name === '[Registration]';
     if (!sw || !(sw.spot || reg) || sw.paint.type !== 'color') return null;
     const k = toCmyk(sw.paint.color), [C, M, Y, K] = reg ? [1, 1, 1, 1] : k.kind === 'cmyk' ? [k.c / 100, k.m / 100, k.y / 100, k.k / 100] : [0, 0, 0, 1];
-    return `[/Separation ${reg ? '/All' : `/${sw.name.replace(/[^A-Za-z0-9_.-]/g, '_') || 'Spot'}`} /DeviceCMYK {dup ${f(C)} mul exch dup ${f(M)} mul exch dup ${f(Y)} mul exch ${f(K)} mul}] setcolorspace ${f(Math.max(0, Math.min(100, raw.tint ?? 100)) / 100)} setcolor`;
+    return `[/Separation ${reg ? '/All' : inkName(sw.name)} /DeviceCMYK {dup ${f(C)} mul exch dup ${f(M)} mul exch dup ${f(Y)} mul exch ${f(K)} mul}] setcolorspace ${f(Math.max(0, Math.min(100, raw.tint ?? 100)) / 100)} setcolor`;
   }
 
   fillWith(raw: VNode['ap']['items'][number]['paint'], d: PathData, evenodd: boolean, b: Rect): string {
