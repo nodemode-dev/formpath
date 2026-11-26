@@ -3,6 +3,7 @@ import { anchor, arcSegmentPath, mul, transformPath } from '../engine/geometry';
 import { fill as fillItem, linearGradient, radialGradient, stop, stroke as strokeItem, toRgb } from '../engine/paint';
 import { bytesStream, filterStream, subStream, toRgba, type PsStream, type Samples } from './ps-filters';
 import { DEFAULT_CHAR, DEFAULT_PARA } from '../engine/text';
+import { csOf, psDecode } from './text-decode';
 import type { Anchor, Color, Doc, Mat, Paint, PathData, SubPath, VNode } from '../engine';
 
 type PsName = { t: 'name'; v: string; lit: boolean };
@@ -82,6 +83,7 @@ class Interp {
   gstack: GState[] = [];
   out: VNode[] = [];
   skipped = new Set<string>();
+  composed = new Map<string, string>();
   images: PendingImage[] = [];
   imgSpace: ImgSpace = { n: 1 };
   stamp = Date.now().toString(36);
@@ -528,27 +530,46 @@ const OPS: Record<string, (ps: Interp) => void> = {
   setpattern: (ps) => { ps.pop(); }, makepattern: (ps) => { ps.pop(); ps.pop(); ps.push({ t: 'dict', v: new Map() }); },
   shfill: (ps) => { const sh = ps.pop(); if (!isDict(sh)) return; const paint = shadingPaint(ps, sh); const c = ps.gs.clip; if (!paint || !c) { ps.skipped.add('shfill'); return; } const g = ps.gs.clip; ps.gs.clip = null; ps.emit({ id: newId('p'), kind: 'path', d: ps.toDoc(c.d), rule: c.even ? 'evenodd' : 'nonzero', opacity: 1, blend: 'normal', ap: { items: [fillItem(paint)], effects: [] } }); ps.gs.clip = g; },
   image: (ps) => imageOp(ps, 'image'), colorimage: (ps) => imageOp(ps, 'colorimage'), imagemask: (ps) => imageOp(ps, 'imagemask'),
-  findfont: (ps) => { const k = keyOf(ps.pop()); ps.push({ t: 'font', name: k, size: 1, m: [1, 0, 0, 1, 0, 0] }); }, definefont: (ps) => { const f = ps.pop(); ps.pop(); ps.push(f); }, undefinefont: (ps) => { ps.pop(); },
+  findfont: (ps) => { const k = keyOf(ps.pop()); ps.push({ t: 'font', name: ps.composed.get(k) ?? k, size: 1, m: [1, 0, 0, 1, 0, 0] }); }, definefont: (ps) => { const f = ps.pop(); ps.pop(); ps.push(f); }, undefinefont: (ps) => { ps.pop(); },
   scalefont: (ps) => { const s = ps.num(), f = ps.pop() as PsFont; ps.push({ t: 'font', name: f?.name ?? 'Helvetica', size: (f?.size ?? 1) * s, m: f?.m ?? [1, 0, 0, 1, 0, 0] }); },
   makefont: (ps) => { const m = ps.mat(ps.pop()) ?? [1, 0, 0, 1, 0, 0], f = ps.pop() as PsFont; ps.push({ t: 'font', name: f?.name ?? 'Helvetica', size: (f?.size ?? 1) * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])), m }); },
   setfont: (ps) => { const f = ps.pop(); if (typeof f === 'object' && f !== null && (f as PsFont).t === 'font') ps.gs.font = f as PsFont; },
   selectfont: (ps) => { const s = ps.pop(), k = keyOf(ps.pop()); ps.gs.font = { t: 'font', name: k, size: typeof s === 'number' ? s : 12, m: [1, 0, 0, 1, 0, 0] }; },
   currentfont: (ps) => ps.push(ps.gs.font ?? { t: 'font', name: 'Helvetica', size: 12, m: [1, 0, 0, 1, 0, 0] }),
-  stringwidth: (ps) => { const s = ps.pop(); ps.push((typeof s === 'string' ? s.length : 0) * 0.5 * (ps.gs.font?.size ?? 12), 0); },
+  stringwidth: (ps) => { const s = ps.pop(), t = typeof s === 'string' ? textOf(ps.gs.font?.name ?? '', s) : ''; ps.push((t ?? (s as string)).length * (t === null ? 0.25 : 0.5) * (ps.gs.font?.size ?? 12), 0); },
+  glyphshow: (ps) => { const g = keyOf(ps.pop()), t = glyphText(g); if (t !== null) showText(ps, t, false); else ps.skipped.add('glyphs shown by name'); },
+  composefont: (ps) => { ps.pop(); const c = ps.pop(), k = keyOf(ps.pop()), name = `${k}--${isName(c) ? c.v : typeof c === 'string' ? c : ''}`; ps.composed.set(k, name); ps.push({ t: 'font', name, size: 1, m: [1, 0, 0, 1, 0, 0] }); },
   show: (ps) => showText(ps, ps.pop()), ashow: (ps) => { const s = ps.pop(); ps.pop(); ps.pop(); showText(ps, s); }, widthshow: (ps) => { const s = ps.pop(); ps.pop(); ps.pop(); ps.pop(); showText(ps, s); },
   awidthshow: (ps) => { const s = ps.pop(); for (let i = 0; i < 5; i++) ps.pop(); showText(ps, s); }, xshow: (ps) => { ps.pop(); showText(ps, ps.pop()); }, yshow: (ps) => { ps.pop(); showText(ps, ps.pop()); }, xyshow: (ps) => { ps.pop(); showText(ps, ps.pop()); },
   kshow: (ps) => { const s = ps.pop(); ps.pop(); showText(ps, s); }, charpath: (ps) => { ps.pop(); ps.pop(); ps.skipped.add('charpath'); },
 };
 
-function showText(ps: Interp, s: PsObj): void {
+const GLYPH_TYPE = 'type in glyph-number fonts (Identity-H)';
+function textOf(font: string, s: string): string | null {
+  if (/Identity-[HV]/.test(font)) return null;
+  const cs = csOf(font);
+  if (!cs && /^(Ryumin|GothicBBB|Midashi|Heisei|Koz(Min|Go))[\w-]*-[HV]$/.test(font)) return psDecode(s.replace(/[\x21-\x7e]/g, (c) => String.fromCharCode(c.charCodeAt(0) | 0x80)), 'euc-jp') ?? s;
+  return cs ? psDecode(s, cs) ?? s : s;
+}
+
+function glyphText(name: string): string | null {
+  const m = /^uni((?:[0-9A-F]{4})+)$/.exec(name), n = /^u([0-9A-F]{4,6})$/.exec(name);
+  const cps = m ? m[1].match(/.{4}/g)!.map((h) => parseInt(h, 16)) : n ? [parseInt(n[1], 16)] : [];
+  return cps.length && cps.every((c) => c <= 0x10ffff && (c < 0xd800 || c > 0xdfff)) ? String.fromCodePoint(...cps) : null;
+}
+
+function showText(ps: Interp, s: PsObj, raw = true): void {
   if (typeof s !== 'string' || !s.trim() || !ps.gs.cp) return;
   const f = ps.gs.font ?? { t: 'font' as const, name: 'Helvetica', size: 12, m: [1, 0, 0, 1, 0, 0] as Mat };
   const i = inv(ps.gs.ctm), cp = ps.gs.cp, u = { x: i[0] * cp.x + i[2] * cp.y + i[4], y: i[1] * cp.x + i[3] * cp.y + i[5] };
-  const xf = mul(mul(ps.flip, mul(ps.gs.ctm, [1, 0, 0, 1, u.x, u.y])), [1, 0, 0, -1, 0, 0]);
-  const fam = FONT_MAP.find(([re]) => re.test(f.name))?.[1] ?? f.name.split('-')[0].replace(/MT$|PS$/, '');
-  const style = /BoldItalic|BoldOblique/i.test(f.name) ? 'Bold Italic' : /Bold/i.test(f.name) ? 'Bold' : /Italic|Oblique/i.test(f.name) ? 'Italic' : 'Regular';
-  ps.emit({ id: newId('t'), kind: 'text', mode: 'point', spans: [{ text: s, style: { ...DEFAULT_CHAR, font: fam, style, size: f.size, fill: { type: 'color', color: ps.gs.color } } }], para: { ...DEFAULT_PARA }, xf, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } });
-  const adv = s.length * 0.5 * f.size;
+  const t = raw ? textOf(f.name, s) : s, adv = (t === null ? s.length / 2 : t.length) * 0.5 * f.size;
+  if (t === null) ps.skipped.add(GLYPH_TYPE);
+  else {
+    const xf = mul(mul(ps.flip, mul(ps.gs.ctm, [1, 0, 0, 1, u.x, u.y])), [1, 0, 0, -1, 0, 0]);
+    const fam = FONT_MAP.find(([re]) => re.test(f.name))?.[1] ?? f.name.split('-')[0].replace(/MT$|PS$/, '');
+    const style = /BoldItalic|BoldOblique/i.test(f.name) ? 'Bold Italic' : /Bold/i.test(f.name) ? 'Bold' : /Italic|Oblique/i.test(f.name) ? 'Italic' : 'Regular';
+    ps.emit({ id: newId('t'), kind: 'text', mode: 'point', spans: [{ text: t, style: { ...DEFAULT_CHAR, font: fam, style, size: f.size, fill: { type: 'color', color: ps.gs.color } } }], para: { ...DEFAULT_PARA }, xf, opacity: 1, blend: 'normal', ap: { items: [], effects: [] } });
+  }
   ps.gs.cp = ps.user(u.x + adv, u.y);
 }
 
@@ -602,5 +623,5 @@ export async function readEpsVector(data: ArrayBuffer, title: string): Promise<E
     } catch { ps.skipped.add('images'); }
   }
   const skipped = [...ps.skipped].filter((k) => !/^(error|AI|Adobe)/.test(k)).slice(0, 12);
-  return { doc, assets, skipped: [...new Set([...skipped.filter((k) => /image|shfill|charpath/.test(k)), ...(skipped.some((k) => !/image|shfill|charpath/.test(k)) ? ['operators it does not know'] : [])])] };
+  return { doc, assets, skipped: [...new Set([...skipped.filter((k) => /image|shfill|charpath|glyph/.test(k)), ...(skipped.some((k) => !/image|shfill|charpath|glyph/.test(k)) ? ['operators it does not know'] : [])])] };
 }

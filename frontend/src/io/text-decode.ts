@@ -45,3 +45,25 @@ export function cadEscapes(s: string, cp?: string | null, codes = false): string
     return c > 255 ? m : c < 128 ? String.fromCharCode(c) : decode(Uint8Array.of(c), cp || 'windows-1252', true) ?? m;
   });
 }
+
+const CMAPS: Array<[RegExp, string]> = [
+  [/UCS2|UTF16/i, 'utf-16be'], [/UTF8/i, 'utf-8'], [/UTF32|Identity-[HV]|(^|-)CNS/i, ''],
+  [/(^|-)(B5|ETen|HKscs|HKdl|HKgccs|HKm\d)/i, 'big5'], [/(^|-)GB(K|pc|T|-EUC|18030)/i, 'gb18030'], [/(^|-)(KSC|UHC)/i, 'euc-kr'],
+  [/RKSJ|(^|-)(90ms|90pv|83pv)/i, 'shift_jis'], [/(^|-)EUC-[HV]$/i, 'euc-jp'],
+  [/^_?P?MingLiU/i, 'big5'], [/^_?N?Sim(Sun|Hei)/i, 'gb18030'], [/^_?MS-P?(Mincho|Gothic)/i, 'shift_jis'], [/^_?(Batang|Gulim|Dotum|Gungsuh)/i, 'euc-kr'],
+];
+
+export function csOf(name: string): string {
+  for (const [re, cs] of CMAPS) if (re.test(name)) return cs;
+  return '';
+}
+
+export function psDecode(s: string, cs: string): string | null {
+  return decode(Uint8Array.from(s, (c) => c.charCodeAt(0) & 255), cs, true);
+}
+
+export function psUni(s: string, cs = ''): string {
+  if (!/[\x80-\xff]/.test(s) || /[^\x00-\xff]/.test(s)) return s;
+  if (s.charCodeAt(0) === 0xfe && s.charCodeAt(1) === 0xff) return psDecode(s.slice(2), 'utf-16be') ?? s;
+  return psDecode(s, 'utf-8') ?? (cs ? psDecode(s, cs) : null) ?? psDecode(s, 'windows-1252') ?? s;
+}
