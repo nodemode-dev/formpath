@@ -1,7 +1,14 @@
 @echo off
 setlocal
 set "PY=%~dp0..\backend\venv\Scripts\python.exe"
-if exist "%PY%" ( "%PY%" %* & exit /b )
-where py >nul 2>nul && ( py -3 %* & exit /b )
+if not exist "%PY%" goto nopy
+"%PY%" %*
+exit /b
+:nopy
+where py >nul 2>nul
+if errorlevel 1 goto nolauncher
+py -3 %*
+exit /b
+:nolauncher
 python %*
 exit /b %ERRORLEVEL%
