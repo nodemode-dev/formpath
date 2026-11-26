@@ -26,6 +26,7 @@ The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app ic
 | bidi-js 1.1.0 (Jason Johnston) | MIT | the Unicode Bidirectional Algorithm (Unicode 13 data) for right-to-left and mixed-direction type; loaded with harfbuzzjs. Its declared dependency require-from-string 2.0.2 (MIT) is installed but not bundled |
 | @tauri-apps/api | Apache-2.0 or MIT | native menus on macOS |
 | tauri, tauri-plugin-shell, tauri-plugin-dialog, tauri-plugin-updater, regex, serde_json | Apache-2.0 or MIT | desktop shell |
+| tauri-plugin-single-instance 2.5.5, with zbus 5.19.0 on Linux | Apache-2.0 or MIT (zbus: MIT) | on Windows and Linux, a second launch hands the files it was given to the running window and ends |
 | fastapi, uvicorn, python-multipart, httpx | MIT, BSD-3-Clause, Apache-2.0, BSD-3-Clause | engine |
 | Pillow 12.3.0, with LittleCMS 2 | MIT-CMU (HPND); LittleCMS is MIT | ICC profile reading and the colour lookup tables for Color Settings and Proof Colors |
 | keyring, with jaraco.classes, jaraco.context, jaraco.functools, more-itertools, jeepney and SecretStorage | MIT (SecretStorage: BSD-3-Clause) | API keys in the system's password store |

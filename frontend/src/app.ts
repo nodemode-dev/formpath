@@ -2253,6 +2253,7 @@ export function startApp(): void {
   }
 
   const faces = Promise.all(['400', '500', '600'].map((w) => document.fonts.load(`${w} 12px Inter`))).catch(() => undefined);
-  void Promise.race([faces, new Promise((r) => window.setTimeout(r, 2500))]).then(() => requestAnimationFrame(() => { revealApp(); void offerRecovery(); }));
+  const openedByShell = (): void => { void import('@tauri-apps/api/core').then(async ({ invoke }) => { for (const [id, name] of await invoke<[number, string][]>('opened_take')) { try { await openFiles([new File([await invoke<ArrayBuffer>('opened_read', { id })], name)]); } catch (err) { toast(`${name}: ${message(err)}`, 'error'); } } }).catch(() => undefined); };
+  void Promise.race([faces, new Promise((r) => window.setTimeout(r, 2500))]).then(() => requestAnimationFrame(() => { revealApp(); void offerRecovery().finally(() => { if (!('__TAURI_INTERNALS__' in window)) return; (window as unknown as { formpathOpened?: () => void }).formpathOpened = openedByShell; openedByShell(); }); }));
   void plainText; void hex;
 }

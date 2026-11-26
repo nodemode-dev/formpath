@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod engine_start;
+mod launch_args;
+mod opened;
 mod reveal;
 mod text_edit;
 mod traffic_lights;
@@ -89,7 +91,14 @@ fn check_for_updates(handle: tauri::AppHandle) {
 
 fn main() {
     reveal::mark_launch();
-    let app = tauri::Builder::default()
+    let app = tauri::Builder::default();
+    #[cfg(any(windows, target_os = "linux"))]
+    let app = app.plugin(tauri_plugin_single_instance::init(|handle, argv, cwd| {
+        let exe = std::env::current_exe().unwrap_or_default();
+        opened::arrive(handle, launch_args::paths(argv.into_iter().map(std::ffi::OsString::from).collect(), std::path::Path::new(&cwd), &exe));
+        opened::bring_forward(handle);
+    }));
+    let app = app
         .on_window_event(|window, event| {
             if window.label() == "main"
                 && matches!(
@@ -103,13 +112,15 @@ fn main() {
                 traffic_lights::place(window);
             }
         })
-        .invoke_handler(tauri::generate_handler![traffic_lights::set_window_title, reveal::app_ready, text_edit::text_edit])
+        .invoke_handler(tauri::generate_handler![traffic_lights::set_window_title, reveal::app_ready, text_edit::text_edit, opened::opened_take, opened::opened_read])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Backend(Mutex::new(None)))
+        .manage(opened::Opened::default())
         .setup(|app| {
             let handle = app.handle().clone();
+            opened::arrive(&handle, launch_args::own());
             reveal::round_splash(&handle);
             let started = app
                 .shell()
@@ -253,6 +264,10 @@ fn main() {
         .expect("tauri app should build");
 
     app.run(|handle, event| {
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls } = &event {
+            opened::arrive(handle, urls.iter().filter_map(|url| url.to_file_path().ok()).collect());
+        }
         if let RunEvent::Exit = event {
             kill_backend(handle);
         }
