@@ -27,7 +27,7 @@ export class Face {
   constructor(readonly key: string, readonly font: Font, readonly style: CharStyle) {}
 }
 
-export const restricted = (font: Font): boolean => ((((font.tables.os2 as { fsType?: number } | undefined)?.fsType ?? 0) & 0x0002) !== 0);
+export const restricted = (font: Font): boolean => ((((font.tables.os2 as { fsType?: number } | undefined)?.fsType ?? 0) & 0x000e) === 0x0002);
 
 const solidOrNone =(doc: Doc, p: Paint): boolean => { const r = resolvePaint(doc, p); return r.type === 'none' || r.type === 'color'; };
 
@@ -72,6 +72,7 @@ export async function embeddedMarkFont(pdf: PdfSink, deflate: (b: Uint8Array) =>
 
 export class LiveFonts {
   private readonly faces = new Map<string, Face>();
+  readonly withheld = new Set<string>();
 
   capable(doc: Doc, n: TextNode): boolean {
     return !has3d(n) && !n.ap.effects.length && !n.ap.items.some((i) => i.visible) && !(n.mask && !n.mask.disabled);
@@ -112,7 +113,7 @@ export class LiveFonts {
 
   async build(pdf: PdfSink, deflate: (d: Uint8Array) => Promise<Uint8Array>, openType = true): Promise<void> {
     await Promise.all([...this.faces.values()].map(async (face) => {
-      if (face.fallback && restricted(face.font)) { face.failed = true; return; }
+      if (restricted(face.font)) { face.failed = true; if (!face.fallback) this.withheld.add(face.style.font); return; }
       const src = fontSource(face.font);
       const res = src ? await api.subsetFont(src, [...face.gids], hasAxes(face.style) ? { ...face.style.axes } : {}) : null;
       if (!res || (res.cff && !openType)) { face.failed = true; return; }

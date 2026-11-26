@@ -749,7 +749,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names}${extra} >>`);
   const info = pdf.add(`<< /Title ${pdfTextString(title)} /Producer ${pdfString(producer)} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
   const blob = await pdf.build(root, info, rules.header, docId, sealer, (o.compression ?? DEFAULT_COMPRESSION).flate !== false);
-  for (const note of [...substituteNotes(swapped), ...glyphNotes([...missing])]) o.notes?.(note);
+  for (const note of [...substituteNotes(swapped), ...[...live.withheld].map((f) => `The licence of ${f} does not allow it to be embedded in a document, so its type was drawn as outlines in ${f}. It looks the same but cannot be selected or searched as text.`), ...glyphNotes([...missing])]) o.notes?.(note);
   return blob;
 }
 
