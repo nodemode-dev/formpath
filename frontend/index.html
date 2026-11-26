@@ -100,6 +100,7 @@
   r.setAttribute('data-ft-dock-side', side);
   r.setAttribute('data-ft-dock-h', String(h));
   r.setAttribute('data-ft-dock-w', String(w));
+  if (/^Win/.test(navigator.platform || '')) r.setAttribute('data-fp-win', '');
   r.style.setProperty('--ft-dock-size', h + 'px');
   r.style.setProperty('--ft-dock-wsize', w + 'px');
 })();
