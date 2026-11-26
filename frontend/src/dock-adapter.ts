@@ -101,7 +101,12 @@ export interface DockDeps {
   homeShown(): boolean;
 }
 
+const imeEscape = (e: KeyboardEvent): void => {
+  if (e.key === 'Escape' && (e.isComposing || e.keyCode === 229) && document.querySelector('.ft-tour:not([hidden])')) Object.defineProperty(e, 'key', { value: 'Process' });
+};
+
 export function formpathDock(deps: DockDeps): DockAdapter<'antigravity'> {
+  window.addEventListener('keydown', imeEscape, true);
   return {
     words: {
       app: 'formpath', noun: 'document', example: 'make the title a warm gradient and add a soft drop shadow', start: './formpath boot',
