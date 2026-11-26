@@ -1,6 +1,6 @@
 import { geomBounds, invalidateBounds, nodePath, selectionBounds, visualBounds } from './bounds';
 import { artGuides, bristleKind, defaultBrushes, TILE_KEYS } from './brushes';
-import { allNodes, ancestors, childrenOf, cloneNode, findNode, inDocOrder, insertInto, isContainer, isLocked, isVisible, layerOf, makeLayer, newDoc, newId, nodeAt, nodeLabel, pathOf, removeNodes, topObjects, topSelectable, updateNodes, walk, type IndexPath } from './doc';
+import { allNodes, ancestors, childrenOf, clip, cloneNode, findNode, inDocOrder, insertInto, isContainer, isLocked, isVisible, layerOf, makeLayer, newDoc, newId, nodeAt, nodeLabel, pathOf, removeNodes, topObjects, topSelectable, updateNodes, walk, type IndexPath } from './doc';
 import { EFFECT_IDS, effectDef, effectDefaults, has3d, onTraceReady, setTraceDraft, flipProfile, normalizeWidthPoints, widthProfileNamed } from './effects';
 import { invalidateLayers } from './render';
 import { Emitter } from './events';
@@ -1066,7 +1066,7 @@ export class Engine extends Emitter<EngineEvents> {
     const made = new Map<string, VNode>();
     for (const t of texts) {
       const d = await provider(t);
-      if (!d || !d.length) { this.notice(`The outlines of “${plainText(t).slice(0, 30)}” need its font, ${t.spans[0]?.style.font}, which formpath could not load.`, 'error'); continue; }
+      if (!d || !d.length) { this.notice(`The outlines of “${clip(plainText(t), 30)}” need its font, ${t.spans[0]?.style.font}, which formpath could not load.`, 'error'); continue; }
       const st = t.spans[0]?.style ?? DEFAULT_CHAR;
       const items = [...(st.fill.type !== 'none' ? [fill(st.fill)] : []), ...(st.stroke.type !== 'none' ? [stroke(st.stroke, st.strokeWidth)] : []), ...t.ap.items];
       made.set(t.id, { id: newId('c'), kind: 'compound', rule: 'nonzero', children: d.map((sp) => ({ id: newId(), kind: 'path', d: [sp], rule: 'nonzero', opacity: 1, blend: 'normal', ap: emptyAppearance() })), opacity: t.opacity, blend: t.blend, ap: { items, effects: t.ap.effects }, name: t.name });
@@ -2138,7 +2138,7 @@ export class Engine extends Emitter<EngineEvents> {
     if (!p) return null;
     const st = p.history.stateAt(index ?? p.history.steps().current);
     if (!st) return null;
-    const q = this.addProject(st.doc, `${p.name} ${st.name}`.slice(0, 80));
+    const q = this.addProject(st.doc, clip(`${p.name} ${st.name}`, 80));
     for (const [k, b] of p.assets) q.assets.set(k, b);
     q.history.markUnsaved();
     this.emit('projects', null);

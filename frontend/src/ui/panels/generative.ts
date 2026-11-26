@@ -1,5 +1,6 @@
 import type { Engine, Project, Rect, VNode } from '../../engine';
 import { geomBounds } from '../../engine/bounds';
+import { clip } from '../../engine/doc';
 import { clipToShape, artParts, modelState, PATTERN_LAYOUTS, patternVariations, shapeFillVariations, strengthMode, type ModelState, type PatternLayout, type PatternVariation, type Variation } from '../../io/generative';
 import { reportText } from '../../io/gen-repair';
 import { GenOptionsUi } from './gen-options';
@@ -219,7 +220,7 @@ export class PatternGenPanel extends ModelPanel {
   }
 
   private saveSwatches(): void {
-    const base = (this.prompt.value.trim() || 'Generated Pattern').replace(/\s+/g, ' ').slice(0, 32);
+    const base = clip((this.prompt.value.trim() || 'Generated Pattern').replace(/\s+/g, ' '), 32);
     const list = [...this.picked].sort().flatMap((i, k) => { const r = this.results[i]; return r?.art ? [{ name: `${base} ${k + 1}`, tile: r.tile, art: r.art, type: r.layout?.type, hs: r.layout?.hs, vs: r.layout?.vs }] : []; });
     const fillIds = this.o.fill ? this.engine.selectedIds() : [];
     const ids = this.engine.addPatternSwatches(list, fillIds);

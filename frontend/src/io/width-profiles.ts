@@ -1,4 +1,5 @@
 import { CUSTOM_WIDTH_PROFILES, normalizeWidthPoints, WIDTH_PROFILES } from '../engine/effects';
+import { clip } from '../engine/doc';
 import type { WidthPoint } from '../engine/types';
 
 const KEY = 'formpath.widthProfiles';
@@ -22,7 +23,7 @@ export const isCustomProfile = (name: string): boolean => Object.prototype.hasOw
 export const onWidthProfiles = (fn: () => void): void => { listeners.add(fn); };
 
 export function saveWidthProfile(name: string, pts: ReadonlyArray<Partial<WidthPoint>>): string | null {
-  const key = name.trim().slice(0, 60);
+  const key = clip(name.trim(), 60);
   if (!key || clash(key) || !pts.length) return null;
   CUSTOM_WIDTH_PROFILES[key] = normalizeWidthPoints(pts);
   persist();

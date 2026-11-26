@@ -182,6 +182,8 @@ export function inDocOrder(doc: Doc, ids: Iterable<string>): string[] {
   return [...new Set(ids)].filter((id) => idx.has(id)).sort((a, b) => comparePaths(idx.get(a) as IndexPath, idx.get(b) as IndexPath));
 }
 
+export const clip = (s: string, n: number): string => s.slice(0, n > 0 && /[\ud800-\udbff]/.test(s[n - 1] ?? '') ? n - 1 : n);
+
 export function nodeLabel(n: VNode): string {
   if (n.name) return n.name;
   switch (n.kind) {
@@ -189,7 +191,7 @@ export function nodeLabel(n: VNode): string {
     case 'group': return n.clip ? 'Clip Group' : 'Group';
     case 'path': return n.live ? ({ rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', star: 'Star', line: 'Line' }[n.live.kind]) : n.guide ? 'Guide' : 'Path';
     case 'compound': return 'Compound Path';
-    case 'text': { const t = n.spans.map((s) => s.text).join('').replace(/\s+/g, ' ').trim(); return t ? (t.length > 28 ? t.slice(0, /[\ud800-\udbff]/.test(t[27]) ? 27 : 28) + '…' : t) : 'Type'; }
+    case 'text': { const t = n.spans.map((s) => s.text).join('').replace(/\s+/g, ' ').trim(); return t ? (t.length > 28 ? clip(t, 28) + '…' : t) : 'Type'; }
     case 'image': return 'Image';
     case 'symbol': return 'Symbol';
     case 'blend': return 'Blend';
