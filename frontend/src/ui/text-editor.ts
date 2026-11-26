@@ -1,6 +1,6 @@
 import { findNode } from '../engine/doc';
 import { apply, invert, rectContains, inflate } from '../engine/geometry';
-import { caretAt, cssFont, DEFAULT_CHAR, deleteText, indexAt, insertText, layoutText, plainText, selectionQuads, stepLine, styleAt } from '../engine/text';
+import { caretAt, cssFont, DEFAULT_CHAR, deleteText, indexAt, insertText, layoutText, plainText, selectionQuads, stepLine, stepVisual, styleAt } from '../engine/text';
 import type { CharStyle, Engine, PathData, Pt, TextNode } from '../engine';
 import type { Paint, ToolContext } from '../extensions/registry';
 import { el } from './dom';
@@ -223,6 +223,8 @@ export class TextEditor {
         e.preventDefault();
         const a = this.arrow(e.key);
         if (a.kind === 'line') { this.move(this.lineStep(a.dir), e.shiftKey); return; }
+        const vis = n && !e.altKey && !mod && !(this.range() && !e.shiftKey) ? stepVisual(n, this.caret, a.dir) : null;
+        if (vis !== null) { this.move(vis, e.shiftKey); return; }
         if (a.dir < 0) this.move(e.altKey || mod ? wordStart(text, this.caret) : this.range() && !e.shiftKey ? Math.min(this.caret, this.anchor) : prevPoint(text, this.caret), e.shiftKey);
         else this.move(e.altKey || mod ? wordEnd(text, this.caret) : this.range() && !e.shiftKey ? Math.max(this.caret, this.anchor) : nextPoint(text, this.caret), e.shiftKey);
         return;

@@ -895,12 +895,55 @@ export function drawText(ctx: CanvasRenderingContext2D, n: TextNode, paintStyle:
 const caretFrom = (a: Pt, d: Pt): { x: number; y: number; h: number; angle: number } => { const h = Math.hypot(d.x, d.y) || 1; return { x: a.x, y: a.y, h, angle: Math.atan2(-d.x / h, d.y / h) }; };
 const gu = (g: Glyph): number => g.iu ?? g.x;
 const ga = (g: Glyph): number => g.ia ?? g.w;
+const rtlOf = (g: Glyph): boolean => ((g.lv ?? 0) & 1) === 1;
+function holder(gs: Glyph[], i: number): { g: Glyph; end: boolean } | null {
+  let prev: Glyph | null = null;
+  for (const g of gs) {
+    if (g.syn) continue;
+    if (i >= g.index && i < g.index + g.ch.length) return { g, end: i > g.index };
+    if (g.index < i && (!prev || g.index > prev.index)) prev = g;
+  }
+  return prev ? { g: prev, end: true } : null;
+}
+function bidiStop(l: Line, i: number): number {
+  const h = holder(l.glyphs, i);
+  if (!h) return l.rtl ? l.x + l.width : l.x;
+  return h.end === rtlOf(h.g) ? gu(h.g) : gu(h.g) + ga(h.g);
+}
+function bidiIndexAt(l: Line, x: number): number {
+  const gs = l.glyphs.filter((g) => !g.syn);
+  if (!gs.length) return l.start;
+  let g = gs[0], dist = Infinity, last = 0;
+  for (const q of gs) { const d = x < gu(q) ? gu(q) - x : x > gu(q) + ga(q) ? x - gu(q) - ga(q) : 0; if (d < dist) { dist = d; g = q; } last = Math.max(last, q.index + q.ch.length); }
+  const after = (x > gu(g) + ga(g) / 2) !== rtlOf(g), at = after ? g.index + g.ch.length : g.index;
+  return after && at >= last ? l.end : at;
+}
+export function stepVisual(n: TextNode, caret: number, dir: 1 | -1): number | null {
+  if (n.mode === 'path' || n.vertical) return null;
+  const lay = layoutText(n), li = lay.lines.findIndex((x) => caret >= x.start && caret <= x.end), l = lay.lines[li];
+  if (!l?.bidi) return null;
+  const stops = new Set<number>([l.start, l.end]);
+  for (const g of l.glyphs) if (!g.syn) { stops.add(g.index); stops.add(g.index + g.ch.length); }
+  const cur = bidiStop(l, caret);
+  let best: number | null = null, bd = 0;
+  for (const i of stops) {
+    if (i === caret) continue;
+    const d = (bidiStop(l, i) - cur) * dir;
+    if (d <= 1e-6) continue;
+    if (best === null || d < bd - 1e-6 || (Math.abs(d - bd) <= 1e-6 && Math.abs(i - caret) < Math.abs(best - caret))) { best = i; bd = d; }
+  }
+  if (best !== null) return best;
+  const t = plainText(n);
+  return (dir > 0) !== !!l.rtl ? Math.min(t.length, caret + (/[\ud800-\udbff]/.test(t[caret] ?? '') ? 2 : 1)) : Math.max(0, caret - (/[\udc00-\udfff]/.test(t[caret - 1] ?? '') ? 2 : 1));
+}
 
 export function caretAt(n: TextNode, index: number): { x: number; y: number; h: number; angle: number } {
   const lay = layoutText(n), xf = n.xf;
   if (n.mode === 'path') {
-    let g = lay.glyphs.find((x) => x.index >= index), end = false;
+    const h = lay.complex ? holder(lay.glyphs, index) : null;
+    let g = h ? h.g : lay.glyphs.find((x) => x.index >= index), end = !!h?.end;
     if (!g) { g = lay.glyphs[lay.glyphs.length - 1]; end = true; }
+    if (g && rtlOf(g)) end = !end;
     if (!g) {
       const ps = pathSpan(n), size = n.spans[0]?.style.size ?? 12;
       if (!ps) return { x: 0, y: 0, h: size, angle: 0 };
@@ -921,6 +964,7 @@ export function caretAt(n: TextNode, index: number): { x: number; y: number; h: 
   };
   for (const l of lay.lines) {
     if (index >= l.start && index <= l.end) {
+      if (l.bidi) { const h = holder(l.glyphs, index), tg = h?.g.t ? h.g : null; return at(bidiStop(l, index), l, tg ? touchMap(tg) : null); }
       let u = l.x, prev: Glyph | null = null, next: Glyph | null = null;
       for (const g of l.glyphs) { if (g.index >= index) { next = g; break; } u = gu(g) + ga(g); prev = g; }
       const tg = next?.t && !next.syn ? next : prev?.t && !prev.syn ? prev : null;
@@ -940,14 +984,14 @@ export function indexAt(n: TextNode, local: Pt): number {
       if (d >= bd) continue;
       bd = d;
       const q = apply(invert(glyphMat(g)), local.x, local.y), bx = glyphBox(g);
-      best = (g.up ? q.y > bx.y + bx.h / 2 : q.x > bx.x + bx.w / 2) ? g.index + g.ch.length : g.index;
+      best = (g.up ? q.y > bx.y + bx.h / 2 : q.x > bx.x + bx.w / 2) !== rtlOf(g) ? g.index + g.ch.length : g.index;
     }
     return best;
   }
   for (const g of lay.glyphs) {
     if (!g.t || g.syn) continue;
     const r = apply(invert(glyphMat(g)), local.x, local.y), bx = glyphBox(g);
-    if (r.x >= bx.x && r.x <= bx.x + bx.w && r.y >= bx.y && r.y <= bx.y + bx.h) return (g.up ? r.y > bx.y + bx.h / 2 : r.x > bx.x + bx.w / 2) ? g.index + g.ch.length : g.index;
+    if (r.x >= bx.x && r.x <= bx.x + bx.w && r.y >= bx.y && r.y <= bx.y + bx.h) return (g.up ? r.y > bx.y + bx.h / 2 : r.x > bx.x + bx.w / 2) !== rtlOf(g) ? g.index + g.ch.length : g.index;
   }
   const q = toAbs(lay.vertical, local);
   let line = lay.lines[0], ld = Infinity;
@@ -956,6 +1000,7 @@ export function indexAt(n: TextNode, local: Pt): number {
     const d = Math.hypot(q.x < x0 ? x0 - q.x : q.x > x1 ? q.x - x1 : 0, q.y < y0 ? y0 - q.y : q.y > y1 ? q.y - y1 : 0) * 4 + Math.abs(q.y - (y0 + y1) / 2) * 0.01;
     if (d < ld) { ld = d; line = l; }
   }
+  if (line.bidi) return bidiIndexAt(line, q.x);
   for (const g of line.glyphs) if (q.x < gu(g) + ga(g) / 2) return g.index;
   return line.end;
 }
@@ -967,7 +1012,9 @@ export function stepLine(n: TextNode, caret: number, dir: 1 | -1): number {
   if (!target) return dir < 0 ? 0 : plainText(n).length;
   const l = lay.lines[li];
   let u = l.x;
-  for (const g of l.glyphs) { if (g.index >= caret) break; u = gu(g) + ga(g); }
+  if (l.bidi) u = bidiStop(l, caret);
+  else for (const g of l.glyphs) { if (g.index >= caret) break; u = gu(g) + ga(g); }
+  if (target.bidi) return bidiIndexAt(target, u);
   for (const g of target.glyphs) if (u < gu(g) + ga(g) / 2) return g.index;
   return target.end;
 }
