@@ -27,7 +27,7 @@ export class Face {
   constructor(readonly key: string, readonly font: Font, readonly style: CharStyle) {}
 }
 
-export const restricted = (font: Font): boolean => ((((font.tables.os2 as { fsType?: number } | undefined)?.fsType ?? 0) & 0x000e) === 0x0002);
+export const restricted = (font: Font): boolean => { const os2 = font.tables.os2 as { fsType?: number; version?: number } | undefined, fs = os2?.fsType ?? 0; return (fs & 0x000e) === 0x0002 || ((os2?.version ?? 0) >= 2 && (fs & 0x0300) !== 0); };
 
 const solidOrNone =(doc: Doc, p: Paint): boolean => { const r = resolvePaint(doc, p); return r.type === 'none' || r.type === 'color'; };
 
