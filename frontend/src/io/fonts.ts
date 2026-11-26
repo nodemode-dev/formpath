@@ -73,10 +73,17 @@ export function families(): string[] {
   const sys = [...new Set((systemList ?? []).map((f) => f.family))].sort((a, b) => a.localeCompare(b));
   return [...BUNDLED_FAMILIES, ...WEB_FAMILIES.filter((f) => !sys.includes(f)), ...sys.filter((f) => !BUNDLED_FAMILIES.includes(f))];
 }
-export async function findSimilarFonts(family: string, style = 'Regular', limit = 10): Promise<SimilarFont[]> {
-  const list = await systemFonts(), of = list.filter((f) => f.family === family);
+let aliasText: Map<string, string> | null = null;
+export function aliasesOf(family: string): string {
+  if (!systemList) return '';
+  if (!aliasText) { aliasText = new Map(); for (const f of systemList) if (f.aliases?.length) aliasText.set(f.family, `${aliasText.get(f.family) ?? ''}\n${f.aliases.join('\n')}`); }
+  return aliasText.get(family) ?? '';
+}
+const byAlias = (list: FontInfo[], family: string): FontInfo[] => { const want = family.toLowerCase(); return list.filter((f) => f.aliases?.some((a) => a.toLowerCase() === want)); };
+export async function findSimilarFonts(family: string, style = 'Regular', limit = 10): Promise<SimilarFont[] | null> {
+  const list = await systemFonts(), own = list.filter((f) => f.family === family), of = own.length ? own : byAlias(list, family);
   const hit = of.find((f) => f.style === style) ?? of.find((f) => /^(regular|book|roman|normal)$/i.test(f.style)) ?? of[0];
-  return hit ? api.similarFonts(hit.id, limit) : [];
+  return hit ? api.similarFonts(hit.id, limit) : !list.length || BUNDLED_FAMILIES.includes(family) ? [] : null;
 }
 export function isVariableFamily(family: string): boolean { return (systemList ?? []).some((f) => f.family === family && !!f.variable); }
 
@@ -117,6 +124,12 @@ export function fontSource(font: Font): { id: string } | { bytes: ArrayBuffer } 
   return id ? { id } : bytes ? { bytes } : null;
 }
 export function glyphAdvance(font: Font, gid: number, st: CharStyle): number { return variedGlyph(font, gid, st).adv; }
+function aliasFace(family: string, style: string, font: Font): void {
+  const buf = rawData.get(font), { weight, italic } = weightOf(style), slant = italic ? 'italic' : 'normal';
+  if (!buf || typeof FontFace === 'undefined' || !globalThis.document?.fonts || declaredFace(family, String(weight), slant)) return;
+  const face = new FontFace(family, buf, { weight: String(weight), style: slant });
+  void face.load().then((f) => { document.fonts.add(f); fontsChanged(); onFace?.(); }).catch(() => undefined);
+}
 export function fontFor(family: string, style: string): Promise<Font | null> {
   const key = `${family}|${style}`;
   let p = parsed.get(key);
@@ -131,6 +144,7 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
         if (!f) { f = api.fontFile(hit.id).then(keep).catch(() => null); byFile.set(hit.id, f); }
         const font = await f;
         if (font) installedId.set(font, hit.id);
+        if (font && hit.family.toLowerCase() !== family.toLowerCase()) aliasFace(family, style, font);
         const info = font ? infoOf(font) : null;
         if (info?.instances.length) {
           const names = info.instances.map((i) => i.name), had = instanceStyles.get(family) ?? [];
