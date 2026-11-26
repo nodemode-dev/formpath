@@ -116,7 +116,7 @@ export function formpathDock(deps: DockDeps): DockAdapter<'antigravity'> {
       sizes: { minHeight: 120, maxHeightShare: 0.7, defaultHeight: 280, minWidth: 320, maxWidthShare: 0.4, defaultWidth: 420 },
       canDockRight: () => window.innerWidth >= DOCK_RIGHT_MIN,
     },
-    isDockChord: (e) => (isMac ? e.metaKey : e.ctrlKey) && e.altKey && e.shiftKey && e.code === 'KeyT',
+    isDockChord: (e) => (isMac ? e.metaKey : e.ctrlKey) && e.altKey && e.shiftKey && (/^[a-z]$/i.test(e.key) ? e.key.toUpperCase() === 'T' : e.code === 'KeyT'),
     chordLabel: () => `${chord}T`,
     tabs: () => ({ builtin: ['chat', 'shell', 'claude', 'codex', 'cursor', 'antigravity'] }),
     classes: { iconButton: 'cv-icon-btn', button: 'cv-btn', primaryButton: 'cv-btn-primary', input: 'cv-input', select: 'cv-input', note: 'cv-note' },

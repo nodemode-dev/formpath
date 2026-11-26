@@ -32,7 +32,7 @@ const CODE_KEYS: Record<string, string> = {
 
 export function comboOf(e: KeyboardEvent): string {
   const c = e.code;
-  const key = c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5) : c.startsWith('Numpad') && /\d$/.test(c) ? c.slice(6) : CODE_KEYS[c] ?? e.key;
+  const key = /^[a-z]$/i.test(e.key) ? e.key.toUpperCase() : c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5) : c.startsWith('Numpad') && /\d$/.test(c) ? c.slice(6) : CODE_KEYS[c] ?? e.key;
   const parts: string[] = [];
   if (e.altKey) parts.push('Alt');
   if (e.shiftKey) parts.push('Shift');

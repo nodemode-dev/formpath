@@ -2124,7 +2124,7 @@ export function startApp(): void {
   window.addEventListener('keyup', (e) => { if (e.code === 'Space') stage.setSpace(false); });
   window.addEventListener('blur', () => stage.setSpace(false));
   function comboOfTool(e: KeyboardEvent): string {
-    const k = e.code.startsWith('Key') ? e.code.slice(3) : e.code === 'Backslash' ? '\\' : e.code === 'Equal' ? '=' : e.code === 'Minus' ? '-' : e.code === 'Backquote' ? '~' : e.key;
+    const k = /^[a-z]$/i.test(e.key) ? e.key.toUpperCase() : e.code.startsWith('Key') ? e.code.slice(3) : e.code === 'Backslash' ? '\\' : e.code === 'Equal' ? '=' : e.code === 'Minus' ? '-' : e.code === 'Backquote' ? '~' : e.key;
     return `${e.altKey ? 'Alt+' : ''}${e.shiftKey ? 'Shift+' : ''}${k}`;
   }
 

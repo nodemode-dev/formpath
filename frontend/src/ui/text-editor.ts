@@ -230,8 +230,8 @@ export class TextEditor {
       case 'Home': e.preventDefault(); this.move(this.lineEdge(false), e.shiftKey); return;
       case 'End': e.preventDefault(); this.move(this.lineEdge(true), e.shiftKey); return;
     }
-    if (mod && !e.altKey && e.code === 'KeyA') { e.preventDefault(); this.selectAll(); return; }
-    if (mod && !e.altKey && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) this.engine.redo(); else this.engine.undo(); return; }
+    if (mod && !e.altKey && (/^[a-z]$/i.test(e.key) ? e.key.toUpperCase() === 'A' : e.code === 'KeyA')) { e.preventDefault(); this.selectAll(); return; }
+    if (mod && !e.altKey && (/^[a-z]$/i.test(e.key) ? e.key.toUpperCase() === 'Z' : e.code === 'KeyZ')) { e.preventDefault(); if (e.shiftKey) this.engine.redo(); else this.engine.undo(); return; }
   }
 
   private place(): void {
