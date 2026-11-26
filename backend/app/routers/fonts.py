@@ -29,6 +29,16 @@ async def similar(id: str, limit: int = 10) -> dict:
     return {"fonts": found}
 
 
+@router.get("/cover")
+async def cover(cp: int, prefer: str = "") -> dict:
+    if not 0 <= cp <= 0x10FFFF:
+        raise HTTPException(status_code=422, detail="cp must be a code point from 0 to 1114111.")
+    hit = await run_in_threadpool(fonts.cover, cp, [p for p in prefer.split(",") if p.strip()][:32])
+    if not hit:
+        raise HTTPException(status_code=404, detail=f"No font on this computer has U+{cp:04X}.")
+    return hit
+
+
 @router.get("/file/{font_id}")
 async def font_file(font_id: str) -> Response:
     found = await run_in_threadpool(fonts.font_file, font_id)
