@@ -959,3 +959,39 @@ The PDF reader in the window meets type whose characters the file does not name 
 Parsed programs are kept by the first 32 hex digits of their SHA-256, the last six used, behind one lock (fontTools objects are not safe to share between threads, and the route runs in the thread pool). An unknown key answers 409 and the window sends the program again. The route sits behind the same window key and local guard as every other route and reads no file of this computer, only the bytes it is sent.
 
 Run against the programs embedded in nine public PDFs of the pdf.js test corpus (TrueType in Arial Unicode MS, AokinMincho, four Arabic faces, two test faces; CFF CID in Neo Sans Intel and Reitam) and a 141 KB CFF CID subset of Noto Sans CJK TC: every one loads and draws. `pytest` 196 pass. Not read: a Type 1 program (`FontFile`), which a simple font carries; the window does not ask for those.
+
+### app/services/fonts.py, app/routers/fonts.py · a font's names in every language, legacy name encodings, which font has a character, and CJK matches for a CJK font (issue 17)
+- refers-to: app/services/fonts.py :: LEGACY, COMMON, _plain, _strict, _fit, _decode, _names, _members, _scan, index, listing, find, _cmap, _upright, cover, _measure, similar; app/routers/fonts.py :: cover
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Only one name per name ID was kept, preferring English, so a font could not be found by its Chinese, Japanese or Korean name (`find` of WenQuanYi Zen Hei's Chinese name answered nothing). Every face now also lists its other family, full and PostScript names (IDs 1, 4, 6, 16, every language) as `aliases`; `find` tries the family first and then the aliases; the listing sends them. The scan is cached in memory only, and a missing key is read as empty.
+
+Name records of platform 3 with encoding 2 to 5 (Shift-JIS, PRC, Big5, Wansung) and of the Macintosh platform with a Japanese, Chinese or Korean script were read as UTF-16 or Mac Roman and came out as garbage. `_decode` tries both readings of a platform 3 legacy record (many Windows fonts store UTF-16 there despite the encoding id): the legacy one only when every 16-bit unit's high byte is 0 or at least 0x81, and when both are valid the one with more characters of the codec's common two-byte set wins, a tie going to UTF-16. A record that decodes as neither is skipped.
+
+`cover(cp, prefer)` answers the first upright, Regular-like face that has a code point: the preferred families first, then by family name. Each face's cmap is read once with fontTools and kept as a sorted array of code points, identical maps shared; a collection after each load keeps the peak near 140 MB where it reached 450 MB without it, and the kept maps total about 2 MB here. `GET /api/fonts/cover?cp=&prefer=` answers `{family, style}`, 404 when nothing has the character and 422 outside Unicode.
+
+`similar` drops a candidate that shares none of the reference's CJK code page bits (OS/2 `ulCodePageRange1`, bits 17 to 21), so a Chinese font's matches are Chinese, Japanese or Korean fonts and not Latin ones of the same weight.
+
+Run on the 376 faces of this machine: family, style, full and PostScript names are the same as before for every face; `find` by WenQuanYi's two Chinese names and IPA Gothic's Japanese name answers the font; `cover` answers a Thai face for U+0E01, a Devanagari one for U+0915, Noto Sans CJK TC for U+4E2D when preferred, and 404 for a private-use code point. The legacy decoding was run on made records only (31 real Windows font names in both storings, and the four Macintosh scripts): no font here has such a record. `pytest` 196 pass.
+
+### app/services/dwg.py, app/routers/io.py · a converter's DXF travels as bytes
+- refers-to: app/services/dwg.py :: to_dxf; app/routers/io.py :: dwg_to_dxf
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`dwg2dxf` writes a DXF in the drawing's own version and code page, and decoding that as UTF-8 with replacement lost every Chinese, Japanese or Korean character of a drawing older than 2007 before the window saw it. The route now answers the bytes as `application/dxf`, with the `X-Converter` header as before, and the window decodes them. No converter is installed here; run with a stand-in that writes Big5 bytes.
+
+### app/routers/projects.py · the package summary header is always valid
+- refers-to: app/routers/projects.py :: _summary_header, SUMMARY_HEADER_CHARS, package_full
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The summary was `json.dumps(...)[:4000]`. Each Chinese character of a missing link's path is a six-character escape, so about fifteen missing links under a Chinese user folder passed 4000 characters and the header ended inside an escape; the reader's parse then failed. `_summary_header` sends the JSON unchanged when it fits (a small package's header is the same bytes as before), and otherwise keeps whole leading entries and adds `missingMore` with the count of the rest. Run against the route with thirty missing links under such a folder: 3879 ASCII characters that parse, seventeen links kept, thirteen counted.
+
+### app/services/subset.py · a CFF2 font is embedded as CFF
+- refers-to: app/services/subset.py :: _instance, build
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A font with CFF2 outlines (the variable builds of Source Han and Noto CJK among them) was refused by the subsetter, so its type went into a PDF as outlines. The instancer is now asked to downgrade CFF2, and a static CFF2 font is saved, reloaded and converted with fontTools' `convertCFF2ToCFF`. Run on fontTools' own variable CFF2 test font: the outlines and widths match the instancer's reference at two weights and draw in a PDF. No CFF2 font of Chinese, Japanese or Korean is installed here to try.

@@ -5087,3 +5087,165 @@ Still left out, by name: type in a composite font with no program in the file an
 `FontNames` matched a `/BaseFont` against the installed families through `squash`, which keeps only `a-z0-9`, so every name written in another script squashed to nothing and went to the Helvetica fallback. The font listing now carries each face's other names (`aliases`, see the font service entry); `FontNames` keeps the ones with a character outside ASCII in `localized`, and `resolve` tries the whole name and then its family part there before the Latin rules. A name in ASCII goes the way it always did.
 
 Seen in the built window: the hand-built test PDF with its Big5 font named 文泉驛正黑 (a name of WenQuanYi Zen Hei, which is installed here) no longer lists that font under "Fonts not installed", and its line is set in WenQuanYi Zen Hei.
+
+### src/engine/text.ts · line breaking and justification outside Latin (issue 17)
+- refers-to: src/engine/text.ts :: NO_START, NO_END, JOINS, joinsCh, joins, glued, isCjk, cjkBreakAfter, isSea, seaBreaks, itemsOf, advance, vAdvance, layoutLines (measure, brks, wb, lastBreak, gaps, dense, paraStart)
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Items are code points, so a combining mark, a variation selector, a zero-width joiner or non-joiner, a skin-tone modifier or Thai SARA AM could start a line and took tracking and justification gaps from its base. Such items now carry `j`, set once in `itemsOf`, and `glued` blocks a break, tracking or a gap before them and after a zero-width joiner. The lists of characters that may not start a line gained closing quotes and brackets, the ellipsis, iteration marks, small kana, ％ ‰ ℃, the halfwidth forms and ASCII punctuation, and `NO_END` holds the openers. A break is allowed when either side is Chinese, Japanese or Korean, so Latin followed by Han can break. A justified line without spaces that holds CJK or Thai, Lao or Khmer spreads its slack over word gaps, or else over character gaps, and is not treated as a single word. A CRLF item records its length, so the empty lines after it get the right caret index. Runs of Thai, Lao and Khmer get word breaks from `Intl.Segmenter`, cached per paragraph string (256 entries); without it they keep the emergency break.
+
+A dump of 126 Latin samples (point and area type; left, centre, right and three justify modes; three trackings; three fonts; custom justification, hyphenation, columns, tabs, lists, kerning, caps, vertical) is the same before and after, to the last glyph position; each fix has a sample that changed as meant. Seen in the built window: justified Chinese reaches both edges and a closing quote no longer starts a line; Thai breaks between words. Timing for a 9,000-character paragraph is within a millisecond of before for Latin and CJK and two for Thai. Left: Latin letters inside an unspaced CJK line are spread like the characters around them; under "Justify all lines" the last line of such a paragraph is spread too.
+
+### src/io/text-decode.ts, src/io/dwg-bits.ts, src/io/dwg-file.ts, src/io/dwg-header.ts, src/io/dwg.ts, src/io/dxf.ts · a DWG's code page and the character codes of CAD text (issue 17)
+- refers-to: src/io/text-decode.ts :: dwgCodePage, cadEscapes; src/io/dwg-bits.ts :: Bits.tvCp; src/io/dwg-file.ts :: Sections.cp, readSections, readClasses; src/io/dwg-header.ts :: walk; src/io/dwg.ts :: Rd, build, assemble; src/io/dxf.ts :: DxfFile.codepage, parseDxf, mtextPlain, textPlain
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Text in a drawing of AutoCAD 2000 to 2006 was always read as windows-1252, so Big5, Shift-JIS, GBK and Korean drawings showed mojibake. The 16-bit code page number at file offset 0x13 now picks the decoder. The table of numbers comes from ezdxf (MIT: `addons/dwg/fileheader.py`, `tools/codepage.py`), not from LibreDWG's source, which keeps this reader clean room; an unknown number stays windows-1252, and 30 is windows-1252, as the writer has always written. `cadEscapes` is the one place for `\U+XXXX`, `\M+nXXXX` (1 Shift-JIS, 2 Big5, 3 Wansung, 5 GBK; 4, Johab, has no decoder in a browser and stays as written) and, for TEXT and ATTRIB, the `%%` codes, with `%%nnn` read in the drawing's code page; it replaces three inline copies of the `\U+` rule. How MTEXT formatting is stripped is unchanged.
+
+Run in scratch vitest: an R2000 drawing from this app's own writer with the code page set to 41 gives its Chinese text and layer name; five public LibreDWG sample drawings parse as before; every escape; a Big5 DXF. No real drawing in a legacy code page was found to try.
+
+### src/io/api.ts, src/app.ts · a drawing opened through a converter arrives as bytes
+- refers-to: src/io/api.ts :: api.dwgToDxf; src/app.ts :: the DWG branch of the opener
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The engine now answers `/api/io/dwg/to-dxf` with the converter's bytes (see the backend log) and the window decodes them with `decodeDxf`, which reads the code page. An older window's `res.text()` still reads a UTF-8 DXF.
+
+### src/io/zip.ts, src/io/model.ts, src/io/psd-read.ts, src/io/ase.ts · smaller readers outside UTF-8
+- refers-to: src/io/zip.ts :: unzip; src/io/model.ts :: importModel; src/io/psd-read.ts :: the layer record name; src/io/ase.ts :: writeAse
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A zip entry name without the UTF-8 flag goes through `decodeText`, so a valid UTF-8 name stays UTF-8 and any other falls back to the system language's legacy charset. OBJ and MTL files are read with `fileText`. A PSD layer's Pascal name is read as UTF-8 or Mac Roman; the Unicode block, when there is one, is read after it and still wins. A 200-unit swatch name written to `.ase` no longer ends in half a character.
+
+### src/automation/agent-bridge.ts, src/plugins/host.ts · agents are told which characters no font draws, and their cuts keep whole characters
+- refers-to: src/automation/agent-bridge.ts :: AgentBridge.uncovered, add_text, set_text (tabs), patternsTool; src/plugins/host.ts :: case 'register'; src/io/fonts.ts :: missingGlyphs
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The per-character fallback kept type visible, but an agent never learned that some characters had no font at all. The results of `add_text` and `set_text` now end with one sentence naming up to twelve such characters and asking for a `font` that covers them; a failed lookup adds nothing. No tool, parameter or description changed. Tab leaders, align-on characters, generated pattern names and plugin labels and command ids are cut by code point. Seen over `/mcp` in a real window: Egyptian hieroglyphs were reported; Latin, and Chinese set in a CJK font, got no sentence. Left: `get_svg` cuts at 200,000 units at the end of an SVG it already marks as cut.
+
+### .claude/skills/formpath-harness/sub-skills/type-and-layout/SUB-SKILL.md · agents choose a font that matches the language
+- refers-to: type-and-layout :: Procedure 1 and 3; the `.agents/skills` mirror
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The skill named one Japanese font for all Chinese, Japanese and Korean type, which draws Japanese letterforms for Chinese. It now names a face per language for Windows, macOS and the Noto families, asks for the words as plain Unicode, and points at the `add_text` sentence about characters no font draws. The mirror was regenerated with `./formpath agents sync`.
+
+### src/io/package.ts · a package summary the window cannot read no longer fails the package
+- refers-to: src/io/package.ts :: packageProject, PackageResult.missingMore
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The engine keeps the summary header valid (backend log); the reader here also treats a header it cannot parse as no summary and still returns the zip. Nothing in the window asks for the zip form today.
+
+### src/ui/commands.ts, src/app.ts, src/ui/text-editor.ts, src/dock-adapter.ts · letter shortcuts follow the letter on the key
+- refers-to: src/ui/commands.ts :: comboOf; src/app.ts :: comboOfTool; src/ui/text-editor.ts :: TextEditor.key; src/dock-adapter.ts :: isDockChord
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Shortcuts were matched by the physical key (`e.code`), so on AZERTY Ctrl with the key labelled Z closed the tab and the key labelled A picked another tool, and on QWERTZ Ctrl+Z toggled Outline; French and German are shipped languages. When `e.key` is one ASCII letter it now decides; otherwise the physical key decides as before, so Cyrillic, Greek, Hebrew, Arabic, Thai and Korean layouts and macOS Option with a letter keep working. Digits, Space, the brackets, Equal, Minus, Slash, the Perspective digit and `dock/keys.ts` (the shared module) stay physical. Seen with synthetic key events for US, AZERTY, QWERTZ, Dvorak and Russian in a built window: each ran the command or tool its key shows. Not run: a real layout switch. People on AZERTY and QWERTZ who learned the old positions will find Undo back on the key labelled Z.
+
+### src/ui/native-menu.ts · only Cmd, Ctrl and function key shortcuts go to the macOS menu bar
+- refers-to: src/ui/native-menu.ts :: menuAccelerator, NativeMenus.build
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The first key of every command became a native accelerator, so Delete or Backspace (Clear) and Tab (Hide Panels) could be taken by the menu before a field or an input method saw them. `menuAccelerator` takes the first of a command's keys that has Mod or Ctrl in it, or is F1 to F12; plain keys stay with the page's own handler, as on Windows and Linux, and the menus inside the window still show them. Checked as logic only; not run on macOS.
+
+### src/ui/panels/spelling.ts · spelling uses the language of the window
+- refers-to: src/ui/panels/spelling.ts :: misspelledRanges, SpellingDialog
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Check Spelling and the spelling marks always asked for the English dictionary. The default is now `language()`. The engine already maps a regional or script variant to its base language and anything without a dictionary to English.
+
+### src/ui/dom.ts, src/engine/doc.ts, src/ui/properties.ts, src/ui/status.ts, src/ui/panels/appearance.ts · an object's own name is not translated
+- refers-to: src/ui/dom.ts :: setOwnText; src/engine/doc.ts :: ownLabel; PropertiesPanel.sync; StatusBar.sync; AppearancePanel.sync
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The Properties head, the status bar's selection and the Appearance head show either interface words or a node's own name, and the translation walker translated both, so a text reading "Copy" showed as "Kopieren". `setOwnText` sets or removes `translate="no"` only when it differs, and before the text: the walker does not watch that attribute and translates a text write in a microtask, by which time both writes are done. When the attribute changes the text is written again even if it is the same, so the walker sees it. Seen in German and Traditional Chinese: a text reading "Copy" stays "Copy", nothing selected reads "Dokument" or "文件". Left: "2 Objects" has no row in the translation tables.
+
+### src/engine/doc.ts and seven call sites · names cut by unit keep whole characters
+- refers-to: src/engine/doc.ts :: clip, nodeLabel; src/engine/index.ts; src/engine/variables.ts; src/ui/panels/actions.ts; src/ui/panels/generative.ts; src/io/width-profiles.ts; src/io/gen-options.ts
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`clip(s, n)` cuts at n UTF-16 units, one fewer when that would end on the first half of a pair. It replaces the cuts 0.60.0 listed as left.
+
+### src/ui/panels/kit.ts, src/ui/options.ts · number fields read a comma and ignore an empty entry
+- refers-to: src/ui/panels/kit.ts :: slider; src/ui/options.ts :: the range field
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A slider's text field used `parseFloat`, so "12,5" became 12; it now uses `evalNumber` (decimal comma, full-width digits) and puts the old value back when that fails. An emptied option field became 0 and set the option to its minimum; it is now ignored and shows the current value again.
+
+### src/io/fonts.ts, src/io/pdf.ts, src/io/pdf-text.ts, src/io/pdf-plates.ts, src/io/eps.ts, src/io/svg.ts, src/app.ts · type in a font that is not installed is exported in Inter, with a sentence that says so
+- refers-to: src/io/fonts.ts :: SUBSTITUTE_FAMILY, exportFace, faceGlyph, substituteNotes, missingGlyphs, outlineText; src/io/pdf-text.ts :: LiveFonts.plan; src/io/pdf.ts :: exportPdf; src/io/pdf-plates.ts :: exportPlates; src/io/eps.ts :: EpsOptions.swapped; src/io/svg.ts :: SvgOptions.swapped; src/app.ts :: exportBlob, exportAs
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+What 0.60.0's log called "left out" was measured in the window and is corrected here: type whose font could not be loaded had no outlines, so a PDF and an EPS drew it as a 300 ppi picture (nothing to select or search), an outlined SVG kept it as live text naming the missing family, a DXF in outlines mode did leave it out, and nothing was said in any of them. The PDF reader names Helvetica for every font it does not know, and Windows has no Helvetica, so this met every imported PDF exported again there.
+
+On export only, `exportFace` sets such type in Inter of the same style, with `glyphOrFallback` for the characters Inter lacks (Chinese goes to a CJK face). Each glyph keeps the position the layout measured with the browser's stand-in font, so line length and line breaks match the screen while the letterforms are Inter's. One sentence per export names the families, through the notes each exporter already has. Create Outlines passes no set and still stops with its error naming the font. Seen: an SVG naming Helvetica and a made-up family holding Latin and Chinese exports as live Inter and Noto CJK type that `pdftotext` reads, with no picture in the PDF; the outlined SVG holds paths. Left: printing substitutes too but has nowhere to say so.
+
+### src/io/pdf-marks.ts, src/io/pdf.ts, src/io/pdf-plates.ts · the page information line and the separations title outside ASCII
+- refers-to: src/io/pdf-marks.ts :: pageInfoLine, pathOps, marksContent; src/io/pdf.ts :: exportPdf; src/io/pdf-plates.ts :: exportPlates
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The marks font covers codes 32 to 126 and the string writer turned everything else into `?`, so a document, an artboard or a spot plate named in Chinese printed as question marks. A line that is not plain ASCII is now filled as outlines from `outlineText` (which has font fallback) at the same origin and 6 pt size, in the registration colour. A plain ASCII line gives the same bytes as before, apart from the trailer id that hashes the time. The separations file's title and producer use the UTF-16 string writer of `pdf-x.ts`.
+
+### src/io/eps.ts · spot ink names keep every character
+- refers-to: src/io/eps.ts :: inkName, PsPainter.spot
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A name outside `[A-Za-z0-9_.-]` had those characters turned into `_`, so two Chinese ink names of the same length became one colourant and their plates merged. Such a name is now written as a string of octal-escaped UTF-8 bytes turned into a name with `cvn`; a name that was legal before is written exactly as before. A name with spaces ("PANTONE 185 C") now keeps them where it had underscores. Not run through a PostScript interpreter: none is installed here.
+
+### src/io/fonts.ts, src/io/api.ts, src/ui/panels/similar-fonts.ts · fonts by their names in other languages, and a fallback that asks the engine
+- refers-to: src/io/api.ts :: FontInfo.aliases, api.coverFont; src/io/fonts.ts :: aliasesOf, byAlias, aliasFace, fontFor, findSimilarFonts, installedNames, fallbackGlyph; src/ui/panels/similar-fonts.ts :: openSimilarFonts
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A face the engine finds by another of its names (see the backend log) is registered as a `FontFace` under the name the document uses, so the canvas draws it where the system does not resolve that name itself. Find Similar Fonts resolves such names and says "is not installed on this computer" for a font that is not, where it said none were found.
+
+`fallbackGlyph` drops from its fixed lists the families the listing says are not installed, so a missing character no longer costs a request per absent family, and after the lists and the bundled Inter it asks `GET /api/fonts/cover` for an installed font that has the character, preferring the regional faces of `hanFirst` for Han. Thai typed in Inter walked about thirty families and ended in an empty box; it now asks for the one listed family that is installed and then the engine, and gets a Thai face.
+
+### src/ui/dropdown.ts, src/ui/panels/kit.ts, src/ui/panels/type.ts, src/ui/options.ts, src/extensions/registry.ts, src/tools/type.ts, src/styles/shell.css · the font menus can be searched
+- refers-to: src/ui/dropdown.ts :: enhanceSelect (terms, filter, shownItems, mark); src/ui/panels/kit.ts :: selectCtl; the select option spec (search, terms)
+- kind: decision
+- logged: v0.61.0 · 2026-11-26
+
+The Character panel's font menu and the Type tool's Font menu have a search field that matches a family's name and its names in other languages. Searching hides and shows the existing rows in place (no list is rebuilt), the list's height is pinned while it is open and the field stays at its top; the arrow keys move over the rows that show. No other menu changed. Seen 4x CPU throttled: the options bar does not move, no console error; typing three characters of WenQuanYi's Chinese name leaves its three families. The new sentence about a font that is not installed has no translations yet.
+
+### src/io/ps-read.ts, src/io/text-decode.ts · Chinese, Japanese and Korean type in EPS and PostScript
+- refers-to: src/io/ps-read.ts :: showText, textOf, glyphText, OPS (glyphshow, composefont, findfont, stringwidth), readEpsVector; src/io/text-decode.ts :: csOf, psDecode, psUni
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`showText` put the raw bytes of each string into the text whatever the font, so type under a Big5, GB, Shift-JIS, EUC or KS CMap read as Latin-1 bytes. `textOf` now decodes by the charset the font's CMap name gives (`csOf`), reads the Japanese 7-bit `-H`/`-V` CMaps of the usual families as EUC-JP after setting the high bit, and returns null for Identity-H and Identity-V: those codes are glyph numbers, so the run is left out and named in the left-out list. `glyphshow` with a `uniXXXX` or `uXXXXX` name shows that character; `composefont` records the composed name so a later `findfont` sees the CMap. `stringwidth` and the advance count decoded characters. Seen on the public ghostpdl `examples/cjk` files (Big5, GB, Shift-JIS, KS, JIS vertical): text that read as Latin-1 bytes reads in its own script. Not done: CNS-EUC (the browser has no decoder for it), Japanese `-H` fonts of a family not in the list.
+
+### src/io/ai-legacy.ts · names and old type in their own script
+- refers-to: src/io/ai-legacy.ts :: prepare (header, customs, fonts, Meta.cs), Reader.exec (Ln, SL), Reader.custom, Reader.textShow, buildDefs, buildAi
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A current Illustrator file writes `Ln` layer names as UTF-8 with octal escapes (a public sample writes a no-break space as `\302\240`); they were shown as Latin-1 bytes. Layer, sublayer, swatch, pattern, symbol and brush names go through `psUni` for display: a UTF-16BE mark first, then UTF-8, then the document's charset, then Windows-1252. The maps that look a name up keep the raw string, and the header's custom colour names have their escapes undone so they still match the names the art uses. `Meta.cs` is the charset the first `%%DocumentFonts` name gives; `textShow` decodes an old file's type by the `Tf` font's charset, else the document's. Checked on hand-made version 8 files in Big5 and Shift-JIS, since no real old CJK `.ai` was found. Not done: graphic style names.
+
+### src/io/ai-guard.ts, src/io/ai-legacy.ts · live type in an .ai is never dropped without a word
+- refers-to: src/io/ai-guard.ts :: hasText, guardAi; src/io/ai-legacy.ts :: buildAi
+- kind: decision
+- logged: v0.61.0 · 2026-11-26
+
+The private data reader does not read `/AI11Text` objects, and said nothing: a file opened without its type. Two changes. `buildAi` adds "type" to the left-out list whenever the data holds an `/AI11Text :` object (the `/AI11TextDocument` block is in every file and means nothing). `guardAi` adopts the PDF page when the page has type and the private read has none, whatever the pixel difference. Not used: falling back to the page for every file with type objects, because one public sample has type objects that are not on its page either, and it would have lost its object names and brush for nothing visible.
+
+### src/io/ai-private.ts · names outside ASCII are written whole
+- refers-to: src/io/ai-private.ts :: esc, pu, pw, Emit.paintOps, Emit.layer, the symbol block, paletteLines, buildAiPrivate
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`ps` turned every character outside ASCII into a question mark. Layer, swatch and symbol names are now written by `pu` as UTF-8 with octal escapes, the form a real file uses for `Ln`, and artboard names by `pw` as UTF-16BE with a byte order mark under `/UnicodeString`. A name of plain ASCII is written exactly as before. Checked by writing and reading back in this app; not opened in Illustrator. The title and gradient names still go through `ps`.
