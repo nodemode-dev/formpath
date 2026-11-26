@@ -1,8 +1,8 @@
 import { findNode } from '../engine/doc';
 import { apply, invert, rectContains, inflate } from '../engine/geometry';
-import { caretAt, deleteText, indexAt, insertText, layoutText, plainText, selectionQuads, stepLine } from '../engine/text';
+import { caretAt, cssFont, DEFAULT_CHAR, deleteText, indexAt, insertText, layoutText, plainText, selectionQuads, stepLine, styleAt } from '../engine/text';
 import type { CharStyle, Engine, PathData, Pt, TextNode } from '../engine';
-import type { ToolContext } from '../extensions/registry';
+import type { Paint, ToolContext } from '../extensions/registry';
 import { el } from './dom';
 import type { TypeRequest } from './stage';
 
@@ -20,23 +20,26 @@ export class TextEditor {
   private on = true;
   private timer = 0;
   private composing = false;
+  private pre = '';
   redraw: () => void = () => undefined;
   style: () => Partial<CharStyle> = () => ({});
 
   constructor(host: HTMLElement, private readonly engine: Engine) {
     this.ta = el<HTMLTextAreaElement>('<textarea class="cv-text-editor" aria-label="Type" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1"></textarea>');
     host.appendChild(this.ta);
-    this.ta.addEventListener('compositionstart', () => { this.composing = true; });
-    this.ta.addEventListener('compositionend', () => { this.composing = false; this.flushInput(); });
+    this.ta.addEventListener('compositionstart', () => { this.composing = true; this.place(); });
+    this.ta.addEventListener('compositionupdate', (e) => { this.pre = e.data; this.on = true; this.redraw(); });
+    this.ta.addEventListener('compositionend', () => { this.composing = false; this.pre = ''; this.flushInput(); this.redraw(); });
     this.ta.addEventListener('input', () => { if (!this.composing) this.flushInput(); });
     this.ta.addEventListener('keydown', (e) => this.key(e));
     this.ta.addEventListener('copy', (e) => { const s = this.selectedText(); if (!s) return; e.preventDefault(); e.clipboardData?.setData('text/plain', s); });
     this.ta.addEventListener('cut', (e) => { const s = this.selectedText(); if (!s) return; e.preventDefault(); e.clipboardData?.setData('text/plain', s); this.replace(''); });
-    this.ta.addEventListener('paste', (e) => { e.preventDefault(); const s = e.clipboardData?.getData('text/plain') ?? ''; if (s) this.replace(s.replace(/\r\n?/g, '\n')); });
-    this.ta.addEventListener('blur', () => { if (this.active) window.setTimeout(() => { if (this.active && document.activeElement !== this.ta && !document.activeElement?.closest('.cv-dock, .cv-props-col, .cv-options, .cv-layers, .cv-dialog')) this.end(); }, 0); });
+    this.ta.addEventListener('paste', (e) => { e.preventDefault(); const s = e.clipboardData?.getData('text/plain') ?? ''; if (s) this.replace(s.replace(/\r\n?/g, '\n').normalize('NFC')); });
+    this.ta.addEventListener('blur', () => { if (this.active) window.setTimeout(() => { if (this.active && document.activeElement !== this.ta && !document.activeElement?.closest('.cv-dock, .cv-props-col, .cv-options, .cv-layers, .cv-dialog, .cv-dd-pop')) this.end(); }, 0); });
     engine.on('tool', () => { if (this.active && !/^(type|areaType|typePath|typeVertical|areaTypeVertical|typePathVertical)$/.test(engine.tool)) this.end(); });
     engine.on('active', () => { if (this.active) this.end(); });
     engine.on('history', () => { if (this.id && !this.node()) this.end(); else this.clamp(); });
+    engine.on('viewport', () => { if (this.active) this.place(); });
   }
 
   get active(): boolean { return !!this.id || !!this.pending; }
@@ -75,15 +78,21 @@ export class TextEditor {
 
   end(): void {
     if (!this.active) return;
+    if (document.activeElement === this.ta) this.ta.blur();
+    this.composing = false; this.pre = ''; this.flushInput();
     const id = this.id;
     this.id = null; this.pending = null; this.dragging = false;
     window.clearInterval(this.timer); this.timer = 0;
-    if (document.activeElement === this.ta) this.ta.blur();
     if (id && this.engine.nodeById(id) && !this.engine.textOf(id)) this.engine.deleteSelection([id]);
     this.redraw();
   }
 
   private focus(): void { this.ta.value = ''; this.ta.focus({ preventScroll: true }); this.place(); }
+
+  take(e: KeyboardEvent): void {
+    this.ta.focus({ preventScroll: true });
+    if (e.key.length !== 1 && e.key !== 'Process' && e.key !== 'Dead' && e.keyCode !== 229) this.key(e);
+  }
 
   private startBlink(): void {
     window.clearInterval(this.timer);
@@ -105,6 +114,7 @@ export class TextEditor {
     this.caret = this.indexFor(n, p);
     if (!extend) this.anchor = this.caret;
     this.startBlink();
+    this.place();
     this.redraw();
   }
 
@@ -113,17 +123,19 @@ export class TextEditor {
     if (!n) return;
     const t = plainText(n), i = this.indexFor(n, p);
     let a = i, b = i;
-    while (a > 0 && /\w/.test(t[a - 1])) a--;
-    while (b < t.length && /\w/.test(t[b])) b++;
+    const s = WORDS?.segment(t).containing(Math.min(i, t.length - 1));
+    if (s?.isWordLike) { a = s.index; b = s.index + s.segment.length; }
+    else { while (a > 0 && WORD_CHAR.test(t[a - 1])) a--; while (b < t.length && WORD_CHAR.test(t[b])) b++; }
     this.anchor = a; this.caret = b;
+    this.place();
     this.redraw();
   }
 
-  selectAll(): void { const n = this.node(); if (!n) return; this.anchor = 0; this.caret = plainText(n).length; this.redraw(); }
+  selectAll(): void { const n = this.node(); if (!n) return; this.anchor = 0; this.caret = plainText(n).length; this.place(); this.redraw(); }
 
   private selectedText(): string { const r = this.range(), n = this.node(); return r && n ? plainText(n).slice(r[0], r[1]) : ''; }
 
-  private clamp(): void { const n = this.node(); if (!n) return; const len = plainText(n).length; this.caret = Math.min(this.caret, len); this.anchor = Math.min(this.anchor, len); this.redraw(); }
+  private clamp(): void { const n = this.node(); if (!n) return; const len = plainText(n).length; this.caret = Math.min(this.caret, len); this.anchor = Math.min(this.anchor, len); this.place(); this.redraw(); }
 
   private flushInput(): void {
     const v = this.ta.value;
@@ -198,13 +210,14 @@ export class TextEditor {
 
   private key(e: KeyboardEvent): void {
     e.stopPropagation();
+    if (e.isComposing || this.composing || e.keyCode === 229) return;
     const mod = /Mac/.test(navigator.platform) ? e.metaKey : e.ctrlKey, n = this.node();
     const text = n ? plainText(n) : '';
     switch (e.key) {
       case 'Escape': e.preventDefault(); { const id = this.id; this.end(); this.engine.setTool('selection'); if (id && this.engine.nodeById(id)) this.engine.select([id]); } return;
       case 'Enter': e.preventDefault(); if (n?.mode !== 'path') this.replace('\n'); return;
       case 'Tab': e.preventDefault(); this.replace('\t'); return;
-      case 'Backspace': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret > 0) { this.anchor = mod || e.altKey ? wordStart(text, this.caret) : prevPoint(text, this.caret); this.replace(''); } return;
+      case 'Backspace': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret > 0) { this.anchor = mod || e.altKey ? wordStart(text, this.caret) : backPoint(text, this.caret); this.replace(''); } return;
       case 'Delete': e.preventDefault(); if (this.range()) this.replace(''); else if (this.caret < text.length) { this.anchor = nextPoint(text, this.caret); this.replace(''); } return;
       case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown': {
         e.preventDefault();
@@ -217,25 +230,26 @@ export class TextEditor {
       case 'Home': e.preventDefault(); this.move(this.lineEdge(false), e.shiftKey); return;
       case 'End': e.preventDefault(); this.move(this.lineEdge(true), e.shiftKey); return;
     }
-    if (mod && e.code === 'KeyA') { e.preventDefault(); this.selectAll(); return; }
-    if (mod && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) this.engine.redo(); else this.engine.undo(); return; }
+    if (mod && !e.altKey && e.code === 'KeyA') { e.preventDefault(); this.selectAll(); return; }
+    if (mod && !e.altKey && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) this.engine.redo(); else this.engine.undo(); return; }
   }
 
   private place(): void {
     const n = this.node(), v = this.engine.current?.viewport;
     if (!v) return;
-    let at: Pt;
-    if (n) { const c = caretAt(n, this.caret); at = v.toScreen(c.x, c.y); }
-    else if (this.pending) at = v.toScreen(this.pending.x, this.pending.y);
+    let at: Pt, h: number;
+    if (n) { const c = caretAt(n, this.caret); at = v.toScreen(c.x, c.y); h = c.h * v.zoom; }
+    else if (this.pending) { h = (this.style().size ?? 12) * v.zoom; const s = v.toScreen(this.pending.x, this.pending.y); at = this.pending.mode === 'area' || this.pending.vertical ? s : { x: s.x, y: s.y - h * 0.8 }; }
     else return;
-    const x = `${Math.round(at.x)}px`, y = `${Math.round(at.y)}px`;
+    const x = `${Math.round(at.x)}px`, y = `${Math.round(at.y)}px`, fs = `${Math.max(1, Math.min(512, Math.round(h)))}px`;
     if (this.ta.style.left !== x) this.ta.style.left = x;
     if (this.ta.style.top !== y) this.ta.style.top = y;
+    if (this.ta.style.fontSize !== fs) this.ta.style.fontSize = fs;
   }
 
   overlay(ctx: ToolContext, g: CanvasRenderingContext2D): void {
     if (!this.active) return;
-    const v = ctx.view(), accent = ctx.paint().accent;
+    const v = ctx.view(), pal = ctx.paint(), accent = pal.accent;
     if (this.pending) {
       const pd = this.pending, s = v.toScreen({ x: pd.x, y: pd.y }), h = 12 * v.zoom;
       g.save();
@@ -247,6 +261,7 @@ export class TextEditor {
         g.stroke();
       }
       g.restore();
+      if (this.pre) { const st = { ...DEFAULT_CHAR, ...this.style() }, px = st.size * v.zoom; this.drawPre(g, pal, pd.mode === 'area' || pd.vertical ? { x: s.x + 2, y: s.y + 2 } : { x: s.x + 2, y: s.y - px * 0.8 }, px, 0, st); }
       return;
     }
     const n = this.node();
@@ -266,12 +281,31 @@ export class TextEditor {
       const c = caretAt(n, this.caret), a = v.toScreen({ x: c.x, y: c.y }), len = c.h * v.zoom, ang = c.angle;
       g.save(); g.strokeStyle = accent; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - Math.sin(ang) * len, a.y + Math.cos(ang) * len); g.stroke(); g.restore();
     }
+    if (this.pre) { const c = caretAt(n, Math.min(this.caret, this.anchor)), st = styleAt(n.spans, this.caret); this.drawPre(g, pal, v.toScreen({ x: c.x, y: c.y }), st.size * v.zoom, n.vertical ? 0 : c.angle, st); }
+  }
+
+  private drawPre(g: CanvasRenderingContext2D, pal: Paint, at: Pt, px: number, angle: number, st: CharStyle): void {
+    const size = Math.max(12, px), h = Math.round(size * 1.25), pad = Math.round(size * 0.15);
+    g.save();
+    g.translate(Math.round(at.x), Math.round(at.y)); g.rotate(angle);
+    g.font = cssFont(st, size); g.textBaseline = 'middle';
+    const w = Math.ceil(g.measureText(this.pre).width) + pad * 2;
+    g.fillStyle = pal.handle; g.fillRect(0, 0, w, h);
+    g.fillStyle = pal.antsA; g.fillText(this.pre, pad, h / 2);
+    g.fillStyle = pal.accent; g.fillRect(0, h - 2, w, 2);
+    g.restore();
   }
 }
 
 function wordStart(t: string, i: number): number { let k = i; while (k > 0 && /\s/.test(t[k - 1])) k--; while (k > 0 && /\S/.test(t[k - 1])) k--; return k; }
 function wordEnd(t: string, i: number): number { let k = i; while (k < t.length && /\s/.test(t[k])) k++; while (k < t.length && /\S/.test(t[k])) k++; return k; }
-function prevPoint(t: string, i: number): number { return i >= 2 && /[\uDC00-\uDFFF]/.test(t[i - 1]) && /[\uD800-\uDBFF]/.test(t[i - 2]) ? i - 2 : i - 1; }
-function nextPoint(t: string, i: number): number { return i + 2 <= t.length && /[\uD800-\uDBFF]/.test(t[i]) && /[\uDC00-\uDFFF]/.test(t[i + 1]) ? i + 2 : i + 1; }
+const GRAPHEMES = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+const WORDS = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'word' }) : null;
+const WORD_CHAR = /[\p{L}\p{N}\p{M}_]/u;
+const JOINED = /\p{Extended_Pictographic}|\p{Regional_Indicator}|[‍️]/u;
+function pointBack(t: string, i: number): number { return i >= 2 && /[\uDC00-\uDFFF]/.test(t[i - 1]) && /[\uD800-\uDBFF]/.test(t[i - 2]) ? i - 2 : i - 1; }
+function prevPoint(t: string, i: number): number { const s = i > 0 ? GRAPHEMES?.segment(t).containing(i - 1) : undefined; return s ? s.index : pointBack(t, i); }
+function nextPoint(t: string, i: number): number { const s = GRAPHEMES?.segment(t).containing(i); return s ? s.index + s.segment.length : i + 2 <= t.length && /[\uD800-\uDBFF]/.test(t[i]) && /[\uDC00-\uDFFF]/.test(t[i + 1]) ? i + 2 : i + 1; }
+function backPoint(t: string, i: number): number { const s = i > 0 ? GRAPHEMES?.segment(t).containing(i - 1) : undefined; return s && JOINED.test(s.segment) ? s.index : pointBack(t, i); }
 
 export const typing: { editor: TextEditor | null } = { editor: null };
