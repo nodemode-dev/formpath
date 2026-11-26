@@ -8,7 +8,7 @@ import { askForm, type Field } from '../form-dialog';
 import { previewEdit } from './preview-edit';
 import { openSimilarFonts } from './similar-fonts';
 import { typing } from '../text-editor';
-import { families, glyphAlternates, glyphList, isVariableFamily, stylesOf, ensureFace, variationOf, type VariationAxis, type VariationInfo } from '../../io/fonts';
+import { aliasesOf, families, glyphAlternates, glyphList, isVariableFamily, stylesOf, ensureFace, variationOf, type VariationAxis, type VariationInfo } from '../../io/fonts';
 import { typeDefaults } from '../../tools/type';
 import { check, numField, row, section, seg, selectCtl, slider, type Ctl } from './kit';
 
@@ -110,7 +110,7 @@ export class CharacterPanel {
     this.figures = selectCtl('Figures', FIGURES, (v) => swap((f) => FIG_TAGS.has(f), v ? v.split('+') : []));
     this.otPos = selectCtl('Position', OT_POS, (v) => swap((f) => POS_TAGS.has(f), v ? [v] : []));
     this.sset = selectCtl('Sets', SETS, (v) => swap((f) => /^ss\d\d$/.test(f), v ? [v] : []));
-    this.font = selectCtl('', [], (v) => set({ font: v, style: stylesOf(v).includes(currentStyle(engine)?.style ?? 'Regular') ? currentStyle(engine)?.style ?? 'Regular' : stylesOf(v)[0] ?? 'Regular' }));
+    this.font = selectCtl('', [], (v) => set({ font: v, style: stylesOf(v).includes(currentStyle(engine)?.style ?? 'Regular') ? currentStyle(engine)?.style ?? 'Regular' : stylesOf(v)[0] ?? 'Regular' }), { search: 'Search', terms: aliasesOf });
     this.style = selectCtl('', [], (v) => { const inst = this.varInfo?.instances.find((i) => i.name === v); set({ style: v, axes: inst ? { ...inst.coords } : undefined }); });
     this.size = numField('Size', 'pt', (v) => set({ size: v }), { min: 0.1, max: 1296 });
     this.leading = numField('Leading', 'pt', (v) => set({ leading: v }), { min: 0, max: 5000, title: 'Leading; leave at auto for 120% of the size' });

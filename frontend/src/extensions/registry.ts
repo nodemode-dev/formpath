@@ -22,7 +22,7 @@ export type OptionSpec = (
   | { kind: 'segment'; label?: string; choices: ReadonlyArray<{ id: string; label: string; icon?: string }>; get: () => string; set: (id: string) => void }
   | { kind: 'range'; label: string; min: number; max: number; step?: number; unit?: string; get: () => number; set: (v: number) => void }
   | { kind: 'toggle'; label: string; get: () => boolean; set: (v: boolean) => void }
-  | { kind: 'select'; label: string; choices: ReadonlyArray<{ id: string; label: string }>; get: () => string; set: (id: string) => void; live?: () => ReadonlyArray<{ id: string; label: string }> }
+  | { kind: 'select'; label: string; choices: ReadonlyArray<{ id: string; label: string }>; get: () => string; set: (id: string) => void; live?: () => ReadonlyArray<{ id: string; label: string }>; search?: string; terms?: (id: string) => string }
   | { kind: 'readout'; label: string; get: () => string }
   | { kind: 'color'; label: string; get: () => RGB; set: (c: RGB) => void }
   | { kind: 'number'; label: string; min?: number; max?: number; step?: number; unit?: string; get: () => number | null; set: (v: number) => void }

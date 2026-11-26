@@ -2,6 +2,7 @@ import type { Engine, ToolId } from '../engine';
 import { toolList, type OptionSpec, type Tool } from '../extensions/registry';
 import { el, q, setChecked, setClass, setHidden, setText, setValue } from './dom';
 import { icon } from './icons';
+import { enhanceSelect } from './dropdown';
 
 interface Group { node: HTMLElement; sync: Array<() => void> }
 
@@ -86,6 +87,7 @@ export class OptionsBar {
         for (const c of spec.choices) { const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; box.appendChild(o); }
         box.addEventListener('change', () => spec.set(box.value));
         box.addEventListener('keydown', (e) => e.stopPropagation());
+        if (spec.search) enhanceSelect(box, { search: spec.search, terms: spec.terms });
         sync.push(() => {
 
           const list = spec.live?.();

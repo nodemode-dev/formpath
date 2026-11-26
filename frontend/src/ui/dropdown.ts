@@ -1,7 +1,7 @@
 import { el, setHidden, setText } from './dom';
 import { icon } from './icons';
 
-export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string } = {}): () => void {
+export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string; terms?: (value: string) => string } = {}): () => void {
   const btn = el<HTMLButtonElement>(`<button class="cv-dd-btn" type="button" aria-haspopup="listbox"><span class="cv-dd-label"></span>${icon('chevronDown', 12)}</button>`);
   const pop = el(`<div class="cv-dd-pop" role="listbox" hidden>${opts.search ? '<input class="cv-dd-search" type="search">' : ''}<div class="cv-dd-list"></div></div>`);
   const list = pop.querySelector('.cv-dd-list') as HTMLElement, search = pop.querySelector('.cv-dd-search') as HTMLInputElement | null;
@@ -48,25 +48,36 @@ export function enhanceSelect(select: HTMLSelectElement, opts: { search?: string
     if (q) picked = 0;
     mark();
   };
-  const mark = (): void => { list.querySelectorAll<HTMLElement>('.cv-dd-item').forEach((i, n) => i.classList.toggle('is-picked', n === picked)); };
+  const shownItems = (): HTMLElement[] => Array.from(list.querySelectorAll<HTMLElement>('.cv-dd-item:not([hidden])'));
+  const mark = (): void => { const want = shownItems()[picked]; list.querySelectorAll<HTMLElement>('.cv-dd-item').forEach((i) => { if (i.classList.contains('is-picked') !== (i === want)) i.classList.toggle('is-picked', i === want); }); };
+  const filter = (): void => {
+    const q = search?.value.trim().toLowerCase() ?? '';
+    list.querySelectorAll<HTMLElement>('.cv-dd-head').forEach((h) => setHidden(h, !!q));
+    list.querySelectorAll<HTMLElement>('.cv-dd-item').forEach((i) => setHidden(i, !!q && !(i.textContent ?? '').toLowerCase().includes(q) && !(opts.terms?.(i.dataset.value ?? '') ?? '').toLowerCase().includes(q)));
+    picked = q ? 0 : Math.max(0, shownItems().findIndex((i) => i.classList.contains('is-chosen')));
+    mark();
+    if (q && pop.scrollTop) pop.scrollTop = 0;
+  };
   const close = (): void => { setHidden(pop, true); btn.setAttribute('aria-expanded', 'false'); };
   const open = (): void => {
     if (search) search.value = '';
     fill();
     setHidden(pop, false);
     btn.setAttribute('aria-expanded', 'true');
+    if (search) pop.style.minHeight = '';
     const r = btn.getBoundingClientRect(), h = pop.offsetHeight;
     pop.style.minWidth = `${Math.round(r.width)}px`;
+    if (search) pop.style.minHeight = `${h}px`;
     pop.style.left = `${Math.round(Math.min(r.left, window.innerWidth - pop.offsetWidth - 4))}px`;
     pop.style.top = `${Math.round(r.bottom + 4 + h <= window.innerHeight - 4 ? r.bottom + 4 : Math.max(4, r.top - 4 - h))}px`;
     (search ?? (list.querySelector('.is-chosen') as HTMLElement | null) ?? btn).focus();
     (list.querySelector('.is-chosen') as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
   };
   btn.addEventListener('click', () => (pop.hidden ? open() : close()));
-  search?.addEventListener('input', fill);
+  search?.addEventListener('input', filter);
   pop.addEventListener('keydown', (e) => {
     if (e.isComposing || e.keyCode === 229) return;
-    const items = Array.from(list.querySelectorAll<HTMLElement>('.cv-dd-item'));
+    const items = shownItems();
     if (e.key === 'Escape') { e.preventDefault(); close(); btn.focus(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (items.length) { picked = (picked + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; mark(); items[picked].scrollIntoView({ block: 'nearest' }); } return; }
     if (e.key === 'Enter') { e.preventDefault(); items[picked]?.click(); }

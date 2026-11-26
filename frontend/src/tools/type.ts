@@ -6,7 +6,7 @@ import type { CharTouch, Engine, Mat, Pt, Rect, TextNode } from '../engine';
 import { registerTool, type OptionSpec, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { typing } from '../ui/text-editor';
-import { families, stylesOf } from '../io/fonts';
+import { aliasesOf, families, stylesOf } from '../io/fonts';
 import { marquee, tolDoc } from './util';
 
 const S = { on: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, word: false };
@@ -25,7 +25,7 @@ function typeOptions(e: Engine): OptionSpec[] {
   };
   return [
     { kind: 'title', text: 'Type' },
-    { kind: 'select', label: 'Font', choices: [], live: () => families().map((f) => ({ id: f, label: f })), get: () => st().font, set: (v) => apply({ font: v }) },
+    { kind: 'select', label: 'Font', choices: [], live: () => families().map((f) => ({ id: f, label: f })), get: () => st().font, set: (v) => apply({ font: v }), search: 'Search', terms: aliasesOf },
     { kind: 'select', label: 'Style', choices: [], live: () => stylesOf(st().font).map((s) => ({ id: s, label: s })), get: () => st().style, set: (v) => apply({ style: v }) },
     { kind: 'number', label: 'Size', min: 0.1, max: 1296, step: 1, unit: 'pt', get: () => st().size, set: (v) => apply({ size: v }) },
     { kind: 'segment', label: 'Align', choices: [{ id: 'left', label: 'Left' }, { id: 'center', label: 'Center' }, { id: 'right', label: 'Right' }, { id: 'justify', label: 'Justify' }], get: () => { const n = e.selected().find((x) => x.kind === 'text'); return n?.kind === 'text' ? n.para.align : 'left'; }, set: (v) => { e.setParaStyle({ align: v as 'left' }); } },
