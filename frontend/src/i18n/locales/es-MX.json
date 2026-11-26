@@ -4123,5 +4123,6 @@
 "with {0} selected {1}": "con {0} seleccionado {1}",
 "x Height": "Altura de la x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} is not installed on this computer": "La fuente {0} no está instalada en esta computadora"
 }

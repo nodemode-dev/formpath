@@ -4123,5 +4123,6 @@
 "Zoom Tool",
 "Zoom with the scroll wheel",
 "Zoom: type a percent and press Enter",
-"ZStandard compressed art ({0})"
+"ZStandard compressed art ({0})",
+"{0} is not installed on this computer"
 ]

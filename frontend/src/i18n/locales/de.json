@@ -4123,5 +4123,6 @@
 "with {0} selected {1}": "mit {0} gewählt {1}",
 "x Height": "x-Höhe",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} is not installed on this computer": "Die Schrift {0} ist auf diesem Computer nicht installiert"
 }

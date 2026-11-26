@@ -4123,5 +4123,6 @@
 "with {0} selected {1}": "med {0} markeret {1}",
 "x Height": "x-højde",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} is not installed on this computer": "Skrifttypen {0} er ikke installeret på denne computer"
 }

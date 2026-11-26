@@ -4123,5 +4123,6 @@
 "with {0} selected {1}": "{0} 선택 시 {1}",
 "x Height": "x 높이",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} is not installed on this computer": "{0} 글꼴이 이 컴퓨터에 설치되어 있지 않습니다"
 }

@@ -4123,5 +4123,6 @@
 "with {0} selected {1}": "dengan {0} terpilih {1}",
 "x Height": "Tinggi x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} is not installed on this computer": "Font {0} tidak terpasang di komputer ini"
 }
