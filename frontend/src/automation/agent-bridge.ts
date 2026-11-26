@@ -639,7 +639,7 @@ export class AgentBridge {
     const res = await patternVariations({ ...common, prompt: str('prompt'), colors, detail: common.detail ?? 4, density: num('density', 3), variations: Math.round(num('variations', 2)), tile: num('tile_size', 96), seamless: a.seamless !== false, layout, hs: num('h_spacing', 0), vs: num('v_spacing', 0), project: e.current });
     const good = res.filter((r) => r.art);
     if (!good.length) return fail(`The model gave no usable tile: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
-    const base = (str('name') || str('prompt') || 'Generated Pattern').replace(/\s+/g, ' ').slice(0, 32);
+    const base = Array.from((str('name') || str('prompt') || 'Generated Pattern').replace(/\s+/g, ' ')).slice(0, 32).join('');
     const fillIds = a.fill_selection === true ? (this.ids(a) ?? e.selectedIds()) : [];
     const ids = e.addPatternSwatches(good.map((r, i) => ({ name: `${base} ${i + 1}`, tile: r.tile, art: r.art as VNode, type: r.layout?.type, hs: r.layout?.hs, vs: r.layout?.vs })), fillIds);
     const defs = (e.doc?.patterns ?? []).filter((p) => ids.includes(p.id));
@@ -1641,7 +1641,7 @@ export class AgentBridge {
               if (!t || typeof t.position !== 'number' || !Number.isFinite(t.position)) return fail('Each tab needs a position in points.');
               const al = typeof t.align === 'string' ? t.align : 'left';
               if (!['left', 'center', 'right', 'decimal'].includes(al)) return fail('A tab aligns left, center, right or decimal.');
-              tabs.push({ pos: Math.max(0, t.position), align: al as TabStop['align'], ...(typeof t.leader === 'string' && t.leader ? { leader: t.leader.slice(0, 4) } : {}), ...(typeof t.align_on === 'string' && t.align_on ? { char: t.align_on.slice(0, 1) } : {}) });
+              tabs.push({ pos: Math.max(0, t.position), align: al as TabStop['align'], ...(typeof t.leader === 'string' && t.leader ? { leader: Array.from(t.leader).slice(0, 4).join('') } : {}), ...(typeof t.align_on === 'string' && t.align_on ? { char: [...t.align_on][0] } : {}) });
             }
             pp.tabs = tabs.length ? tabs : undefined;
           }
