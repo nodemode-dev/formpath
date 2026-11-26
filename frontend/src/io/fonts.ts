@@ -3,6 +3,7 @@ import { anchor, mul, transformPath } from '../engine/geometry';
 import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, scriptOf, setShaping, weightOf, type BidiLevels, type ComplexRun } from '../engine/text';
 import type { Anchor, CharStyle, Mat, PathData, SubPath, TextNode } from '../engine';
 import { api, type FontInfo, type SimilarFont } from './api';
+import HB_WASM from 'harfbuzzjs/dist/harfbuzz.wasm?url';
 
 const BUNDLED = import.meta.glob('../../node_modules/@fontsource/{inter,jetbrains-mono}/files/*-{latin,latin-ext,greek,greek-ext,cyrillic,cyrillic-ext,vietnamese}-*-{normal,italic}.woff', { query: '?url', import: 'default' }) as Record<string, () => Promise<string>>;
 const SUBSETS = ['latin-ext', 'greek', 'greek-ext', 'cyrillic', 'cyrillic-ext', 'vietnamese'];
@@ -594,10 +595,10 @@ function featureGlyphs(font: Font, st: CharStyle, text: string, features: string
 type Hb = typeof import('harfbuzzjs');
 type HbFont = InstanceType<Hb['Font']>;
 type BidiApi = ReturnType<typeof import('bidi-js').default>;
-let hb: Hb | null = null, hbBuf: InstanceType<Hb['Buffer']> | null = null, bidiApi: BidiApi | null = null, shaperLoad: Promise<void> | null = null;
+let hb: Hb | null = null, hbBuf: InstanceType<Hb['Buffer']> | null = null, bidiApi: BidiApi | null = null, shaperLoad: Promise<void> | null = null, shaperAfter = 0;
 function loadShaper(): void {
-  if (shaperLoad) return;
-  shaperLoad = Promise.all([import('harfbuzzjs'), import('bidi-js')]).then(([h, b]) => { hb = h; hbBuf = new h.Buffer(); bidiApi = b.default(); fontsChanged(); onFace?.(); }).catch(() => undefined);
+  if (shaperLoad || performance.now() < shaperAfter) return;
+  shaperLoad = fetch(HB_WASM).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status))))).then(() => Promise.all([import('harfbuzzjs'), import('bidi-js')])).then(([h, b]) => { hb = h; hbBuf = new h.Buffer(); bidiApi = b.default(); fontsChanged(); onFace?.(); }).catch(() => { shaperLoad = null; shaperAfter = performance.now() + 3000; });
 }
 const isSfnt = (font: Font): boolean => { const b = rawData.get(font); if (!b || b.byteLength < 12) return false; const s = new DataView(b).getUint32(0); return s === 0x00010000 || s === 0x4f54544f || s === 0x74727565; };
 const hbFonts = new WeakMap<Font, { font: HbFont; upem: number } | null>();
