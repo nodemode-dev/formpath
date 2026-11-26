@@ -477,7 +477,7 @@ export function startApp(): void {
           // only a version the native reader does not cover goes to the installed converter; a damaged file reports its own error
           if (!(e instanceof DwgUnsupportedError)) throw e;
           const conv = await api.dwgToDxf(f);
-          file = parseDxf(conv.text);
+          file = parseDxf(decodeDxf(conv.bytes));
           how = ` through ${conv.converter}`;
         }
       } else file = parseDxf(decodeDxf(new Uint8Array(await f.arrayBuffer())));

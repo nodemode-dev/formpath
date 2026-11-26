@@ -125,11 +125,11 @@ export const api = {
     try { return await json<FontOutlines>(await request('/fonts/outlines', { method: 'POST', body })); } catch (e) { return e instanceof ApiError && e.status === 409 ? 'gone' : null; }
   },
 
-  async dwgToDxf(file: Blob): Promise<{ text: string; converter: string }> {
+  async dwgToDxf(file: Blob): Promise<{ bytes: Uint8Array; converter: string }> {
     const body = new FormData();
     body.append('file', file, 'drawing.dwg');
     const res = await request('/io/dwg/to-dxf', { method: 'POST', body });
-    return { text: await res.text(), converter: res.headers.get('X-Converter') ?? 'a DWG converter' };
+    return { bytes: new Uint8Array(await res.arrayBuffer()), converter: res.headers.get('X-Converter') ?? 'a DWG converter' };
   },
 
   async plugins(): Promise<Array<{ name: string; size: number }>> { try { return await json<Array<{ name: string; size: number }>>(await request('/plugins')); } catch { return []; } },

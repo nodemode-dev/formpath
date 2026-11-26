@@ -52,7 +52,7 @@ def _run(argv: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(argv, capture_output=True, timeout=TIMEOUT, env=env, check=False)
 
 
-def to_dxf(data: bytes) -> tuple[str, str]:
+def to_dxf(data: bytes) -> tuple[bytes, str]:
     if not data.startswith(b"AC10"):
         raise DwgError("This file is not a DWG drawing (it does not start with an AutoCAD version tag).")
     found = converters()
@@ -82,7 +82,7 @@ def to_dxf(data: bytes) -> tuple[str, str]:
                 errors.append(f"{conv['name']}: {exc}")
                 continue
             if hits and hits[0].stat().st_size > 0:
-                return hits[0].read_bytes().decode("utf-8", errors="replace"), conv["name"]
+                return hits[0].read_bytes(), conv["name"]
             tail = (res.stderr or res.stdout or b"").decode("utf-8", errors="replace").strip().splitlines()[-1:] or ["no output"]
             errors.append(f"{conv['name']}: {tail[0]}")
     raise DwgError("The DWG converter could not read this drawing. " + "; ".join(errors))
