@@ -23,7 +23,7 @@ def _instance(font: TTFont, axes: dict[str, float]) -> None:
     except ImportError as exc:
         raise SubsetError("This font is variable and the engine cannot fix its axes. Export with Preserve text as live text off.") from exc
     try:
-        instancer.instantiateVariableFont(font, spot, inplace=True)
+        instancer.instantiateVariableFont(font, spot, inplace=True, downgradeCFF2="CFF2" in font)
     except Exception as exc:
         raise SubsetError(f"This variable font could not be fixed at its axis values ({exc}). Export with Preserve text as live text off.") from exc
 
@@ -56,7 +56,14 @@ def build(data: bytes, gids: list[int], axes: dict[str, float]) -> tuple[bytes, 
         raise SubsetError(f"This font could not be subset ({exc}).") from exc
     _instance(font, axes)
     if "CFF2" in font:
-        raise SubsetError("This font uses CFF2 outlines that cannot be embedded. Export with Preserve text as live text off.")
+        try:
+            from fontTools.cffLib.CFF2ToCFF import convertCFF2ToCFF
+            tmp = io.BytesIO()
+            font.save(tmp)
+            font = TTFont(io.BytesIO(tmp.getvalue()), recalcBBoxes=False)
+            convertCFF2ToCFF(font)
+        except Exception as exc:
+            raise SubsetError(f"This font uses CFF2 outlines that could not be converted for embedding ({exc}). Export with Preserve text as live text off.") from exc
     font.flavor = None
     out = io.BytesIO()
     font.save(out)
