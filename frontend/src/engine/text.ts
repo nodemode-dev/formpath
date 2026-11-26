@@ -743,10 +743,14 @@ function layoutOnPath(n: TextNode): TextLayout {
   const eff = n.pathEffect ?? 'rainbow', spacing = n.pathSpacing ?? 0, align = n.pathAlign ?? 'baseline';
   const pb = pathBounds([sp]), centre = { x: pb.x + pb.w / 2, y: pb.y + pb.h / 2 };
   let overflow = -1, b = emptyRect();
-  const ord = all.some((x) => !!x.lv || !!x.parts) ? visualOrder(all, all[0]?.pl ?? 0) : null;
-  for (let q = 0; q < all.length; q++) {
+  const past = (mid: number): boolean => mid > s1 + 1e-6 || (!sp.closed && mid > total + 1e-6) || (sp.closed && mid - s0 > total + 1e-6);
+  const bidi = all.some((x) => !!x.lv || !!x.parts);
+  let fit = all.length;
+  if (bidi) for (let k = 0, t = s; k < all.length; t += widths[k], k++) if (past(t + widths[k] / 2)) { fit = k; overflow = all[k].index; break; }
+  const ord = bidi ? visualOrder(all.slice(0, fit), all[0]?.pl ?? 0) : null;
+  for (let q = 0; q < (ord ? ord.length : all.length); q++) {
     const k = ord ? ord[q] : q, it = all[k], w = widths[k], mid = s + w / 2;
-    if (mid > s1 + 1e-6 || (!sp.closed && mid > total + 1e-6) || (sp.closed && mid - s0 > total + 1e-6)) { overflow = it.index; break; }
+    if (!ord && past(mid)) { overflow = it.index; break; }
     const { p, tangent: t } = spanPoint(ps, mid), nrm = { x: -t.y, y: t.x };
     let U: Pt, V: Pt;
     switch (eff) {
@@ -919,20 +923,21 @@ function bidiIndexAt(l: Line, x: number): number {
   return after && at >= last ? l.end : at;
 }
 export function stepVisual(n: TextNode, caret: number, dir: 1 | -1): number | null {
-  if (n.mode === 'path' || n.vertical) return null;
-  const lay = layoutText(n), li = lay.lines.findIndex((x) => caret >= x.start && caret <= x.end), l = lay.lines[li];
-  if (!l?.bidi) return null;
-  const stops = new Set<number>([l.start, l.end]);
-  for (const g of l.glyphs) if (!g.syn) { stops.add(g.index); stops.add(g.index + g.ch.length); }
-  const cur = bidiStop(l, caret);
+  if (n.vertical) return null;
+  const lay = layoutText(n), path = n.mode === 'path', li = lay.lines.findIndex((x) => caret >= x.start && caret <= x.end), l = lay.lines[li];
+  if (path ? !lay.complex : !l?.bidi) return null;
+  const gs = path ? lay.glyphs : l.glyphs, stops = new Set<number>(path ? [] : [l.start, l.end]);
+  for (const g of gs) if (!g.syn) { stops.add(g.index); stops.add(g.index + g.ch.length); }
+  const at = (i: number): number => { if (!path) return bidiStop(l, i); const h = holder(gs, i), k = h ? gs.indexOf(h.g) : 0; return h && h.end !== rtlOf(h.g) ? k + 1 : k; };
+  const cur = at(caret);
   let best: number | null = null, bd = 0;
   for (const i of stops) {
     if (i === caret) continue;
-    const d = (bidiStop(l, i) - cur) * dir;
+    const d = (at(i) - cur) * dir;
     if (d <= 1e-6) continue;
     if (best === null || d < bd - 1e-6 || (Math.abs(d - bd) <= 1e-6 && Math.abs(i - caret) < Math.abs(best - caret))) { best = i; bd = d; }
   }
-  if (best !== null) return best;
+  if (best !== null || path) return best ?? caret;
   const t = plainText(n);
   return (dir > 0) !== !!l.rtl ? Math.min(t.length, caret + (/[\ud800-\udbff]/.test(t[caret] ?? '') ? 2 : 1)) : Math.max(0, caret - (/[\udc00-\udfff]/.test(t[caret - 1] ?? '') ? 2 : 1));
 }
