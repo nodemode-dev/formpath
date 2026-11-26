@@ -17,7 +17,7 @@ import { SYMBOL_REGISTRATIONS, type SymbolRegistration } from '../engine/symbols
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
 import { charStyleAt, DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
 import { DEFAULT_HYPH, DEFAULT_JUST } from '../engine/hyphen';
-import { variationOf } from '../io/fonts';
+import { missingGlyphs, variationOf } from '../io/fonts';
 import { harmonyColors, variations, type HarmonyRule, type Variation } from '../engine/harmony';
 import { CONVERT_KINDS, liveParams, type ConvertKind, type LivePatch } from '../engine/ops/live-shapes';
 import { transformNode } from '../engine/transform';
@@ -246,6 +246,11 @@ export class AgentBridge {
     const n = this.node(a.layer);
     if (n.kind !== 'layer') throw new ToolError(`${a.layer} is not a layer id.`);
     return n.id;
+  }
+
+  private async uncovered(id: string): Promise<string> {
+    const n = this.node(id), miss = n.kind === 'text' ? await missingGlyphs(n).catch(() => [] as string[]) : [];
+    return miss.length ? `No font on this computer draws ${miss.slice(0, 12).join(' ')}${miss.length > 12 ? ` or ${miss.length - 12} more` : ''}, so set font to a family that covers ${miss.length === 1 ? 'it' : 'them'}.` : '';
   }
 
   private describe(n: VNode): Record<string, unknown> {
@@ -842,7 +847,7 @@ export class AgentBridge {
           if (mode === 'path') { const src = this.node(a.path_id); if (src.kind !== 'path') return fail('path_id must be a path.'); path = src.d; }
           const id = e.addText(str('text'), num('x', 0), num('y', 0), { mode, width: num('width', 200), height: num('height', 100), path, style, para: has('align') ? { align: str('align') as 'left' } : undefined, name: str('name') || undefined, layer: this.layer(a), vertical: str('orientation') === 'vertical' });
           if (!id) return fail('Could not add the type.');
-          return text(`Added ${mode} type (id ${id}).`, this.describe(this.node(id)));
+          return text([`Added ${mode} type (id ${id}).`, await this.uncovered(id)].filter(Boolean).join(' '), this.describe(this.node(id)));
         }
         case 'edit_anchors': {
           const n = this.node(a.id);
@@ -1677,7 +1682,7 @@ export class AgentBridge {
             node.area = area;
           }
           if (Object.keys(node).length) e.setTextNode(n.id, node, has('orientation') && Object.keys(node).length === 1 ? 'Type Orientation' : cur.mode === 'path' ? 'Type on a Path Options' : cur.mode === 'area' ? 'Area Type Options' : 'Type Options');
-          return text(['Changed the type.', ...notes].join(' '), this.describe(this.node(n.id)));
+          return text(['Changed the type.', ...notes, await this.uncovered(n.id)].filter(Boolean).join(' '), this.describe(this.node(n.id)));
         }
         case 'select_similar': {
           const ref = has('id') ? this.node(a.id).id : e.selectedIds()[0];
