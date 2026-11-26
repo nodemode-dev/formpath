@@ -18,7 +18,7 @@ import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, 
 import { colourEmoji, missingGlyphs, outlineText, substituteNotes } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
-import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
+import { bleedFor, marksActive, marksContent, pageGeometry, pageInfoLine, type PdfMarks } from './pdf-marks';
 import { pdfxParts } from './pdf-x';
 import { outputProfileBytes } from '../engine/color-management';
 import { inCopies, sheetPages } from './pdf-sheet';
@@ -665,7 +665,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     if (boxed) parts.push('Q');
     if (marksActive(o.marks) && o.marks) {
       const reg = regSpace();
-      const info = pdfString(`${o.title ?? p.doc.title ?? p.name}   ${a.name}   ${p.doc.colorMode.toUpperCase()}   ${new Date().toISOString().slice(0, 10)}`);
+      const info = await pageInfoLine(`${o.title ?? p.doc.title ?? p.name}   ${a.name}   ${p.doc.colorMode.toUpperCase()}   ${new Date().toISOString().slice(0, 10)}`);
       parts.push(marksContent(geo, a.w, a.h, o.marks, s, `CS${reg}`, 'FMark', info, painter.rgbOnly));
     }
     const packed = await deflate(new TextEncoder().encode(parts.filter(Boolean).join('\n')));

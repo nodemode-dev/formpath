@@ -3,9 +3,10 @@ import { platesOf, type Plate } from '../engine/inks';
 import type { Mat, PathData, Project, VNode } from '../engine';
 import { outlineText } from './fonts';
 import { deflate, Painter, PdfFile, PDF_MAX_SIDE } from './pdf';
-import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
+import { bleedFor, marksActive, marksContent, pageGeometry, pageInfoLine, type PdfMarks } from './pdf-marks';
 import { PlatePaint } from './pdf-plate-map';
 import { inCopies, sheetPages } from './pdf-sheet';
+import { pdfString } from './pdf-x';
 import { embeddedMarkFont, LiveFonts, type LiveText } from './pdf-text';
 import type { PrintSettings } from './print-layout';
 import { ensureBitmaps } from './raster';
@@ -14,7 +15,6 @@ export interface PlateOptions { artboards: number[]; marks: PdfMarks; dpi: numbe
 
 const f = (v: number): string => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? '0' : String(r); };
 const f6 = (v: number): string => { const r = Math.round(v * 1e6) / 1e6; return Object.is(r, -0) ? '0' : String(r); };
-const text = (s: string): string => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).replace(/[^\x20-\x7e]/g, '?')})`;
 
 export async function exportPlates(p: Project, o: PlateOptions): Promise<Blob> {
   await ensureBitmaps(p);
@@ -72,7 +72,7 @@ export async function exportPlates(p: Project, o: PlateOptions): Promise<Blob> {
       parts.push(`${f6(s)} 0 0 ${f6(-s)} ${f6(ox - a.x * s)} ${f6(oy + (a.y + a.h) * s)} cm`, body);
       if (boxed) parts.push('Q');
       if (marksActive(o.marks)) {
-        parts.push(marksContent(geo, a.w, a.h, { ...o.marks, colorBars: false }, s, `CS${sep}`, 'FMark', text(`${title}   ${a.name}   ${info.label}   ${day}`)));
+        parts.push(marksContent(geo, a.w, a.h, { ...o.marks, colorBars: false }, s, `CS${sep}`, 'FMark', await pageInfoLine(`${title}   ${a.name}   ${info.label}   ${day}`)));
         if (o.marks.colorBars) {
           const sz = 9 * s, y = oy - geo.start.b * s - sz, room = Math.max(0, Math.floor((a.w * s / 2 - 16 * s) / sz));
           const steps = Array.from({ length: Math.min(room, 11) }, (_, n) => `${f(1 - n / 10)} g ${f(ox + 16 * s + n * sz)} ${f(y)} ${f(sz)} ${f(sz)} re f`);
@@ -99,6 +99,6 @@ export async function exportPlates(p: Project, o: PlateOptions): Promise<Blob> {
   pdf.set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((x) => `${x} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`), now = new Date();
   const stamp = `D:${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}${String(now.getUTCSeconds()).padStart(2, '0')}Z`;
-  const info = pdf.add(`<< /Title ${text(`${title} separations`)} /Producer ${text(`formpath ${o.version ?? ''}`.trim())} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp}) >>`);
+  const info = pdf.add(`<< /Title ${pdfString(`${title} separations`)} /Producer ${pdfString(`formpath ${o.version ?? ''}`.trim())} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp}) >>`);
   return pdf.build(root, info);
 }
