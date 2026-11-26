@@ -263,10 +263,10 @@ export function substituteNotes(swapped: Iterable<string>): string[] {
 export async function missingGlyphs(n: TextNode, swapped?: Set<string>): Promise<string[]> {
   const out = new Set<string>();
   for (const g of layoutText(n).glyphs) {
-    if (!g.ch.trim() || g.ch.charCodeAt(0) < 32 || invisibleChar(g.ch)) continue;
+    if (!g.ch.trim() || g.ch.charCodeAt(0) < 32 || invisibleChar(g.ch) || g.parts) continue;
     const face = await exportFace(g.style, swapped);
     if (!face) continue;
-    const pick = await glyphOrFallback(g.ch, face.style, face.font, faceGlyph(face, g.ch, g.gid));
+    const ch = g.mir ?? g.ch, pick = await glyphOrFallback(ch, face.style, face.font, faceGlyph(face, ch, g.gid));
     if (pick.missing) out.add(g.ch);
   }
   return [...out];
@@ -331,11 +331,17 @@ export async function outlineText(n: TextNode, swapped?: Set<string>): Promise<P
   const out: SubPath[] = [];
   for (const g of lay.glyphs) {
     if (g.ch === ' ' || g.ch === '\t') continue;
+    const local: Mat = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]);
+    if (g.parts) {
+      const fst = g.face ?? g.style, pf = await fontFor(fst.font, fst.style);
+      if (!pf) return null;
+      for (const p of g.parts) out.push(...transformPath(variedGlyph(pf, p.gid, fst).d, mul(n.mode === 'path' ? local : mul(n.xf, local), [1, 0, 0, 1, p.x, p.y])));
+      continue;
+    }
     const face = await exportFace(g.style, swapped);
     if (!face) return null;
-    const pick = await glyphOrFallback(g.ch, face.style, face.font, faceGlyph(face, g.ch, g.gid));
+    const ch = g.mir ?? g.ch, pick = await glyphOrFallback(ch, face.style, face.font, faceGlyph(face, ch, g.gid));
     if (pick.skip) continue;
-    const local: Mat = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]);
     out.push(...transformPath(variedGlyph(pick.font, pick.gid, pick.style).d, n.mode === 'path' ? local : mul(n.xf, local)));
   }
   return out;

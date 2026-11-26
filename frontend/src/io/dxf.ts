@@ -542,7 +542,7 @@ export async function exportDxf(p: Project, o: DxfExportOptions, outline: (n: Te
       case 'text': {
         if (!on) return;
         const fillC = n.spans[0] ? solidOf(n.spans[0].style.fill) ?? { kind: 'rgb', r: 0, g: 0, b: 0 } as Color : { kind: 'rgb', r: 0, g: 0, b: 0 } as Color;
-        if (o.text === 'outlines' || n.mode === 'path') { const d = await outline(n); if (d) shapes.push({ layer, d, stroke: null, fill: fillC, even: false }); return; }
+        if (o.text === 'outlines' || n.mode === 'path' || layoutText(n).complex) { const d = await outline(n); if (d) shapes.push({ layer, d, stroke: null, fill: fillC, even: false }); return; }
         const lay = layoutText(n), lines: Label['lines'] = [];
         for (const ln of lay.lines) {
           const t = ln.glyphs.map((gl) => gl.ch).join('').replace(/\s+$/, '');
