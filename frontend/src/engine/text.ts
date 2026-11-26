@@ -198,7 +198,7 @@ function itemsOf(spans: Span[]): Item[] {
       const shaped = (feats.length || st.alt !== undefined || hasAxes(st)) && shaping ? shaping.shape(st, piece, feats) : null;
       if (shaped) {
         let k = 0;
-        for (const g of shaped) { const ch = piece.slice(k, k + g.chars); out.push({ ch, st, index: i, gid: g.gid, adv: g.adv }); i += ch.length; k += g.chars; }
+        for (const g of shaped) { const ch = piece.slice(k, k + g.chars); out.push(g.gid ? { ch, st, index: i, gid: g.gid, adv: g.adv } : { ch, st, index: i }); i += ch.length; k += g.chars; }
         continue;
       }
       for (const ch of piece) {

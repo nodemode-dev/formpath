@@ -146,6 +146,17 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
 
 const CJK_FALLBACKS = ['PingFang SC', 'Hiragino Sans GB', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Apple SD Gothic Neo', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', 'Source Han Sans SC', 'Microsoft YaHei', 'Yu Gothic', 'Meiryo', 'Malgun Gothic', 'SimSun', 'MS Gothic', 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'Songti SC', 'Arial Unicode MS'];
 const GENERAL_FALLBACKS = ['Helvetica Neue', 'Arial', 'Segoe UI', 'Noto Sans', 'DejaVu Sans', 'Liberation Sans', 'Lucida Grande', 'Arial Unicode MS', 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols', 'Noto Sans Symbols 2'];
+const HAN_FIRST: Record<string, string[]> = {
+  tw: ['Microsoft JhengHei', 'PingFang TC', 'Noto Sans CJK TC', 'Source Han Sans TC', 'Heiti TC', 'PMingLiU', 'MingLiU'],
+  hk: ['Microsoft JhengHei', 'PingFang HK', 'Noto Sans CJK HK', 'Noto Sans CJK TC', 'Source Han Sans HK', 'MingLiU_HKSCS'],
+  ja: ['Yu Gothic', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans CJK JP', 'Source Han Sans', 'Meiryo', 'MS Gothic'],
+  ko: ['Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', 'Source Han Sans K'],
+};
+function hanFirst(family: string): string[] {
+  const lang = (globalThis.document?.documentElement.lang || globalThis.navigator?.language || '').toLowerCase();
+  const by = /\bHK\b|HKSCS/.test(family) ? 'hk' : /\bTC\b|JhengHei|MingLiU|Heiti TC/.test(family) ? 'tw' : /\bJP\b|Hiragino|Meiryo|Mincho|Yu Gothic|MS Gothic/.test(family) ? 'ja' : /\bKR?\b|Malgun|Gulim|Batang/.test(family) ? 'ko' : /\bSC\b|YaHei|SimSun|SimHei/.test(family) ? '' : /^zh-(hk|mo)/.test(lang) ? 'hk' : /^zh-(tw|hant)/.test(lang) ? 'tw' : lang.startsWith('ja') ? 'ja' : lang.startsWith('ko') ? 'ko' : '';
+  return HAN_FIRST[by] ?? [];
+}
 const isCjk = (cp: number): boolean => (cp >= 0x2e80 && cp <= 0x9fff) || (cp >= 0xac00 && cp <= 0xd7af) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xffef) || (cp >= 0x20000 && cp <= 0x3ffff);
 
 export interface FallbackGlyph { font: Font; gid: number; family: string; source: string }
@@ -179,7 +190,7 @@ export function fallbackGlyph(ch: string, family: string, style: string): Promis
     p = (async () => {
       const own = await bundledFallback(family, style, ch);
       if (own) return own;
-      const cp = ch.codePointAt(0) ?? 0, order = isCjk(cp) ? [...CJK_FALLBACKS, ...GENERAL_FALLBACKS] : [...GENERAL_FALLBACKS, ...CJK_FALLBACKS];
+      const cp = ch.codePointAt(0) ?? 0, order = isCjk(cp) ? [...hanFirst(family), ...CJK_FALLBACKS, ...GENERAL_FALLBACKS] : [...GENERAL_FALLBACKS, ...CJK_FALLBACKS];
       for (const fam of [...new Set(order)].filter((f) => f !== family)) {
         const font = await fontFor(fam, style).catch(() => null), gid = covers(font, ch);
         if (font && gid) return { font, gid, family: fam, source: fam };

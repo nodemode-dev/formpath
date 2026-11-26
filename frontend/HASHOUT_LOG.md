@@ -5018,3 +5018,16 @@ A library made from a document or an .ase file got its id from its name with eve
 Run outside the repository (a scratch vitest file importing these functions): a touch on either half of an astral character, and a range ending inside it, leave every span well formed; a label cut at a pair is well formed. `tsc` clean. Not run: the PSD in Photoshop.
 
 Left: other cuts by unit that only shorten a name for display or a file stem (`engine/index.ts` 1069 and 2141, `engine/variables.ts` 124, `ui/panels/actions.ts` 70, `ui/panels/generative.ts` 222, `automation/agent-bridge.ts` 637, `io/width-profiles.ts` 25, `io/gen-options.ts` 205).
+
+### src/io/fonts.ts, src/engine/text.ts · a character the font lacks: Traditional Chinese, Japanese and Korean faces first, and no empty box in shaped type (issue 17)
+- refers-to: src/io/fonts.ts :: HAN_FIRST, hanFirst, fallbackGlyph; src/engine/text.ts :: itemsOf (the shaped branch)
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+When type is outlined (Create Outlines, PDF, EPS, outlined SVG) and its font has no glyph for a character, `fallbackGlyph` walks a list of families. For Han characters that list began with the Simplified Chinese faces and had no Traditional one at all, so on Windows a Traditional Chinese text set in a Latin font was outlined in Microsoft YaHei, with mainland letterforms, while the screen (the browser's own fallback, led by the page language) showed Microsoft JhengHei. Japanese text got the Chinese forms too. `hanFirst` puts the faces of one region first: by the family's own name when it says (TC, HK, JP, KR, JhengHei, MingLiU, Hiragino, Malgun and so on; SC, YaHei and SimSun keep the old order), else by the page language (`zh-TW`, `zh-HK`, `ja`, `ko`), which the i18n module sets from the language chosen in Preferences. The old list follows unchanged.
+
+In `itemsOf`, a run that goes through the shaper (features, a glyph alternate or variable axes are set) kept glyph id 0 for a character the font lacks, and the renderer drew the font's empty box for it; type without those settings never did, because the browser falls back per character. A shaped glyph with id 0 is now pushed as a plain character, so it is measured and drawn the way unshaped type is, and the rest of the run stays shaped.
+
+`tsc` clean, `npm test` 61 pass. Not run: the order on a Windows or macOS machine with those faces; a variable font with Chinese in it on screen.
+
+Found and not changed here: type whose font is not installed is left out of a PDF, an EPS and an outlined SVG without a word (`outlineText` returns null when `fontFor` does, and the exporters then write nothing for that object), and the PDF reader names Helvetica as the nearest match for every font it does not know, a family Windows does not have. Create Outlines says so; the exporters do not. That is the next change in this area.
