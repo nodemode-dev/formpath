@@ -8,6 +8,7 @@ import { fill as fillItem, linearGradient, radialGradient, solid, stop, stroke a
 import { DEFAULT_CHAR, DEFAULT_PARA } from '../engine/text';
 import { zstdDecompress } from './ai-zstd';
 import { parseStyles, resolveStyle, type PaintRead, type StyleHost, type StyleResult } from './ai-styles';
+import { csOf, psDecode, psUni } from './text-decode';
 import type { Anchor, Appearance, BlendMode, BrushDef, Color, CompoundNode, Doc, GradientStop, ImageNode, LayerNode, Mat, Paint, PathData, PathNode, PatternDef, Span, SubPath, SymbolDef, TextNode, Units, VNode } from '../engine';
 
 export interface AiRead { doc: Doc; assets: Map<string, Blob>; skipped: string[]; unknown: string[]; version: string; kept: string[] }
@@ -20,7 +21,7 @@ type Tok = { t: 'n'; v: number } | { t: 's'; v: string } | { t: 'x'; v: string }
 interface GradDef { type: number; stops: GradientStop[] }
 interface Meta {
   version: string; bbox: number[] | null; tile: number[] | null; artboards: number[][]; units: Units; cmyk: boolean;
-  customs: Map<string, Color>; gradients: Map<string, GradDef>; skipped: Set<string>; pages: number; defs: Def[];
+  customs: Map<string, Color>; gradients: Map<string, GradDef>; skipped: Set<string>; pages: number; defs: Def[]; cs: string;
 }
 interface Ctx { kind: 'layer' | 'group' | 'clip' | 'compound'; inner?: number; nodes: VNode[]; clipper?: VNode; kids: PathNode[]; ap?: Appearance; rule?: 'nonzero' | 'evenodd'; clipped?: boolean; opacity?: number; blend?: BlendMode; styled?: string; sub?: { name: string; hidden: boolean; locked: boolean } }
 /** A group the file marked with an art style: Illustrator wrote its expanded look, and the unpainted source art follows. */
@@ -169,13 +170,14 @@ function tokenize(s: string): Tok[] {
 interface Prep { ops: string; datas: string[]; meta: Meta }
 
 function prepare(text: string, bins: string[] = []): Prep {
-  const meta: Meta = { version: '', bbox: null, tile: null, artboards: [], units: 'pt', cmyk: true, customs: new Map(), gradients: new Map(), skipped: new Set(), pages: 1, defs: [] };
+  const meta: Meta = { version: '', bbox: null, tile: null, artboards: [], units: 'pt', cmyk: true, customs: new Map(), gradients: new Map(), skipped: new Set(), pages: 1, defs: [], cs: '' };
   const lines = text.split(/\r\n|\r|\n/), keep: string[] = [], datas: string[] = [];
   let cap: Def | null = null, layerIn = false;
   const num =(s: string): number[] => (s.match(/[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?/g) ?? []).map(Number);
-  let skipEnd: string | null = null, nonPrint = 0, grad: { name: string; lines: string[] } | null = null, inData: string[] | null = null, lastCustom = false, binAt = -1;
+  let skipEnd: string | null = null, nonPrint = 0, grad: { name: string; lines: string[] } | null = null, inData: string[] | null = null, lastCustom = false, lastFonts = false, binAt = -1;
+  const fonts = (l: string): void => { for (const f of l.split(/\s+/)) if (!meta.cs && f) meta.cs = csOf(f); };
   const customs = (l: string): void => {
-    for (const m of l.matchAll(/([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+\(([^)]*)\)/g)) meta.customs.set(m[5], { kind: 'cmyk', c: Number(m[1]) * 100, m: Number(m[2]) * 100, y: Number(m[3]) * 100, k: Number(m[4]) * 100 });
+    for (const m of l.matchAll(/([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+\(([^)]*)\)/g)) meta.customs.set(firstString(`(${m[5]})`), { kind: 'cmyk', c: Number(m[1]) * 100, m: Number(m[2]) * 100, y: Number(m[3]) * 100, k: Number(m[4]) * 100 });
   };
   const header = (l: string): void => {
     let m: RegExpExecArray | null;
@@ -188,11 +190,14 @@ function prepare(text: string, bins: string[] = []): Prep {
     else if ((m = /^%AI9_ColorModel:\s*(\d+)/.exec(l))) meta.cmyk = Number(m[1]) !== 1;
     else if ((m = /^%%CMYKCustomColor:\s*(.*)$/.exec(l))) { customs(m[1]); lastCustom = true; return; }
     else if ((m = /^%%RGBCustomColor:\s*(.*)$/.exec(l))) {
-      for (const g of m[1].matchAll(/([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+\(([^)]*)\)/g)) meta.customs.set(g[4], { kind: 'rgb', r: Math.round(Number(g[1]) * 255), g: Math.round(Number(g[2]) * 255), b: Math.round(Number(g[3]) * 255) });
+      for (const g of m[1].matchAll(/([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+([-+]?[\d.]+)\s+\(([^)]*)\)/g)) meta.customs.set(firstString(`(${g[4]})`), { kind: 'rgb', r: Math.round(Number(g[1]) * 255), g: Math.round(Number(g[2]) * 255), b: Math.round(Number(g[3]) * 255) });
       lastCustom = true;
       return;
     } else if (lastCustom && (m = /^%%\+\s*(.*)$/.exec(l))) { customs(m[1]); return; }
+    else if ((m = /^%%DocumentFonts:\s*(.*)$/.exec(l))) { fonts(m[1]); lastCustom = false; lastFonts = true; return; }
+    else if (lastFonts && (m = /^%%\+\s*(.*)$/.exec(l))) { fonts(m[1]); return; }
     lastCustom = false;
+    lastFonts = false;
   };
   for (let li = 0; li < lines.length; li++) {
     let l = lines[li];
@@ -365,7 +370,7 @@ class Reader {
       id = newId('s');
       this.swatches.set(name, id);
       const c = this.meta.customs.get(name) ?? base;
-      this.swatchDefs.push({ id, name, paint: solid(c), global: true, spot: true });
+      this.swatchDefs.push({ id, name: psUni(name, this.meta.cs), paint: solid(c), global: true, spot: true });
     }
     return this.colorPaint(base, Math.round((1 - tint) * 1000) / 10, id);
   }
@@ -557,7 +562,7 @@ class Reader {
   textShow(s: string): void {
     const t = this.text;
     if (!t || !s) return;
-    const style = this.styleNow(), str = s.replace(/\r\n?/g, '\n');
+    const cs = csOf(this.run.name) || this.meta.cs, style = this.styleNow(), str = (cs ? psDecode(s, cs) ?? s : s).replace(/\r\n?/g, '\n');
     const last = t.runs[t.runs.length - 1];
     if (last && JSON.stringify(last.style) === JSON.stringify(style)) last.text += str; else t.runs.push({ text: str, style });
   }
@@ -640,10 +645,10 @@ class Reader {
       case 'Xy': g.blend = BLEND[Math.round(a[0] ?? 0)] ?? 'normal'; g.opacity = Math.max(0, Math.min(1, a.length > 1 ? a[1] : 1)); break;
       case 'Lb': this.beginLayer(a); break;
       case 'LB': this.flushLayer(); break;
-      case 'Ln': { const L = this.layers[this.layers.length - 1]; if (L) L.name = this.str() || L.name; break; }
+      case 'Ln': { const L = this.layers[this.layers.length - 1]; if (L) L.name = psUni(this.str(), this.meta.cs) || L.name; break; }
       case ':': if (this.stack.some((t) => t.t === 'x' && t.v === 'XMLUID')) this.xmlNext = true; break;
       case ';': if (this.xmlNext) { this.xmlNext = false; const nm = xmlName(this.str()); if (nm && this.lastNode && !this.lastNode.name) this.lastNode.name = nm; } break;
-      case 'SL': this.lastNode = null; this.top().sub ={ name: this.str(), hidden: n(-2) === 0, locked: n(-1) === 0 }; break;
+      case 'SL': this.lastNode = null; this.top().sub ={ name: psUni(this.str(), this.meta.cs), hidden: n(-2) === 0, locked: n(-1) === 0 }; break;
       case 'Bb': this.inBb = true; break;
       case 'Xx': case 'XX': {
         const type = n(-1), tint = n(-2);
@@ -821,15 +826,15 @@ function buildDefs(rd: Reader, doc: Doc): string[] {
     }
     const nodes = artOf(rd, ls.slice(1));
     if (!nodes.length) { sk.add('patterns with no visible art'); continue; }
-    const def: PatternDef = { id: newId('pt'), name, tile: { x: x0 - rd.ox, y: rd.oy - y1, w: x1 - x0, h: y1 - y0 }, art: group(nodes), type: 'grid', hs: 0, vs: 0 };
+    const shown = psUni(name, rd.meta.cs), def: PatternDef = { id: newId('pt'), name: shown, tile: { x: x0 - rd.ox, y: rd.oy - y1, w: x1 - x0, h: y1 - y0 }, art: group(nodes), type: 'grid', hs: 0, vs: 0 };
     patterns.push(def);
-    swatches.push({ id: newId('s'), name, paint: { type: 'pattern', pattern: def.id, xf: [1, 0, 0, 1, 0, 0] }, global: false, spot: false });
+    swatches.push({ id: newId('s'), name: shown, paint: { type: 'pattern', pattern: def.id, xf: [1, 0, 0, 1, 0, 0] }, global: false, spot: false });
     rd.patterns.set(name, def.id);
   }
   for (const d of defs) {
     if (d.kind !== 'symbol') continue;
     if (d.raster) { sk.add('symbols that hold placed images'); continue; }
-    const ls = lines(d), name = firstString(ls[0] ?? '') || `Symbol ${symbols.length + 1}`;
+    const ls = lines(d), name = psUni(firstString(ls[0] ?? ''), rd.meta.cs) || `Symbol ${symbols.length + 1}`;
     const nodes = artOf(rd, ls);
     if (!nodes.length) { sk.add('symbols with no visible art'); continue; }
     const art = group(nodes), b = geomBounds(doc, art);
@@ -853,7 +858,7 @@ function buildDefs(rd: Reader, doc: Doc): string[] {
     const s = tokenize(d.lines.join('\n')).filter((t) => t.t === 's').map((t) => (t.t === 's' ? t.v : ''));
     const tool = s[0] ?? '';
     if (!/Brush Tool$/.test(tool)) { if (!/Brush Manager/.test(tool)) sk.add('live effects and plug-in objects'); continue; }
-    const name = s[1] ?? '', params = s.slice(2).join('');
+    const name = psUni(s[1] ?? '', rd.meta.cs), params = s.slice(2).join('');
     const bad = (): void => { sk.add('brushes whose definition is incomplete'); };
     if (/Calligraphic/.test(tool)) {
       const n = params.trim().split(/\s+/).map(Number);
@@ -952,7 +957,7 @@ export async function buildAi(text: string, title: string, early: Set<string>, o
     return ly;
   });
   doc.swatches = [...doc.swatches, ...rd.swatchDefs];
-  for (const [name, c] of meta.customs) if (!rd.swatches.has(name)) doc.swatches.push({ id: newId('s'), name, paint: solid(c), global: true, spot: true });
+  for (const [name, c] of meta.customs) if (!rd.swatches.has(name)) doc.swatches.push({ id: newId('s'), name: psUni(name, meta.cs), paint: solid(c), global: true, spot: true });
   const assets = new Map<string, Blob>();
   for (const im of rd.images) {
     const blob = await rasterPng(im.w, im.h, im.comps, im.bits, im.data, im.binary).catch(() => null);
