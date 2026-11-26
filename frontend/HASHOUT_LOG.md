@@ -5050,3 +5050,31 @@ Found and not changed here: type whose font is not installed is left out of a PD
 The module has no DOM and no imports. Run outside the repository (a scratch vitest file): Big5 with the hint, UTF-8 with an emoji, UTF-16LE with its mark, the language table, and a DXF header naming ANSI_950 followed by Big5 text. `tsc` clean. Not run: the Variables and Graph Data pickers with a real Excel file in the window.
 
 Left: the `\M+` multibyte escapes and `%%` codes of DXF text; the native DWG reader, which reads every drawing older than 2007 as windows-1252; `zip.ts` entry names without the UTF-8 flag; OBJ and MTL files; a PSD layer name with no Unicode block.
+
+### src/io/pdf-read.ts, src/io/api.ts, src/app.ts · type a PDF gives no characters for is kept as shapes, drawn from the font inside the file (issue 17)
+- refers-to: src/io/pdf-read.ts :: FontProgram, FontInfo (shown, vertical, dw2, program, high), SEVEN_BIT_CMAPS, BROKEN, Painter.show, Painter.shapes, Painter.font, outlineOf, parseCMap (put), FontNames.resolve (shown), FontNames.outlined, PdfImport.outlined; src/io/api.ts :: api.fontOutlines, FontOutlines; src/app.ts :: the sentence after a PDF is opened
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+0.60.0 stopped replacement characters from being stored and left such type out with a sentence. For the issue's picture that meant the two-character label would vanish. The owner asked for the real fix and for it to be tried on real files.
+
+What happens now. In `show`, a run is "lost" when any of its codes has no character: a two-byte code with no mapping, or a code the ToUnicode table maps to nothing usable. If the font is a composite one with `/Encoding` Identity-H or Identity-V and its descriptor carries a program (`FontFile2`, or `FontFile3`), `shapes` draws the whole run as one filled path instead of a text object: each code is the character id, mapped through `/CIDToGIDMap` when that is a stream, the outlines come from the engine (`api.fontOutlines`, see the backend log), and each glyph is placed by the same text matrix, size, horizontal scaling, rise, character spacing and `/W` widths the PDF asks for, so the shapes sit exactly where the type did. Fill and stroke follow the text rendering mode. The whole run becomes shapes, not only the unnamed characters, so its letters stay on one baseline in one object. When the engine cannot be reached or cannot read the program, the old behaviour stands: what can be read is kept as type and the sentence says characters were left out. The sentence after opening gains "Type the file gives no characters for was kept as shapes: [fonts]."
+
+Why only Identity. Under Identity the code is the character id, which is what the font program is keyed by. Under any other CMap (a predefined one, or a CMap stream in the file) the code must first be mapped to a character id by that CMap, which this reader does not do; drawing with the code would draw the wrong letters, so those runs are still left out and named.
+
+Three corrections to 0.60.0 found while trying real files:
+- `parseCMap` dropped a mapping to U+FFFD. For a simple (one-byte) font that made `show` fall through to guessing the character from the code, which gives a wrong Latin letter. A broken mapping is now stored as an empty string, `show` treats it as "named as nothing" and guesses nothing, and the Differences glyph name is still tried first.
+- U+FFFE and U+FFFF count as broken too: one public file (Arial Unicode MS written by OpenOffice) maps every glyph to `<FFFF>`, and 0.60.0 showed four of them in the Layers panel.
+- The left-out sentence named the substitute family ("Helvetica"); it names the file's own font (`shown`).
+
+Vertical writing. A font whose CMap name ends in `-V` (or whose CMap stream says `WMode 1`) advances down the page: `show` now moves by the vertical displacement (`/DW2`, default 880 and -1000; `/W2` is not read) and returns a vertical move, and `shapes` shifts each glyph by the position vector. Readable vertical type is still set as horizontal text objects, one per show, but each now starts where the PDF puts it.
+
+The 7-bit CMaps (`H`, `V`, `Ext-H`, `Add-H`, `GB-H`, `KSC-H`) are read by setting the high bit of each byte and decoding as EUC-JP, GBK or EUC-KR (`high`).
+
+Tried on real files, in the built window, against 0.59.1 and 0.60.0 built side by side:
+- A CFF CID subset of Noto Sans CJK TC (141 KB, the reporter's font) as Type0, Identity-H, `CIDFontType0C`, with the two characters of a white label on a blue box mapped to `<FFFD>`: 0.59.1 gives one text object reading two replacement characters (the issue's picture; `pdftotext` gives the same two); 0.60.0 leaves the label out; now the label is a path and the page matches the reference render. The same with a PDF written by the fpdf2 library from WenQuanYi Zen Hei (Type0, `CIDFontType2`, a `/CIDToGIDMap` stream).
+- Public files from the pdf.js test corpus (Apache-2.0): `arial_unicode_en_cidfont.pdf` (OpenOffice, no ToUnicode) opened blank in 0.60.0 and now reads "This is an Arial Unicode PDF from OpenOffice." as shapes; `arial_unicode_ab_cidfont.pdf` (the `<FFFF>` one) the same; `vertical.pdf` (AokinMincho, Identity-V, no ToUnicode) opened blank and now shows its two vertical columns of Japanese; `noembed-jis7.pdf` now reads its kana through `H`; `90ms_rksj_h_sample.pdf`, `noembed-sjis.pdf`, `noembed-eucjp.pdf` and `perf_text_cjk_nonembedded.pdf` read their Japanese and Chinese through the 0.60.0 byte CMaps.
+- Fifteen PDFs (Latin, Type 3, Arabic, CFF CID with a good ToUnicode, the LibreOffice and fpdf2 originals) give the same objects and the same sentence in 0.60.0 and now, apart from the font name in the left-out sentence.
+`npm test` 61 pass.
+
+Still left out, by name: type in a composite font with no program in the file and no usable CMap (`noembed-identity.pdf`: Ryumin, Identity-H, Japan1, nothing embedded; reading it needs Adobe's character collection tables); type under a CMap stream in the file (`perf_text_cmap_mixed.pdf`). Not done: the same for a simple font, whose program is Type 1, TrueType or name-keyed CFF and whose glyph is chosen by an encoding (LibreOffice writes CJK that way; such a file with broken ToUnicode entries is left out with the sentence); `/W2`; `/ActualText`.

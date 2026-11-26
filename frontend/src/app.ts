@@ -568,7 +568,7 @@ export function startApp(): void {
             adopt(tagged.doc, title, r.assets);
             if (tagged.name) toast(`The PDF colours use the CMYK profile ${tagged.name}; it is now this document's CMYK working space.`);
             const subs =r.fonts.slice(0, 4).map(([from, to]) => `${from} as ${to}`).join(', ') + (r.fonts.length > 4 ? ` and ${r.fonts.length - 4} more` : '');
-            toast(`Opened ${f.name}: ${r.pages === 1 ? 'one page as an artboard' : `${r.pages} pages as artboards`}.${r.fonts.length ? ` Fonts not installed, set in their nearest match: ${subs}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
+            toast(`Opened ${f.name}: ${r.pages === 1 ? 'one page as an artboard' : `${r.pages} pages as artboards`}.${r.fonts.length ? ` Fonts not installed, set in their nearest match: ${subs}.` : ''}${r.outlined.length ? ` Type the file gives no characters for was kept as shapes: ${r.outlined.join(', ')}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
           } else if (f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
             const s = await imageSize(f);
             const p = engine.newDocument(s.w, s.h, { title: f.name.replace(/\.[^.]+$/, ''), units: 'px' });

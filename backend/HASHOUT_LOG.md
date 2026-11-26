@@ -24,6 +24,7 @@ backend/
     │   ├── system.py           health, version, capabilities
     │   ├── projects.py         .fpth library: list, save with conflict copies, package, import, folder
     │   ├── fonts.py            installed fonts: list, find, file
+    │   ├── outlines.py         glyph outlines of a font program the window sends (a PDF's embedded font)
     │   ├── io.py               writes exports for the window
     │   ├── mcp.py              MCP endpoint, the TOOLS catalogue, the window bridge
     │   ├── batch.py            action library, folder listing, file read and write for batch and data merge
@@ -34,6 +35,7 @@ backend/
         ├── project_format.py   .fpth package validation and writing
         ├── sessions.py         temporary opened-project sessions, pruned at start
         ├── fonts.py            system font folders scan and lookup
+        ├── outlines.py         reads a TrueType, OpenType or bare CFF program and draws its glyphs as cubic paths
         ├── llm.py              Ollama and OpenAI-compatible clients
         ├── secrets.py          API keys in the system keyring
         └── outbound.py         outbound URL checks and errors for NodeMode
@@ -53,6 +55,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - app/routers/projects.py
 - app/routers/fonts.py
 - app/services/fonts.py
+- app/routers/outlines.py
+- app/services/outlines.py
 - app/main.py
 - formpath and setup (the launchers)
 
@@ -940,3 +944,18 @@ Issue 17 asks for text input and non-English fonts to work across the product. T
 - The stdio bridge (`./formpath mcp`, the Claude Desktop bundle) read standard input in the ANSI code page on Windows. MCP is UTF-8, so text with Chinese in it ended the bridge with a decode error or reached the engine as other characters. `main` reconfigures both streams to UTF-8 and writes plain newlines. `cli.py` does the same for its output, with `backslashreplace`, so a label with a character the console cannot show no longer raises when the output is piped. The decode failure was reproduced by the audit with the stream forced to cp950; the fix was not run on Windows.
 
 Looked at and left: text files read and written with no encoding (`core/config.py` library.json, `routers/projects.py`, `services/llm.py`) hold ASCII JSON, so the code page does not reach them; the package summary header is cut at 4000 characters and can end mid-escape when many missing links have long Chinese paths; `services/dwg.py` decodes LibreDWG's DXF as UTF-8 with replacement, which loses text in a drawing older than 2007; a chat message with a line break is cut when Claude Code is a `.cmd` shim on Windows; `formpath.bat` splits `key=value` arguments at the `=`.
+
+### app/services/outlines.py, app/routers/outlines.py, app/main.py · the glyph outlines of a font program the window sends (issue 17)
+- refers-to: app/services/outlines.py :: Program, _Pen, load, glyphs, MAX_BYTES, MAX_IDS, WHOLE, KEPT; app/routers/outlines.py :: font_outlines; app/main.py :: the router list
+- kind: decision
+- logged: v0.61.0 · 2026-11-26
+
+The PDF reader in the window meets type whose characters the file does not name (see the frontend log, "type a PDF gives no characters for is kept as shapes"). The file still carries the font program, so the letters can be drawn; reading a font program is fontTools' work, which the engine already ships for subsetting, so the window sends the program here and gets outlines back. Nothing new is installed.
+
+`POST /api/fonts/outlines` takes `ids` (a JSON list), `kind` (`gid`: the ids are glyph indices, for a TrueType program; `cid`: character ids, for a CFF one) and either `file` (the program, at most 64 MiB) or `key` (what an earlier call answered). It answers `{key, upm, whole, glyphs}`: each glyph is a flat list of `"M", x, y`, `"L", x, y`, `"C", x1, y1, x2, y2, x, y` and `"Z"` in font units, y up, quadratic curves already made cubic by the pen. When the program has at most 2500 glyphs every one is sent and `whole` is true, so a subset font costs one request for a whole document; a larger one answers only the ids asked for, at most 4000 a call. An id the program does not hold is left out.
+
+`Program` reads an sfnt (TrueType, OpenType, the first face of a collection) through `TTFont`, or a bare CFF table (what a PDF's `FontFile3` of subtype `CIDFontType0C` or `Type1C` holds) through `CFFFontSet`. A PDF's TrueType subset often has no `post` or `cmap` table; glyph names then come from `maxp` alone. In a CID-keyed CFF the charset names are `cidNNNNN` and a `cid` id is looked up by that number; in a name-keyed one the id is the glyph index. A glyph that fails to draw is left out, never an error for the whole call.
+
+Parsed programs are kept by the first 32 hex digits of their SHA-256, the last six used, behind one lock (fontTools objects are not safe to share between threads, and the route runs in the thread pool). An unknown key answers 409 and the window sends the program again. The route sits behind the same window key and local guard as every other route and reads no file of this computer, only the bytes it is sent.
+
+Run against the programs embedded in nine public PDFs of the pdf.js test corpus (TrueType in Arial Unicode MS, AokinMincho, four Arabic faces, two test faces; CFF CID in Neo Sans Intel and Reitam) and a 141 KB CFF CID subset of Noto Sans CJK TC: every one loads and draws. `pytest` 196 pass. Not read: a Type 1 program (`FontFile`), which a simple font carries; the window does not ask for those.

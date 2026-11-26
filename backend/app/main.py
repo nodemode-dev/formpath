@@ -12,7 +12,7 @@ from app.core.local_guard import LocalGuard
 from app.core.window_key import WindowKeyGuard
 import asyncio
 
-from app.routers import batch, claude_code, color, commands, fonts, io, llm, mcp, nodemode, plugins, projects, spell, system, terminal
+from app.routers import batch, claude_code, color, commands, fonts, io, llm, mcp, nodemode, outlines, plugins, projects, spell, system, terminal
 from app.services import claude_code as claude_service, sessions
 from app.services import terminal as terminals
 
@@ -42,6 +42,7 @@ app.add_middleware(LocalGuard, origins=config.window_origins())
 app.include_router(system.router, prefix="/api")
 app.include_router(projects.router, prefix="/api/projects")
 app.include_router(fonts.router)
+app.include_router(outlines.router)
 app.include_router(io.router)
 app.include_router(llm.router)
 app.include_router(mcp.router)
