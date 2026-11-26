@@ -929,7 +929,8 @@ export function stepVisual(n: TextNode, caret: number, dir: 1 | -1): number | nu
   if (path ? !lay.complex : !l?.bidi) return null;
   const gs = path ? lay.glyphs : l.glyphs, stops = new Set<number>(path ? [] : [l.start, l.end]);
   for (const g of gs) if (!g.syn) { stops.add(g.index); stops.add(g.index + g.ch.length); }
-  const at = (i: number): number => { if (!path) return bidiStop(l, i); const h = holder(gs, i), k = h ? gs.indexOf(h.g) : 0; return h && h.end !== rtlOf(h.g) ? k + 1 : k; };
+  if (!path && lay.lines[li - 1]?.end === l.start) stops.delete(l.start);
+  const at =(i: number): number => { if (!path) return bidiStop(l, i); const h = holder(gs, i), k = h ? gs.indexOf(h.g) : 0; return h && h.end !== rtlOf(h.g) ? k + 1 : k; };
   const cur = at(caret);
   let best: number | null = null, bd = 0;
   for (const i of stops) {
@@ -939,8 +940,14 @@ export function stepVisual(n: TextNode, caret: number, dir: 1 | -1): number | nu
     if (best === null || d < bd - 1e-6 || (Math.abs(d - bd) <= 1e-6 && Math.abs(i - caret) < Math.abs(best - caret))) { best = i; bd = d; }
   }
   if (best !== null || path) return best ?? caret;
-  const t = plainText(n);
-  return (dir > 0) !== !!l.rtl ? Math.min(t.length, caret + (/[\ud800-\udbff]/.test(t[caret] ?? '') ? 2 : 1)) : Math.max(0, caret - (/[\udc00-\udfff]/.test(t[caret - 1] ?? '') ? 2 : 1));
+  const to = lay.lines[li + ((dir > 0) !== !!l.rtl ? 1 : -1)];
+  let pick: number | null = null, pv = Infinity;
+  for (const g of to?.glyphs ?? []) if (!g.syn) for (const i of [g.index, g.index + g.ch.length]) {
+    if (i === l.start || i === l.end) continue;
+    const v = (to.bidi ? bidiStop(to, i) : gu(g) + (i > g.index ? ga(g) : 0)) * dir;
+    if (v < pv - 1e-6) { pv = v; pick = i; }
+  }
+  return pick ?? caret;
 }
 
 export function caretAt(n: TextNode, index: number): { x: number; y: number; h: number; angle: number } {
