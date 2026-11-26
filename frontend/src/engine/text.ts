@@ -146,7 +146,7 @@ export interface Shaping {
   bidi?(text: string): BidiLevels | null;
   mirror?(ch: string): string | null;
 }
-export interface ComplexRun { face: CharStyle; glyphs: Array<{ gid: number; cl: number; ax: number; dx: number; dy: number }> }
+export interface ComplexRun { face: CharStyle; glyphs: Array<{ gid: number; cl: number; ax: number; dx: number; dy: number; face?: CharStyle }> }
 export interface BidiLevels { levels: Uint8Array; paras: Array<{ start: number; end: number; level: number }> }
 let shaping: Shaping | null = null;
 export function setShaping(s: Shaping | null): void { shaping = s; fontsChanged(); }
@@ -294,10 +294,10 @@ function itemsOf(spans: Span[], complex = false): Item[] {
       for (const sg of segmentsOf(bx, i, piece.length)) {
         const run = sg.shape && shaping?.complex && !(st.caps === 'small' && !smcp && /\p{Ll}/u.test(bx.text.slice(sg.a, sg.b))) ? shaping.complex(st, bx.text, sg.a, sg.b, sg.lv % 2 === 1, sg.script, feats) : null;
         if (!run) { plain(bx.text.slice(sg.a, sg.b)); continue; }
-        const by = new Map<number, GlyphPart[]>(), adv = new Map<number, number>();
+        const by = new Map<number, GlyphPart[]>(), adv = new Map<number, number>(), fc = new Map<number, CharStyle>();
         for (const g of run.glyphs) {
           let list = by.get(g.cl);
-          if (!list) { list = []; by.set(g.cl, list); adv.set(g.cl, 0); }
+          if (!list) { list = []; by.set(g.cl, list); adv.set(g.cl, 0); if (g.face) fc.set(g.cl, g.face); }
           const pen = adv.get(g.cl) ?? 0;
           list.push({ gid: g.gid, x: pen + g.dx, y: -g.dy });
           adv.set(g.cl, pen + g.ax);
@@ -309,7 +309,7 @@ function itemsOf(spans: Span[], complex = false): Item[] {
           const end = k + 1 < starts.length ? starts[k + 1] : sg.b, ch = bx.text.slice(c, end), parts = by.get(c) ?? [];
           if (parts.some((p) => !p.gid)) { plain(ch); return; }
           const prev = out[out.length - 1], j = cursive && prev?.parts !== undefined && (k > 0 || (prev.index + prev.ch.length === c && scriptOf(prev.ch.codePointAt(0) ?? 0) === sg.script)) && !/\s/.test(ch) && !/\s/.test(prev.ch);
-          out.push({ ch, st, index: i, adv: adv.get(c) ?? 0, parts, face: run.face, ...(j ? { j } : {}) });
+          out.push({ ch, st, index: i, adv: adv.get(c) ?? 0, parts, face: fc.get(c) ?? run.face, ...(j ? { j } : {}) });
           i += ch.length;
         });
       }

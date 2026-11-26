@@ -648,8 +648,8 @@ async function resolveScriptFace(st: CharStyle, script: string, ch: string): Pro
   const hit = await api.coverFont(ch.codePointAt(0) ?? 0, []), f = hit ? await fontFor(hit.family, st.style).catch(() => null) : null;
   return hit && ok(f) ? { font: f, style: { ...st, font: hit.family, axes: undefined } } : null;
 }
-function scriptFace(st: CharStyle, script: string, ch: string): ScriptFace | null {
-  const key = `${st.font}|${st.style}|${axesKey(st)}|${script}`, hit = scriptFaces.get(key);
+function scriptFace(st: CharStyle, script: string, ch: string, exact = false): ScriptFace | null {
+  const key = `${st.font}|${st.style}|${axesKey(st)}|${script}${exact ? `|${ch}` : ''}`, hit = scriptFaces.get(key);
   if (hit !== undefined) return hit;
   if (!facesPending.has(key)) {
     facesPending.add(key);
@@ -664,15 +664,31 @@ function shapeComplex(st: CharStyle, text: string, start: number, end: number, r
   for (const c of text.slice(start, end)) if (scriptOf(c.codePointAt(0) ?? 0) === script) { ch = c; break; }
   const pick = ch ? scriptFace(st, script, ch) : null, hf = pick ? hbFontOf(pick.font) : null;
   if (!pick || !hf) return null;
-  hf.font.setVariations(hasAxes(pick.style) ? Object.entries(pick.style.axes ?? {}).map(([t, v]) => new h.Variation(t, v)) : []);
-  buf.reset();
-  buf.addText(text, start, end - start);
-  buf.setDirection(rtl ? h.Direction.RTL : h.Direction.LTR);
-  if (script !== 'Zzzz') buf.setScript(script);
-  buf.guessSegmentProperties();
-  h.shape(hf.font, buf, [...features.filter((f) => /^[a-z0-9]{4}$/.test(f)).map((f) => new h.Feature(f, 1)), ...(st.kerning === 'none' ? [new h.Feature('kern', 0)] : [])]);
-  const k = 1 / hf.upem;
-  return { face: pick.style, glyphs: buf.getGlyphInfosAndPositions().map((g) => ({ gid: g.codepoint, cl: g.cluster, ax: (g.xAdvance ?? 0) * k, dx: (g.xOffset ?? 0) * k, dy: (g.yOffset ?? 0) * k })) };
+  const run = (f: { font: HbFont; upem: number }, face: CharStyle, a: number, b: number): ComplexRun['glyphs'] => {
+    f.font.setVariations(hasAxes(face) ? Object.entries(face.axes ?? {}).map(([t, v]) => new h.Variation(t, v)) : []);
+    buf.reset();
+    buf.addText(text, a, b - a);
+    buf.setDirection(rtl ? h.Direction.RTL : h.Direction.LTR);
+    if (script !== 'Zzzz') buf.setScript(script);
+    buf.guessSegmentProperties();
+    h.shape(f.font, buf, [...features.filter((t) => /^[a-z0-9]{4}$/.test(t)).map((t) => new h.Feature(t, 1)), ...(st.kerning === 'none' ? [new h.Feature('kern', 0)] : [])]);
+    const k = 1 / f.upem;
+    return buf.getGlyphInfosAndPositions().map((g) => ({ gid: g.codepoint, cl: g.cluster, ax: (g.xAdvance ?? 0) * k, dx: (g.xOffset ?? 0) * k, dy: (g.yOffset ?? 0) * k }));
+  };
+  const glyphs = run(hf, pick.style, start, end), bad = new Set(glyphs.filter((g) => !g.gid).map((g) => g.cl));
+  if (!bad.size) return { face: pick.style, glyphs };
+  const cls = [...new Set(glyphs.map((g) => g.cl))].sort((a, b) => a - b), out = glyphs.filter((g) => !bad.has(g.cl));
+  for (let q = 0; q < cls.length;) {
+    if (!bad.has(cls[q])) { q++; continue; }
+    let e = q, c = '';
+    while (e < cls.length && bad.has(cls[e])) e++;
+    const a = cls[q], b = e < cls.length ? cls[e] : end;
+    for (const x of text.slice(a, b)) if (!covers(pick.font, x) && scriptOf(x.codePointAt(0) ?? 0) === script) { c = x; break; }
+    const fb = c ? scriptFace(st, script, c, true) : null, ff = fb && fb.font !== pick.font ? hbFontOf(fb.font) : null;
+    out.push(...(fb && ff ? run(ff, fb.style, a, b).map((g) => ({ ...g, face: fb.style })) : glyphs.filter((g) => g.cl >= a && g.cl < b)));
+    q = e;
+  }
+  return { face: pick.style, glyphs: out };
 }
 function bidiLevels(text: string): BidiLevels | null {
   if (!bidiApi) { loadShaper(); return null; }
