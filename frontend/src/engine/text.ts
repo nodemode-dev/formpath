@@ -292,7 +292,7 @@ function itemsOf(spans: Span[], complex = false): Item[] {
       if (piece === '\n' || piece === '\r' || piece === '\r\n') { out.push(piece.length > 1 ? { ch: '\n', st, index: i, len: piece.length } : { ch: '\n', st, index: i }); i += piece.length; continue; }
       if (!bx) { plain(piece); continue; }
       for (const sg of segmentsOf(bx, i, piece.length)) {
-        const run = sg.shape && shaping?.complex ? shaping.complex(st, bx.text, sg.a, sg.b, sg.lv % 2 === 1, sg.script, feats) : null;
+        const run = sg.shape && shaping?.complex && !(st.caps === 'small' && !smcp && /\p{Ll}/u.test(bx.text.slice(sg.a, sg.b))) ? shaping.complex(st, bx.text, sg.a, sg.b, sg.lv % 2 === 1, sg.script, feats) : null;
         if (!run) { plain(bx.text.slice(sg.a, sg.b)); continue; }
         const by = new Map<number, GlyphPart[]>(), adv = new Map<number, number>();
         for (const g of run.glyphs) {
@@ -308,7 +308,7 @@ function itemsOf(spans: Span[], complex = false): Item[] {
         starts.forEach((c, k) => {
           const end = k + 1 < starts.length ? starts[k + 1] : sg.b, ch = bx.text.slice(c, end), parts = by.get(c) ?? [];
           if (parts.some((p) => !p.gid)) { plain(ch); return; }
-          const prev = out[out.length - 1], j = cursive && k > 0 && prev?.parts !== undefined && !/\s/.test(ch) && !/\s/.test(prev.ch);
+          const prev = out[out.length - 1], j = cursive && prev?.parts !== undefined && (k > 0 || (prev.index + prev.ch.length === c && scriptOf(prev.ch.codePointAt(0) ?? 0) === sg.script)) && !/\s/.test(ch) && !/\s/.test(prev.ch);
           out.push({ ch, st, index: i, adv: adv.get(c) ?? 0, parts, face: run.face, ...(j ? { j } : {}) });
           i += ch.length;
         });
