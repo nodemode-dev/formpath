@@ -2,6 +2,32 @@
 
 Versions follow `v*.*.*` with dots. Dates are UTC.
 
+## 0.61.0 · 2026-11-26
+
+The rest of issue 17: what 0.60.0 found and left. Tried on public PDFs of the pdf.js test corpus and on PDFs made here with real embedded Chinese fonts, in a Chromium window on Linux; nothing in this release has run on Windows or macOS yet, and no real input method has typed into it.
+
+- Opening a PDF or a PDF-compatible .ai file: type the file gives no characters for is kept as shapes, drawn from the font inside the file, where 0.60.0 left it out and 0.59.1 showed replacement characters. The message after opening says which fonts this happened to. It works for fonts stored the way Chinese, Japanese and Korean fonts usually are (two-byte, Identity encoding); a file with no font inside still has such type left out, and says so.
+- Opening an EPS or PostScript file: Chinese, Japanese and Korean type reads as its own characters instead of as accented Latin letters. Type stored as glyph numbers is left out, and the message says so.
+- Opening an .ai file: layer, swatch, pattern, symbol and brush names keep their own script, and type in older .ai files reads in the file's own encoding. A file whose type is only on its PDF page opens through that page, and when type cannot be brought in the message after opening says "type" where it said nothing.
+- Saving an .ai file: layer, swatch, symbol and artboard names outside English are written whole instead of as question marks.
+- Opening a PDF: vertical Japanese and Chinese type starts where the file puts it, more of the older Japanese, Chinese and Korean encodings are read, and a font the file names in Chinese, Japanese or Korean finds the installed font.
+- Exporting: type in a font that is not on this computer is exported as real type in Inter, with other fonts for the characters Inter lacks, and a message names the fonts that were replaced. It went into a PDF or an EPS as a picture, stayed as text naming the missing font in an outlined SVG, and was left out of a DXF, without a word.
+- Exporting: the page information line of printer's marks and the title of a separations file show Chinese and other non-English text instead of question marks; EPS spot colours named in Chinese or other scripts stay separate inks; fonts with CFF2 outlines (the variable Chinese, Japanese and Korean fonts among them) go into a PDF as real type.
+- Fonts: a document that names a font by its Chinese, Japanese or Korean name finds it; font names stored in older encodings read correctly; a character none of the usual fonts has, such as Thai or Devanagari, comes from an installed font that has it instead of an empty box; the font menus of the Character panel and the Type tool can be searched, by a font's names in any language; Find Similar Fonts offers Chinese, Japanese and Korean fonts for one of them and says when a font is not installed.
+- Type in a frame: Thai, Lao and Khmer wrap between words; accents, Thai vowel and tone marks and emoji skin tones stay on their letter at a line end and under tracking; closing brackets, small kana and the like no longer start a line and opening brackets no longer end one; English followed by Chinese, Japanese or Korean can wrap between the two; justified Chinese, Japanese and Thai reaches both edges; the caret lands right on empty lines of text with Windows line endings. Text that is only Latin sets exactly as before.
+- Shortcuts follow the letter printed on the key, so on French, German and Dvorak keyboards Undo is on the key labelled Z again; Cyrillic, Greek and other non-Latin layouts keep using the key's position. If you learned the old positions on AZERTY or QWERTZ, they have moved.
+- macOS: Backspace, Delete and Tab are no longer menu bar shortcuts, so they stay with the text field or the input method you are typing in.
+- Check Spelling uses the dictionary of the language FormPath is shown in.
+- An object's or layer's own name is no longer translated in the Properties head, the status bar and the Appearance panel.
+- Slider number fields read "12,5" and full-width digits, and clearing an option's number field keeps its value.
+- DWG drawings from AutoCAD 2000 to 2006 saved on a Chinese, Japanese, Korean, Cyrillic or other non-Western system show their text and layer names; multibyte and `%%nnn` character codes in CAD text show as their characters; a drawing opened through an installed converter keeps such text.
+- Zip archives made on Windows, OBJ models and older PSD layer names keep non-English names, and names shortened for a message or a file never end in half a character.
+- Agents: `add_text` and `set_text` say which characters no installed font draws, and the drawing skill tells agents to choose a font that matches the language.
+- Packaging as a zip no longer fails when many linked images are missing from folders with non-English names.
+- This release carries 0.60.0 as well, which was not published on its own.
+- Not in this release: Arabic and Hebrew still run left to right and Indic scripts are not shaped; opening a `.fpth` by double click still does nothing (the desktop shell could not be built here); the terminal and chat dock's own findings belong to the module the Form apps share.
+- The three demos are not rebuilt and still say 0.59.0.
+
 ## 0.60.0 · 2026-11-26
 
 Typing and reading text that is not English: Chinese, Japanese, Korean and other scripts (issue 17). Run in a Chromium window on Linux with composition events sent by a test driver; no real input method on Windows, macOS or Linux has typed into this build yet.
