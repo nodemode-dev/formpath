@@ -1,4 +1,5 @@
 import type { CmykToRgb } from './tiff-read';
+import { decodeText } from './text-decode';
 
 export interface PsdInfo {
   width: number;
@@ -153,7 +154,7 @@ class Psd {
     p += 4 + ml;
     p += 4 + dv.getUint32(p);
     const nl = this.b[p];
-    rec.name = new TextDecoder('latin1').decode(this.b.subarray(p + 1, p + 1 + nl));
+    rec.name = decodeText(this.b.subarray(p + 1, p + 1 + nl), 'macintosh');
     p += 1 + nl;
     p += (4 - ((1 + nl) & 3)) & 3;
     while (p + 12 <= xend) {
