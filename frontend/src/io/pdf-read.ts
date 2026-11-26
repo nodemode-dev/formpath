@@ -303,7 +303,8 @@ const ORDERINGS: Record<string, string> = { CNS1: 'big5', GB1: 'gbk', Japan1: 's
 const BROKEN = /[�-￿]|[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/;
 interface FontProgram { data: Stream; kind: 'gid' | 'cid' | 'code'; enc: string; chars: Map<number, string>; map: Val | undefined; table: Uint8Array | null; key: string; whole: boolean; dead: boolean; upm: number; glyphs: Map<number, PathData> }
 interface CidMap { space: number[][]; map: Map<number, number>; identity: boolean }
-interface FontInfo { family: string; style: string; shown: string; vertical: boolean; dw2: [number, number]; w2: Map<number, number[]> | null; cmap: Stream | null; cids: CidMap | null; own: boolean; named: Map<number, string>; program: FontProgram | null; widths: Map<number, number>; dw: number; two: boolean; direct: boolean; bytes: string; high: boolean; uni: Map<number, string> | null; enc: Map<number, string> | null; type3: { matrix: Mat; procs: PDict; res: PDict | null; names: Map<number, string> } | null }
+interface Piece { seen: string; gaps: Map<number, number>; spoken: boolean; style: CharStyle; xf: Mat; ink: number; end: number; opacity: number; blend: BlendMode; flat: boolean }
+interface FontInfo { family: string; style: string; shown: string; vertical: boolean; dw2: [number, number]; w2: Map<number, number[]> | null; cmap: Stream | null; cids: CidMap | null; collection: string; std: Map<number, string> | null; own: boolean; named: Map<number, string>; program: FontProgram | null; widths: Map<number, number>; dw: number; two: boolean; direct: boolean; bytes: string; high: boolean; uni: Map<number, string> | null; enc: Map<number, string> | null; type3: { matrix: Mat; procs: PDict; res: PDict | null; names: Map<number, string> } | null }
 interface GS {
   ctm: Mat; fill: Paint; stroke: Paint; fa: number; sa: number; lw: number; cap: Cap; join: Join; miter: number; dash: number[]; phase: number; blend: BlendMode;
   fcs: Val[]; scs: Val[]; target: VNode[]; sm: { g: GroupNode; outer: VNode[] } | null; font: FontInfo | null; size: number; tc: number; tw: number; th: number; tl: number; rise: number; tr: number;
@@ -795,6 +796,7 @@ class Painter {
         default: break;
       }
     }
+    this.close();
   }
 
   private async show(items: Val[], gs: GS, tm: Mat, depth: number): Promise<Mat> {
@@ -819,10 +821,10 @@ class Painter {
       for (let i = 0, n = 1; i < b.length; i += n) {
         n = f.cids ? codeBytes(f.cids.space, b, i) : f.two ? 2 : 1;
         const code = n === 2 ? (b[i] << 8) | (b[i + 1] ?? 0) : b[i], id = f.cids ? f.cids.map.get(n * 0x10000 + code) ?? (f.cids.identity ? code : 0) : code;
-        const named = f.uni?.get(code), guess = code >= 32 && code < 127 ? String.fromCharCode(code) : WIN[code] ?? (code >= 160 ? String.fromCharCode(code) : ''), told = !!own && (f.own || odd(code)), drawn = told && !!own?.glyphs.get(code)?.length;
+        const named = f.uni ? f.uni.get(code) : f.std?.get(id), guess = code >= 32 && code < 127 ? String.fromCharCode(code) : WIN[code] ?? (code >= 160 ? String.fromCharCode(code) : ''), told = !!own && (f.own || odd(code)), drawn = told && !!own?.glyphs.get(code)?.length;
         const ch = named || f.enc?.get(code) || (named === '' ? '' : f.two ? (f.direct ? String.fromCharCode(code) : '') : told ? own?.chars.get(code) ?? (drawn ? '' : guess) : guess);
         if (!ch && (f.two || named === '' || drawn)) lost++;
-        text += ch;
+        text += ch.length > 1 && rtl(ch) ? Array.from(ch).reverse().join('') : ch;
         if (t3 || f.program) glyphs.push({ code: id, at: adv });
         const w = t3 ? (f.widths.get(code) ?? 0) * t3.matrix[0] : css ? emOf(css, ch || ' ') : (f.widths.get(id) ?? f.dw) / 1000;
         adv += f.vertical ? ((f.w2?.get(id)?.[0] ?? f.dw2[1]) / 1000) * size + gs.tc : (w * size + gs.tc + (code === 32 && n === 1 ? gs.tw : 0)) * gs.th;
@@ -845,24 +847,27 @@ class Painter {
     if (act && spoken) { if (act.used) return next; act.used = true; text = act.t; ink = adv; lost = 0; gaps.clear(); }
     if (lost && (await this.shapes(f, glyphs, gs, start, size))) return next;
     if (lost) this.skipped.add(`characters of type in ${f.shown} that the file gives no Unicode value for`);
-    if (!text.trim()) return next;
+    if (!text) return next;
     const xf = mul(gs.ctm, mul(start, [gs.th, 0, 0, -1, 0, gs.rise]));
     const filled = gs.tr === 1 || gs.tr === 5 ? NONE : gs.fill, stroked = gs.tr === 1 || gs.tr === 2 || gs.tr === 5 || gs.tr === 6 ? gs.stroke : NONE;
-    const base: CharStyle = { ...DEFAULT_CHAR, font: f.family, style: f.style, size, fill: filled, stroke: stroked, strokeWidth: stroked.type === 'none' ? 0 : gs.lw, tracking: gs.tc ? Math.round((gs.tc / Math.max(0.01, size)) * 1000) : 0 };
-    const turned = hasRtl(text) && !spoken ? readingOrder(text.replace(/\s+$/, ''), gaps) : null;
-    const body = turned ? turned.text : text.replace(/\s+$/, ''), space = emOf(cssFont(base, 100), ' '), spans: Span[] = [];
+    const k = Math.hypot(xf[2], xf[3]), unit = k > 1e-6 && Math.abs(k - 1) > 1e-6, by = unit ? k : 1;
+    const style: CharStyle = { ...DEFAULT_CHAR, font: f.family, style: f.style, size: size * by, fill: filled, stroke: stroked, strokeWidth: stroked.type === 'none' ? 0 : gs.lw, tracking: gs.tc ? Math.round((gs.tc / Math.max(0.01, size)) * 1000) : 0 };
+    this.place(gs.target, { seen: text, gaps, spoken, style, xf: unit ? [xf[0] / k, xf[1] / k, xf[2] / k, xf[3] / k, xf[4], xf[5]] : xf, ink: (ink / gs.th) * by, end: (adv / gs.th) * by, opacity: gs.fa, blend: gs.blend, flat: !f.vertical });
+    return next;
+  }
+
+  private typeset(p: Piece): TextNode {
+    const seen = p.seen.replace(/\s+$/, ''), turned = hasRtl(seen) && !p.spoken ? readingOrder(seen, p.gaps) : null;
+    const body = turned ? turned.text : seen, space = emOf(cssFont(p.style, 100), ' '), spans: Span[] = [];
     let from = 0;
-    for (const [at, em] of turned ? turned.gaps : gaps) {
+    for (const [at, em] of turned ? turned.gaps : p.gaps) {
       if (at >= body.length) break;
-      if (at > from) spans.push({ text: body.slice(from, at), style: base });
-      spans.push({ text: ' ', style: { ...base, tracking: Math.round((em - space) * 1000) } });
+      if (at > from) spans.push({ text: body.slice(from, at), style: p.style });
+      spans.push({ text: ' ', style: { ...p.style, tracking: Math.round((em - space) * 1000) } });
       from = at + 1;
     }
-    if (from < body.length) spans.push({ text: body.slice(from), style: base });
-    const k = Math.hypot(xf[2], xf[3]), unit = k > 1e-6 && Math.abs(k - 1) > 1e-6;
-    const node: TextNode = { id: newId('t'), kind: 'text', mode: 'point', xf: unit ? [xf[0] / k, xf[1] / k, xf[2] / k, xf[3] / k, xf[4], xf[5]] : xf, opacity: gs.fa, blend: gs.blend, ap: { items: [], effects: [] }, para: { ...DEFAULT_PARA }, spans: unit ? spans.map((s) => ({ ...s, style: { ...s.style, size: s.style.size * k } })) : spans };
-    this.place(gs.target, fitRun(node, (ink / gs.th) * (unit ? k : 1), body.length));
-    return next;
+    if (from < body.length) spans.push({ text: body.slice(from), style: p.style });
+    return fitRun({ id: newId('t'), kind: 'text', mode: 'point', xf: p.xf, opacity: p.opacity, blend: p.blend, ap: { items: [], effects: [] }, para: { ...DEFAULT_PARA }, spans }, p.ink, body.length);
   }
 
   private async outlines(p: FontProgram, need: number[]): Promise<boolean> {
@@ -904,9 +909,43 @@ class Painter {
 
   private readonly leads = new WeakMap<TextNode, { step: number; rows: number }>();
 
-  /** Puts a line of type on the target; a line that sits directly under the previous one (same matrix, same left edge, same style, an even step) joins it as one text object with several lines, so a PDF written one line per Tj reopens as paragraphs rather than a node per line. */
-  private place(target: VNode[], node: TextNode): void {
-    const prev = target[target.length - 1];
+  /** Puts a run of type on the target; a run that starts where the line being gathered ends, on its baseline and in its style, extends that line, so a PDF written one glyph per Tj reopens as lines rather than a node per letter. */
+  private place(target: VNode[], p: Piece): void {
+    const o = this.open, q = o && o.target === target && target[target.length - 1] === o.node ? this.pieces.get(o.node) : undefined;
+    const blank = !p.seen.trim();
+    if (o && q && q.flat && p.flat && !q.spoken && !p.spoken && q.style.size === p.style.size && (blank || (q.opacity === p.opacity && q.blend === p.blend && q.style.font === p.style.font && q.style.style === p.style.style && q.style.tracking === p.style.tracking && q.style.strokeWidth === p.style.strokeWidth && JSON.stringify(q.style.fill) === JSON.stringify(p.style.fill) && JSON.stringify(q.style.stroke) === JSON.stringify(p.style.stroke)))) {
+      const a = q.xf, b = p.xf, tol = 1e-4 * (Math.abs(a[0]) + Math.abs(a[1]) + Math.abs(a[2]) + Math.abs(a[3]) + 1), det = a[0] * a[3] - a[1] * a[2], dxp = b[4] - a[4], dyp = b[5] - a[5];
+      if (Math.abs(det) > 1e-9 && Math.abs(a[0] - b[0]) < tol && Math.abs(a[1] - b[1]) < tol && Math.abs(a[2] - b[2]) < tol && Math.abs(a[3] - b[3]) < tol) {
+        const x = (dxp * a[3] - dyp * a[2]) / det, y = (dyp * a[0] - dxp * a[1]) / det;
+        if (Math.abs(y) <= q.style.size * 0.02 && Math.abs(x - q.end) <= q.style.size * 0.12) {
+          const gaps = new Map(q.gaps);
+          for (const [at, em] of p.gaps) gaps.set(q.seen.length + at, em);
+          const joined: Piece = { ...q, seen: q.seen + p.seen, gaps, ink: p.seen.trim() ? x + p.ink : q.ink, end: x + p.end };
+          const node = p.seen.trim() ? { ...this.typeset(joined), id: o.node.id } : o.node;
+          this.pieces.set(node, joined);
+          target[target.length - 1] = node;
+          this.open = { target, node };
+          return;
+        }
+      }
+    }
+    this.close();
+    if (!p.seen.trim()) return;
+    const node = this.typeset(p);
+    this.pieces.set(node, p);
+    target.push(node);
+    this.open = { target, node };
+  }
+
+  private readonly pieces = new WeakMap<TextNode, Piece>();
+  private open: { target: VNode[]; node: TextNode } | null = null;
+
+  /** Ends the line being gathered; a line that sits directly under the text object before it (same matrix, same left edge, same style, an even step) joins it as one text object with several lines, so a PDF written one line per Tj reopens as paragraphs rather than a node per line. */
+  private close(): void {
+    const o = this.open;
+    this.open = null;
+    if (!o) return;
+    const target = o.target, node = o.node, at = target.lastIndexOf(node), prev = at > 0 ? target[at - 1] : undefined;
     if (prev && prev.kind === 'text' && prev.mode === 'point' && prev.opacity === node.opacity && prev.blend === node.blend) {
       const a = prev.xf, b = node.xf, tol = 1e-4 * (Math.abs(a[0]) + Math.abs(a[1]) + Math.abs(a[2]) + Math.abs(a[3]) + 1);
       const s0 = prev.spans[0]?.style, s1 = node.spans[0]?.style;
@@ -918,13 +957,11 @@ class Painter {
             const step = run?.step ?? down, lined = (s: Span): Span => ({ ...s, style: { ...s.style, leading: step } });
             const merged: TextNode = { ...prev, spans: [...prev.spans.map(lined), lined({ text: '\n', style: prev.spans[prev.spans.length - 1].style }), ...node.spans.map(lined)] };
             this.leads.set(merged, { step, rows: rows + 1 });
-            target[target.length - 1] = merged;
-            return;
+            target.splice(at - 1, 2, merged);
           }
         }
       }
     }
-    target.push(node);
   }
 
   private font(ref: Val | undefined, res: PDict | null): FontInfo | null {
@@ -969,7 +1006,7 @@ class Painter {
       if (Array.isArray(b)) { for (let k = 0; k + 2 < b.length; k += 3) w2.set(a + k / 3, [pdf.n(b[k]), pdf.n(b[k + 1]), pdf.n(b[k + 2])]); i += 2; }
       else { const z = pdf.n(b), t = [pdf.n(raw2[i + 2]), pdf.n(raw2[i + 3]), pdf.n(raw2[i + 4])]; for (let c = a; c <= z && c - a < 65536; c++) w2.set(c, t); i += 5; }
     }
-    const info: FontInfo = { family, style, shown, vertical: two && (/(^|-)V$/.test(cmap) || (e instanceof Stream && pdf.n(e.dict.get('WMode')) === 1)), dw2: [v[0] ?? 880, v[1] ?? -1000], w2, cmap: two && e instanceof Stream ? e : null, cids: null, own: !two && !t3 && !!data && !base, named: names, program, widths, dw, two, direct: /-(UCS2|UTF16)-/.test(cmap), bytes: seven || (BYTE_CMAPS.find(([re]) => re.test(cmap))?.[1] ?? ''), high: !!seven, uni: null, enc, type3: t3 };
+    const info: FontInfo = { family, style, shown, vertical: two && (/(^|-)V$/.test(cmap) || (e instanceof Stream && pdf.n(e.dict.get('WMode')) === 1)), dw2: [v[0] ?? 880, v[1] ?? -1000], w2, cmap: two && e instanceof Stream ? e : null, cids: null, collection: byCid && ordering instanceof Str ? latin(ordering.b) : '', std: null, own: !two && !t3 && !!data && !base, named: names, program, widths, dw, two, direct: /-(UCS2|UTF16)-/.test(cmap), bytes: seven || (BYTE_CMAPS.find(([re]) => re.test(cmap))?.[1] ?? ''), high: !!seven, uni: null, enc, type3: t3 };
     this.fonts.set(d, info);
     return info;
   }
@@ -985,6 +1022,7 @@ class Painter {
         if (!f.cids && f.program) f.program.dead = true;
         f.cmap = null;
       }
+      if (f && !f.std && !f.uni && !f.program && f.collection) f.std = await cidTable(f.collection);
     }
   }
 
@@ -1315,16 +1353,33 @@ function readingOrder(seen: string, gaps: Map<number, number>): { text: string; 
   const from: number[] = [], to: number[] = [], out = new Map<number, number>();
   let at = 0, text = '';
   for (const c of cps) { from.push(at); at += c.length; }
-  const whole = !order.some((i, p) => {
-    const u = cps[i].charCodeAt(0), form = FORMS.get(cps[i]);
-    if (u >= 0xfb50 && u <= 0xfdff) return true;
-    if (form === undefined) return false;
-    const before = p > 0 && kind[order[p - 1]] === 2, after = p + 1 < n && kind[order[p + 1]] === 2;
-    return ((form === 1 || form === 3) && !before) || ((form === 2 || form === 3) && !after);
-  });
-  for (const i of order) { to[i] = text.length; text += turn[i] && MIRROR[cps[i]] ? MIRROR[cps[i]] : whole && kind[i] === 2 && cps[i].charCodeAt(0) >= 0xfb1d ? cps[i].normalize('NFKC') : cps[i]; }
+  const spelt = cps.map(() => false);
+  for (let a = 0; a < n; a++) {
+    if (kind[order[a]] !== 2) continue;
+    let b = a;
+    while (b + 1 < n && kind[order[b + 1]] === 2) b++;
+    let sound = true;
+    for (let p = a; p <= b && sound; p++) {
+      const u = cps[order[p]].charCodeAt(0), form = FORMS.get(cps[order[p]]);
+      if (u >= 0xfb50 && u <= 0xfdff) sound = p > a && p < b;
+      else if (form !== undefined) sound = !((form === 1 || form === 3) && p === a) && !((form === 2 || form === 3) && p === b);
+    }
+    for (let p = a; p <= b; p++) spelt[order[p]] = sound;
+    a = b;
+  }
+  for (const i of order) { to[i] = text.length; text += turn[i] && MIRROR[cps[i]] ? MIRROR[cps[i]] : spelt[i] && cps[i].charCodeAt(0) >= 0xfb1d ? cps[i].normalize('NFKC') : cps[i]; }
   for (const [old, em] of [...gaps].map(([g, em]) => [to[from.indexOf(g)], em]).filter(([g]) => g !== undefined).sort((x, y) => x[0] - y[0])) out.set(old, em);
   return { text, gaps: out };
+}
+
+const CID_FILES: Record<string, () => Promise<{ default: string }>> = {
+  Japan1: () => import('./cmaps/Adobe-Japan1-UCS2.txt?raw'), GB1: () => import('./cmaps/Adobe-GB1-UCS2.txt?raw'), CNS1: () => import('./cmaps/Adobe-CNS1-UCS2.txt?raw'), Korea1: () => import('./cmaps/Adobe-Korea1-UCS2.txt?raw'), KR: () => import('./cmaps/Adobe-KR-UCS2.txt?raw'),
+};
+const cidTables = new Map<string, Promise<Map<number, string> | null>>();
+function cidTable(collection: string): Promise<Map<number, string> | null> {
+  let p = cidTables.get(collection);
+  if (!p) { const load = CID_FILES[collection]; p = load ? load().then((m) => parseCMap(m.default)).catch(() => null) : Promise.resolve(null); cidTables.set(collection, p); }
+  return p;
 }
 
 const codeBytes = (space: number[][], b: Uint8Array, i: number): number => (space.some((s) => s[0] === 1 && b[i] >= s[1] && b[i] <= s[2]) ? 1 : space.some((s) => s[0] === 2) && i + 1 < b.length ? 2 : 1);
