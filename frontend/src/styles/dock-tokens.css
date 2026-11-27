@@ -51,3 +51,9 @@
   --dock-term-line-height: 1.2;
   --dock-term-contrast: 1;
 }
+
+:root[data-fp-win], :root[data-fp-win] .ft-dock { --dock-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', Consolas, monospace; }
+:root[data-fp-win]:lang(zh), :root[data-fp-win]:lang(zh) .ft-dock { --dock-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', Consolas, 'Microsoft YaHei', 'Microsoft JhengHei', 'Yu Gothic', 'Malgun Gothic', monospace; }
+:root[data-fp-win]:lang(zh-TW), :root[data-fp-win]:lang(zh-TW) .ft-dock { --dock-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', Consolas, 'Microsoft JhengHei', 'Microsoft YaHei', 'Yu Gothic', 'Malgun Gothic', monospace; }
+:root[data-fp-win]:lang(ja), :root[data-fp-win]:lang(ja) .ft-dock { --dock-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', Consolas, 'Yu Gothic', 'Microsoft YaHei', 'Microsoft JhengHei', 'Malgun Gothic', monospace; }
+:root[data-fp-win]:lang(ko), :root[data-fp-win]:lang(ko) .ft-dock { --dock-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', Consolas, 'Malgun Gothic', 'Microsoft YaHei', 'Microsoft JhengHei', 'Yu Gothic', monospace; }

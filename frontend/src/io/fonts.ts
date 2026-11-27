@@ -1,8 +1,9 @@
 import { parse, type Font, type PathCommand } from 'opentype.js';
 import { anchor, mul, transformPath } from '../engine/geometry';
-import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, setShaping, weightOf } from '../engine/text';
+import { axesKey, fontsChanged, glyphMat, hasAxes, layoutText, scriptOf, setShaping, weightOf, type BidiLevels, type ComplexRun } from '../engine/text';
 import type { Anchor, CharStyle, Mat, PathData, SubPath, TextNode } from '../engine';
 import { api, type FontInfo, type SimilarFont } from './api';
+import HB_WASM from 'harfbuzzjs/dist/harfbuzz.wasm?url';
 
 const BUNDLED = import.meta.glob('../../node_modules/@fontsource/{inter,jetbrains-mono}/files/*-{latin,latin-ext,greek,greek-ext,cyrillic,cyrillic-ext,vietnamese}-*-{normal,italic}.woff', { query: '?url', import: 'default' }) as Record<string, () => Promise<string>>;
 const SUBSETS = ['latin-ext', 'greek', 'greek-ext', 'cyrillic', 'cyrillic-ext', 'vietnamese'];
@@ -73,10 +74,17 @@ export function families(): string[] {
   const sys = [...new Set((systemList ?? []).map((f) => f.family))].sort((a, b) => a.localeCompare(b));
   return [...BUNDLED_FAMILIES, ...WEB_FAMILIES.filter((f) => !sys.includes(f)), ...sys.filter((f) => !BUNDLED_FAMILIES.includes(f))];
 }
-export async function findSimilarFonts(family: string, style = 'Regular', limit = 10): Promise<SimilarFont[]> {
-  const list = await systemFonts(), of = list.filter((f) => f.family === family);
+let aliasText: Map<string, string> | null = null;
+export function aliasesOf(family: string): string {
+  if (!systemList) return '';
+  if (!aliasText) { aliasText = new Map(); for (const f of systemList) if (f.aliases?.length) aliasText.set(f.family, `${aliasText.get(f.family) ?? ''}\n${f.aliases.join('\n')}`); }
+  return aliasText.get(family) ?? '';
+}
+const byAlias = (list: FontInfo[], family: string): FontInfo[] => { const want = family.toLowerCase(); return list.filter((f) => f.aliases?.some((a) => a.toLowerCase() === want)); };
+export async function findSimilarFonts(family: string, style = 'Regular', limit = 10): Promise<SimilarFont[] | null> {
+  const list = await systemFonts(), own = list.filter((f) => f.family === family), of = own.length ? own : byAlias(list, family);
   const hit = of.find((f) => f.style === style) ?? of.find((f) => /^(regular|book|roman|normal)$/i.test(f.style)) ?? of[0];
-  return hit ? api.similarFonts(hit.id, limit) : [];
+  return hit ? api.similarFonts(hit.id, limit) : !list.length || BUNDLED_FAMILIES.includes(family) ? [] : null;
 }
 export function isVariableFamily(family: string): boolean { return (systemList ?? []).some((f) => f.family === family && !!f.variable); }
 
@@ -117,6 +125,12 @@ export function fontSource(font: Font): { id: string } | { bytes: ArrayBuffer } 
   return id ? { id } : bytes ? { bytes } : null;
 }
 export function glyphAdvance(font: Font, gid: number, st: CharStyle): number { return variedGlyph(font, gid, st).adv; }
+function aliasFace(family: string, style: string, font: Font): void {
+  const buf = rawData.get(font), { weight, italic } = weightOf(style), slant = italic ? 'italic' : 'normal';
+  if (!buf || typeof FontFace === 'undefined' || !globalThis.document?.fonts || declaredFace(family, String(weight), slant)) return;
+  const face = new FontFace(family, buf, { weight: String(weight), style: slant });
+  void face.load().then((f) => { document.fonts.add(f); fontsChanged(); onFace?.(); }).catch(() => undefined);
+}
 export function fontFor(family: string, style: string): Promise<Font | null> {
   const key = `${family}|${style}`;
   let p = parsed.get(key);
@@ -131,6 +145,7 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
         if (!f) { f = api.fontFile(hit.id).then(keep).catch(() => null); byFile.set(hit.id, f); }
         const font = await f;
         if (font) installedId.set(font, hit.id);
+        if (font && hit.family.toLowerCase() !== family.toLowerCase()) aliasFace(family, style, font);
         const info = font ? infoOf(font) : null;
         if (info?.instances.length) {
           const names = info.instances.map((i) => i.name), had = instanceStyles.get(family) ?? [];
@@ -146,6 +161,17 @@ export function fontFor(family: string, style: string): Promise<Font | null> {
 
 const CJK_FALLBACKS = ['PingFang SC', 'Hiragino Sans GB', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Apple SD Gothic Neo', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', 'Source Han Sans SC', 'Microsoft YaHei', 'Yu Gothic', 'Meiryo', 'Malgun Gothic', 'SimSun', 'MS Gothic', 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'Songti SC', 'Arial Unicode MS'];
 const GENERAL_FALLBACKS = ['Helvetica Neue', 'Arial', 'Segoe UI', 'Noto Sans', 'DejaVu Sans', 'Liberation Sans', 'Lucida Grande', 'Arial Unicode MS', 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols', 'Noto Sans Symbols 2'];
+const HAN_FIRST: Record<string, string[]> = {
+  tw: ['Microsoft JhengHei', 'PingFang TC', 'Noto Sans CJK TC', 'Source Han Sans TC', 'Heiti TC', 'PMingLiU', 'MingLiU'],
+  hk: ['Microsoft JhengHei', 'PingFang HK', 'Noto Sans CJK HK', 'Noto Sans CJK TC', 'Source Han Sans HK', 'MingLiU_HKSCS'],
+  ja: ['Yu Gothic', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans CJK JP', 'Source Han Sans', 'Meiryo', 'MS Gothic'],
+  ko: ['Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', 'Source Han Sans K'],
+};
+function hanFirst(family: string): string[] {
+  const lang = (globalThis.document?.documentElement.lang || globalThis.navigator?.language || '').toLowerCase();
+  const by = /\bHK\b|HKSCS/.test(family) ? 'hk' : /\bTC\b|JhengHei|MingLiU|Heiti TC/.test(family) ? 'tw' : /\bJP\b|Hiragino|Meiryo|Mincho|Yu Gothic|MS Gothic/.test(family) ? 'ja' : /\bKR?\b|Malgun|Gulim|Batang/.test(family) ? 'ko' : /\bSC\b|YaHei|SimSun|SimHei/.test(family) ? '' : /^zh-(hk|mo)/.test(lang) ? 'hk' : /^zh-(tw|hant)/.test(lang) ? 'tw' : lang.startsWith('ja') ? 'ja' : lang.startsWith('ko') ? 'ko' : '';
+  return HAN_FIRST[by] ?? [];
+}
 const isCjk = (cp: number): boolean => (cp >= 0x2e80 && cp <= 0x9fff) || (cp >= 0xac00 && cp <= 0xd7af) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xffef) || (cp >= 0x20000 && cp <= 0x3ffff);
 
 export interface FallbackGlyph { font: Font; gid: number; family: string; source: string }
@@ -170,6 +196,12 @@ async function bundledFallback(family: string, style: string, ch: string): Promi
   return null;
 }
 
+const namesOf = new WeakMap<FontInfo[], Set<string>>();
+function installedNames(list: FontInfo[]): Set<string> {
+  let s = namesOf.get(list);
+  if (!s) { s = new Set(list.flatMap((f) => [f.family, ...(f.aliases ?? [])].map((n) => n.toLowerCase()))); namesOf.set(list, s); }
+  return s;
+}
 const fallbacks = new Map<string, Promise<FallbackGlyph | null>>();
 export function fallbackGlyph(ch: string, family: string, style: string): Promise<FallbackGlyph | null> {
   if (invisibleChar(ch) || colourEmoji(ch)) return Promise.resolve(null);
@@ -179,12 +211,16 @@ export function fallbackGlyph(ch: string, family: string, style: string): Promis
     p = (async () => {
       const own = await bundledFallback(family, style, ch);
       if (own) return own;
-      const cp = ch.codePointAt(0) ?? 0, order = isCjk(cp) ? [...CJK_FALLBACKS, ...GENERAL_FALLBACKS] : [...GENERAL_FALLBACKS, ...CJK_FALLBACKS];
-      for (const fam of [...new Set(order)].filter((f) => f !== family)) {
+      const cp = ch.codePointAt(0) ?? 0, order = isCjk(cp) ? [...hanFirst(family), ...CJK_FALLBACKS, ...GENERAL_FALLBACKS] : [...GENERAL_FALLBACKS, ...CJK_FALLBACKS];
+      const have = installedNames(await systemFonts().catch((): FontInfo[] => []));
+      for (const fam of [...new Set(order)].filter((f) => f !== family && (!have.size || have.has(f.toLowerCase())))) {
         const font = await fontFor(fam, style).catch(() => null), gid = covers(font, ch);
         if (font && gid) return { font, gid, family: fam, source: fam };
       }
-      return family === 'Inter' ? null : bundledFallback('Inter', style, ch);
+      const inter = family === 'Inter' ? null : await bundledFallback('Inter', style, ch);
+      if (inter) return inter;
+      const hit = await api.coverFont(cp, isCjk(cp) ? hanFirst(family) : []), font = hit ? await fontFor(hit.family, style).catch(() => null) : null, gid = covers(font, ch);
+      return hit && font && gid ? { font, gid, family: hit.family, source: hit.family } : null;
     })();
     fallbacks.set(key, p);
   }
@@ -206,13 +242,32 @@ export async function glyphOrFallback(ch: string, st: CharStyle, font: Font, gid
   return hit ? { ...hit, style: { ...st, font: hit.family, axes: undefined }, missing: false, skip: false } : { ...own, missing: true };
 }
 
-export async function missingGlyphs(n: TextNode): Promise<string[]> {
+export const SUBSTITUTE_FAMILY = 'Inter';
+export interface ExportFace { font: Font; style: CharStyle; own: boolean }
+export async function exportFace(st: CharStyle, swapped?: Set<string>): Promise<ExportFace | null> {
+  const font = await fontFor(st.font, st.style);
+  if (font) return { font, style: st, own: true };
+  if (!swapped) return null;
+  const sub = await fontFor(SUBSTITUTE_FAMILY, st.style);
+  if (!sub) return null;
+  swapped.add(st.font);
+  return { font: sub, style: { ...st, font: SUBSTITUTE_FAMILY, axes: undefined }, own: false };
+}
+export const faceGlyph = (face: ExportFace, ch: string, gid?: number): number => (face.own ? gid ?? face.font.charToGlyph(ch).index : face.font.charToGlyph(ch).index);
+export function substituteNotes(swapped: Iterable<string>): string[] {
+  const fams = [...new Set(swapped)].filter(Boolean);
+  if (!fams.length) return [];
+  if (fams.length === 1) return [`${fams[0]} is not on this computer, so its type was set in ${SUBSTITUTE_FAMILY} at the same letter positions, with other fonts for characters ${SUBSTITUTE_FAMILY} lacks. Install it and export again to keep its own look.`];
+  return [`${fams.join(', ')} are not on this computer, so their type was set in ${SUBSTITUTE_FAMILY} at the same letter positions, with other fonts for characters ${SUBSTITUTE_FAMILY} lacks. Install them and export again to keep their own look.`];
+}
+
+export async function missingGlyphs(n: TextNode, swapped?: Set<string>): Promise<string[]> {
   const out = new Set<string>();
   for (const g of layoutText(n).glyphs) {
-    if (!g.ch.trim() || g.ch.charCodeAt(0) < 32 || invisibleChar(g.ch)) continue;
-    const font = await fontFor(g.style.font, g.style.style);
-    if (!font) continue;
-    const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
+    if (!g.ch.trim() || g.ch.charCodeAt(0) < 32 || invisibleChar(g.ch) || g.parts) continue;
+    const face = await exportFace(g.style, swapped);
+    if (!face) continue;
+    const ch = g.mir ?? g.ch, pick = await glyphOrFallback(ch, face.style, face.font, faceGlyph(face, ch, g.gid));
     if (pick.missing) out.add(g.ch);
   }
   return [...out];
@@ -272,16 +327,22 @@ function commandsToPath(cmds: PathCommand[], m: Mat): PathData {
   return transformPath(out, m);
 }
 
-export async function outlineText(n: TextNode): Promise<PathData | null> {
+export async function outlineText(n: TextNode, swapped?: Set<string>): Promise<PathData | null> {
   const lay = layoutText(n);
   const out: SubPath[] = [];
   for (const g of lay.glyphs) {
     if (g.ch === ' ' || g.ch === '\t') continue;
-    const font = await fontFor(g.style.font, g.style.style);
-    if (!font) return null;
-    const pick = await glyphOrFallback(g.ch, g.style, font, g.gid ?? font.charToGlyph(g.ch).index);
-    if (pick.skip) continue;
     const local: Mat = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]);
+    if (g.parts) {
+      const fst = g.face ?? g.style, pf = await fontFor(fst.font, fst.style);
+      if (!pf) return null;
+      for (const p of g.parts) out.push(...transformPath(variedGlyph(pf, p.gid, fst).d, mul(n.mode === 'path' ? local : mul(n.xf, local), [1, 0, 0, 1, p.x, p.y])));
+      continue;
+    }
+    const face = await exportFace(g.style, swapped);
+    if (!face) return null;
+    const ch = g.mir ?? g.ch, pick = await glyphOrFallback(ch, face.style, face.font, faceGlyph(face, ch, g.gid));
+    if (pick.skip) continue;
     out.push(...transformPath(variedGlyph(pick.font, pick.gid, pick.style).d, n.mode === 'path' ? local : mul(n.xf, local)));
   }
   return out;
@@ -531,8 +592,115 @@ function featureGlyphs(font: Font, st: CharStyle, text: string, features: string
   return gs;
 }
 
+type Hb = typeof import('harfbuzzjs');
+type HbFont = InstanceType<Hb['Font']>;
+type BidiApi = ReturnType<typeof import('bidi-js').default>;
+let hb: Hb | null = null, hbBuf: InstanceType<Hb['Buffer']> | null = null, bidiApi: BidiApi | null = null, shaperLoad: Promise<void> | null = null, shaperAfter = 0;
+function loadShaper(): void {
+  if (shaperLoad || performance.now() < shaperAfter) return;
+  shaperLoad = fetch(HB_WASM).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status))))).then(() => Promise.all([import('harfbuzzjs'), import('bidi-js')])).then(([h, b]) => { hb = h; hbBuf = new h.Buffer(); bidiApi = b.default(); fontsChanged(); onFace?.(); }).catch(() => { shaperLoad = null; shaperAfter = performance.now() + 3000; });
+}
+const isSfnt = (font: Font): boolean => { const b = rawData.get(font); if (!b || b.byteLength < 12) return false; const s = new DataView(b).getUint32(0); return s === 0x00010000 || s === 0x4f54544f || s === 0x74727565; };
+const hbFonts = new WeakMap<Font, { font: HbFont; upem: number } | null>();
+function hbFontOf(font: Font): { font: HbFont; upem: number } | null {
+  if (!hb) return null;
+  if (hbFonts.has(font)) return hbFonts.get(font) ?? null;
+  let out: { font: HbFont; upem: number } | null = null;
+  const buf = rawData.get(font);
+  if (buf && isSfnt(font)) { try { const face = new hb.Face(new hb.Blob(buf), 0); out = { font: new hb.Font(face), upem: face.upem || font.unitsPerEm || 1000 }; } catch { out = null; } }
+  hbFonts.set(font, out);
+  return out;
+}
+const SCRIPT_FONTS: Record<string, string[]> = {
+  Arab: ['Noto Naskh Arabic', 'Noto Sans Arabic', 'Geeza Pro', 'Segoe UI', 'Arial', 'Tahoma', 'Times New Roman', 'DejaVu Sans'],
+  Hebr: ['Noto Sans Hebrew', 'Arial Hebrew', 'Segoe UI', 'Arial', 'Times New Roman', 'DejaVu Sans'],
+  Syrc: ['Noto Sans Syriac', 'Estrangelo Edessa', 'Segoe UI Historic'],
+  Thaa: ['Noto Sans Thaana', 'MV Boli'],
+  Nkoo: ['Noto Sans NKo', 'Ebrima'],
+  Deva: ['Noto Sans Devanagari', 'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Nirmala UI', 'Mangal', 'Lohit Devanagari'],
+  Beng: ['Noto Sans Bengali', 'Kohinoor Bangla', 'Bangla Sangam MN', 'Nirmala UI', 'Vrinda', 'Lohit Bengali'],
+  Guru: ['Noto Sans Gurmukhi', 'Gurmukhi Sangam MN', 'Nirmala UI', 'Raavi', 'Lohit Gurmukhi'],
+  Gujr: ['Noto Sans Gujarati', 'Gujarati Sangam MN', 'Nirmala UI', 'Shruti', 'Lohit Gujarati'],
+  Orya: ['Noto Sans Oriya', 'Oriya Sangam MN', 'Nirmala UI', 'Kalinga', 'Lohit Odia'],
+  Taml: ['Noto Sans Tamil', 'Tamil Sangam MN', 'Nirmala UI', 'Latha', 'Lohit Tamil'],
+  Telu: ['Noto Sans Telugu', 'Telugu Sangam MN', 'Nirmala UI', 'Gautami', 'Lohit Telugu'],
+  Knda: ['Noto Sans Kannada', 'Kannada Sangam MN', 'Nirmala UI', 'Tunga', 'Lohit Kannada'],
+  Mlym: ['Noto Sans Malayalam', 'Malayalam Sangam MN', 'Nirmala UI', 'Kartika', 'Lohit Malayalam'],
+  Sinh: ['Noto Sans Sinhala', 'Sinhala Sangam MN', 'Nirmala UI', 'Iskoola Pota'],
+  Thai: ['Noto Sans Thai', 'Thonburi', 'Leelawadee UI', 'Tahoma'],
+  Laoo: ['Noto Sans Lao', 'Lao Sangam MN', 'Leelawadee UI', 'Lao UI'],
+  Khmr: ['Noto Sans Khmer', 'Khmer Sangam MN', 'Leelawadee UI', 'Khmer UI'],
+  Mymr: ['Noto Sans Myanmar', 'Myanmar Sangam MN', 'Myanmar Text'],
+  Tibt: ['Noto Serif Tibetan', 'Kokonor', 'Microsoft Himalaya'],
+  Mong: ['Noto Sans Mongolian', 'Mongolian Baiti'],
+};
+interface ScriptFace { font: Font; style: CharStyle }
+const scriptFaces = new Map<string, ScriptFace | null>(), facesPending = new Set<string>();
+async function resolveScriptFace(st: CharStyle, script: string, ch: string): Promise<ScriptFace | null> {
+  const ok = (f: Font | null): f is Font => !!f && isSfnt(f) && covers(f, ch) > 0;
+  const have = installedNames(await systemFonts().catch((): FontInfo[] => []));
+  const own = !have.size || have.has(st.font.toLowerCase()) ? await fontFor(st.font, st.style).catch(() => null) : null;
+  if (ok(own)) return { font: own, style: st };
+  for (const fam of (SCRIPT_FONTS[script] ?? []).filter((f) => f !== st.font && (!have.size || have.has(f.toLowerCase())))) {
+    const f = await fontFor(fam, st.style).catch(() => null);
+    if (ok(f)) return { font: f, style: { ...st, font: fam, axes: undefined } };
+  }
+  const hit = await api.coverFont(ch.codePointAt(0) ?? 0, []), f = hit ? await fontFor(hit.family, st.style).catch(() => null) : null;
+  return hit && ok(f) ? { font: f, style: { ...st, font: hit.family, axes: undefined } } : null;
+}
+function scriptFace(st: CharStyle, script: string, ch: string, exact = false): ScriptFace | null {
+  const key = `${st.font}|${st.style}|${axesKey(st)}|${script}${exact ? `|${ch}` : ''}`, hit = scriptFaces.get(key);
+  if (hit !== undefined) return hit;
+  if (!facesPending.has(key)) {
+    facesPending.add(key);
+    void resolveScriptFace(st, script, ch).catch(() => null).then((p) => { scriptFaces.set(key, p); facesPending.delete(key); if (!p) return; ready.set(`${p.style.font}|${p.style.style}`, p.font); fontsChanged(); onFace?.(); });
+  }
+  return null;
+}
+function shapeComplex(st: CharStyle, text: string, start: number, end: number, rtl: boolean, script: string, features: string[]): ComplexRun | null {
+  const h = hb, buf = hbBuf;
+  if (!h || !buf) { loadShaper(); return null; }
+  let ch = '';
+  for (const c of text.slice(start, end)) if (scriptOf(c.codePointAt(0) ?? 0) === script) { ch = c; break; }
+  const pick = ch ? scriptFace(st, script, ch) : null, hf = pick ? hbFontOf(pick.font) : null;
+  if (!pick || !hf) return null;
+  const run = (f: { font: HbFont; upem: number }, face: CharStyle, a: number, b: number): ComplexRun['glyphs'] => {
+    f.font.setVariations(hasAxes(face) ? Object.entries(face.axes ?? {}).map(([t, v]) => new h.Variation(t, v)) : []);
+    buf.reset();
+    buf.addText(text, a, b - a);
+    buf.setDirection(rtl ? h.Direction.RTL : h.Direction.LTR);
+    if (script !== 'Zzzz') buf.setScript(script);
+    buf.guessSegmentProperties();
+    h.shape(f.font, buf, [...features.filter((t) => /^[a-z0-9]{4}$/.test(t)).map((t) => new h.Feature(t, 1)), ...(st.kerning === 'none' ? [new h.Feature('kern', 0)] : [])]);
+    const k = 1 / f.upem;
+    return buf.getGlyphInfosAndPositions().map((g) => ({ gid: g.codepoint, cl: g.cluster, ax: (g.xAdvance ?? 0) * k, dx: (g.xOffset ?? 0) * k, dy: (g.yOffset ?? 0) * k }));
+  };
+  const glyphs = run(hf, pick.style, start, end), bad = new Set(glyphs.filter((g) => !g.gid).map((g) => g.cl));
+  if (!bad.size) return { face: pick.style, glyphs };
+  const cls = [...new Set(glyphs.map((g) => g.cl))].sort((a, b) => a - b), out = glyphs.filter((g) => !bad.has(g.cl));
+  for (let q = 0; q < cls.length;) {
+    if (!bad.has(cls[q])) { q++; continue; }
+    let e = q, c = '';
+    while (e < cls.length && bad.has(cls[e])) e++;
+    const a = cls[q], b = e < cls.length ? cls[e] : end;
+    for (const x of text.slice(a, b)) if (!covers(pick.font, x) && scriptOf(x.codePointAt(0) ?? 0) === script) { c = x; break; }
+    const fb = c ? scriptFace(st, script, c, true) : null, ff = fb && fb.font !== pick.font ? hbFontOf(fb.font) : null;
+    out.push(...(fb && ff ? run(ff, fb.style, a, b).map((g) => ({ ...g, face: fb.style })) : glyphs.filter((g) => g.cl >= a && g.cl < b)));
+    q = e;
+  }
+  return { face: pick.style, glyphs: out };
+}
+function bidiLevels(text: string): BidiLevels | null {
+  if (!bidiApi) { loadShaper(); return null; }
+  const r = bidiApi.getEmbeddingLevels(text);
+  return { levels: r.levels, paras: r.paragraphs };
+}
+
 export function installShaping(): void {
   setShaping({
+    complex: shapeComplex,
+    bidi: bidiLevels,
+    mirror: (ch) => bidiApi?.getMirroredCharacter(ch) ?? null,
     vertical: (st, text, features) => {
       const font = fontNow(st);
       if (!font) return null;

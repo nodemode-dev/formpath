@@ -2246,6 +2246,8 @@
 "No document is open.": "Không có tài liệu nào đang mở.",
 "No errors recorded this session.": "Phiên này chưa ghi nhận lỗi nào.",
 "No files match the filter.": "Không có tệp nào khớp với bộ lọc.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Không phông chữ nào trên máy tính này có {0}, nên ký tự đó hiển thị thành ô trống. Hãy cài một phông chữ có ký tự đó rồi xuất lại.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Không phông chữ nào trên máy tính này có {0}, nên các ký tự đó hiển thị thành ô trống. Hãy cài một phông chữ có các ký tự đó rồi xuất lại.",
 "No gap detection": "Không phát hiện khe hở",
 "No installed font matched.": "Không có phông chữ đã cài nào khớp.",
 "No installed fonts could be read for comparison.": "Không thể đọc phông chữ đã cài nào để so sánh.",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "Thư viện nằm ở {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Thư viện nằm ở {0}, được đặt bởi FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Thư viện nằm ở {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Giấy phép của {0} không cho phép nhúng vào tài liệu, nên văn bản được vẽ thành đường viền bằng {1}. Trông vẫn như cũ nhưng không thể chọn hay tìm kiếm như văn bản.",
 "The manual says nothing about that. Try other words, or search it.": "Hướng dẫn không nói gì về điều đó. Hãy thử từ khác, hoặc tìm kiếm trong hướng dẫn.",
 "The menus go to the menu bar from the next start.": "Từ lần khởi động tới, menu sẽ chuyển lên thanh menu.",
 "The menus stay in the window from the next start.": "Từ lần khởi động tới, menu sẽ ở trong cửa sổ.",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "khi đã chọn {0} {1}",
 "x Height": "Chiều cao chữ x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Các phông chữ {0} không có trên máy tính này, nên văn bản được dàn bằng {1} ở cùng vị trí chữ, dùng phông khác cho các ký tự mà {2} không có. Hãy cài các phông chữ đó rồi xuất lại để giữ đúng diện mạo của chúng.",
+"{0} is not installed on this computer": "Phông chữ {0} chưa được cài trên máy tính này",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Phông chữ {0} không có trên máy tính này, nên văn bản được dàn bằng {1} ở cùng vị trí chữ, dùng phông khác cho các ký tự mà {2} không có. Hãy cài phông chữ đó rồi xuất lại để giữ đúng diện mạo của nó."
 }

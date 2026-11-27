@@ -46,14 +46,14 @@ export function readAse(data: ArrayBuffer, name = 'Library'): SwatchLibrary {
     }
     at = body + len;
   }
-  const id = `user_${name.toLowerCase().replace(/\.ase$/, '').replace(/[^a-z0-9]+/g, '_')}`;
+  const id = `user_${name.toLowerCase().replace(/\.ase$/, '').replace(/[^\p{L}\p{N}]+/gu, '_')}`;
   return { id, name: name.replace(/\.ase$/i, ''), groups: groups.filter((g) => g.swatches.length), user: true };
 }
 
 export function writeAse(lib: SwatchLibrary): { blob: Blob; skipped: number } {
   const blocks: Uint8Array[] = [];
   let count = 0, skipped = 0;
-  const strBytes = (s: string): Uint8Array => { const t = s.slice(0, 200), b = new Uint8Array(2 + (t.length + 1) * 2), dv = new DataView(b.buffer); dv.setUint16(0, t.length + 1); for (let i = 0; i < t.length; i++) dv.setUint16(2 + i * 2, t.charCodeAt(i)); return b; };
+  const strBytes = (s: string): Uint8Array => { const t = s.slice(0, 200).replace(/[\uD800-\uDBFF]$/, ''), b =new Uint8Array(2 + (t.length + 1) * 2), dv = new DataView(b.buffer); dv.setUint16(0, t.length + 1); for (let i = 0; i < t.length; i++) dv.setUint16(2 + i * 2, t.charCodeAt(i)); return b; };
   const block = (type: number, body: Uint8Array): void => { const b = new Uint8Array(6 + body.length), dv = new DataView(b.buffer); dv.setUint16(0, type); dv.setUint32(2, body.length); b.set(body, 6); blocks.push(b); count++; };
   const entry = (name: string, c: Color, kind: 0 | 1 | 2): void => {
     const nm = strBytes(name), vals = c.kind === 'cmyk' ? [c.c / 100, c.m / 100, c.y / 100, c.k / 100] : c.kind === 'gray' ? [1 - c.k / 100] : (() => { const v = toRgb(c); return [v.r / 255, v.g / 255, v.b / 255]; })();

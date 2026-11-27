@@ -21,7 +21,7 @@ import { cssFilterEffects, filterChain, filterEffects, filterPrimitives, type Fi
 import { clipOf, fitViewBox, markers, maskOf, patternPaint, refId, userBox, type MarkerOut, type RefCtx } from './svg-refs';
 import { importText, textFromHint, type TextEnv } from './svg-text';
 
-export interface SvgOptions { artboard: number | 'all' | 'art'; outlineText: boolean; preserve: boolean; precision: number; ids?: string[] }
+export interface SvgOptions { artboard: number | 'all' | 'art'; outlineText: boolean; preserve: boolean; precision: number; ids?: string[]; swapped?: Set<string> }
 const BLEND_CSS = new Map(BLEND_MODES.map((b) => [b.id, b.css === 'source-over' ? 'normal' : b.css]));
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -254,11 +254,11 @@ class Writer {
       const parts: string[] = [];
       const st = g.style, m = mul(glyphMat(g), [st.hscale / 100, 0, 0, st.vscale / 100, 0, 0]), f = this.paint(st.fill, b);
       const stroked = st.stroke.type !== 'none' && st.strokeWidth > 0, sv = stroked ? this.paint(st.stroke, b).v : '';
-      const shape = g.gid !== undefined ? glyphOutline(st, g.gid) : g.t ? glyphShape(g) : null;
+      const shape = g.gid !== undefined ? glyphOutline(st, g.gid) : g.t || g.parts ? glyphShape(g) : null;
       if (shape && shape.length) parts.push(`<path d="${this.d(transformPath(shape, mul(m, [g.size, 0, 0, g.size, 0, 0])))}" fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}/>`);
       else {
         const deco = g.up ? '' : [st.underline ? 'underline' : '', st.strike ? 'line-through' : ''].filter(Boolean).join(' ');
-        parts.push(`<text transform="${mat(m, pr)}" font-family="${esc(st.font)}" font-size="${num(g.size)}"${face(st)} fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}${deco ? ` text-decoration="${deco}"` : ''}${css(st, false)}>${esc(g.ch)}</text>`);
+        parts.push(`<text transform="${mat(m, pr)}" font-family="${esc(st.font)}" font-size="${num(g.size)}"${face(st)} fill="${f.v}"${stroked ? ` stroke="${sv}" stroke-width="${num(st.strokeWidth)}" stroke-linejoin="round"` : ''}${deco ? ` text-decoration="${deco}"` : ''}${css(st, false)}>${esc(g.mir ?? g.ch)}</text>`);
       }
       if (g.up && (st.underline || st.strike)) {
         const bx = glyphBox(g), t = Math.max(0.5, g.size * 0.06), gm = mat(glyphMat(g), pr);
@@ -267,7 +267,7 @@ class Writer {
       }
       return parts.join('');
     };
-    const glyphRuns = (gs: typeof lay.glyphs): string => {
+    const glyphRuns = (gs: typeof lay.glyphs, bidi = false): string => {
       const parts: string[] = [];
       let cur: typeof lay.glyphs = [];
       const flush = (): void => {
@@ -275,12 +275,12 @@ class Writer {
         const st = cur[0].style;
         const f = this.paint(st.fill, b), s = st.stroke.type !== 'none' && st.strokeWidth > 0 ? ` stroke="${this.paint(st.stroke, b).v}" stroke-width="${num(st.strokeWidth)}"` : '';
         const deco = [st.underline ? 'underline' : '', st.strike ? 'line-through' : ''].filter(Boolean).join(' ');
-        parts.push(`<tspan x="${cur.map((g) => num(g.x)).join(' ')}" y="${num(cur[0].y)}" font-family="${esc(st.font)}" font-size="${num(cur[0].size)}"${face(st)} fill="${f.v}"${s}${deco ? ` text-decoration="${deco}"` : ''}${css(st, true)}>${esc(cur.map((g) => g.ch).join(''))}</tspan>`);
+        parts.push(`<tspan x="${cur.map((g) => num(g.x)).join(' ')}" y="${num(cur[0].y)}" font-family="${esc(st.font)}" font-size="${num(cur[0].size)}"${face(st)} fill="${f.v}"${s}${deco ? ` text-decoration="${deco}"` : ''}${css(st, true)}>${esc(cur.map((g) => g.mir ?? g.ch).join(''))}</tspan>`);
         cur = [];
       };
       const loose: string[] = [];
       for (const g of gs) {
-        if (g.t || outlineOnly(g)) { if (g.ch !== ' ' && g.ch !== '\t') loose.push(one(g)); continue; }
+        if (g.t || bidi || outlineOnly(g)) { if (g.ch !== ' ' && g.ch !== '\t') loose.push(one(g)); continue; }
         if (cur.length && (cur[0].style !== g.style || g.style.features.length || cur[cur.length - 1].y !== g.y)) flush();
         cur.push(g);
       }
@@ -299,7 +299,7 @@ class Writer {
       const tp = n.mode === 'path' && n.path ? ` data-formpath-textpath="${esc(JSON.stringify({ d: this.d(n.path), s: n.pathStart ?? 0, e: n.pathEnd ?? 1, f: n.pathFlip ? 1 : 0, fx: n.pathEffect ?? 'rainbow', al: n.pathAlign ?? 'baseline', sp: n.pathSpacing ?? 0, pa: n.para.align, r: runs }))}"` : '';
       return `<g${xf}${tp} style="font-kerning:none">${parts.join('')}</g>`;
     }
-    for (const l of lay.lines) if (l.glyphs.length) runs.push(glyphRuns(l.glyphs));
+    for (const l of lay.lines) if (l.glyphs.length) runs.push(glyphRuns(l.glyphs, !!l.bidi));
     const xf = n.xf[0] === 1 && n.xf[1] === 0 && n.xf[2] === 0 && n.xf[3] === 1 && !n.xf[4] && !n.xf[5] ? '' : ` transform="${mat(n.xf, this.o.precision)}"`;
     return `<text xml:space="preserve"${xf}>${runs.join('')}</text>`;
   }
@@ -376,7 +376,7 @@ export async function exportSvg(p: Project, o: SvgOptions): Promise<string> {
   for (const key of textureImageKeys(p.doc)) { const b = p.assets.get(key); if (b && !p.bitmaps.has(key)) try { p.bitmaps.set(key, await createImageBitmap(b)); } catch { } }
   const outlines = new Map<string, PathData>();
   if (o.outlineText) {
-    const visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
+    const swapped = o.swapped ?? new Set<string>(), visit = async (n: VNode): Promise<void> => { if (n.kind === 'text') { const d = await outlineText(n, swapped); if (d) outlines.set(n.id, d); } for (const c of childrenOf(n) ?? []) await visit(c); };
     for (const l of p.doc.layers) await visit(l);
   }
   const w = new Writer(p, o, images, outlines);

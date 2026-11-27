@@ -14,11 +14,12 @@ import { hex, solid, defaultGradient, NONE, toRgb, toCmyk, fill as fillItem, str
 import { fontsChanged, plainText, textNode } from './engine/text';
 import { toolHost, toolList, type Tool } from './extensions/registry';
 import { api, type Capabilities, type OpenedProject } from './io/api';
-import { ensureFace, installShaping, onFontsLoaded, outlineText, systemFonts } from './io/fonts';
+import { ensureFace, installShaping, onFontsLoaded, outlineText, substituteNotes, systemFonts } from './io/fonts';
 import { exportPdf, readPdfNative } from './io/pdf';
 import { buildPrintPdf, printPdf } from './io/print';
 import { PrintDialog } from './ui/print-dialog';
-import { DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
+import { decodeDxf, DXF_UNITS, dxfToDoc, exportDxf, parseDxf, type DxfFile, type DxfImportOptions, type DxfUnit } from './io/dxf';
+import { decodeText } from './io/text-decode';
 import { exportDwg } from './io/dwg-write';
 import { DwgUnsupportedError, parseDwg } from './io/dwg';
 import { exportEps, readEpsNative } from './io/eps';
@@ -442,8 +443,8 @@ export function startApp(): void {
   }
 
   async function svgText(f: File): Promise<string> {
-    if (/\.svgz$/i.test(f.name) && typeof DecompressionStream !== 'undefined') return new Response(f.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    return f.text();
+    const bytes = new Uint8Array(/\.svgz$/i.test(f.name) && typeof DecompressionStream !== 'undefined' ? await new Response(f.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer() : await f.arrayBuffer());
+    return decodeText(bytes, /^\s*<\?xml[^>]*encoding=["']([\w.:-]+)/.exec(new TextDecoder('latin1').decode(bytes.subarray(0, 200)))?.[1]);
   }
 
   async function imageSize(blob: Blob): Promise<{ w: number; h: number }> { const b = await createImageBitmap(blob); const s = { w: b.width, h: b.height }; b.close(); return s; }
@@ -476,10 +477,10 @@ export function startApp(): void {
           // only a version the native reader does not cover goes to the installed converter; a damaged file reports its own error
           if (!(e instanceof DwgUnsupportedError)) throw e;
           const conv = await api.dwgToDxf(f);
-          file = parseDxf(conv.text);
+          file = parseDxf(decodeDxf(conv.bytes));
           how = ` through ${conv.converter}`;
         }
-      } else file = parseDxf(await f.text());
+      } else file = parseDxf(decodeDxf(new Uint8Array(await f.arrayBuffer())));
       const o = await dxfOptions(file, dxf);
       if (!o) return null;
       const r = dxfToDoc(file, o, title);
@@ -567,7 +568,7 @@ export function startApp(): void {
             adopt(tagged.doc, title, r.assets);
             if (tagged.name) toast(`The PDF colours use the CMYK profile ${tagged.name}; it is now this document's CMYK working space.`);
             const subs =r.fonts.slice(0, 4).map(([from, to]) => `${from} as ${to}`).join(', ') + (r.fonts.length > 4 ? ` and ${r.fonts.length - 4} more` : '');
-            toast(`Opened ${f.name}: ${r.pages === 1 ? 'one page as an artboard' : `${r.pages} pages as artboards`}.${r.fonts.length ? ` Fonts not installed, set in their nearest match: ${subs}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
+            toast(`Opened ${f.name}: ${r.pages === 1 ? 'one page as an artboard' : `${r.pages} pages as artboards`}.${r.fonts.length ? ` Fonts not installed, set in their nearest match: ${subs}.` : ''}${r.outlined.length ? ` Type the file gives no characters for was kept as shapes: ${r.outlined.join(', ')}.` : ''}${r.skipped.length ? ` Left out: ${r.skipped.join(', ')}.` : ''}`);
           } else if (f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
             const s = await imageSize(f);
             const p = engine.newDocument(s.w, s.h, { title: f.name.replace(/\.[^.]+$/, ''), units: 'px' });
@@ -713,7 +714,7 @@ export function startApp(): void {
     if (!p || !raw || n.linked) return false;
     const ext = raw.type === 'image/jpeg' ? 'jpg' : raw.type === 'image/webp' ? 'webp' : 'png';
     const blob = ext === 'png' && raw.type !== 'image/png' ? await (async () => { const b = await createImageBitmap(raw), c = new OffscreenCanvas(b.width, b.height); c.getContext('2d')?.drawImage(b, 0, 0); b.close(); return c.convertToBlob({ type: 'image/png' }); })() : raw;
-    const base = (n.name ?? n.link ?? 'Image').replace(/\.[a-z0-9]+$/i, '').replace(/[^A-Za-z0-9 ._()-]+/g, '_').trim() || 'Image', fname = `${base}.${ext}`;
+    const base = (n.name ?? n.link ?? 'Image').replace(/\.[a-z0-9]+$/i, '').replace(/[\\/:*?"<>|\x00-\x1f\x7f]+/g, '_').trim() || 'Image', fname = `${base}.${ext}`;
     let f: LinkFile | null = null;
     if (caps && !useHandles()) {
       const lib = (await api.libraryFolder())?.folder ?? caps.libraryDir;
@@ -821,27 +822,28 @@ export function startApp(): void {
     const p = engine.current;
     if (!p) return null;
     typing.end();
-    const scope = c.scope, ab = c.artboard;
+    const scope = c.scope, ab = c.artboard, swapped = new Set<string>();
+    const told = <T>(v: T): T => { for (const s of substituteNotes(swapped)) (c.notes ?? ((note: string) => toast(note, 'info')))(s); return v; };
     if (c.format === 'svg') {
       const ids = scope === 'selection' ? engine.targetIds() : undefined;
-      return new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids })], { type: 'image/svg+xml' });
+      return told(new Blob([await exportSvg(p, { artboard: scope === 'all' ? 'all' : scope === 'art' ? 'art' : ab, outlineText: c.outlineText, preserve: c.preserve, precision: 3, ids, swapped })], { type: 'image/svg+xml' }));
     }
     if (c.format === 'pdf' || c.format === 'ai') return exportPdf(p, { artboards: scope === 'all' || scope === 'art' ? p.doc.artboards.map((_, i) => i) : c.artboards ?? [ab], preserve: c.format === 'ai' || c.preserve, aiPrivate: c.format === 'ai', ppi: p.doc.rasterPpi || 300, version: VERSION, marks: c.format === 'pdf' ? c.marks : undefined, liveText: c.liveText, standard: c.format === 'pdf' ? c.standard : 'none', layers: c.format === 'pdf' ? c.layers : true, compression: c.compression, security: c.format === 'pdf' ? c.security : undefined, notes: c.notes ?? ((note) => toast(note, 'info')) });
     if (c.format === 'eps') {
-      const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION });
+      const one = (region: Rect, title: string): Promise<Blob> => exportEps(p, { region, cmyk: c.cmyk ?? p.doc.colorMode === 'cmyk', preserve: c.preserve, ppi: p.doc.rasterPpi || 300, title, version: VERSION, swapped });
       if (scope === 'all' && p.doc.artboards.length > 1) {
         const files: Array<{ name: string; blob: Blob }> = [];
         for (const a of p.doc.artboards) files.push({ name: `${p.name}-${a.name}.eps`.replace(/[\\/:*?"<>|]+/g, '-'), blob: await one(a, `${p.name} ${a.name}`) });
-        return zipFiles(files);
+        return told(await zipFiles(files));
       }
       const r = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : exportRegion(p, ab);
-      return r ? one(r, p.name) : null;
+      return r ? told(await one(r, p.name)) : null;
     }
     if (c.format === 'dxf' || c.format === 'dwg') {
       const cad = c.cad ?? { version: '2000', units: 'mm', scale: 1, text: 'text', lineweights: false };
       const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
       if (!region) return null;
-      return (c.format === 'dwg' ? exportDwg : exportDxf)(p, { region, ...cad, ids: scope === 'selection' ? engine.targetIds() : undefined }, async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n); });
+      return told(await (c.format === 'dwg' ? exportDwg : exportDxf)(p, { region, ...cad, ids: scope === 'selection' ? engine.targetIds() : undefined }, async (n) => { await ensureFace(n.spans[0]?.style.font ?? 'Inter', n.spans[0]?.style.style ?? 'Regular'); return outlineText(n, swapped); }));
     }
     const region = scope === 'selection' ? regionOf(engine, 'selection') : scope === 'art' ? exportRegion(p, 'art') : scope === 'all' ? exportRegion(p, 'all') : exportRegion(p, ab);
     if (!region) return null;
@@ -883,11 +885,12 @@ export function startApp(): void {
     await engine.task(async () => {
       try {
         if (c.artboards && c.artboards.length > 1 && c.format !== 'pdf' && c.format !== 'ai') {
-          const files: Array<{ name: string; blob: Blob }> = [];
+          const files: Array<{ name: string; blob: Blob }> = [], said = new Set<string>();
           for (const i of c.artboards) {
-            const one = await exportBlob({ ...c, artboard: i, artboards: undefined });
+            const one = await exportBlob({ ...c, artboard: i, artboards: undefined, notes: c.notes ?? ((s) => said.add(s)) });
             if (one) files.push({ name: `${p.name}-${i + 1}.${rasterExt(c.format)}`.replace(/[\\/:*?"<>|]+/g, '-'), blob: one });
           }
+          for (const s of said) toast(s, 'info');
           if (!files.length) { toast('There is nothing to export there.', 'error'); return; }
           await deliver(await zipFiles(files), `${p.name}.zip`.replace(/[\\/:*?"<>|]+/g, '-'));
           return;
@@ -1380,17 +1383,17 @@ export function startApp(): void {
         if (!/\.fpth$/i.test(f.name)) throw new Error('Symbol libraries are formpath projects (.fpth).');
         const d = await libraryDoc(f);
         if (!d.symbols.length) throw new Error(`${f.name} holds no symbols.`);
-        showSymbolLib(symbolLibraryFromDoc(d, name, `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`));
+        showSymbolLib(symbolLibraryFromDoc(d, name, `file_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`));
         return;
       }
       if (kind === 'brush') {
         if (!/\.fpth$/i.test(f.name)) throw new Error('Brush libraries are formpath projects (.fpth).');
         const d = await libraryDoc(f);
         if (!d.brushes.length) throw new Error(`${f.name} holds no brushes.`);
-        showBrushLib({ id: `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: d.brushes.map(({ id: _id, ...b }) => { void _id; return b; }), user: true });
+        showBrushLib({ id: `file_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`, name, brushes: d.brushes.map(({ id: _id, ...b }) => { void _id; return b; }), user: true });
         return;
       }
-      const lib = /\.ase$/i.test(f.name) ? readAse(await f.arrayBuffer(), f.name) : libraryFromDoc(await libraryDoc(f), name, `file_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`);
+      const lib = /\.ase$/i.test(f.name) ? readAse(await f.arrayBuffer(), f.name) : libraryFromDoc(await libraryDoc(f), name, `file_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`);
       if (!lib.groups.length) throw new Error(`${f.name} holds no swatches.`);
       showSwatchLib(lib);
     } catch (err) { toast(message(err), 'error'); }
@@ -1454,7 +1457,7 @@ export function startApp(): void {
     const v = await askForm('Save Brushes', [{ kind: 'text', key: 'name', label: 'Library name', value: `${p.name} Brushes` }, { kind: 'note', text: 'Saves the document’s brushes as a formpath project to open later with Open Brush Library; it also appears under User Defined.' }], { ok: 'Save' });
     if (!v) return;
     const name = String(v.name).trim() || 'Brushes';
-    keepUserBrushLibrary({ id: `user_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`, name, brushes: p.doc.brushes.map(({ id: _id, ...b }) => { void _id; return b; }) });
+    keepUserBrushLibrary({ id: `user_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`, name, brushes: p.doc.brushes.map(({ id: _id, ...b }) => { void _id; return b; }) });
     await deliver(await libraryProject(name, { brushes: p.doc.brushes }), `${name}.fpth`);
   }
 
@@ -1490,8 +1493,9 @@ export function startApp(): void {
     await engine.task(async () => {
       try {
         const r = await packageProject(p, { folder: String(v.folder).trim(), copyLinks: !!v.links, copyFonts: !!v.fonts, separateLinks: !!v.separate, relink: !!v.relink, report: !!v.report });
-        const miss = r.missingLinks.length + r.missingFonts.length;
-        toast(`Packaged ${r.links} ${r.links === 1 ? 'link' : 'links'} and ${r.fonts} ${r.fonts === 1 ? 'font' : 'fonts'} to ${r.folder ?? 'the Exports folder'}${miss ? `. Missing: ${[...r.missingLinks, ...r.missingFonts].join(', ')}` : '.'}`, miss ? 'error' : 'info');
+        const miss = r.missingLinks.length + r.missingFonts.length, held = r.restricted ?? [];
+        const told = !held.length ? '' : held.length === 1 ? ` The licence of ${held[0]} restricts embedding it in documents; check that it also lets you pass the font on before you share the package.` : ` The licences of ${held.join(', ')} restrict embedding them in documents; check that they also let you pass the fonts on before you share the package.`;
+        toast(`Packaged ${r.links} ${r.links === 1 ? 'link' : 'links'} and ${r.fonts} ${r.fonts === 1 ? 'font' : 'fonts'} to ${r.folder ?? 'the Exports folder'}${miss ? `. Missing: ${[...r.missingLinks, ...r.missingFonts].join(', ')}${told ? '.' : ''}` : '.'}${told}`, miss ? 'error' : 'info');
       } catch (err) { toast(message(err), 'error'); }
     });
   }
@@ -1550,7 +1554,7 @@ export function startApp(): void {
   type Screen = 'standard' | 'menu' | 'full';
   let screen: Screen = 'standard', panelsHidden = false;
   const applyScreen = (): void => { root.classList.toggle('is-screen-menu', screen === 'menu'); root.classList.toggle('is-screen-full', screen === 'full'); root.classList.toggle('is-panels-hidden', panelsHidden || screen === 'full'); window.dispatchEvent(new Event('resize')); };
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && screen === 'full' && !anyDialogOpen()) { screen = 'standard'; applyScreen(); e.preventDefault(); } }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.isComposing && e.keyCode !== 229 && screen === 'full' && !anyDialogOpen()) { screen = 'standard'; applyScreen(); e.preventDefault(); } }, true);
 
   const toolCmd = (id: string): string => `tool-${id}`;
   for (const t of toolList()) commands.add({ id: toolCmd(t.id), label: t.label, run: () => engine.setTool(t.id) });
@@ -2097,6 +2101,7 @@ export function startApp(): void {
     if (menubar.isOpen || contextMenu.isOpen) { if (e.key === 'Escape') { e.preventDefault(); menubar.close(); contextMenu.close(); } return; }
     const target = e.target instanceof Element ? e.target : null;
     if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (typing.active && !e.ctrlKey && !e.metaKey && !target?.closest('[role="listbox"], [role="menu"]') && !(target?.matches(':focus-visible') && target.closest('button, [role="button"], [role="option"], [role="menuitem"], [role="tab"]'))) { typing.take(e); return; }
     if (e.code === 'Space' && target?.matches(':focus-visible') && target.closest('button, [role="button"], [role="option"], [role="menuitem"], [role="tab"]')) return;
     if (e.code === 'Space' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (!e.repeat) stage.setSpace(true); return; }
     if (stage.toolKeydown(e)) { e.preventDefault(); return; }
@@ -2122,7 +2127,7 @@ export function startApp(): void {
   window.addEventListener('keyup', (e) => { if (e.code === 'Space') stage.setSpace(false); });
   window.addEventListener('blur', () => stage.setSpace(false));
   function comboOfTool(e: KeyboardEvent): string {
-    const k = e.code.startsWith('Key') ? e.code.slice(3) : e.code === 'Backslash' ? '\\' : e.code === 'Equal' ? '=' : e.code === 'Minus' ? '-' : e.code === 'Backquote' ? '~' : e.key;
+    const k = /^[a-z]$/i.test(e.key) ? e.key.toUpperCase() : e.code.startsWith('Key') ? e.code.slice(3) : e.code === 'Backslash' ? '\\' : e.code === 'Equal' ? '=' : e.code === 'Minus' ? '-' : e.code === 'Backquote' ? '~' : e.key;
     return `${e.altKey ? 'Alt+' : ''}${e.shiftKey ? 'Shift+' : ''}${k}`;
   }
 
@@ -2249,6 +2254,7 @@ export function startApp(): void {
   }
 
   const faces = Promise.all(['400', '500', '600'].map((w) => document.fonts.load(`${w} 12px Inter`))).catch(() => undefined);
-  void Promise.race([faces, new Promise((r) => window.setTimeout(r, 2500))]).then(() => requestAnimationFrame(() => { revealApp(); void offerRecovery(); }));
+  const openedByShell = (): void => { void import('@tauri-apps/api/core').then(async ({ invoke }) => { for (const [id, name] of await invoke<[number, string][]>('opened_take')) { try { await openFiles([new File([await invoke<ArrayBuffer>('opened_read', { id })], name)]); } catch (err) { toast(`${name}: ${message(err)}`, 'error'); } } }).catch(() => undefined); };
+  void Promise.race([faces, new Promise((r) => window.setTimeout(r, 2500))]).then(() => requestAnimationFrame(() => { revealApp(); void offerRecovery().finally(() => { if (!('__TAURI_INTERNALS__' in window)) return; (window as unknown as { formpathOpened?: () => void }).formpathOpened = openedByShell; openedByShell(); }); }));
   void plainText; void hex;
 }

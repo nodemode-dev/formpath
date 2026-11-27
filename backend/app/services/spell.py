@@ -68,6 +68,8 @@ def check(words: list[str], lang: str) -> list[dict[str, object]]:
             continue
         seen.add(word)
         low = word.lower().strip("'")
+        if any(ch.isalpha() and ch not in spell.word_frequency.letters for ch in low):
+            continue
         if low in known or not spell.unknown([low]):
             continue
         found = spell.candidates(low) or set()

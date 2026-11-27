@@ -2246,6 +2246,8 @@
 "No document is open.": "Není otevřen žádný dokument.",
 "No errors recorded this session.": "V této relaci nebyly zaznamenány žádné chyby.",
 "No files match the filter.": "Filtru neodpovídají žádné soubory.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Žádné písmo v tomto počítači nemá znak {0}, proto se zobrazí jako prázdný rámeček. Nainstalujte písmo s tímto znakem a exportujte znovu.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Žádné písmo v tomto počítači nemá znaky {0}, proto se zobrazí jako prázdný rámeček. Nainstalujte písmo s těmito znaky a exportujte znovu.",
 "No gap detection": "Bez zjišťování mezer",
 "No installed font matched.": "Žádné nainstalované písmo neodpovídá.",
 "No installed fonts could be read for comparison.": "Nainstalovaná písma nelze přečíst pro porovnání.",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "Knihovna je v {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Knihovna je v {0}, nastaveno proměnnou FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Knihovna je v {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Licence písma {0} nedovoluje jeho vložení do dokumentu, proto byl jeho text nakreslen jako křivky v {1}. Vypadá stejně, ale nelze jej vybrat ani vyhledat jako text.",
 "The manual says nothing about that. Try other words, or search it.": "Příručka o tom nic neříká. Zkuste jiná slova nebo v ní vyhledávejte.",
 "The menus go to the menu bar from the next start.": "Nabídky se od příštího spuštění přesunou do řádku nabídek.",
 "The menus stay in the window from the next start.": "Nabídky od příštího spuštění zůstanou v okně.",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "s vybraným {0}: {1}",
 "x Height": "Výška x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Písma {0} v tomto počítači nejsou, proto byl jejich text vysázen písmem {1} na stejných pozicích písmen a znaky, které {2} nemá, jinými písmy. Nainstalujte je a exportujte znovu, aby si zachovala svůj vlastní vzhled.",
+"{0} is not installed on this computer": "Písmo {0} není v tomto počítači nainstalováno",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Písmo {0} v tomto počítači není, proto byl jeho text vysázen písmem {1} na stejných pozicích písmen a znaky, které {2} nemá, jinými písmy. Nainstalujte ho a exportujte znovu, aby si zachovalo svůj vlastní vzhled."
 }

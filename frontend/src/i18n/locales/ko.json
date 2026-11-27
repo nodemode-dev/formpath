@@ -2246,6 +2246,8 @@
 "No document is open.": "열려 있는 문서가 없습니다.",
 "No errors recorded this session.": "이 세션에서 기록된 오류가 없습니다.",
 "No files match the filter.": "필터와 일치하는 파일이 없습니다.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "이 컴퓨터의 어떤 글꼴에도 {0}이(가) 없으므로 빈 상자로 표시됩니다. 이 문자가 있는 글꼴을 설치하고 다시 내보내십시오.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "이 컴퓨터의 어떤 글꼴에도 {0}이(가) 없으므로 빈 상자로 표시됩니다. 이 문자들이 있는 글꼴을 설치하고 다시 내보내십시오.",
 "No gap detection": "간격 감지 안 함",
 "No installed font matched.": "일치하는 설치된 글꼴이 없습니다.",
 "No installed fonts could be read for comparison.": "비교할 설치된 글꼴을 읽을 수 없었습니다.",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "라이브러리 위치: {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "라이브러리 위치: {0}(FORMPATH_LIBRARY_DIR로 설정됨).",
 "The library is in {0}.": "라이브러리 위치: {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "{0}의 라이선스는 문서에 포함하는 것을 허용하지 않으므로 텍스트를 {1}의 윤곽선으로 그렸습니다. 모양은 같지만 텍스트로 선택하거나 검색할 수 없습니다.",
 "The manual says nothing about that. Try other words, or search it.": "매뉴얼에 해당 내용이 없습니다. 다른 단어로 시도하거나 검색하십시오.",
 "The menus go to the menu bar from the next start.": "다음 시작부터 메뉴가 메뉴 막대로 이동합니다.",
 "The menus stay in the window from the next start.": "다음 시작부터 메뉴가 창 안에 유지됩니다.",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "{0} 선택 시 {1}",
 "x Height": "x 높이",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "{0} 글꼴이 이 컴퓨터에 없어서 텍스트를 같은 글자 위치에 {1}(으)로 조판하고, {2}에 없는 문자에는 다른 글꼴을 사용했습니다. 원래 모양을 유지하려면 이 글꼴들을 설치하고 다시 내보내십시오.",
+"{0} is not installed on this computer": "{0} 글꼴이 이 컴퓨터에 설치되어 있지 않습니다",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "{0} 글꼴이 이 컴퓨터에 없어서 텍스트를 같은 글자 위치에 {1}(으)로 조판하고, {2}에 없는 문자에는 다른 글꼴을 사용했습니다. 원래 모양을 유지하려면 글꼴을 설치하고 다시 내보내십시오."
 }

@@ -99,6 +99,7 @@ frontend/
     │   ├── svg-refs.ts         SVG import: patterns, masks, clip paths and markers
     │   ├── svg-filter.ts       SVG import: filter chains to live effects
     │   ├── svg-text.ts         SVG import: text, tspans and text on a path to live type
+    │   ├── text-decode.ts      bytes of a text file to a string: byte order marks, UTF-8, then a legacy charset
     │   ├── pdf.ts              PDF writer and native reader
     │   ├── raster.ts           region rendering, PNG, JPEG, WebP, screens zip
     │   ├── trace.ts            image trace: options, presets, worker run, nodes
@@ -194,6 +195,7 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - src/io/svg-refs.ts
 - src/io/svg-filter.ts
 - src/io/svg-text.ts
+- src/io/text-decode.ts
 - src/io/pdf.ts
 - src/io/pdf-read.ts
 - src/io/pdf-crypt.ts
@@ -4944,3 +4946,498 @@ Seen in headless Chromium (Playwright 1.63.0) against the engine serving the bui
 The family's design alignment (FormVis's names are the family's names). formpath's token values already equal FormVis's in every shared name but one: `--z-taskbar` stays 120 (FormVis 900), because z-index values stay each app's own. Seven FormVis names were missing and are now defined with FormVis Studio Dark's values: `--z-under` -1, `--z-local-2` 2, `--z-local-4` 4, `--z-local-5` 5, `--cv-tabs-h` 34px, `--cv-action-blue` #3b82f6, `--cv-action-violet` #8b5cf6. No stylesheet uses them yet, so nothing on screen changes; formpath's own names (layout values such as `--cv-chip` or `--fp-help-h`) have no FormVis counterpart, so there is no alias to add. No rule was rewritten.
 
 Seen in headless Chromium at 1323x860 (the shell's fallback window size), the build before and after, dark and light: the resolved value of every token on `:root` (222 before, 229 after) differs only by the seven new names; the Home screen, the New Document dialog and the canvas with a new document are pixel-identical, apart from one run where 4x2 pixels at an anti-aliased edge of the canvas differed by one in one channel (the first run was identical); a cold load under 4x CPU throttle, recorded from a black page, shows no white frame in either build.
+
+### src/ui/text-editor.ts, src/app.ts, src/styles/formpath.css · typing with an input method (issue 17)
+- refers-to: src/ui/text-editor.ts :: TextEditor (constructor, end, take, place, key, selectWord, overlay, drawPre), prevPoint, nextPoint, backPoint, GRAPHEMES, WORDS; src/app.ts :: the window keydown listener; src/styles/formpath.css :: .cv-text-editor
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+Issue 17 (a Traditional Chinese Windows user): "ensure support for text input and the proper display of non-English fonts". Read against the code and run in Chromium with composition events sent over the DevTools protocol (`Input.imeSetComposition`, `Input.insertText`), typing had these faults; each is fixed here.
+
+- The words being composed were invisible. The textarea is 2px wide and transparent, and the overlay drew only the caret, so with Bopomofo, Cangjie, Pinyin, Japanese or Hangul a person typed blind until the commit. `compositionupdate` now keeps the string in `pre`, and `overlay` draws it at the caret through `drawPre`: the text's own font and on-screen size (never under 12px), on the handle colour with the accent rule under it, rotated with the line. It is drawn on the overlay canvas; no DOM node is added or changed for it. Not shown: which clause of a long Japanese conversion is active (the events do not say).
+- The candidate window sat at a fixed 16px line whatever the size and zoom, and stayed behind after a click, a zoom or a pan. `place` now also writes the textarea's font size (the caret's height on screen, 1 to 512px), the CSS makes its height one line of that size, a new text that does not exist yet is anchored at the top of its first line, and `place` runs after `caretTo`, `selectWord`, `selectAll`, `clamp` and on the engine's `viewport` event.
+- Keys the input method is using were also acted on. `key` returns at once while a composition is going on, and for a keydown with keyCode 229. In WebKit (the macOS and Linux desktop windows) the Enter that confirms a candidate arrives after `compositionend` with keyCode 229 and `key` "Enter", so every confirmed word got a new line; Backspace, the arrows, Tab and Escape misfired the same way. WebView2 reports "Process" for these keys, so Windows was mostly spared.
+- Text still being composed was thrown away when editing ended (a click elsewhere, another tool, another document): `end` cleared `id` and `pending` before the blur that makes the browser commit. `end` now blurs first and flushes the textarea, then clears.
+- Opening the font menu ended the edit, because the menu's list is a child of `body` and the blur check did not know it; `.cv-dd-pop` is in that list now. After a choice in the options bar or a panel the focus is on `body`, and the next keys were read as tool shortcuts (V switched to the Selection tool, Backspace cleared the object). The window listener now hands such keys to `TextEditor.take`, which focuses the textarea (so the character, or the composition, lands there) and runs `key` for the keys that produce no character. Keys with Ctrl or Cmd, keys inside a list or menu, and keys on a control reached with the keyboard are left alone.
+- AltGr letters ran commands: on Windows AltGr sets Ctrl and Alt together, so the Polish a-ogonek selected all and z-dot undid. Select All and Undo in `key` now need Alt to be up.
+- Backspace took an emoji apart (a family, a flag, a heart with its variation selector lost one piece per press). `backPoint` removes such a cluster whole and still steps one code point elsewhere, so a Hangul syllable built from jamo and a letter with combining marks lose one part per press. The arrows and Delete step by grapheme cluster (`Intl.Segmenter`), with the code point step as the fallback.
+- A double click selected nothing in Chinese or Japanese and half of an accented word (`\w` is ASCII). `selectWord` asks `Intl.Segmenter` for the word, and falls back to letters, digits and marks of any script.
+- Pasted text is normalised to NFC, because layout sets one glyph per code point and text copied from the macOS Finder arrives decomposed.
+
+Run in headless Chrome 4x CPU throttled on a slow network, against the engine serving the built window: the composed string shown for a new text and inside an existing one and gone after a cancel; a 229 Enter adds no line; text composed and then clicked away from is kept; the three emoji clusters go in three presses; a font chosen from the options bar mid-edit and typing goes on in the same text. Layout shift 0, no console error. Not run: a real input method on Windows, macOS or Linux; WebKit.
+
+Left as they were: shortcuts are matched by the physical key (`e.code`), so on AZERTY the key labelled Z does not undo while typing; Ctrl or Alt with Backspace still removes a whole run of unspaced Chinese; the composed string is drawn over the text after the caret instead of pushing it along.
+
+### src/io/pdf-read.ts · Chinese, Japanese and Korean type in a PDF or a PDF-compatible .ai (issue 17)
+- refers-to: src/io/pdf-read.ts :: strict, BYTE_CMAPS, ORDERINGS, BROKEN, FontInfo (direct, bytes), Painter.show, Painter.font, parseCMap (uni, put), pdfText, FontNames.resolve
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+The issue's picture shows a two-character text object in Noto Sans CJK TC whose content is two U+FFFD, in a document this reader built (the "Page 1" and "Page 2" groups inside optional-content layers are made only here; a modern .ai falls back to it through `guardAi`). The reporter's file is not at hand, so which of the cases below it is has not been confirmed. Each was reproduced with a hand-built PDF (fonts named, not embedded) opened in the built window, before and after.
+
+- A ToUnicode table that maps a code to `<FFFD>` (producers write that for a glyph they cannot name) was copied into live type: `parseCMap` kept whatever the hex said. Two such codes give exactly the picture: two U+FFFD in the Content panel and the status bar, and the font's replacement glyph twice on the canvas. `put` now keeps a mapping only when it is non-empty, has no U+FFFD and no unpaired surrogate (`BROKEN`). A range whose base is a surrogate pair is counted on by code point (it ran past DFFF into E000), and hex with spaces inside (`<4E2D 6587>`, dropped before) is read.
+- A two-byte code with no mapping still adds nothing to the text, as before, but `show` now counts it and the import says so once per font: "Left out: characters of type in [family] that the file gives no Unicode value for." Before, the characters went missing without a word and the rest of the line was tracked out to hide the gap. The line is kept with what could be read.
+- A Type0 font whose `/Encoding` is a predefined CMap was read as fixed two-byte CIDs, so its type came out empty or wrong. Two kinds are now read: the Unicode ones (`...-UCS2-...`, `...-UTF16-...`, where the code is the UTF-16 unit itself: `direct`), and the byte ones of Big5, GB, Shift-JIS, EUC-JP and KS (`BYTE_CMAPS`: ETen-B5, B5pc, the HK ones, GBK-EUC, GBpc-EUC, 90ms-RKSJ, EUC, KSCms-UHC and their -V forms), where the whole string is decoded with that charset, strictly (`bytes`); a string that does not decode falls back to the old path. Widths on the byte path are half an em for Latin and half-width kana and one em otherwise, because the `/W` array is keyed by CIDs this reader cannot derive from the bytes. UTF-32 CMaps and an embedded CMap stream as `/Encoding` are still read as two-byte codes.
+- A `/BaseFont` written in UTF-8 or in the collection's own charset (`#B7#73...`, PMingLiU's Chinese name in Big5) was shown as Latin-1 garble in the "Fonts not installed" sentence. `resolve` decodes it as UTF-8 when that is valid, else with the charset of the descendant font's `/Ordering` (CNS1 Big5, GB1 GBK, Japan1 Shift-JIS, Korea1 EUC-KR), strictly. A family known only by a localized name is still not matched to an installed font.
+- `pdfText` (layer names) reads a UTF-16LE byte order mark and UTF-8 without one; Latin-1 stays the last resort.
+
+Seen in the built window with the test file: before, one object reading U+FFFD U+FFFD and two lines of type missing; after, no U+FFFD or unpaired surrogate in any object, the Big5 line and the UTF-16 line present, the font named in Chinese in the sentence, and the left-out sentence for the two fonts with unmapped codes. `npm test`: 61 pass.
+
+Not done, and the right next step once the reporter's file is here: drawing type that cannot be read as outlines from the font program embedded in the file (the reader never opens `FontFile`, `FontFile2` or `FontFile3`), so its shapes stay on the page; `/ActualText`; variable-length codes under a ToUnicode table.
+
+### src/ui/ fields, dialogs and pickers · a key the input method is using is left to it (issue 17)
+- refers-to: src/ui/dialogs.ts :: Dialog (the scrim's keydown), PromptDialog; src/ui/layers.ts :: rename; src/ui/file-dialog.ts; src/ui/titlebar-tools.ts :: the command search (keydown, fill); src/ui/dropdown.ts :: enhanceSelect (pop keydown, label); src/ui/options.ts; src/ui/rail.ts; src/app.ts :: the Escape that leaves full screen; src/ui/panels/ assistant.ts, help.ts, recolor.ts, generative.ts, pattern-options.ts, type.ts, spelling.ts, attributes.ts, graph-data.ts, kit.ts :: numField, slider, evalNumber
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+No key handler outside the canvas editor asked whether the key belonged to a composition. With a Chinese, Japanese or Korean input method the Enter that picks a candidate also sent the half-typed prompt (Assistant, Help, Recolor, AI Patterns), committed a half-typed name (a layer, a pattern, a tab stop's leader, Save As, the spelling change), ran the highlighted command in the title bar search, picked the highlighted font, or closed and accepted the dialog; Escape closed the dialog or the flyout instead of cancelling the composition. Each handler now returns first when `e.isComposing` is set or `e.keyCode` is 229 (WebKit sends the confirming Enter after `compositionend`, with 229 and no `isComposing`; WebView2 sends "Process", which never matched). The expression is written out at each site; there is no helper, so a reader of any one handler sees the whole rule.
+
+`Dialog`'s own scrim listener is registered before those of its subclasses, so there it also calls `stopImmediatePropagation`: the Enter handlers that `FormDialog`, New Document and Place put on the same scrim do not run for such a key. The Password prompt is not guarded; a password is not composed.
+
+Three small things for the same people, in the same files:
+- `evalNumber` reads full-width digits, point, comma, signs, brackets and units (an input method in its full-width mode types them): the text is normalised with NFKC first. Before, such an entry was thrown away and the field went back to the old value.
+- The title bar search also matches a command's label in the language shown (`t(label)`); typing the Chinese word for Undo found nothing, because only the English label was compared.
+- A menu button's tooltip is its current choice unless the select has a title of its own, so a font name cut short in the options bar (Noto Sans CJK TC, SC, JP and KR all read "Noto Sans C...") can be read in full. `label` writes `title` only when it differs.
+
+Run in headless Chrome, 4x CPU throttled, slow network: a layer renamed with a composition stays in the field after a 229 Enter and is committed by the real one; a full-width "123.5" in X moves the object to 123.5; the font button's tooltip reads the family. Layout shift 0, no console error. Not run: each of the other guarded fields one by one; WebKit.
+
+Looked at and left: the Content panel's head, the status bar's selection and the Appearance panel's head show a text object's own words through the translation walker, so an object reading "Copy" is shown translated there. Skipping those three elements would also stop "No Document" and "3 Objects" from being translated, so they need a `translate="no"` set with the label, which is its own change. The numeric fields of the options bar and the zoom field keep their handlers.
+
+### src/engine/text.ts, src/engine/doc.ts, library ids, src/io/psd-write.ts · characters outside the basic plane and names outside Latin are kept whole (issue 17)
+- refers-to: src/engine/text.ts :: styleSpans (split); src/engine/doc.ts :: nodeLabel; src/tools/type.ts :: the Glyph Touch readout; src/ui/panels/type.ts :: the one-character test; src/app.ts :: the `file_` and `user_` library ids; src/engine/swatch-libraries.ts :: libraryFromDoc; src/engine/symbol-libraries.ts :: symbolLibraryFromDoc; src/io/ase.ts :: readAse; src/io/psd-write.ts :: the `luni` block
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+A character past U+FFFF is two UTF-16 units (the rarer Chinese characters of Hong Kong and Taiwan names, and every emoji). Four places counted or cut by unit:
+
+- `touchSpans` styles `index` to `index + 1`, which put the first half of such a character in one span and the second half in the next; each half then drew as a replacement glyph and was saved that way. `styleSpans` now widens a range edge that falls between the two halves, so no caller can split a pair.
+- `nodeLabel` cut a text object's name at 28 units; when the 28th was a first half, the Layers row, the Content panel and the status bar ended in a replacement character. It cuts at 27 there.
+- The Glyph Touch readout and the Character panel's one-character test took one unit; they take one code point.
+- The PSD writer's Unicode layer name (`luni`) gave its length in code points but wrote UTF-16 units, so Photoshop read a name with such a character one unit short.
+
+A library made from a document or an .ase file got its id from its name with everything but `a-z0-9` turned into `_`, so every name in Chinese, Japanese, Korean, Cyrillic, Greek or Thai came to the same id (`user__`), and saving a second library replaced the first. The seven places keep letters and digits of any script (`\p{L}\p{N}`). A name in plain ASCII gets the id it had; a name with accented letters gets a new one, so a library saved under such a name before stays in the list beside a newly saved one.
+
+Run outside the repository (a scratch vitest file importing these functions): a touch on either half of an astral character, and a range ending inside it, leave every span well formed; a label cut at a pair is well formed. `tsc` clean. Not run: the PSD in Photoshop.
+
+Left: other cuts by unit that only shorten a name for display or a file stem (`engine/index.ts` 1069 and 2141, `engine/variables.ts` 124, `ui/panels/actions.ts` 70, `ui/panels/generative.ts` 222, `automation/agent-bridge.ts` 637, `io/width-profiles.ts` 25, `io/gen-options.ts` 205).
+
+### src/io/fonts.ts, src/engine/text.ts · a character the font lacks: Traditional Chinese, Japanese and Korean faces first, and no empty box in shaped type (issue 17)
+- refers-to: src/io/fonts.ts :: HAN_FIRST, hanFirst, fallbackGlyph; src/engine/text.ts :: itemsOf (the shaped branch)
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+When type is outlined (Create Outlines, PDF, EPS, outlined SVG) and its font has no glyph for a character, `fallbackGlyph` walks a list of families. For Han characters that list began with the Simplified Chinese faces and had no Traditional one at all, so on Windows a Traditional Chinese text set in a Latin font was outlined in Microsoft YaHei, with mainland letterforms, while the screen (the browser's own fallback, led by the page language) showed Microsoft JhengHei. Japanese text got the Chinese forms too. `hanFirst` puts the faces of one region first: by the family's own name when it says (TC, HK, JP, KR, JhengHei, MingLiU, Hiragino, Malgun and so on; SC, YaHei and SimSun keep the old order), else by the page language (`zh-TW`, `zh-HK`, `ja`, `ko`), which the i18n module sets from the language chosen in Preferences. The old list follows unchanged.
+
+In `itemsOf`, a run that goes through the shaper (features, a glyph alternate or variable axes are set) kept glyph id 0 for a character the font lacks, and the renderer drew the font's empty box for it; type without those settings never did, because the browser falls back per character. A shaped glyph with id 0 is now pushed as a plain character, so it is measured and drawn the way unshaped type is, and the rest of the run stays shaped.
+
+`tsc` clean, `npm test` 61 pass. Not run: the order on a Windows or macOS machine with those faces; a variable font with Chinese in it on screen.
+
+Found and not changed here: type whose font is not installed is left out of a PDF, an EPS and an outlined SVG without a word (`outlineText` returns null when `fontFor` does, and the exporters then write nothing for that object), and the PDF reader names Helvetica as the nearest match for every font it does not know, a family Windows does not have. Create Outlines says so; the exporters do not. That is the next change in this area.
+
+### src/io/text-decode.ts, src/io/dxf.ts, src/app.ts, src/ui/panels/variables.ts, src/ui/panels/graph-data.ts · a text file that is not UTF-8 is read in its own charset (issue 17)
+- refers-to: src/io/text-decode.ts :: decodeText, fileText, localeLabel; src/io/dxf.ts :: decodeDxf, CODE_PAGES; src/app.ts :: svgText, the DXF branch of the opener; src/ui/panels/variables.ts :: the data file import; src/ui/panels/graph-data.ts :: the data import
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+`Blob.text()` is UTF-8 and nothing else: any byte that is not UTF-8 becomes U+FFFD, with no error. Four readers used it for files that are often not UTF-8.
+
+- Variables (data merge) and Graph Data read a CSV or TSV. Excel's plain "CSV" on a Traditional Chinese Windows is Big5, on a Japanese one Shift-JIS, and its "Unicode Text" is UTF-16LE: every cell with such text came in as replacement characters.
+- A DXF up to AutoCAD 2004, and one from several other CAD programs on Chinese, Japanese and Korean Windows, holds its text in the code page named by `$DWGCODEPAGE` (ANSI_950, ANSI_936, ANSI_932, ANSI_949, ANSI_1251 and so on).
+- An SVG saved as UTF-16, or with `encoding="Big5"` or `ISO-8859-1` in its XML declaration.
+
+`decodeText` is the one place for it: a byte order mark decides (UTF-8, UTF-16LE, UTF-16BE); else UTF-8 when the bytes are valid UTF-8; else the charset the caller names (the DXF's code page, the SVG's declared encoding), strictly; else the legacy charset of the language the system is set to (`localeLabel`: Big5 for zh-TW and zh-HK, GB18030 for other Chinese, Shift-JIS, EUC-KR, the Windows code pages for Cyrillic, Greek, Turkish, Hebrew, Arabic, Thai, Vietnamese, Central European and Baltic), strictly; else windows-1252, which cannot fail. A file that is UTF-8 is read exactly as before. `decodeDxf` reads `$ACADVER` and `$DWGCODEPAGE` from the first 64 KB; from AC1021 (2007) on a DXF is UTF-8 and no code page is given.
+
+The module has no DOM and no imports. Run outside the repository (a scratch vitest file): Big5 with the hint, UTF-8 with an emoji, UTF-16LE with its mark, the language table, and a DXF header naming ANSI_950 followed by Big5 text. `tsc` clean. Not run: the Variables and Graph Data pickers with a real Excel file in the window.
+
+Left: the `\M+` multibyte escapes and `%%` codes of DXF text; the native DWG reader, which reads every drawing older than 2007 as windows-1252; `zip.ts` entry names without the UTF-8 flag; OBJ and MTL files; a PSD layer name with no Unicode block.
+
+### src/io/pdf-read.ts, src/io/api.ts, src/app.ts · type a PDF gives no characters for is kept as shapes, drawn from the font inside the file (issue 17)
+- refers-to: src/io/pdf-read.ts :: FontProgram, FontInfo (shown, vertical, dw2, program, high), SEVEN_BIT_CMAPS, BROKEN, Painter.show, Painter.shapes, Painter.font, outlineOf, parseCMap (put), FontNames.resolve (shown), FontNames.outlined, PdfImport.outlined; src/io/api.ts :: api.fontOutlines, FontOutlines; src/app.ts :: the sentence after a PDF is opened
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+0.60.0 stopped replacement characters from being stored and left such type out with a sentence. For the issue's picture that meant the two-character label would vanish. The owner asked for the real fix and for it to be tried on real files.
+
+What happens now. In `show`, a run is "lost" when any of its codes has no character: a two-byte code with no mapping, or a code the ToUnicode table maps to nothing usable. If the font is a composite one with `/Encoding` Identity-H or Identity-V and its descriptor carries a program (`FontFile2`, or `FontFile3`), `shapes` draws the whole run as one filled path instead of a text object: each code is the character id, mapped through `/CIDToGIDMap` when that is a stream, the outlines come from the engine (`api.fontOutlines`, see the backend log), and each glyph is placed by the same text matrix, size, horizontal scaling, rise, character spacing and `/W` widths the PDF asks for, so the shapes sit exactly where the type did. Fill and stroke follow the text rendering mode. The whole run becomes shapes, not only the unnamed characters, so its letters stay on one baseline in one object. When the engine cannot be reached or cannot read the program, the old behaviour stands: what can be read is kept as type and the sentence says characters were left out. The sentence after opening gains "Type the file gives no characters for was kept as shapes: [fonts]."
+
+Why only Identity. Under Identity the code is the character id, which is what the font program is keyed by. Under any other CMap (a predefined one, or a CMap stream in the file) the code must first be mapped to a character id by that CMap, which this reader does not do; drawing with the code would draw the wrong letters, so those runs are still left out and named.
+
+Three corrections to 0.60.0 found while trying real files:
+- `parseCMap` dropped a mapping to U+FFFD. For a simple (one-byte) font that made `show` fall through to guessing the character from the code, which gives a wrong Latin letter. A broken mapping is now stored as an empty string, `show` treats it as "named as nothing" and guesses nothing, and the Differences glyph name is still tried first.
+- U+FFFE and U+FFFF count as broken too: one public file (Arial Unicode MS written by OpenOffice) maps every glyph to `<FFFF>`, and 0.60.0 showed four of them in the Layers panel.
+- The left-out sentence named the substitute family ("Helvetica"); it names the file's own font (`shown`).
+
+Vertical writing. A font whose CMap name ends in `-V` (or whose CMap stream says `WMode 1`) advances down the page: `show` now moves by the vertical displacement (`/DW2`, default 880 and -1000; `/W2` is not read) and returns a vertical move, and `shapes` shifts each glyph by the position vector. Readable vertical type is still set as horizontal text objects, one per show, but each now starts where the PDF puts it.
+
+The 7-bit CMaps (`H`, `V`, `Ext-H`, `Add-H`, `GB-H`, `KSC-H`) are read by setting the high bit of each byte and decoding as EUC-JP, GBK or EUC-KR (`high`).
+
+Tried on real files, in the built window, against 0.59.1 and 0.60.0 built side by side:
+- A CFF CID subset of Noto Sans CJK TC (141 KB, the reporter's font) as Type0, Identity-H, `CIDFontType0C`, with the two characters of a white label on a blue box mapped to `<FFFD>`: 0.59.1 gives one text object reading two replacement characters (the issue's picture; `pdftotext` gives the same two); 0.60.0 leaves the label out; now the label is a path and the page matches the reference render. The same with a PDF written by the fpdf2 library from WenQuanYi Zen Hei (Type0, `CIDFontType2`, a `/CIDToGIDMap` stream).
+- Public files from the pdf.js test corpus (Apache-2.0): `arial_unicode_en_cidfont.pdf` (OpenOffice, no ToUnicode) opened blank in 0.60.0 and now reads "This is an Arial Unicode PDF from OpenOffice." as shapes; `arial_unicode_ab_cidfont.pdf` (the `<FFFF>` one) the same; `vertical.pdf` (AokinMincho, Identity-V, no ToUnicode) opened blank and now shows its two vertical columns of Japanese; `noembed-jis7.pdf` now reads its kana through `H`; `90ms_rksj_h_sample.pdf`, `noembed-sjis.pdf`, `noembed-eucjp.pdf` and `perf_text_cjk_nonembedded.pdf` read their Japanese and Chinese through the 0.60.0 byte CMaps.
+- Fifteen PDFs (Latin, Type 3, Arabic, CFF CID with a good ToUnicode, the LibreOffice and fpdf2 originals) give the same objects and the same sentence in 0.60.0 and now, apart from the font name in the left-out sentence.
+`npm test` 61 pass.
+
+Still left out, by name: type in a composite font with no program in the file and no usable CMap (`noembed-identity.pdf`: Ryumin, Identity-H, Japan1, nothing embedded; reading it needs Adobe's character collection tables); type under a CMap stream in the file (`perf_text_cmap_mixed.pdf`). Not done: the same for a simple font, whose program is Type 1, TrueType or name-keyed CFF and whose glyph is chosen by an encoding (LibreOffice writes CJK that way; such a file with broken ToUnicode entries is left out with the sentence); `/W2`; `/ActualText`.
+
+### src/io/pdf-read.ts · a PDF that names a font by its Chinese, Japanese or Korean name finds the installed font
+- refers-to: src/io/pdf-read.ts :: FontNames (localized, resolve)
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`FontNames` matched a `/BaseFont` against the installed families through `squash`, which keeps only `a-z0-9`, so every name written in another script squashed to nothing and went to the Helvetica fallback. The font listing now carries each face's other names (`aliases`, see the font service entry); `FontNames` keeps the ones with a character outside ASCII in `localized`, and `resolve` tries the whole name and then its family part there before the Latin rules. A name in ASCII goes the way it always did.
+
+Seen in the built window: the hand-built test PDF with its Big5 font named 文泉驛正黑 (a name of WenQuanYi Zen Hei, which is installed here) no longer lists that font under "Fonts not installed", and its line is set in WenQuanYi Zen Hei.
+
+### src/engine/text.ts · line breaking and justification outside Latin (issue 17)
+- refers-to: src/engine/text.ts :: NO_START, NO_END, JOINS, joinsCh, joins, glued, isCjk, cjkBreakAfter, isSea, seaBreaks, itemsOf, advance, vAdvance, layoutLines (measure, brks, wb, lastBreak, gaps, dense, paraStart)
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Items are code points, so a combining mark, a variation selector, a zero-width joiner or non-joiner, a skin-tone modifier or Thai SARA AM could start a line and took tracking and justification gaps from its base. Such items now carry `j`, set once in `itemsOf`, and `glued` blocks a break, tracking or a gap before them and after a zero-width joiner. The lists of characters that may not start a line gained closing quotes and brackets, the ellipsis, iteration marks, small kana, ％ ‰ ℃, the halfwidth forms and ASCII punctuation, and `NO_END` holds the openers. A break is allowed when either side is Chinese, Japanese or Korean, so Latin followed by Han can break. A justified line without spaces that holds CJK or Thai, Lao or Khmer spreads its slack over word gaps, or else over character gaps, and is not treated as a single word. A CRLF item records its length, so the empty lines after it get the right caret index. Runs of Thai, Lao and Khmer get word breaks from `Intl.Segmenter`, cached per paragraph string (256 entries); without it they keep the emergency break.
+
+A dump of 126 Latin samples (point and area type; left, centre, right and three justify modes; three trackings; three fonts; custom justification, hyphenation, columns, tabs, lists, kerning, caps, vertical) is the same before and after, to the last glyph position; each fix has a sample that changed as meant. Seen in the built window: justified Chinese reaches both edges and a closing quote no longer starts a line; Thai breaks between words. Timing for a 9,000-character paragraph is within a millisecond of before for Latin and CJK and two for Thai. Left: Latin letters inside an unspaced CJK line are spread like the characters around them; under "Justify all lines" the last line of such a paragraph is spread too.
+
+### src/io/text-decode.ts, src/io/dwg-bits.ts, src/io/dwg-file.ts, src/io/dwg-header.ts, src/io/dwg.ts, src/io/dxf.ts · a DWG's code page and the character codes of CAD text (issue 17)
+- refers-to: src/io/text-decode.ts :: dwgCodePage, cadEscapes; src/io/dwg-bits.ts :: Bits.tvCp; src/io/dwg-file.ts :: Sections.cp, readSections, readClasses; src/io/dwg-header.ts :: walk; src/io/dwg.ts :: Rd, build, assemble; src/io/dxf.ts :: DxfFile.codepage, parseDxf, mtextPlain, textPlain
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Text in a drawing of AutoCAD 2000 to 2006 was always read as windows-1252, so Big5, Shift-JIS, GBK and Korean drawings showed mojibake. The 16-bit code page number at file offset 0x13 now picks the decoder. The table of numbers comes from ezdxf (MIT: `addons/dwg/fileheader.py`, `tools/codepage.py`), not from LibreDWG's source, which keeps this reader clean room; an unknown number stays windows-1252, and 30 is windows-1252, as the writer has always written. `cadEscapes` is the one place for `\U+XXXX`, `\M+nXXXX` (1 Shift-JIS, 2 Big5, 3 Wansung, 5 GBK; 4, Johab, has no decoder in a browser and stays as written) and, for TEXT and ATTRIB, the `%%` codes, with `%%nnn` read in the drawing's code page; it replaces three inline copies of the `\U+` rule. How MTEXT formatting is stripped is unchanged.
+
+Run in scratch vitest: an R2000 drawing from this app's own writer with the code page set to 41 gives its Chinese text and layer name; five public LibreDWG sample drawings parse as before; every escape; a Big5 DXF. No real drawing in a legacy code page was found to try.
+
+### src/io/api.ts, src/app.ts · a drawing opened through a converter arrives as bytes
+- refers-to: src/io/api.ts :: api.dwgToDxf; src/app.ts :: the DWG branch of the opener
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The engine now answers `/api/io/dwg/to-dxf` with the converter's bytes (see the backend log) and the window decodes them with `decodeDxf`, which reads the code page. An older window's `res.text()` still reads a UTF-8 DXF.
+
+### src/io/zip.ts, src/io/model.ts, src/io/psd-read.ts, src/io/ase.ts · smaller readers outside UTF-8
+- refers-to: src/io/zip.ts :: unzip; src/io/model.ts :: importModel; src/io/psd-read.ts :: the layer record name; src/io/ase.ts :: writeAse
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A zip entry name without the UTF-8 flag goes through `decodeText`, so a valid UTF-8 name stays UTF-8 and any other falls back to the system language's legacy charset. OBJ and MTL files are read with `fileText`. A PSD layer's Pascal name is read as UTF-8 or Mac Roman; the Unicode block, when there is one, is read after it and still wins. A 200-unit swatch name written to `.ase` no longer ends in half a character.
+
+### src/automation/agent-bridge.ts, src/plugins/host.ts · agents are told which characters no font draws, and their cuts keep whole characters
+- refers-to: src/automation/agent-bridge.ts :: AgentBridge.uncovered, add_text, set_text (tabs), patternsTool; src/plugins/host.ts :: case 'register'; src/io/fonts.ts :: missingGlyphs
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The per-character fallback kept type visible, but an agent never learned that some characters had no font at all. The results of `add_text` and `set_text` now end with one sentence naming up to twelve such characters and asking for a `font` that covers them; a failed lookup adds nothing. No tool, parameter or description changed. Tab leaders, align-on characters, generated pattern names and plugin labels and command ids are cut by code point. Seen over `/mcp` in a real window: Egyptian hieroglyphs were reported; Latin, and Chinese set in a CJK font, got no sentence. Left: `get_svg` cuts at 200,000 units at the end of an SVG it already marks as cut.
+
+### .claude/skills/formpath-harness/sub-skills/type-and-layout/SUB-SKILL.md · agents choose a font that matches the language
+- refers-to: type-and-layout :: Procedure 1 and 3; the `.agents/skills` mirror
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The skill named one Japanese font for all Chinese, Japanese and Korean type, which draws Japanese letterforms for Chinese. It now names a face per language for Windows, macOS and the Noto families, asks for the words as plain Unicode, and points at the `add_text` sentence about characters no font draws. The mirror was regenerated with `./formpath agents sync`.
+
+### src/io/package.ts · a package summary the window cannot read no longer fails the package
+- refers-to: src/io/package.ts :: packageProject, PackageResult.missingMore
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The engine keeps the summary header valid (backend log); the reader here also treats a header it cannot parse as no summary and still returns the zip. Nothing in the window asks for the zip form today.
+
+### src/ui/commands.ts, src/app.ts, src/ui/text-editor.ts, src/dock-adapter.ts · letter shortcuts follow the letter on the key
+- refers-to: src/ui/commands.ts :: comboOf; src/app.ts :: comboOfTool; src/ui/text-editor.ts :: TextEditor.key; src/dock-adapter.ts :: isDockChord
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Shortcuts were matched by the physical key (`e.code`), so on AZERTY Ctrl with the key labelled Z closed the tab and the key labelled A picked another tool, and on QWERTZ Ctrl+Z toggled Outline; French and German are shipped languages. When `e.key` is one ASCII letter it now decides; otherwise the physical key decides as before, so Cyrillic, Greek, Hebrew, Arabic, Thai and Korean layouts and macOS Option with a letter keep working. Digits, Space, the brackets, Equal, Minus, Slash, the Perspective digit and `dock/keys.ts` (the shared module) stay physical. Seen with synthetic key events for US, AZERTY, QWERTZ, Dvorak and Russian in a built window: each ran the command or tool its key shows. Not run: a real layout switch. People on AZERTY and QWERTZ who learned the old positions will find Undo back on the key labelled Z.
+
+### src/ui/native-menu.ts · only Cmd, Ctrl and function key shortcuts go to the macOS menu bar
+- refers-to: src/ui/native-menu.ts :: menuAccelerator, NativeMenus.build
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The first key of every command became a native accelerator, so Delete or Backspace (Clear) and Tab (Hide Panels) could be taken by the menu before a field or an input method saw them. `menuAccelerator` takes the first of a command's keys that has Mod or Ctrl in it, or is F1 to F12; plain keys stay with the page's own handler, as on Windows and Linux, and the menus inside the window still show them. Checked as logic only; not run on macOS.
+
+### src/ui/panels/spelling.ts · spelling uses the language of the window
+- refers-to: src/ui/panels/spelling.ts :: misspelledRanges, SpellingDialog
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Check Spelling and the spelling marks always asked for the English dictionary. The default is now `language()`. The engine already maps a regional or script variant to its base language and anything without a dictionary to English.
+
+### src/ui/dom.ts, src/engine/doc.ts, src/ui/properties.ts, src/ui/status.ts, src/ui/panels/appearance.ts · an object's own name is not translated
+- refers-to: src/ui/dom.ts :: setOwnText; src/engine/doc.ts :: ownLabel; PropertiesPanel.sync; StatusBar.sync; AppearancePanel.sync
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The Properties head, the status bar's selection and the Appearance head show either interface words or a node's own name, and the translation walker translated both, so a text reading "Copy" showed as "Kopieren". `setOwnText` sets or removes `translate="no"` only when it differs, and before the text: the walker does not watch that attribute and translates a text write in a microtask, by which time both writes are done. When the attribute changes the text is written again even if it is the same, so the walker sees it. Seen in German and Traditional Chinese: a text reading "Copy" stays "Copy", nothing selected reads "Dokument" or "文件". Left: "2 Objects" has no row in the translation tables.
+
+### src/engine/doc.ts and seven call sites · names cut by unit keep whole characters
+- refers-to: src/engine/doc.ts :: clip, nodeLabel; src/engine/index.ts; src/engine/variables.ts; src/ui/panels/actions.ts; src/ui/panels/generative.ts; src/io/width-profiles.ts; src/io/gen-options.ts
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`clip(s, n)` cuts at n UTF-16 units, one fewer when that would end on the first half of a pair. It replaces the cuts 0.60.0 listed as left.
+
+### src/ui/panels/kit.ts, src/ui/options.ts · number fields read a comma and ignore an empty entry
+- refers-to: src/ui/panels/kit.ts :: slider; src/ui/options.ts :: the range field
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A slider's text field used `parseFloat`, so "12,5" became 12; it now uses `evalNumber` (decimal comma, full-width digits) and puts the old value back when that fails. An emptied option field became 0 and set the option to its minimum; it is now ignored and shows the current value again.
+
+### src/io/fonts.ts, src/io/pdf.ts, src/io/pdf-text.ts, src/io/pdf-plates.ts, src/io/eps.ts, src/io/svg.ts, src/app.ts · type in a font that is not installed is exported in Inter, with a sentence that says so
+- refers-to: src/io/fonts.ts :: SUBSTITUTE_FAMILY, exportFace, faceGlyph, substituteNotes, missingGlyphs, outlineText; src/io/pdf-text.ts :: LiveFonts.plan; src/io/pdf.ts :: exportPdf; src/io/pdf-plates.ts :: exportPlates; src/io/eps.ts :: EpsOptions.swapped; src/io/svg.ts :: SvgOptions.swapped; src/app.ts :: exportBlob, exportAs
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+What 0.60.0's log called "left out" was measured in the window and is corrected here: type whose font could not be loaded had no outlines, so a PDF and an EPS drew it as a 300 ppi picture (nothing to select or search), an outlined SVG kept it as live text naming the missing family, a DXF in outlines mode did leave it out, and nothing was said in any of them. The PDF reader names Helvetica for every font it does not know, and Windows has no Helvetica, so this met every imported PDF exported again there.
+
+On export only, `exportFace` sets such type in Inter of the same style, with `glyphOrFallback` for the characters Inter lacks (Chinese goes to a CJK face). Each glyph keeps the position the layout measured with the browser's stand-in font, so line length and line breaks match the screen while the letterforms are Inter's. One sentence per export names the families, through the notes each exporter already has. Create Outlines passes no set and still stops with its error naming the font. Seen: an SVG naming Helvetica and a made-up family holding Latin and Chinese exports as live Inter and Noto CJK type that `pdftotext` reads, with no picture in the PDF; the outlined SVG holds paths. Left: printing substitutes too but has nowhere to say so.
+
+### src/io/pdf-marks.ts, src/io/pdf.ts, src/io/pdf-plates.ts · the page information line and the separations title outside ASCII
+- refers-to: src/io/pdf-marks.ts :: pageInfoLine, pathOps, marksContent; src/io/pdf.ts :: exportPdf; src/io/pdf-plates.ts :: exportPlates
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The marks font covers codes 32 to 126 and the string writer turned everything else into `?`, so a document, an artboard or a spot plate named in Chinese printed as question marks. A line that is not plain ASCII is now filled as outlines from `outlineText` (which has font fallback) at the same origin and 6 pt size, in the registration colour. A plain ASCII line gives the same bytes as before, apart from the trailer id that hashes the time. The separations file's title and producer use the UTF-16 string writer of `pdf-x.ts`.
+
+### src/io/eps.ts · spot ink names keep every character
+- refers-to: src/io/eps.ts :: inkName, PsPainter.spot
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A name outside `[A-Za-z0-9_.-]` had those characters turned into `_`, so two Chinese ink names of the same length became one colourant and their plates merged. Such a name is now written as a string of octal-escaped UTF-8 bytes turned into a name with `cvn`; a name that was legal before is written exactly as before. A name with spaces ("PANTONE 185 C") now keeps them where it had underscores. Not run through a PostScript interpreter: none is installed here.
+
+### src/io/fonts.ts, src/io/api.ts, src/ui/panels/similar-fonts.ts · fonts by their names in other languages, and a fallback that asks the engine
+- refers-to: src/io/api.ts :: FontInfo.aliases, api.coverFont; src/io/fonts.ts :: aliasesOf, byAlias, aliasFace, fontFor, findSimilarFonts, installedNames, fallbackGlyph; src/ui/panels/similar-fonts.ts :: openSimilarFonts
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A face the engine finds by another of its names (see the backend log) is registered as a `FontFace` under the name the document uses, so the canvas draws it where the system does not resolve that name itself. Find Similar Fonts resolves such names and says "is not installed on this computer" for a font that is not, where it said none were found.
+
+`fallbackGlyph` drops from its fixed lists the families the listing says are not installed, so a missing character no longer costs a request per absent family, and after the lists and the bundled Inter it asks `GET /api/fonts/cover` for an installed font that has the character, preferring the regional faces of `hanFirst` for Han. Thai typed in Inter walked about thirty families and ended in an empty box; it now asks for the one listed family that is installed and then the engine, and gets a Thai face.
+
+### src/ui/dropdown.ts, src/ui/panels/kit.ts, src/ui/panels/type.ts, src/ui/options.ts, src/extensions/registry.ts, src/tools/type.ts, src/styles/shell.css · the font menus can be searched
+- refers-to: src/ui/dropdown.ts :: enhanceSelect (terms, filter, shownItems, mark); src/ui/panels/kit.ts :: selectCtl; the select option spec (search, terms)
+- kind: decision
+- logged: v0.61.0 · 2026-11-26
+
+The Character panel's font menu and the Type tool's Font menu have a search field that matches a family's name and its names in other languages. Searching hides and shows the existing rows in place (no list is rebuilt), the list's height is pinned while it is open and the field stays at its top; the arrow keys move over the rows that show. No other menu changed. Seen 4x CPU throttled: the options bar does not move, no console error; typing three characters of WenQuanYi's Chinese name leaves its three families. The new sentence about a font that is not installed has no translations yet.
+
+### src/io/ps-read.ts, src/io/text-decode.ts · Chinese, Japanese and Korean type in EPS and PostScript
+- refers-to: src/io/ps-read.ts :: showText, textOf, glyphText, OPS (glyphshow, composefont, findfont, stringwidth), readEpsVector; src/io/text-decode.ts :: csOf, psDecode, psUni
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`showText` put the raw bytes of each string into the text whatever the font, so type under a Big5, GB, Shift-JIS, EUC or KS CMap read as Latin-1 bytes. `textOf` now decodes by the charset the font's CMap name gives (`csOf`), reads the Japanese 7-bit `-H`/`-V` CMaps of the usual families as EUC-JP after setting the high bit, and returns null for Identity-H and Identity-V: those codes are glyph numbers, so the run is left out and named in the left-out list. `glyphshow` with a `uniXXXX` or `uXXXXX` name shows that character; `composefont` records the composed name so a later `findfont` sees the CMap. `stringwidth` and the advance count decoded characters. Seen on the public ghostpdl `examples/cjk` files (Big5, GB, Shift-JIS, KS, JIS vertical): text that read as Latin-1 bytes reads in its own script. Not done: CNS-EUC (the browser has no decoder for it), Japanese `-H` fonts of a family not in the list.
+
+### src/io/ai-legacy.ts · names and old type in their own script
+- refers-to: src/io/ai-legacy.ts :: prepare (header, customs, fonts, Meta.cs), Reader.exec (Ln, SL), Reader.custom, Reader.textShow, buildDefs, buildAi
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A current Illustrator file writes `Ln` layer names as UTF-8 with octal escapes (a public sample writes a no-break space as `\302\240`); they were shown as Latin-1 bytes. Layer, sublayer, swatch, pattern, symbol and brush names go through `psUni` for display: a UTF-16BE mark first, then UTF-8, then the document's charset, then Windows-1252. The maps that look a name up keep the raw string, and the header's custom colour names have their escapes undone so they still match the names the art uses. `Meta.cs` is the charset the first `%%DocumentFonts` name gives; `textShow` decodes an old file's type by the `Tf` font's charset, else the document's. Checked on hand-made version 8 files in Big5 and Shift-JIS, since no real old CJK `.ai` was found. Not done: graphic style names.
+
+### src/io/ai-guard.ts, src/io/ai-legacy.ts · live type in an .ai is never dropped without a word
+- refers-to: src/io/ai-guard.ts :: hasText, guardAi; src/io/ai-legacy.ts :: buildAi
+- kind: decision
+- logged: v0.61.0 · 2026-11-26
+
+The private data reader does not read `/AI11Text` objects, and said nothing: a file opened without its type. Two changes. `buildAi` adds "type" to the left-out list whenever the data holds an `/AI11Text :` object (the `/AI11TextDocument` block is in every file and means nothing). `guardAi` adopts the PDF page when the page has type and the private read has none, whatever the pixel difference. Not used: falling back to the page for every file with type objects, because one public sample has type objects that are not on its page either, and it would have lost its object names and brush for nothing visible.
+
+### src/io/ai-private.ts · names outside ASCII are written whole
+- refers-to: src/io/ai-private.ts :: esc, pu, pw, Emit.paintOps, Emit.layer, the symbol block, paletteLines, buildAiPrivate
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`ps` turned every character outside ASCII into a question mark. Layer, swatch and symbol names are now written by `pu` as UTF-8 with octal escapes, the form a real file uses for `Ln`, and artboard names by `pw` as UTF-16BE with a byte order mark under `/UnicodeString`. A name of plain ASCII is written exactly as before. Checked by writing and reading back in this app; not opened in Illustrator. The title and gradient names still go through `ps`.
+
+### src/io/pdf-read.ts, src/io/api.ts · one-byte fonts, embedded CMaps, vertical metrics and ActualText
+- refers-to: src/io/pdf-read.ts :: FontProgram (kind code, enc, chars), FontInfo (w2, cmap, cids, own, named), CidMap, glyphChar, MARKS, LETTERS, Painter.font, prepareFonts, show (odd, simple, own, told, drawn), outlines, shapes, actual, the BDC and EMC cases of run, codeBytes, parseCidMap; src/io/api.ts :: fontOutlines (enc), FontOutlines.chars
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+0.61.0 drew unreadable type as shapes only for two-byte fonts under Identity-H or Identity-V. Four cases were left, and real files showed a fifth that was worse than a gap: wrong characters. All were seen on public files of the pdf.js corpus and on PDFs made here before the change.
+
+One-byte fonts. A font with a `FontFile`, `FontFile2` or `FontFile3` program gets a `FontProgram` of kind `code`: the engine is given the codes' meaning as the file states it (base encoding, the symbolic flag, the `Differences` names) and answers with an outline per code and, where the glyph's name has a Unicode value, the character. A run is drawn as shapes when a code has an outline and no character: a ToUnicode entry of `<FFFD>`, or a `Differences` name that names nothing (`/G21`, `/g152`). Before, such a code was guessed from its number, so a public slide (`font_ascent_descent.pdf`) opened as punctuation where its heading stood, and Quartz-made PDFs lost their body text. This is also the form LibreOffice writes Chinese in (a Type 1 subset per 255 glyphs), so a label like the one in issue 17 made that way is now drawn (`label-type1-fffd.pdf`), where 0.61.0 left it out. A font with no base encoding takes its characters from the program's own encoding when the engine answers; when the engine cannot be reached the old guess stands, so nothing changes offline. A font with no program is read exactly as before.
+
+`glyphChar` knows more names without a table of the whole glyph list: the Latin letters with an accent are composed (`ccaron`, `uring`, `Ecircumflex`), the common signs and ligature names with an underscore are listed, and a `uniXXXX` name in the private use area or below U+0020 names nothing. `issue8229.pdf` read "Roztovn nklad" and now reads "Rozúčtování nákladů".
+
+Embedded CMaps. A Type0 font whose `Encoding` is a stream had its codes read two bytes at a time and its widths looked up by code. `parseCidMap` reads the codespace ranges and the cid ranges and chars; `show` takes one or two bytes per code as the codespace says (`codeBytes`), maps the code to its CID for widths, vertical metrics and glyphs, and the font gets a program. A CMap built on a predefined CMap other than Identity, or with codes longer than two bytes, is refused and the font is read as before. `perf_text_cmap_mixed.pdf` (one-byte and two-byte codes in one string) opened blank and now shows both of its blocks.
+
+Vertical metrics. `/W2` is read per CID: the advance replaces `DW2`'s, and the glyph's origin replaces half the width and `DW2`'s height when shapes are placed. Only for fonts whose codes are CIDs.
+
+ActualText. A marked-content span that carries `/ActualText` (inline or through `Properties`) supplies the characters of a run that has none: the first such run in the span becomes live type with that text, later runs in the same span add nothing, and an empty or broken ActualText is ignored so the shapes are still drawn. A run that reads on its own keeps its own characters.
+
+Seen in the built window against an untouched 0.61.0 build: 28 of 29 other PDFs give the same objects and message, and the one that differs is `issue8229.pdf` above. Cost: a file with many small symbolic fonts and no ToUnicode sends each program to the engine once (a 23-page public file took about 7 seconds to open where it had taken about 5). Not done: a `ToUnicode` or CID map keyed by code length (a one-byte `<20>` and a two-byte `<0020>` share an entry in ToUnicode), ActualText given only through the structure tree, MacExpert as a base encoding, codes of three or four bytes, and type with no font program in the file, which is still left out and named.
+
+### src/io/pdf-read.ts, src/io/fonts.ts · right-to-left type from a PDF is stored in reading order
+- refers-to: src/io/pdf-read.ts :: readingOrder, rtl, hasRtl, FORMS, MIRROR, show (turned), MARKS; src/io/fonts.ts :: resolveScriptFace
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+A PDF writes a line's glyphs left to right, so Arabic and Hebrew arrive in the order they are seen, not the order they are read. While type was drawn one character at a time that looked right by accident. With bidirectional layout the same string was laid out as right-to-left text and every word came out mirrored: seen on the public `ArabicCIDTrueType.pdf` the moment the two changes met. `readingOrder` turns a run that holds Hebrew or Arabic into reading order: when the rightmost strong character is right-to-left the whole run is reversed and its Latin words and numbers are put back; otherwise only the right-to-left stretches are reversed, with the numbers inside them put back. Brackets that end up inside a reversed stretch are mirrored, and the wide-space spans keep their places. Text supplied by ActualText is already in reading order and is not touched.
+
+Arabic presentation forms (the file's ToUnicode often gives them) are spelt as their base letters only when every one in the run has the neighbour its form calls for, read from the order of the forms in the Unicode block (isolated, final, initial, medial). A run that is one glyph of a word, as a browser's print to PDF writes them, keeps its forms: spelt as base letters, each lone glyph would be drawn in its isolated form, which is what a first attempt did to a browser-printed page. A run with a ligature of Presentation Forms-A keeps its forms too.
+
+`MARKS` now holds code points, not literal combining characters, so the table can be read and edited. `resolveScriptFace` no longer asks the engine for the chosen font when the font listing says it is not installed (a 404 in the console for every style of a substituted font).
+
+Seen in the built window: the public Arabic file reads "انواع الخطوط العربية" word by word, as `pdftotext` gives it, and draws joined; a page printed to PDF from a browser with Arabic, Hebrew and mixed lines looks as it did in 0.61.0; 27 other PDFs are unchanged. Not done: a file that places each letter with its own operator still opens as one object per letter, as before, so its Arabic is not one editable word; mixed lines are put in reading order by this rule of thumb, not by undoing the full bidirectional algorithm.
+
+### src/engine/text.ts, src/io/fonts.ts · complex scripts are shaped and runs follow the bidirectional algorithm
+- refers-to: src/engine/text.ts :: itemsOf, segmentsOf, visualOrder, partsShape, scriptOf; src/io/fonts.ts :: shapeComplex, scriptFace, loadShaper, SCRIPT_FONTS
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+Layout was one character at a time, so Arabic was isolated letters in left-to-right order, Hebrew ran backwards and Indic scripts were not shaped. Text that needs it is split into runs by bidi level and script; HarfBuzz (harfbuzzjs 1.6.4, MIT, WebAssembly, loaded only when a document has such text) shapes each run with the whole text as context; each cluster becomes one item drawn from outlines; lines are reordered by UAX 9 rules L1 and L2 through bidi-js 1.1.0 (MIT, Unicode 13 data). `align: left` stays left. Brackets the font lacks are mirrored when drawn. The face is the chosen font if it covers the script, else a list per script (Noto Naskh Arabic, Noto Sans Hebrew, Noto Sans Devanagari and others), else `GET /api/fonts/cover`.
+
+Text that needs neither shaping nor reordering is untouched: 3,608 layouts (164,251 glyph records: point, area, path and vertical type, tracking, the kerning modes, features, caps, justified lines, tabs and lists, in Latin, Greek, Cyrillic, Chinese, Japanese, Korean, unmarked Thai and emoji) are equal on the 0.61.0 tree and on this one. Against native HarfBuzz 15, 11 of 12 single-direction samples have the same glyph ids and positions; the twelfth differs only where bidi keeps digits left to right. bidi-js passes all 91,699 cases of BidiCharacterTest 13.0.0. Ink overlap with one browser `fillText` of the same string in the same font is 0.96 to 0.996 over 18 samples in Arabic, Persian, Urdu, Hebrew with and without points, Devanagari, Bengali, Tamil, Thai and mixed lines (0.11 to 0.95 before). The always-loaded bundle grows by 8,460 bytes; on demand, `harfbuzz.wasm` is 444,394 bytes, its script 42,161 and bidi-js 12,356. Nothing is fetched from outside the app.
+
+Not done: vertical type is not shaped; clusters the chosen font lacks fall back to drawing character by character; in a right-to-left paragraph list markers and tab stops stay on the left; no hyphenation or kashida justification for such text; tracking is suppressed inside joined Arabic words; small caps are ignored in shaped runs; a failed load of the shaper is not retried; the macOS and Windows font names in the script lists are untried.
+
+### src/engine/text.ts, src/ui/text-editor.ts · the caret on bidirectional lines
+- refers-to: src/engine/text.ts :: caretAt, indexAt, stepLine, stepVisual; src/ui/text-editor.ts :: key
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The caret assumed that the order on screen is the order in the text. On a mixed-direction line `caretAt`, `indexAt` and `stepLine` work on cluster edges and each glyph's direction, and `stepVisual` drives the arrow keys so they move the way they point. The stored text stays in reading order, and a caret inside a ligature or cluster sits at its edge. Driven in the built window under 4x CPU throttling: typing, arrows, Shift with arrows, Backspace, inserting inside Arabic and Hebrew words, Home and End, a selection across a change of direction; the stored text was right each time and layout shift was 0. On a path the arrow keys still step in reading order.
+
+### src/io/pdf-text.ts, src/io/svg.ts, src/io/fonts.ts, src/io/dxf.ts · exports of shaped type
+- refers-to: src/io/pdf-text.ts :: LiveFonts.plan, liveStream; src/io/fonts.ts :: outlineText; src/io/svg.ts; src/io/dxf.ts :: exportDxf
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+PDF keeps live type: glyphs in the order they are seen, with ToUnicode; the mapping of a right-to-left ligature is stored reversed because poppler and PDFium both reverse it; ActualText is written only on left-to-right clusters (conjuncts, reordered vowels). SVG writes clusters as paths and the other glyphs of such a line one by one, because renderers reorder per-character positions. DXF and DWG outline shaped text instead of writing TEXT entities. Create Outlines and EPS draw the shaped pieces. Against the canvas: the PDF through `pdftoppm` overlaps 0.914, the SVG through rsvg 0.952. `pdftotext` gives Arabic and Devanagari in reading order. An export of Latin, Chinese, Japanese, Korean and Thai text is unchanged (SVG, EPS and DXF byte for byte after ids and dates are normalized; the PDF's objects equal as a set). In poppler, Hebrew points come out on a line of their own; PDFium keeps them in place. EPS was not rasterized (no Ghostscript here). PSD type layers carry the reading-order string; untried in Photoshop.
+
+### src/io/pdf-text.ts, src/io/pdf.ts · the person's own restricted font is outlined, with a note
+- refers-to: src/io/pdf-text.ts :: restricted, LiveFonts.withheld, LiveFonts.build; src/io/pdf.ts :: exportPdf
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+This reverses the 0.53.2 decision not to check the style's own font. `build` now fails every face whose `fsType` forbids embedding, so its type is drawn from the outlines `exportPdf` already made in that font. Families that are not fallbacks go into `withheld`, and `exportPdf` adds one note for each. `restricted` reads bits 1 to 3: bit 1 counts only when neither 4 nor 8 is set. That is the least-restrictive rule the OpenType specification states for OS/2 versions 0 to 2 and says applications may assume for later versions; it is applied to every version. Checked with fontTools copies of DejaVu Sans at `fsType` 2, 0 and 6 in the built window: `pdffonts` lists only the two permitted ones as embedded and `pdftoppm` draws all three lines; on 0.61.0 all three were embedded and nothing was said. Not done: the bitmap-only and no-subsetting bits, and Package, which still copies font files.
+
+### src/io/ai-legacy.ts · graphic style names in their own script
+- refers-to: src/io/ai-legacy.ts :: buildDefs
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+A style's name is shown through `psUni`; the `rd.styles` keys stay raw. Checked by putting UTF-8 names into a public sample's private data. The writer's title and gradient names still go through `ps`: all 22 public samples write them in plain ASCII, so the form for other scripts is still unknown, and guessing it could make a file Illustrator refuses.
+
+### src/i18n · the not-installed sentence of Find Similar Fonts
+- refers-to: src/i18n/keys.json; src/i18n/locales/*.json
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+"{0} is not installed on this computer" was added by hand as the last row of `keys.json` and of each of the 25 locales, in each file's own words for font and installed. The key starts with a placeholder, and `extract`'s CODEISH rule rejects strings that begin with `{`, so the next `extract` then `prune` will drop the row unless that rule changes. Still in English because they are built from parts the mechanism does not cover: the substitute-font export note, "Type the file gives no characters for was kept as shapes", the left-out item for glyph-number type, and the agent note about characters no font draws.
+
+### index.html, src/styles/dock-tokens.css · the terminal names Windows faces before the generic monospace
+- refers-to: index.html :: the dock pre-paint script (data-fp-win); src/styles/dock-tokens.css :: --dock-font-mono under :root[data-fp-win] and :lang(zh, zh-TW, ja, ko)
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The shared dock module reads `--dock-font-mono`, and its stack had no Windows face, so Windows chose the face for Chinese, Japanese and Korean. The pre-paint script marks Windows with `data-fp-win`. Under that mark the stack keeps today's names, gains Consolas, then that language's Windows face (Microsoft YaHei, Microsoft JhengHei, Yu Gothic, Malgun Gothic), then the other three. macOS and Linux get the same token as before: Yu Gothic also exists on macOS and would have changed what it shows. `--font-mono` itself is unchanged. Seen in Chrome on Linux and with the platform emulated as Win32. Not run on Windows.
+
+### src/dock-adapter.ts · Escape that belongs to a composition leaves the guide open
+- refers-to: src/dock-adapter.ts :: imeEscape, formpathDock; src/dock/tour.ts :: Tour.onKey (read only)
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The guide's capture-phase Escape listener in the shared module ignores composition, so closing an input method's candidates with Escape ended the guide. The module cannot be edited here. `imeEscape`, registered on window in the capture phase, acts only while `.ft-tour` is shown, only on Escape, only when the key belongs to a composition (`isComposing` or `keyCode` 229): it relabels that event's `key` as `Process`, the value Chrome on Windows already sends for such keys. Nothing is stopped or prevented; the terminal's own textarea still receives the event. Seen at 4x CPU throttling with DevTools compositions; typing Chinese still works in the terminal, Chat, the Type tool and a panel field. Remove it when the module carries the fix. Two findings in the module cannot be reached from outside and are open until the module changes: the dock taking focus from a field being typed in (seen: about 3 seconds after a slow start, focus left a Character field in mid-composition), and terminal widths for Unicode 11 (measured: emoji take 1 cell in the terminal against 2 in the C library). The change note for the module is in the planning sidecar.
+
+### src/io/pdf-read.ts · runs that continue a line are gathered into the line
+- refers-to: src/io/pdf-read.ts :: Piece, Painter.show, typeset, place, close, pieces, open, run (its last line), readingOrder (spelt), show (the reversed ligature mapping)
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+A PDF made by a browser's print to PDF writes one glyph per show operator, each with its own position. Every letter became its own text object: a line of English was thirty objects, and an Arabic line was thirty isolated letters that the reading-order step could not put back into words. `show` now hands `place` a `Piece` (the characters as seen, the wide-space marks, the style, the matrix, where the ink and the advance end) instead of a finished node. `place` extends the line being gathered when the new piece starts where that line's advance ends (within 0.12 of the type size), on its baseline (within 0.02), with the same matrix and the same style; a piece of spaces only may come from another font, because browsers take the space from the first font of the stack. The joined piece is typeset again as one node, so reading order, the spelling of presentation forms and the fit to the file's width are worked out for the whole line. Runs with a gap between them, in another font or on another baseline stay separate objects, exactly as before.
+
+Joining lines into paragraphs moved from `place` to `close`, which runs when a line is finished: when the next piece does not continue it, and at the end of every content stream. The test and the result are the ones `place` had; only the moment changed, because a line must be whole before it can be compared with the line above it.
+
+Two things in the reading-order step were made finer because whole lines now reach it. Presentation forms are spelt as base letters word by word, not run by run, so one word with a ligature of Presentation Forms-A at its edge no longer keeps the whole line in forms; such a ligature inside a word is accepted. A glyph whose ToUnicode entry is several right-to-left characters (a ligature) has them in reading order while everything around it is in the order seen, so they are turned before the run is; without that the browser-printed page read "اهلل" for "الله", as `pdftotext` still does.
+
+Seen in the built window against an untouched 0.62.0 build, on every test PDF at hand (50): the browser-printed page with Arabic, Hebrew and English opens with its Latin line as one object and its first Arabic line as one line reading "السلام عليكم ورحمة الله", joined (0.62.0: one object per letter); the public Arabic file opens as four lines reading "انواع الخطوط العربية" (0.62.0: three words per line, one of them in presentation forms); a LibreOffice file's line of four runs is one line; two more files gather a contiguous pair. The others give the same objects and message. Not done: a line whose words are in different fonts (a browser falls back per character, so digits and commas inside Hebrew come from another font) is still several objects, because a piece carries one style; marks placed off the baseline end the line.
+
+### src/io/pdf-read.ts, src/io/cmaps · type with no font in the file and no Unicode table is read by its character collection
+- refers-to: src/io/pdf-read.ts :: CID_FILES, cidTable, FontInfo (collection, std), Painter.font, prepareFonts, show (named); src/io/cmaps/Adobe-Japan1-UCS2.txt, Adobe-GB1-UCS2.txt, Adobe-CNS1-UCS2.txt, Adobe-Korea1-UCS2.txt, Adobe-KR-UCS2.txt; NOTICE.md
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+The last case of unreadable PDF type that was left out with a sentence: a Chinese, Japanese or Korean font that is not in the file, under Identity-H or Identity-V, with no ToUnicode. There is nothing to draw from. But a font that is not embedded can only be shown by any reader if it names one of the standard character collections, and for those the meaning of each CID is published. The five tables of Adobe's `mapping-resources-pdf` (`pdf2unicode`, BSD-3-Clause, each file carrying its notice) are in `src/io/cmaps/` unchanged, each a separate chunk that is loaded only when a PDF needs it (147 to 294 kB each). `prepareFonts` loads the table for a Type0 font whose codes are CIDs, whose `CIDSystemInfo` ordering is Japan1, GB1, CNS1, Korea1 or KR, which has no ToUnicode and no font program; `show` then reads the character by CID. A CID the table maps to U+FFFD is still unreadable and still named.
+
+Deliberately not used when the font program is in the file: such type is kept as shapes, as since 0.61.0. Two public files claim the Japan1 collection for an embedded TrueType font whose codes are plainly its own glyph numbers (`arial_unicode_en_cidfont.pdf`, `vertical.pdf`); reading them by the collection would have turned English into wrong Japanese, and the shapes are exact.
+
+Seen: `noembed-identity.pdf` reads "あいうえお" where it had the left-out sentence, `noembed-identity-2.pdf` reads "あAbstract012" (poppler cannot draw either without its language pack); the two files above still open as shapes.
+
+### src/io/fonts.ts, src/io/pdf.ts, src/i18n · the export notes about fonts and characters are translated
+- refers-to: src/io/fonts.ts :: substituteNotes; src/io/pdf.ts :: glyphNotes; src/i18n/keys.json; src/i18n/locales/*.json
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+Text is translated when it is shown, by matching a whole sentence against keys with placeholders. The notes about a font set in a stand-in, a licence that forbids embedding, and characters no font on this computer has were glued together from pieces for one or several, so no key could match and they showed in English in every language. `substituteNotes` and `glyphNotes` now each return one of two whole sentences (one; several, joined with commas), with five keys in `keys.json` and hand translations in all 25 languages. Seen in the window in German, Japanese and English, the last with CJK extension characters no font here has (U+31350, U+31351, U+2EBF0). Left: the "and N more" suffix stays English, as in the colour emoji note; the message after opening a PDF is one joined message and that whole family is English by design.
+
+### src/io/pdf-text.ts · a font that forbids subsetting or allows only bitmaps is outlined
+- refers-to: src/io/pdf-text.ts :: restricted
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+`restricted` read only the embedding level of `fsType`. It now also treats bit 8 (no subsetting) and bit 9 (bitmap embedding only) as forbidding embedding, and only for OS/2 version 2 or later, since the specification has readers ignore bits 4 to 15 in a version 0 or 1 table. No subsetting: the exporter embeds subsets only, and embedding the whole file would need a new engine path, so the font is not embedded at all. Bitmap only: the writer cannot embed bitmap strikes, so the font counts as one that cannot be embedded. In both cases the type is drawn as outlines with the licence note, as for a restricted font. Whether paths in the page count as "outline data" under a bitmap-only licence is the owner's ruling to make. Tried with copies of DejaVu Sans whose bits were set with fontTools, and a version 1 control with both bits: before, subsets of the two fonts were embedded; after, only permitted fonts are embedded and every line still draws.
+
+### src/io/fonts.ts · a failed load of the shaper is tried again
+- refers-to: src/io/fonts.ts :: loadShaper, HB_WASM, shaperAfter
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+A failed load left `shaperLoad` set for good, so complex scripts stayed unshaped until a reload. `loadShaper` now fetches the wasm file itself first (`?url`, the same hashed asset the library then reads from the disk cache); a failure clears the promise and holds off the next try for three seconds, and the try comes with the next shaped layout. In the built window with one blocked request for the wasm: 0.62.0 never recovered and logged three errors from the library; now the next text is shaped and the only console line is the browser's own failed request. Limit: when a script chunk fails, the browser caches the failed `import()`, and only a reload clears that.
+
+### src/engine/text.ts · joins across a style change; small caps in shaped runs
+- refers-to: src/engine/text.ts :: itemsOf
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+Fault fixed: a letter in another colour or weight inside an Arabic word starts a new span, and the first cluster of the new span was not marked as joined to the one before, so the join was drawn broken and a line could break inside the word. A cluster now joins the previous one when it starts where that one ends and both are in the same cursive script. Two behaviours are now deliberate. Tracking: a joined cursive word takes none, and the space takes it, which is what the browser does. Small caps: scripts without case are unaffected; a shaped run that holds lowercase letters in a font without `smcp` is drawn unshaped with the made small capitals, as Latin always was.
+
+### src/io/fonts.ts, src/engine/text.ts · letters the font lacks are shaped in a font that has them
+- refers-to: src/io/fonts.ts :: shapeComplex, scriptFace, ComplexRun; src/engine/text.ts :: itemsOf
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+A complex-script letter missing from the chosen font came back from the shaper as glyph 0 and was then drawn one letter at a time from a fallback, in its isolated form. `shapeComplex` now cuts out each run of clusters that came back as glyph 0 and shapes it again, with the whole text as context, in a face found for the first missing letter of that script (`scriptFace` with `exact`); each cluster carries its own face. Punctuation and digits keep the old fallback. Ink overlap with the browser's drawing: Urdu set in DejaVu Sans 0.198 to 0.986; Arabic with alef wasla 0.935 to 0.957; the exported PDF's text reads in order.
+
+### src/engine/text.ts · arrows and overflow on a path, and at the visual end of a line
+- refers-to: src/engine/text.ts :: layoutOnPath, stepVisual
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+On a path the amount of text that fits was decided after reordering, so a path too short for its text could keep its end and thread its beginning. What fits is now a logical prefix, which is then reordered, and the overflow is logical. `stepVisual` covers paths, so the caret moves one way under Right and one way under Left through right-to-left words, where it used to jump back and forth. At the visual end of a mixed-direction line an arrow key now goes on to the nearest stop of the next line; before, it returned a stop inside the same line and the caret could loop there.
+
+### src/engine/text.ts · right-to-left paragraphs mirror the marker, tab stops and indents
+- refers-to: src/engine/text.ts :: layoutLines
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+For a paragraph whose base direction is right to left: the list marker sits after the line's right end and reads with its separator first and brackets mirrored, as the browser draws it; tab positions count from the right edge; the first-line and left indents land on the right and the right indent on the left. `align` keeps its literal meaning, so 'left' is still left. Decision to confirm: tab alignments mirror with the positions, so a 'left' stop means the start side. Left-to-right paragraphs are unchanged.
+
+### src/engine/text.ts · vertical type shapes the scripts that run sideways
+- refers-to: src/engine/text.ts :: items, itemsOf, orient, stepVisual
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+Vertical type skipped shaping, so Arabic was unjoined and reversed and Indic clusters were broken. `itemsOf` now shapes for vertical type too: shaped clusters skip `orient` and are placed turned a quarter, the way Latin is, in bidirectional order down the column; spans set upright stay unshaped at level 0 as before. Ink overlap with the browser's `vertical-rl` for three mixed columns: 0.504, 0.423, 0.753 (0.62.0: 0.264, 0.236, 0.368); a column of CJK alone is 0.928 on both, and 160 further vertical CJK layouts are identical to 0.62.0. The gap left is how turned runs are centred in the column, which was already so. Exported text reads in order. One difference from the browser: a column whose first strong letter is Arabic is a right-to-left paragraph, as horizontal type already is.
+
+### src/engine/text.ts, src/io/pdf-text.ts, src/io/fonts.ts · three things looked at and left as they are
+- refers-to: src/engine/text.ts :: layoutLines (justify); src/io/pdf-text.ts (Hebrew points); src/io/fonts.ts :: loadShaper (bidi-js)
+- kind: rationale
+- logged: v0.63.0 · 2026-11-26
+
+Kashida. Justified Arabic reaches both edges by its word spaces and matches the browser's justify line for line; shaped clusters are never hyphenated. Stretching by tatweel is not done: the shaper has no call for it, and doing it correctly means shaping each line again after it is broken, choosing where a tatweel may go for each font, and remapping clusters, the caret and the exported text.
+
+Hebrew points in one reader. In an exported PDF each point is written before its letter, the order that both common readers reverse into correct text. One reader starts a new word for a zero-width point that does not overlap the glyph before it and puts that word on its own line when text is extracted. Writing the letter first keeps the points inline there but makes both readers put each point before its letter; a spoken-text entry per cluster is reversed by one reader and not the other. Left as it is, since the other reader extracts it correctly today and no order satisfies both.
+
+Bidirectional data. bidi-js 1.1.0 is the newest release and its data is Unicode 13. Against Unicode 17, 1,207 assigned code points differ: Arabic Extended-B letters are treated as plain right-to-left, so numbers after them are not Arabic numbers; newer Arabic marks are not marks; some ornate signs are letters; about 700 newer symbols and emoji are left-to-right, so in Arabic text they act as Latin; mirroring is missing for U+2E55 to U+2E5C. No newer data can be dropped in without replacing the library, so it stays, and this is the list of what it gets wrong.
+
+Proof that nothing else moved: 3,608 layouts with no complex script give byte-identical results before and after; the 18 typed samples score what they scored in 0.62.0.
+
+### src/dock/ · the shared dock module stays at 2.2.1 in this version
+- refers-to: src/dock/ (unchanged since 0.62.0); src/dock-adapter.ts :: imeEscape
+- kind: rationale
+- logged: v0.63.0 · 2026-11-26
+
+Two faults found under issue 17 are inside the shared dock module: after a slow start the panel takes focus from a field that is being typed in, and the terminal counts an emoji or a wide sign as one cell. FormPath carries the module byte for byte and never edits it, and this version's work was FormPath's alone, so both are still there. The fix belongs to the module's home; what to change is written up in the planning sidecar's change note. Until a new module version is copied in, `imeEscape` in the adapter stays: it is the guard 0.62.0 added from outside so that an Escape belonging to a composition does not end the guide.

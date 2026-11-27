@@ -67,6 +67,13 @@ export function setText(el: Element | null, text: string): void {
   if (el && el.textContent !== text) el.textContent = text;
 }
 
+export function setOwnText(el: Element, text: string, own: boolean): void {
+  const flip = el.hasAttribute('translate') !== own;
+  if (flip && own) el.setAttribute('translate', 'no');
+  else if (flip) el.removeAttribute('translate');
+  if (flip || el.textContent !== text) el.textContent = text;
+}
+
 export function setClass(el: Element | null, cls: string, on: boolean): void {
   if (!el) return;
   if (el.classList.contains(cls) !== on) el.classList.toggle(cls, on);

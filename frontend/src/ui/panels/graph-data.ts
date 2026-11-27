@@ -1,5 +1,6 @@
 import { cleanData, parseGrid, parseNumber, parseTable } from '../../engine/graph';
 import type { Engine, GraphData } from '../../engine';
+import { fileText } from '../../io/text-decode';
 import { el, patchList, q, setClass, setDisabled, setHidden, setText, setValue } from '../dom';
 import { icon } from '../icons';
 
@@ -32,14 +33,14 @@ export class GraphDataWindow {
     const [imp, trans, swap, revert, apply] = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.cv-gdw-tools button'));
     const file = q<HTMLInputElement>(this.el, 'input[type="file"]');
     imp.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void f.text().then((t) => { this.draft = this.normal(gridOf(parseTable(t))); this.touch(); }); });
+    file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void fileText(f).then((t) => { this.draft = this.normal(gridOf(parseTable(t))); this.touch(); }); });
     trans.addEventListener('click', () => { const w = Math.max(...this.draft.map((r) => r.length)); this.draft = this.normal(Array.from({ length: w }, (_, c) => this.draft.map((r) => r[c] ?? ''))); this.touch(); });
     swap.addEventListener('click', () => { this.draft = this.draft.map((r) => [r[0] ?? '', ...this.swapPairs(r.slice(1))]); this.touch(); });
     revert.addEventListener('click', () => { this.load(true); });
     apply.addEventListener('click', () => this.apply());
     q(this.el, '[data-close]').addEventListener('click', () => this.close());
     this.entry.addEventListener('input', () => { this.set(this.at.r, this.at.c, this.entry.value); const cell = this.cell(this.at.r, this.at.c); if (cell) cell.value = this.entry.value; });
-    this.entry.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.focus(this.at.r + (e.shiftKey ? -1 : 1), this.at.c); } });
+    this.entry.addEventListener('keydown', (e) => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); this.focus(this.at.r + (e.shiftKey ? -1 : 1), this.at.c); } });
     this.grid.addEventListener('input', (e) => { const t = e.target as HTMLInputElement; const r = Number(t.dataset.r), c = Number(t.dataset.c); this.set(r, c, t.value); setValue(this.entry, t.value); });
     this.grid.addEventListener('focusin', (e) => { const t = e.target as HTMLInputElement; if (!t.dataset.r) return; this.at = { r: Number(t.dataset.r), c: Number(t.dataset.c) }; this.entry.value = t.value; this.mark(); });
     this.grid.addEventListener('keydown', (e) => {

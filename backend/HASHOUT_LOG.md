@@ -24,6 +24,7 @@ backend/
     │   ├── system.py           health, version, capabilities
     │   ├── projects.py         .fpth library: list, save with conflict copies, package, import, folder
     │   ├── fonts.py            installed fonts: list, find, file
+    │   ├── outlines.py         glyph outlines of a font program the window sends (a PDF's embedded font)
     │   ├── io.py               writes exports for the window
     │   ├── mcp.py              MCP endpoint, the TOOLS catalogue, the window bridge
     │   ├── batch.py            action library, folder listing, file read and write for batch and data merge
@@ -34,6 +35,7 @@ backend/
         ├── project_format.py   .fpth package validation and writing
         ├── sessions.py         temporary opened-project sessions, pruned at start
         ├── fonts.py            system font folders scan and lookup
+        ├── outlines.py         reads a TrueType, OpenType or bare CFF program and draws its glyphs as cubic paths
         ├── llm.py              Ollama and OpenAI-compatible clients
         ├── secrets.py          API keys in the system keyring
         └── outbound.py         outbound URL checks and errors for NodeMode
@@ -53,6 +55,8 @@ Scripts with entries, in folder order. Every other script is in the map above wi
 - app/routers/projects.py
 - app/routers/fonts.py
 - app/services/fonts.py
+- app/routers/outlines.py
+- app/services/outlines.py
 - app/main.py
 - formpath and setup (the launchers)
 
@@ -923,3 +927,145 @@ Reproduced on the engine before the change: a document of 1,200 objects (659 KB 
 After the change, same engine, same test: 4,000 objects (2,199 KB) and 30,000 objects (16,652 KB) save, and the file read back holds the same document that was sent; 64 MiB and 10 bytes is refused with the engine's own sentence; the package route takes the 2,199 KB document.
 
 Not changed here: where a project is saved. Save still writes into the library folder by name, and an export still goes to the exports folder. Choosing a place in the system's own file window, and saving again to that place, is the next change.
+
+### app/routers/io.py, app/routers/batch.py, app/main.py, formpath_engine.py, app/services/terminal.py, app/services/spell.py, setup/mcp_stdio.py, setup/cli.py · names and text outside ASCII survive the engine (issue 17)
+- refers-to: app/routers/io.py :: SAFE, export; app/routers/batch.py :: SAFE, files_write; app/main.py :: AsciiJSON, app; formpath_engine.py :: the stream setup at the top; app/services/terminal.py :: PtyProcess, base_env; app/services/spell.py :: check; setup/mcp_stdio.py :: main; setup/cli.py :: main
+- kind: fix
+- logged: v0.60.0 · 2026-11-26
+
+Issue 17 asks for text input and non-English fonts to work across the product. The engine had these faults for anyone whose names and words are not ASCII; each was read in the code, and the ones marked run were run here on Linux.
+
+- An exported file lost its name. `SAFE` in `io.py` (every export of the desktop app goes through `/api/io/export`) and in `batch.py` (`/api/files/write`: actions, batch, data merge, unembed) kept only ASCII letters, digits and a few signs and turned the rest into `_`. A poster named in Chinese was written as `_.pdf`, the next as `_ 2.pdf`; through `files/write`, which overwrites, a batch of Chinese-named files left only the last. Both now remove only what a file name cannot hold on Windows, macOS or Linux (`\ / : * ? " < > |` and control characters), the rule `projects.py` NAME and `package.py` already follow. Run: the issue's own document name comes back unchanged from both. The window's unembed name (`frontend/src/app.ts`) follows the same rule.
+- A project holding half of a surrogate pair saved and then never opened again. The window sends such a half as the escape `\ud83d`; `json.loads` accepts it and the file is written with ASCII escapes, but the web framework renders every answer with `ensure_ascii=False` and then encodes it as UTF-8, which raises on a lone half, so opening that project answered 500 every time. `AsciiJSON` is the app's default response class: the same JSON with every character outside ASCII escaped, which a lone half survives and the window reads back as the same string. Answers with Chinese text are larger on the wire (six bytes a character for three); the window and the engine are on one machine. Run: the body for a string with a lone half is valid ASCII JSON; `pytest` 196 pass.
+- The frozen engine wrote its messages in the ANSI code page (cp950 on a Traditional Chinese Windows) while the desktop shell reads them as UTF-8, so a start failure that names the data folder under a Chinese user name showed replacement characters, and a character outside Big5 raised on a strict stream. `formpath_engine.py` sets both streams to UTF-8 with `backslashreplace` when they can be reconfigured. Not run on Windows.
+- The terminal's reader died on one byte that is not UTF-8 (`cat` of a Big5 file): `PtyProcessUnicode` decodes strictly, the read raised, the thread ended with the chunk, and the tab froze with the session still marked alive. `PtyProcess` is now a subclass that decodes with `replace`. Run: Big5 bytes followed by UTF-8 text arrive as two replacement characters and the text. Windows (`winpty`) is untouched and not examined.
+- A shell started from the Dock or a launcher with no locale ran in the C locale, where typed Chinese echoes as escapes and `ls` prints question marks. `base_env` sets `LANG=en_US.UTF-8` when none of `LC_ALL`, `LC_CTYPE` and `LANG` is set, off Windows only.
+- Check Spelling marked every Chinese, Japanese, Thai or Cyrillic word as misspelt and offered English two-letter words for it, because a language with no dictionary falls back to English and `isalpha` is true for those letters. `check` passes over a word that has a letter the dictionary's own alphabet does not hold (`word_frequency.letters`). Run: of a Chinese word, a Russian word, a Vietnamese word and "helo", only "helo" is reported.
+- The stdio bridge (`./formpath mcp`, the Claude Desktop bundle) read standard input in the ANSI code page on Windows. MCP is UTF-8, so text with Chinese in it ended the bridge with a decode error or reached the engine as other characters. `main` reconfigures both streams to UTF-8 and writes plain newlines. `cli.py` does the same for its output, with `backslashreplace`, so a label with a character the console cannot show no longer raises when the output is piped. The decode failure was reproduced by the audit with the stream forced to cp950; the fix was not run on Windows.
+
+Looked at and left: text files read and written with no encoding (`core/config.py` library.json, `routers/projects.py`, `services/llm.py`) hold ASCII JSON, so the code page does not reach them; the package summary header is cut at 4000 characters and can end mid-escape when many missing links have long Chinese paths; `services/dwg.py` decodes LibreDWG's DXF as UTF-8 with replacement, which loses text in a drawing older than 2007; a chat message with a line break is cut when Claude Code is a `.cmd` shim on Windows; `formpath.bat` splits `key=value` arguments at the `=`.
+
+### app/services/outlines.py, app/routers/outlines.py, app/main.py · the glyph outlines of a font program the window sends (issue 17)
+- refers-to: app/services/outlines.py :: Program, _Pen, load, glyphs, MAX_BYTES, MAX_IDS, WHOLE, KEPT; app/routers/outlines.py :: font_outlines; app/main.py :: the router list
+- kind: decision
+- logged: v0.61.0 · 2026-11-26
+
+The PDF reader in the window meets type whose characters the file does not name (see the frontend log, "type a PDF gives no characters for is kept as shapes"). The file still carries the font program, so the letters can be drawn; reading a font program is fontTools' work, which the engine already ships for subsetting, so the window sends the program here and gets outlines back. Nothing new is installed.
+
+`POST /api/fonts/outlines` takes `ids` (a JSON list), `kind` (`gid`: the ids are glyph indices, for a TrueType program; `cid`: character ids, for a CFF one) and either `file` (the program, at most 64 MiB) or `key` (what an earlier call answered). It answers `{key, upm, whole, glyphs}`: each glyph is a flat list of `"M", x, y`, `"L", x, y`, `"C", x1, y1, x2, y2, x, y` and `"Z"` in font units, y up, quadratic curves already made cubic by the pen. When the program has at most 2500 glyphs every one is sent and `whole` is true, so a subset font costs one request for a whole document; a larger one answers only the ids asked for, at most 4000 a call. An id the program does not hold is left out.
+
+`Program` reads an sfnt (TrueType, OpenType, the first face of a collection) through `TTFont`, or a bare CFF table (what a PDF's `FontFile3` of subtype `CIDFontType0C` or `Type1C` holds) through `CFFFontSet`. A PDF's TrueType subset often has no `post` or `cmap` table; glyph names then come from `maxp` alone. In a CID-keyed CFF the charset names are `cidNNNNN` and a `cid` id is looked up by that number; in a name-keyed one the id is the glyph index. A glyph that fails to draw is left out, never an error for the whole call.
+
+Parsed programs are kept by the first 32 hex digits of their SHA-256, the last six used, behind one lock (fontTools objects are not safe to share between threads, and the route runs in the thread pool). An unknown key answers 409 and the window sends the program again. The route sits behind the same window key and local guard as every other route and reads no file of this computer, only the bytes it is sent.
+
+Run against the programs embedded in nine public PDFs of the pdf.js test corpus (TrueType in Arial Unicode MS, AokinMincho, four Arabic faces, two test faces; CFF CID in Neo Sans Intel and Reitam) and a 141 KB CFF CID subset of Noto Sans CJK TC: every one loads and draws. `pytest` 196 pass. Not read: a Type 1 program (`FontFile`), which a simple font carries; the window does not ask for those.
+
+### app/services/fonts.py, app/routers/fonts.py · a font's names in every language, legacy name encodings, which font has a character, and CJK matches for a CJK font (issue 17)
+- refers-to: app/services/fonts.py :: LEGACY, COMMON, _plain, _strict, _fit, _decode, _names, _members, _scan, index, listing, find, _cmap, _upright, cover, _measure, similar; app/routers/fonts.py :: cover
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+Only one name per name ID was kept, preferring English, so a font could not be found by its Chinese, Japanese or Korean name (`find` of WenQuanYi Zen Hei's Chinese name answered nothing). Every face now also lists its other family, full and PostScript names (IDs 1, 4, 6, 16, every language) as `aliases`; `find` tries the family first and then the aliases; the listing sends them. The scan is cached in memory only, and a missing key is read as empty.
+
+Name records of platform 3 with encoding 2 to 5 (Shift-JIS, PRC, Big5, Wansung) and of the Macintosh platform with a Japanese, Chinese or Korean script were read as UTF-16 or Mac Roman and came out as garbage. `_decode` tries both readings of a platform 3 legacy record (many Windows fonts store UTF-16 there despite the encoding id): the legacy one only when every 16-bit unit's high byte is 0 or at least 0x81, and when both are valid the one with more characters of the codec's common two-byte set wins, a tie going to UTF-16. A record that decodes as neither is skipped.
+
+`cover(cp, prefer)` answers the first upright, Regular-like face that has a code point: the preferred families first, then by family name. Each face's cmap is read once with fontTools and kept as a sorted array of code points, identical maps shared; a collection after each load keeps the peak near 140 MB where it reached 450 MB without it, and the kept maps total about 2 MB here. `GET /api/fonts/cover?cp=&prefer=` answers `{family, style}`, 404 when nothing has the character and 422 outside Unicode.
+
+`similar` drops a candidate that shares none of the reference's CJK code page bits (OS/2 `ulCodePageRange1`, bits 17 to 21), so a Chinese font's matches are Chinese, Japanese or Korean fonts and not Latin ones of the same weight.
+
+Run on the 376 faces of this machine: family, style, full and PostScript names are the same as before for every face; `find` by WenQuanYi's two Chinese names and IPA Gothic's Japanese name answers the font; `cover` answers a Thai face for U+0E01, a Devanagari one for U+0915, Noto Sans CJK TC for U+4E2D when preferred, and 404 for a private-use code point. The legacy decoding was run on made records only (31 real Windows font names in both storings, and the four Macintosh scripts): no font here has such a record. `pytest` 196 pass.
+
+### app/services/dwg.py, app/routers/io.py · a converter's DXF travels as bytes
+- refers-to: app/services/dwg.py :: to_dxf; app/routers/io.py :: dwg_to_dxf
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+`dwg2dxf` writes a DXF in the drawing's own version and code page, and decoding that as UTF-8 with replacement lost every Chinese, Japanese or Korean character of a drawing older than 2007 before the window saw it. The route now answers the bytes as `application/dxf`, with the `X-Converter` header as before, and the window decodes them. No converter is installed here; run with a stand-in that writes Big5 bytes.
+
+### app/routers/projects.py · the package summary header is always valid
+- refers-to: app/routers/projects.py :: _summary_header, SUMMARY_HEADER_CHARS, package_full
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+The summary was `json.dumps(...)[:4000]`. Each Chinese character of a missing link's path is a six-character escape, so about fifteen missing links under a Chinese user folder passed 4000 characters and the header ended inside an escape; the reader's parse then failed. `_summary_header` sends the JSON unchanged when it fits (a small package's header is the same bytes as before), and otherwise keeps whole leading entries and adds `missingMore` with the count of the rest. Run against the route with thirty missing links under such a folder: 3879 ASCII characters that parse, seventeen links kept, thirteen counted.
+
+### app/services/subset.py · a CFF2 font is embedded as CFF
+- refers-to: app/services/subset.py :: _instance, build
+- kind: fix
+- logged: v0.61.0 · 2026-11-26
+
+A font with CFF2 outlines (the variable builds of Source Han and Noto CJK among them) was refused by the subsetter, so its type went into a PDF as outlines. The instancer is now asked to downgrade CFF2, and a static CFF2 font is saved, reloaded and converted with fontTools' `convertCFF2ToCFF`. Run on fontTools' own variable CFF2 test font: the outlines and widths match the instancer's reference at two weights and draw in a PDF. No CFF2 font of Chinese, Japanese or Korean is installed here to try.
+
+### app/services/outlines.py, app/routers/outlines.py · outlines by character code for one-byte fonts, and Type 1 programs
+- refers-to: app/services/outlines.py :: _base, _type1, Program (builtin, cmaps, unicode, _simple, code, outline), glyphs (kind code, chars), SYMBOL_PAGES; app/routers/outlines.py :: font_outlines (enc)
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+`POST /api/fonts/outlines` takes a third kind, `code`, for a PDF's one-byte fonts, with `enc`: the base encoding's name, whether the font is flagged symbolic, and the `Differences` names by code. The answer holds an outline for each of the 256 codes that has one and, in `chars`, the character of each whose glyph name has a Unicode value in the Adobe glyph list (private use and control values are left out; the Latin ligatures are spelt as their letters). Finding the glyph follows the PDF rules: for a Type 1 or name-keyed CFF program the `Differences` name, then the base encoding's name, then the program's own encoding; for a TrueType program the name's Unicode value through the Unicode cmap, the Macintosh cmap, or the glyph's own name, and for a symbolic one the (3,0) cmap at 0xF000 plus the code first, then the (1,0) cmap.
+
+Type 1 programs (`FontFile`) are read with fontTools' `t1Lib` from memory: PFB segment headers are taken off, the encrypted part is found and the font parsed without a file on disk. A TrueType program whose `hmtx` table is cut short, which subsetters produce, no longer fails: its glyphs are drawn straight from `glyf`. Run directly on the embedded programs of 13 public PDFs (Type 1, Type 1C, multiple master, TrueType with and without a cmap) and through the window. A Type 1 font is a small PostScript program; fontTools reads it with its own limited interpreter, every failure is caught and answered as 422, and the 64 MiB limit applies.
+
+### src-tauri/src/opened.rs, src-tauri/src/launch_args.rs, src-tauri/src/main.rs, frontend/src/app.ts · files the system opens with formpath reach the window
+- refers-to: src-tauri/src/opened.rs :: Opened, arrive, bring_forward, opened_take, opened_read; src-tauri/src/launch_args.rs :: program_end, paths, own; src-tauri/src/main.rs :: main; src-tauri/build.rs :: APP_COMMANDS; src-tauri/capabilities/default.json; frontend/src/app.ts :: startApp (openedByShell)
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The `.fpth` association was declared, but the shell never read the path the system hands over, and a second launch started a second engine that stopped because the first holds the data folder ("FormPath could not start: another copy of its engine holds its data folder."). Both were reproduced with the untouched binary. The shell now queues paths from three places: the launch arguments; a second launch, forwarded by tauri-plugin-single-instance 2.5.5 on Windows and Linux (Apache-2.0 or MIT; 33 new crates, all MIT or Apache-2.0, zbus on Linux; `Cargo.lock` was refreshed by cargo and only gained entries); and `RunEvent::Opened` on macOS, where the system already delivers files to the running app. `arrive` adds to the queue and, when the main window exists, calls `window.formpathOpened()`; `bring_forward` unminimizes and focuses only after the splash is gone. The window pulls the queue after `offerRecovery()` settles, so a restored session is not skipped, and opens each file through the existing `openFiles`; errors are the normal toast. `opened_read(id)` returns raw bytes and reads only paths the system handed over, never a path the page names. `launch_args` drops flags (anything that starts with `-`, `-psn_` included) and joins relative paths to the launch's working folder. `program_end` rebuilds the program path from `current_exe`: the Tauri 2.12.1 NSIS template registers the open command with the program path unquoted, and Rust's parser ends the program name at the first space, so `C:\Program Files\...` would otherwise become extra arguments.
+
+Seen on Linux (debug build, Xvfb, the real engine, the window title read with `xwininfo`): a project, a relative path, a path with spaces and Chinese in its folder and name, a second launch while the window was ready and while it was on the splash (it exits in under a second and the project opens in the first window), a missing path, a text file and a broken project (three toasts), ignored flags, and an SVG argument. `cargo check` and `clippy` are clean on Linux and for `x86_64-pc-windows-gnu` apart from one older warning in `check_for_updates`; `aarch64-apple-darwin` type-checks with its C dependencies stubbed. Not run: the Windows shell (no WebView2 here), the macOS shell and its Opened event. With no D-Bus session the plugin starts normally. After an update restart the app would get its original arguments again and reopen the file; the updater is off today. `fileAssociations` stays `.fpth` only.
+
+### src-tauri/tauri.conf.json, src-tauri/linux/formpath.desktop, src-tauri/linux/formpath-mime.xml · Linux packages pass the file and name the type
+- refers-to: src-tauri/tauri.conf.json :: bundle.linux
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The pinned CLI 2.12.1 writes `Exec={{exec}}` with no `%F` and installs no MIME definition, so a double click on Linux never passed the file. A desktop template with `%F` and a shared-mime-info file that maps `*.fpth` to `application/x-formpath` are now used by the deb and rpm packages (the AppImage uses the deb template). Checked with a deb built by the pinned CLI, unpacked into a scratch XDG folder: `gio info` reports `application/x-formpath`, and `gio open`, which is what a file manager does, starts formpath with the path and the window title shows the project.
+
+### formpath.bat, setup/bat_args.py · arguments reach the Python commands as typed
+- refers-to: formpath.bat :: PYS, the command table; setup/bat_args.py
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+The `%1` and `shift` loop split arguments at `=`, `,` and `;`, stopped at an empty `""`, and its `set "REST=%REST% %1"` ran the text after `&` in a quoted argument. `call` then expanded `%` a second time and doubled `^` inside quotes. The Python commands (mcp, mcpb, i18n, cli, claude, agents) now chain to `python.bat` without `call` and pass `%*` unchanged; `bat_args.py` changes to the repository root, drops the command word and runs the script with `runpy`. install, desktop, counts and clean get `%2` to `%9`; they only read flag words. Checked under Wine 9.0 with code page 950 and a compiled argument printer standing in for `python.exe`: `key=value`, `a,b;c`, an empty argument, quoted `&`, `|`, `<`, `>`, `!`, `^` and Chinese arrive whole, and `"x&pwn"` no longer runs `pwn.bat`. The `%` cases and exit codes are reasoned only: Wine's `cmd` expands substituted text again and loses batch exit codes, which real `cmd.exe` does not. An argument that ends inside an open quote still gets one trailing space from `python.bat`. Not run on Windows.
+
+### app/services/agent_shim.py, app/services/claude_code.py, setup/claude_launch.py · agent programs start without the command interpreter
+- refers-to: app/services/agent_shim.py :: npm_target, unshim, through_cmd, plain; app/services/claude_code.py :: _direct, _wrap, argv, _chat_argv, _feed, _run; setup/claude_launch.py :: lookup, main
+- kind: fix
+- logged: v0.62.0 · 2026-11-26
+
+On Windows a program installed by npm is a `.cmd` shim that ran through `cmd /c`, which cuts a command line at a line break and acts on `%`, `&` and quotes in it; `list2cmdline` leaves an argument without spaces unquoted, so a message of `x&pwn` ran `pwn`. A shim of the current npm template is now read and started as `node` and its script, or as the `.exe` it points at; only that template is accepted. Where a program would still start through `cmd`, Chat gives the message on standard input as UTF-8, which the program reads as its prompt, and a terminal tab refuses a first message that `cmd` would change, with a sentence that says why. Nothing changes on macOS and Linux. Checked under Wine with shims written from the npm template and compiled stand-ins; on Linux with the tests' stand-in agent program, and with the real program against a local capture server, where the message as an argument and on standard input give the same bytes. Not run: real Windows, real `cmd.exe`, a real npm install on Windows. Left: the shim's PATHEXT change for `node`; typing a message into a running tab followed by Enter, where a line break sends the message early on every system. Shims made by other package managers fall to the standard input and refusal paths.
+
+### app/routers/mcp.py, frontend/src/automation/agent-bridge.ts · export notes reach outside agents
+- refers-to: app/routers/mcp.py :: _write; frontend/src/automation/agent-bridge.ts :: __export
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+`_write` threw away the text the bridge returned with an export, so an agent exporting through the MCP tools was never told that a font was replaced, outlined, or lacked a character. The bridge now returns `notes` beside `data`; `_write` keeps "Wrote ... (n bytes)." as the first line, puts the notes after it, and adds a `notes` field to the result only when there are notes. Nothing is renamed or removed. Seen on the real `/mcp` route in a built window, exporting type in a font that is not installed: before, the one line; after, the same line followed by the stand-in font sentence. SVG, PNG and Save Project are unchanged. The notes reach an agent in English, since translation happens when text is shown in the window.
+
+### setup/i18n.py · extract keeps a sentence that begins with a placeholder
+- refers-to: setup/i18n.py :: CODEISH, wanted
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+The rule that skips code and data beginning with a brace or bracket also skipped "{0} is not installed on this computer", so `prune` would have deleted its translations. `[` is still always skipped; `{` is skipped unless the string is a placeholder followed by at least four lowercase words. A second rule (a keyword next to code punctuation) took a placeholder's braces for code in a sentence that says "export" or "new", and no longer does. Tried on copies of the tree: extract then prune keep the sentence and its rows, and nothing the old rule found is lost; 19 strings newly found are real sentences that have no translations yet. Already wrong before this change and left: extract on the untouched tree adds 186 keys and drops 8 that are in use, so `prune` is not safe to run without reading its list.
+
+### app/services/terminal.py, app/services/claude_code.py · a first message typed into a running tab arrives whole
+- refers-to: app/services/terminal.py :: _modes, type_line; app/services/claude_code.py :: open_tab
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+The item 0.62.0 left: a message with a line break typed into a running tab was sent at the first break. A terminal program that accepts pasted text says so by switching bracketed paste on. `terminal.py` now watches each tab's output for that switch (whole or split across reads, cleared on restart), and `type_line` sends the message between paste brackets, then Enter, when it is on; when it is off, line breaks become spaces and one line is sent. Stand-in programs on a real pseudo-terminal: before, both received "line one" early; after, the one with paste on received one message byte for byte and the one with paste off received one line and no stray brackets. The real agent program against a local capture server, with a message holding CRLF: three turns before, one turn with its line breaks after. Not run: Windows, where whether ConPTY passes the switch through is not known.
+
+### setup/python.bat, formpath.bat · an argument with an open quote reaches the command
+- refers-to: setup/python.bat; formpath.bat :: install, desktop, counts, clean
+- kind: fix
+- logged: v0.63.0 · 2026-11-26
+
+Both launchers expanded `%*` or `%2` to `%9` inside a parenthesised block. `cmd` expands them before it parses the line, so an unbalanced quote hid the closing parenthesis: in `python.bat` the argument gained a trailing space or the rest of the line, and in `formpath.bat` the rest of the file was read as part of a false block, so nothing ran and nothing was said. Python now runs on a line of its own, `where py || goto` became `if errorlevel 1 goto`, and the four `formpath.bat` commands jump to labels at the end of the file where each call stands alone on its line. Under Wine 9.0: `"C:\dir\" tail` and `"abc` arrive exact, the three open-quote cases at the `formpath.bat` level arrive as typed, and the twelve cases that already passed are unchanged. The two `%` cases reach Python under Wine with `%` lost to Wine's second expansion; on real `cmd.exe` they are reasoned to arrive whole. Not run: real Windows; exit codes are lost under Wine before and after.
+
+### app/services/package.py, frontend/src/io/package.ts, frontend/src/app.ts · Package names fonts whose licence restricts embedding
+- refers-to: app/services/package.py :: restricted, build; frontend/src/io/package.ts; frontend/src/app.ts :: packageDialog
+- kind: decision
+- logged: v0.63.0 · 2026-11-26
+
+Package copied every font the document uses and said nothing about licences. It now names the copied fonts whose `fsType` restricts embedding and asks the person to check that the licence also lets them pass the font on before they share the package. No font is ever dropped: a package without its fonts opens wrong on the next computer, and whether a licence allows passing the file on is the person's reading to make, not the app's.

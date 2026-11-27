@@ -105,8 +105,8 @@ export class PluginHost {
         case 'register': {
           const cmds = Array.isArray(m.args?.commands) ? (m.args.commands as Array<{ id: string; label: string }>).slice(0, 40) : [];
           for (const c of p.commands) this.commands.remove(this.id(p.name, c.id));
-          p.label = String(m.args?.name ?? p.label).slice(0, 60);
-          p.commands = cmds.map((c) => ({ id: String(c.id).slice(0, 60), label: String(c.label).slice(0, 80) }));
+          p.label = Array.from(String(m.args?.name ?? p.label)).slice(0, 60).join('');
+          p.commands = cmds.map((c) => ({ id: Array.from(String(c.id)).slice(0, 60).join(''), label: Array.from(String(c.label)).slice(0, 80).join('') }));
           for (const c of p.commands) this.commands.add({ id: this.id(p.name, c.id), label: c.label, enabled: () => !!this.engine.current, run: () => this.run(p, c.id, c.label) });
           this.onChange();
           return;

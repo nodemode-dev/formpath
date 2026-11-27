@@ -1,5 +1,5 @@
 import type { Engine, RecordedOp } from '../../engine';
-import { newId } from '../../engine/doc';
+import { clip, newId } from '../../engine/doc';
 import { reflow } from '../../engine/flow';
 import { applyDataSetDoc, fileStem } from '../../engine/variables';
 import { api, engineStatus } from '../../io/api';
@@ -67,7 +67,7 @@ function validSet(x: unknown): ActionSet | null {
     id: typeof a.id === 'string' ? a.id : newId('a'), name: a.name,
     steps: a.steps.filter((s) => s && typeof s === 'object' && ['command', 'op', 'stop'].includes((s as ActionStep).kind)).map((s) => ({ ...s, on: (s as ActionStep).on !== false })) as ActionStep[],
   }));
-  return { id: newId('as'), name: o.name.slice(0, 80), actions };
+  return { id: newId('as'), name: clip(o.name, 80), actions };
 }
 
 interface Row { key: string; level: 0 | 1 | 2; label: string; set: ActionSet; action?: Action; step?: number }

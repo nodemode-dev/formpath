@@ -1,4 +1,6 @@
-import type { Doc } from '../engine';
+import type { Doc, PathData, TextNode } from '../engine';
+import { textNode } from '../engine/text';
+import { outlineText } from './fonts';
 
 export interface PdfMarks {
   trim: boolean; registration: boolean; colorBars: boolean; pageInfo: boolean;
@@ -36,7 +38,18 @@ export function pageGeometry(w: number, h: number, bleed: Bleed, m?: PdfMarks): 
   return { ml, mb, mr, mt, bleed, start, width: w + ml + mr, height: h + mb + mt };
 }
 
-export function marksContent(g: PageGeometry, w: number, h: number, m: PdfMarks, s: number, cs: string, fontRef: string, info: string, rgb = false): string {
+const literal = (s: string): string => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).replace(/[^\x20-\x7e]/g, '?')})`;
+export async function pageInfoLine(s: string): Promise<string | PathData> {
+  if (/^[\x20-\x7e]*$/.test(s)) return literal(s);
+  const d = await outlineText({ id: 'page-info', ...textNode(s, 0, 0, { font: 'Inter', style: 'Regular', size: 6 }) } as TextNode).catch(() => null);
+  return d?.length ? d : literal(s);
+}
+const pathOps = (d: PathData): string => d.map((sp) => {
+  const p = sp.pts, seg = (a: (typeof p)[number], b: (typeof p)[number]): string => `${f(a.ox)} ${f(a.oy)} ${f(b.ix)} ${f(b.iy)} ${f(b.x)} ${f(b.y)} c`;
+  return `${f(p[0].x)} ${f(p[0].y)} m ${p.slice(1).map((b, i) => seg(p[i], b)).join(' ')}${sp.closed ? ` ${seg(p[p.length - 1], p[0])} h` : ''}`;
+}).join(' ');
+
+export function marksContent(g: PageGeometry, w: number, h: number, m: PdfMarks, s: number, cs: string, fontRef: string, info: string | PathData, rgb = false): string {
   const out: string[] = [`q /${cs} cs 1 scn /${cs} CS 1 SCN ${f(m.weight * s)} w`];
   const X0 = g.ml * s, Y0 = g.mb * s, X1 = (g.ml + w) * s, Y1 = (g.mb + h) * s;
   const st = { l: g.start.l * s, r: g.start.r * s, b: g.start.b * s, t: g.start.t * s }, L = MARK_LEN * s;
@@ -70,6 +83,6 @@ export function marksContent(g: PageGeometry, w: number, h: number, m: PdfMarks,
     inks.slice(0, room).forEach((ink, i) => tints.push(`${paintOf(ink)} ${f(X0 + 16 * s + i * sz)} ${f(y)} ${f(sz)} ${f(sz)} re f`));
     if (tints.length) out.push(`q ${tints.join(' ')} Q`);
   }
-  if (m.pageInfo) out.push(`q /${cs} cs 1 scn BT /${fontRef} ${f(6 * s)} Tf ${f(X0 + 16 * s)} ${f(Y1 + st.t + 3 * s)} Td ${info} Tj ET Q`);
+  if (m.pageInfo) out.push(typeof info === 'string' ? `q /${cs} cs 1 scn BT /${fontRef} ${f(6 * s)} Tf ${f(X0 + 16 * s)} ${f(Y1 + st.t + 3 * s)} Td ${info} Tj ET Q` : `q /${cs} cs 1 scn ${f(s)} 0 0 ${f(-s)} ${f(X0 + 16 * s)} ${f(Y1 + st.t + 3 * s)} cm ${pathOps(info)} f Q`);
   return out.join('\n');
 }

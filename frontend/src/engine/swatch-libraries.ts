@@ -119,7 +119,7 @@ export function swatchLibrary(key: string, extra: SwatchLibrary[] = []): SwatchL
   return [...SWATCH_LIBRARIES, ...extra].find((l) => l.id.toLowerCase() === k || l.name.toLowerCase() === k);
 }
 
-export function libraryFromDoc(doc: Doc, name: string, id = `user_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`): SwatchLibrary {
+export function libraryFromDoc(doc: Doc, name: string, id = `user_${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_')}`): SwatchLibrary {
   const groups: LibGroup[] = [];
   const at = (g: string): LibGroup => { let x = groups.find((y) => y.name === g); if (!x) { x = { name: g, swatches: [] }; groups.push(x); } return x; };
   for (const s of doc.swatches) {

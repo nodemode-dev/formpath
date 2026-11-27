@@ -2246,6 +2246,8 @@
 "No document is open.": "Ingen dokumenter er åpne.",
 "No errors recorded this session.": "Ingen feil registrert i denne økten.",
 "No files match the filter.": "Ingen filer samsvarer med filteret.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Ingen skrift på denne datamaskinen har {0}, så det vises som en tom boks. Installer en skrift med det tegnet og eksporter på nytt.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Ingen skrift på denne datamaskinen har {0}, så de vises som en tom boks. Installer en skrift med de tegnene og eksporter på nytt.",
 "No gap detection": "Ingen gapdeteksjon",
 "No installed font matched.": "Ingen installert skrift samsvarte.",
 "No installed fonts could be read for comparison.": "Ingen installerte skrifter kunne leses for sammenligning.",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "Biblioteket ligger i {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Biblioteket ligger i {0}, satt av FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "Biblioteket ligger i {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "Lisensen for {0} tillater ikke at den bygges inn i et dokument, så teksten ble tegnet som konturer i {1}. Den ser lik ut, men kan ikke merkes eller søkes i som tekst.",
 "The manual says nothing about that. Try other words, or search it.": "Håndboken sier ingenting om det. Prøv andre ord, eller søk i den.",
 "The menus go to the menu bar from the next start.": "Menyene flyttes til menylinjen fra neste oppstart.",
 "The menus stay in the window from the next start.": "Menyene blir værende i vinduet fra neste oppstart.",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "med {0} valgt {1}",
 "x Height": "x-høyde",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Skriftene {0} finnes ikke på denne datamaskinen, så teksten ble satt med {1} på de samme bokstavposisjonene, med andre skrifter for tegn som {2} mangler. Installer dem og eksporter på nytt for å beholde deres eget utseende.",
+"{0} is not installed on this computer": "Skriften {0} er ikke installert på denne datamaskinen",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "Skriften {0} finnes ikke på denne datamaskinen, så teksten ble satt med {1} på de samme bokstavposisjonene, med andre skrifter for tegn som {2} mangler. Installer den og eksporter på nytt for å beholde dens eget utseende."
 }

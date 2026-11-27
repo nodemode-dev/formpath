@@ -76,6 +76,7 @@ def params(args: list[str]) -> dict:
 
 
 def main(argv: list[str]) -> int:
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
         return 0

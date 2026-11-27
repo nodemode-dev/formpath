@@ -2,15 +2,15 @@ import type { Font } from 'opentype.js';
 import { has3d } from '../engine/effects';
 import { mul } from '../engine/geometry';
 import { resolvePaint } from '../engine/paint';
-import { axesKey, glyphMat, hasAxes, layoutText } from '../engine/text';
+import { axesKey, glyphMat, hasAxes, layoutText, type Glyph } from '../engine/text';
 import type { CharStyle, Doc, Mat, Paint, TextNode } from '../engine';
 import { api } from './api';
-import { fontFor, fontSource, glyphAdvance, glyphOrFallback } from './fonts';
+import { exportFace, faceGlyph, fontFor, fontSource, glyphAdvance, glyphOrFallback } from './fonts';
 
 export interface PdfSink { add(dict: string, stream?: Uint8Array): number }
 export interface Ink { fill: string | null; stroke: string | null; width: number }
-export interface LiveGlyph { face: Face; gid: number; tm: Mat; style: CharStyle }
-export interface LiveText { node: TextNode; glyphs: LiveGlyph[]; faces: Set<Face> }
+export interface LiveGlyph { face: Face; gid: number; tm: Mat; style: CharStyle; act?: number }
+export interface LiveText { node: TextNode; glyphs: LiveGlyph[]; faces: Set<Face>; acts?: string[] }
 
 const num = (v: number): string => { const r = Math.round(v * 1e6) / 1e6; return Object.is(r, -0) ? '0' : String(r); };
 const hex4 = (v: number): string => v.toString(16).padStart(4, '0');
@@ -27,7 +27,7 @@ export class Face {
   constructor(readonly key: string, readonly font: Font, readonly style: CharStyle) {}
 }
 
-export const restricted = (font: Font): boolean => ((((font.tables.os2 as { fsType?: number } | undefined)?.fsType ?? 0) & 0x0002) !== 0);
+export const restricted = (font: Font): boolean => { const os2 = font.tables.os2 as { fsType?: number; version?: number } | undefined, fs = os2?.fsType ?? 0; return (fs & 0x000e) === 0x0002 || ((os2?.version ?? 0) >= 2 && (fs & 0x0300) !== 0); };
 
 const solidOrNone =(doc: Doc, p: Paint): boolean => { const r = resolvePaint(doc, p); return r.type === 'none' || r.type === 'color'; };
 
@@ -72,47 +72,65 @@ export async function embeddedMarkFont(pdf: PdfSink, deflate: (b: Uint8Array) =>
 
 export class LiveFonts {
   private readonly faces = new Map<string, Face>();
+  readonly withheld = new Set<string>();
 
   capable(doc: Doc, n: TextNode): boolean {
     return !has3d(n) && !n.ap.effects.length && !n.ap.items.some((i) => i.visible) && !(n.mask && !n.mask.disabled);
   }
 
-  async plan(doc: Doc, n: TextNode): Promise<LiveText | null> {
+  async plan(doc: Doc, n: TextNode, swapped?: Set<string>): Promise<LiveText | null> {
     if (!this.capable(doc, n)) return null;
-    const lay = layoutText(n), staged: Array<{ key: string; font: Font; style: CharStyle; gid: number; ch: string; tm: Mat; fallback: boolean }> = [];
+    const lay = layoutText(n), staged: Array<{ key: string; font: Font; style: CharStyle; gid: number; ch: string; tm: Mat; fallback: boolean; cl?: Glyph }> = [];
     for (const g of lay.glyphs) {
       const code = g.ch.charCodeAt(0);
       if (code < 32) continue;
-      const st = g.style, hasStroke = st.stroke.type !== 'none' && st.strokeWidth > 0;
-      if (!solidOrNone(doc, st.fill) || (hasStroke && !solidOrNone(doc, st.stroke))) return null;
-      const font = await fontFor(st.font, st.style);
-      if (!font) return null;
-      const own = g.gid ?? font.charToGlyph(g.ch).index;
+      const hasStroke = g.style.stroke.type !== 'none' && g.style.strokeWidth > 0;
+      if (!solidOrNone(doc, g.style.fill) || (hasStroke && !solidOrNone(doc, g.style.stroke))) return null;
+      if (g.parts) {
+        const fst = g.face ?? g.style, pf = await fontFor(fst.font, fst.style);
+        if (!pf) return null;
+        const local = mul(glyphMat(g), [(g.size * g.style.hscale) / 100, 0, 0, (g.size * g.style.vscale) / 100, 0, 0]), m0 = n.mode === 'path' ? local : mul(n.xf, local);
+        for (const p of g.parts) { const m = mul(m0, [1, 0, 0, 1, p.x, p.y]); staged.push({ key: `${fst.font}|${fst.style}|${hasAxes(fst) ? axesKey(fst) : ''}`, font: pf, style: fst, gid: p.gid, ch: g.ch, tm: [m[0], m[1], -m[2], -m[3], m[4], m[5]], fallback: fst.font !== g.style.font, cl: g }); }
+        continue;
+      }
+      const face = await exportFace(g.style, swapped);
+      if (!face) return null;
+      const st = face.style, font = face.font, ch = g.mir ?? g.ch, own = faceGlyph(face, ch, g.gid);
       if (own === 0 && /\s/.test(g.ch)) continue;
-      const pick = await glyphOrFallback(g.ch, st, font, own), ps = pick.style;
+      const pick = await glyphOrFallback(ch, st, font, own), ps = pick.style;
       if (pick.skip) continue;
       const local = mul(glyphMat(g), [(g.size * st.hscale) / 100, 0, 0, (g.size * st.vscale) / 100, 0, 0]), m = n.mode === 'path' ? local : mul(n.xf, local);
-      staged.push({ key: `${pick.source}|${ps.style}|${hasAxes(ps) ? axesKey(ps) : ''}`, font: pick.font, style: ps, gid: pick.gid, ch: g.ch, tm: [m[0], m[1], -m[2], -m[3], m[4], m[5]], fallback: pick.font !== font });
+      staged.push({ key: `${pick.source}|${ps.style}|${hasAxes(ps) ? axesKey(ps) : ''}`, font: pick.font, style: ps, gid: pick.gid, ch, tm: [m[0], m[1], -m[2], -m[3], m[4], m[5]], fallback: pick.font !== font });
     }
-    const glyphs: LiveGlyph[] = [], used = new Set<Face>();
+    const glyphs: LiveGlyph[] = [], used = new Set<Face>(), acts: string[] = [], actOf = new Map<Glyph, number>();
+    const faceOf = (s: (typeof staged)[number]): Face => { let f = this.faces.get(s.key); if (!f) { f = new Face(s.key, s.font, s.style); this.faces.set(s.key, f); } return f; };
+    const one = (s: (typeof staged)[number]): boolean => !s.cl || (s.cl.parts?.length === 1 && [...s.ch].length === 1);
+    for (const s of staged) { const face = faceOf(s); if (s.gid !== 0 && one(s) && !face.uni.has(s.gid)) face.uni.set(s.gid, s.ch); }
+    const rtl = new Map<Glyph, Array<(typeof staged)[number]>>();
+    for (const s of staged) if (s.cl && ((s.cl.lv ?? 0) & 1) === 1 && !one(s)) rtl.set(s.cl, [...(rtl.get(s.cl) ?? []), s]);
+    for (const [g, list] of rtl) {
+      const rest = [...g.ch];
+      for (const s of list) { const k = rest.findIndex((c) => s.font.charToGlyph(c).index === s.gid); if (k >= 0 && s.gid !== 0) { const f = faceOf(s); if (!f.uni.has(s.gid)) f.uni.set(s.gid, rest[k]); rest.splice(k, 1); } }
+      const free = list.find((s) => s.gid !== 0 && !faceOf(s).uni.has(s.gid));
+      if (free && rest.length) faceOf(free).uni.set(free.gid, rest.reverse().join(''));
+    }
+    for (const s of staged) if (s.cl && !rtl.has(s.cl) && !actOf.has(s.cl) && (!one(s) || faceOf(s).uni.get(s.gid) !== s.ch) && s.ch.trim()) actOf.set(s.cl, acts.push(s.ch) - 1);
     for (const s of staged) {
-      let face = this.faces.get(s.key);
-      if (!face) { face = new Face(s.key, s.font, s.style); this.faces.set(s.key, face); }
+      const face = faceOf(s), act = s.cl ? actOf.get(s.cl) : undefined;
       if (s.fallback) face.fallback = true;
       face.gids.add(s.gid);
-      if (s.gid !== 0 && !face.uni.has(s.gid)) face.uni.set(s.gid, s.ch);
       if (!face.adv.has(s.gid)) face.adv.set(s.gid, Math.round(glyphAdvance(s.font, s.gid, s.style) * 1e4) / 10);
       used.add(face);
-      glyphs.push({ face, gid: s.gid, tm: s.tm, style: s.style });
+      glyphs.push({ face, gid: s.gid, tm: s.tm, style: s.style, ...(act !== undefined ? { act } : {}) });
     }
-    return { node: n, glyphs, faces: used };
+    return { node: n, glyphs, faces: used, ...(acts.length ? { acts } : {}) };
   }
 
   ok(plan: LiveText): boolean { return [...plan.faces].every((f) => !f.failed); }
 
   async build(pdf: PdfSink, deflate: (d: Uint8Array) => Promise<Uint8Array>, openType = true): Promise<void> {
     await Promise.all([...this.faces.values()].map(async (face) => {
-      if (face.fallback && restricted(face.font)) { face.failed = true; return; }
+      if (restricted(face.font)) { face.failed = true; if (!face.fallback) this.withheld.add(face.style.font); return; }
       const src = fontSource(face.font);
       const res = src ? await api.subsetFont(src, [...face.gids], hasAxes(face.style) ? { ...face.style.axes } : {}) : null;
       if (!res || (res.cff && !openType)) { face.failed = true; return; }
@@ -139,7 +157,7 @@ export class LiveFonts {
   }
 }
 
-export interface Run { face: Face; ink: Ink; tm: Mat; parts: string[]; hex: string; pos: number; end: number; glyphs: number }
+export interface Run { face: Face; ink: Ink; tm: Mat; parts: string[]; hex: string; pos: number; end: number; glyphs: number; act?: number }
 
 const sameLinear = (a: Mat, b: Mat): boolean => { const tol = 1e-5 * (Math.abs(a[0]) + Math.abs(a[1]) + Math.abs(a[2]) + Math.abs(a[3])) + 1e-9; return Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol && Math.abs(a[3] - b[3]) <= tol; };
 
@@ -152,7 +170,7 @@ export function liveRuns(plan: LiveText, inkOf: (st: CharStyle) => Ink): Run[] {
     const ink = inkOf(g.style);
     if (!ink.fill && !ink.stroke) { flush(); continue; }
     const adv = g.face.adv.get(g.gid) ?? 0;
-    if (cur && last && cur.face === g.face && cur.ink.fill === ink.fill && cur.ink.stroke === ink.stroke && cur.ink.width === ink.width && sameLinear(cur.tm, g.tm)) {
+    if (cur && last && cur.face === g.face && cur.act === g.act && cur.ink.fill === ink.fill && cur.ink.stroke === ink.stroke && cur.ink.width === ink.width && sameLinear(cur.tm, g.tm)) {
       const a = cur.tm[0], b = cur.tm[1], den = a * a + b * b, dx = g.tm[4] - cur.tm[4], dy = g.tm[5] - cur.tm[5];
       const perp = den > 0 ? Math.abs(dx * b - dy * a) / Math.sqrt(den) : Infinity;
       if (den > 0 && perp <= 0.01) {
@@ -167,7 +185,7 @@ export function liveRuns(plan: LiveText, inkOf: (st: CharStyle) => Ink): Run[] {
       }
     }
     flush();
-    cur = { face: g.face, ink, tm: g.tm, parts: [], hex: hex4(g.gid), pos: 0, end: adv, glyphs: 1 };
+    cur = { face: g.face, ink, tm: g.tm, parts: [], hex: hex4(g.gid), pos: 0, end: adv, glyphs: 1, ...(g.act !== undefined ? { act: g.act } : {}) };
     last = g;
   }
   flush();
@@ -176,8 +194,13 @@ export function liveRuns(plan: LiveText, inkOf: (st: CharStyle) => Ink): Run[] {
 
 export function liveStream(plan: LiveText, inkOf: (st: CharStyle) => Ink): string {
   const out: string[] = [];
-  let face: Face | null = null, fill = '', stroke = '', mode = -1, width = '';
+  let face: Face | null = null, fill = '', stroke = '', mode = -1, width = '', open: number | undefined;
   for (const r of liveRuns(plan, inkOf)) {
+    if (r.act !== open) {
+      if (open !== undefined) out.push('EMC');
+      if (r.act !== undefined) out.push(`/Span << /ActualText <FEFF${utf16(plan.acts?.[r.act] ?? '')}> >> BDC`);
+      open = r.act;
+    }
     const ink = r.ink, m = ink.fill && ink.stroke ? 2 : ink.stroke ? 1 : 0;
     if (ink.fill && ink.fill !== fill) { out.push(ink.fill); fill = ink.fill; }
     if (ink.stroke) {
@@ -190,5 +213,6 @@ export function liveStream(plan: LiveText, inkOf: (st: CharStyle) => Ink): strin
     if (r.face !== face) { out.push(`/${r.face.resource} 1 Tf`); face = r.face; }
     out.push(`${r.tm.map(num).join(' ')} Tm`, r.parts.length === 1 && r.parts[0].startsWith('<') ? `${r.parts[0]} Tj` : `[${r.parts.join(' ')}] TJ`, 'ET');
   }
+  if (open !== undefined) out.push('EMC');
   return out.length ? `q\n${out.join('\n')}\nQ` : '';
 }

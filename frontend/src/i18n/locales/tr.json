@@ -2246,6 +2246,8 @@
 "No document is open.": "Açık belge yok.",
 "No errors recorded this session.": "Bu oturumda kaydedilen hata yok.",
 "No files match the filter.": "Filtreyle eşleşen dosya yok.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Bu bilgisayardaki hiçbir yazı tipinde {0} yok, bu nedenle boş bir kutu olarak görünür. Bu karakteri içeren bir yazı tipi yükleyip yeniden dışa aktarın.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Bu bilgisayardaki hiçbir yazı tipinde {0} yok, bu nedenle boş kutular olarak görünürler. Bu karakterleri içeren bir yazı tipi yükleyip yeniden dışa aktarın.",
 "No gap detection": "Boşluk algılama yok",
 "No installed font matched.": "Eşleşen yüklü yazı tipi yok.",
 "No installed fonts could be read for comparison.": "Karşılaştırma için hiçbir yüklü yazı tipi okunamadı.",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "Kitaplık şurada: {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "Kitaplık şurada: {0}, FORMPATH_LIBRARY_DIR ile ayarlandı.",
 "The library is in {0}.": "Kitaplık şurada: {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "{0} lisansı bir belgeye gömülmesine izin vermiyor, bu nedenle metni {1} ile dış çizgiler olarak çizildi. Aynı görünür ancak metin olarak seçilemez veya aranamaz.",
 "The manual says nothing about that. Try other words, or search it.": "Kılavuz bu konuda bir şey söylemiyor. Başka sözcükler deneyin veya kılavuzda arayın.",
 "The menus go to the menu bar from the next start.": "Menüler bir sonraki başlatmadan itibaren menü çubuğuna taşınır.",
 "The menus stay in the window from the next start.": "Menüler bir sonraki başlatmadan itibaren pencerede kalır.",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "{0} seçiliyken {1}",
 "x Height": "x Yüksekliği",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "{0} yazı tipleri bu bilgisayarda yok, bu nedenle metinleri aynı harf konumlarında {1} ile dizildi; {2} yazı tipinde olmayan karakterler için başka yazı tipleri kullanıldı. Kendi görünümlerini korumak için bu yazı tiplerini yükleyip yeniden dışa aktarın.",
+"{0} is not installed on this computer": "{0} yazı tipi bu bilgisayarda yüklü değil",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "{0} yazı tipi bu bilgisayarda yok, bu nedenle metni aynı harf konumlarında {1} ile dizildi; {2} yazı tipinde olmayan karakterler için başka yazı tipleri kullanıldı. Kendi görünümünü korumak için yazı tipini yükleyip yeniden dışa aktarın."
 }

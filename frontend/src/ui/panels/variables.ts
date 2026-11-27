@@ -2,6 +2,7 @@ import { findNode } from '../../engine/doc';
 import { boundLabel, kindFits, parseDataFile, VARIABLE_KINDS } from '../../engine/variables';
 import type { Engine, Variable, VariableKind } from '../../engine';
 import { exportDataSets, showDataSet } from '../../io/data-merge';
+import { fileText } from '../../io/text-decode';
 import { promptName } from '../dialogs';
 import { el, patchList, q, setClass, setDisabled, setText, setTitle, setValue } from '../dom';
 import { askForm } from '../form-dialog';
@@ -89,7 +90,7 @@ export class VariablesPanel {
     const e = this.engine, d = e.doc;
     if (!d) return;
     try {
-      const r = parseDataFile(d, await f.text(), /\.json$/i.test(f.name) ? 'json' : 'csv');
+      const r = parseDataFile(d, await fileText(f), /\.json$/i.test(f.name) ? 'json' : 'csv');
       if (!e.addDataSets(r.variables, r.sets)) { e.notice('That file has no data sets.', 'error'); return; }
       const unbound = r.variables.filter((v) => !v.node).length;
       e.notice(`Imported ${r.sets.length} data set${r.sets.length === 1 ? '' : 's'}.${unbound ? ` ${unbound} variable${unbound === 1 ? ' is' : 's are'} unbound: pick each and bind it to an object.` : ''}`);

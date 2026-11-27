@@ -14,7 +14,7 @@ export interface PackageOptions {
   report: boolean;
   zip?: boolean;
 }
-export interface PackageResult { links: number; fonts: number; missingLinks: string[]; missingFonts: string[]; files?: string[]; folder?: string; zip?: Blob }
+export interface PackageResult { links: number; fonts: number; missingLinks: string[]; missingFonts: string[]; restricted?: string[]; missingMore?: number; files?: string[]; folder?: string; zip?: Blob }
 
 export async function packageProject(p: Project, o: PackageOptions): Promise<PackageResult> {
   const { manifest, files } = serialize(p);
@@ -40,8 +40,10 @@ export async function packageProject(p: Project, o: PackageOptions): Promise<Pac
     separate_links: String(o.separateLinks), relink_copies: String(o.relink), as_zip: String(!!o.zip),
   }, files, fontFiles);
   if (o.zip) {
-    const head = res.headers.get('X-Package-Summary');
-    return { ...(head ? (JSON.parse(head) as PackageResult) : { links: 0, fonts: 0, missingLinks: [], missingFonts: [] }), zip: await res.blob() };
+    const head = res.headers.get('X-Package-Summary'), none: PackageResult = { links: 0, fonts: 0, missingLinks: [], missingFonts: [] };
+    let sum = none;
+    try { const r = head ? JSON.parse(head) as PackageResult : none; sum = r && typeof r === 'object' && Array.isArray(r.missingLinks) && Array.isArray(r.missingFonts) ? r : none; } catch { sum = none; }
+    return { ...sum, zip: await res.blob() };
   }
   return (await res.json()) as PackageResult;
 }

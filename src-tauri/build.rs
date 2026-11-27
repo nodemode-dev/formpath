@@ -1,4 +1,4 @@
-const APP_COMMANDS: &[&str] = &["set_window_title", "app_ready", "text_edit"];
+const APP_COMMANDS: &[&str] = &["set_window_title", "app_ready", "text_edit", "opened_take", "opened_read"];
 
 fn main() {
     tauri_build::try_build(

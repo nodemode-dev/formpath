@@ -1,5 +1,6 @@
 import { geomBounds } from '../engine/bounds';
 import { effectDefaults } from '../engine/effects';
+import { clip } from '../engine/doc';
 import { collectColors, fitRowsToPalette, mapNodeColors, nearestFn, oklab, reduceRows, rowsFn, samplePalette } from '../engine/ops/recolor';
 import { hex, parseColor } from '../engine/paint';
 import type { Color, Doc, Effect, ImageNode, Project, Rect, VNode } from '../engine';
@@ -202,7 +203,7 @@ function summarize(doc: Doc, nodes: VNode[], box: Rect): string {
       const pad = '  '.repeat(depth);
       if (n.kind === 'group' || n.kind === 'layer') {
         count++;
-        const nm = n.name ? ` name="${n.name.replace(/[<>"&]/g, '').slice(0, 30)}"` : '';
+        const nm = n.name ? ` name="${clip(n.name.replace(/[<>"&]/g, ''), 30)}"` : '';
         lines.push(`${pad}<g${nm}${n.clip ? ' clip="true"' : ''}${n.opacity < 1 ? ` opacity="${Math.round(n.opacity * 100) / 100}"` : ''}>`);
         if (depth < 3) walk(n.children, depth + 1); else lines.push(`${pad}  <!-- ${leaves(n.children).length} nested -->`);
         lines.push(`${pad}</g>`);

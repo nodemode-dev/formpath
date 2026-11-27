@@ -101,7 +101,12 @@ export interface DockDeps {
   homeShown(): boolean;
 }
 
+const imeEscape = (e: KeyboardEvent): void => {
+  if (e.key === 'Escape' && (e.isComposing || e.keyCode === 229) && document.querySelector('.ft-tour:not([hidden])')) Object.defineProperty(e, 'key', { value: 'Process' });
+};
+
 export function formpathDock(deps: DockDeps): DockAdapter<'antigravity'> {
+  window.addEventListener('keydown', imeEscape, true);
   return {
     words: {
       app: 'formpath', noun: 'document', example: 'make the title a warm gradient and add a soft drop shadow', start: './formpath boot',
@@ -116,7 +121,7 @@ export function formpathDock(deps: DockDeps): DockAdapter<'antigravity'> {
       sizes: { minHeight: 120, maxHeightShare: 0.7, defaultHeight: 280, minWidth: 320, maxWidthShare: 0.4, defaultWidth: 420 },
       canDockRight: () => window.innerWidth >= DOCK_RIGHT_MIN,
     },
-    isDockChord: (e) => (isMac ? e.metaKey : e.ctrlKey) && e.altKey && e.shiftKey && e.code === 'KeyT',
+    isDockChord: (e) => (isMac ? e.metaKey : e.ctrlKey) && e.altKey && e.shiftKey && (/^[a-z]$/i.test(e.key) ? e.key.toUpperCase() === 'T' : e.code === 'KeyT'),
     chordLabel: () => `${chord}T`,
     tabs: () => ({ builtin: ['chat', 'shell', 'claude', 'codex', 'cursor', 'antigravity'] }),
     classes: { iconButton: 'cv-icon-btn', button: 'cv-btn', primaryButton: 'cv-btn-primary', input: 'cv-input', select: 'cv-input', note: 'cv-note' },

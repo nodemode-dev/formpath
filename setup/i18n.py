@@ -28,7 +28,7 @@ SINGLE = re.compile(r"'((?:[^'\\\n]|\\.)*)'")
 TEMPLATE = re.compile(r"`((?:[^`\\]|\\.)*)`", re.S)
 DOUBLE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 IDENT = re.compile(r"^[a-z0-9_.:/#@%+=\-\[\]()*,|<>!?$&^~ ]*$")
-CODEISH = re.compile(r"(^[A-Z_][A-Z0-9_]+$)|(^\w+\(.*\)$)|(^[.#][\w-]+)|(=>)|(\bfunction\b)|(^\s*[{[])|(\b(px|em|rem|deg|vh|vw)\b\s*[;)]?$)|(^https?://)|(^[\w-]+\.(ts|js|json|css|svg|png|fpth|pdf)$)|(\\n)|(\\x)|(\\u)")
+CODEISH = re.compile(r"(^[A-Z_][A-Z0-9_]+$)|(^\w+\(.*\)$)|(^[.#][\w-]+)|(=>)|(\bfunction\b)|(^\s*\[)|(^\s*\{(?!\d+\}( [a-z][a-z']*){4}))|(\b(px|em|rem|deg|vh|vw)\b\s*[;)]?$)|(^https?://)|(^[\w-]+\.(ts|js|json|css|svg|png|fpth|pdf)$)|(\\n)|(\\x)|(\\u)")
 ATTR = re.compile(r'\b(title|placeholder|aria-label|alt)="([^"]*)"')
 TAGTEXT = re.compile(r">([^<>]+)<")
 
@@ -89,7 +89,7 @@ def wanted(s: str) -> bool:
         return False
     if re.fullmatch(r"[\w-]+", s) and not re.match(r"[A-Z]", s):
         return False
-    if re.search(r"\b(var|const|let|return|import|export|class|new)\b\s", s) and re.search(r"[=(){};]", s):
+    if re.search(r"\b(var|const|let|return|import|export|class|new)\b\s", s) and re.search(r"[=(){};]", re.sub(r"\{\d+\}", "", s)):
         return False
     return True
 

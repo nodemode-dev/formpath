@@ -114,6 +114,8 @@ def main() -> None:
             print(f"{flag}: not an option. ./formpath mcp takes --attach.", file=sys.stderr)
             sys.exit(2)
         ATTACH = True
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     for line in sys.stdin:
         if not line.strip():
             continue

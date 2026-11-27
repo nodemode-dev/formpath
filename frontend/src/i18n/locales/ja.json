@@ -2246,6 +2246,8 @@
 "No document is open.": "開いているドキュメントがありません。",
 "No errors recorded this session.": "このセッションで記録されたエラーはありません。",
 "No files match the filter.": "フィルターに一致するファイルはありません。",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "このコンピューターには {0} を含むフォントがないため、空の四角で表示されます。この文字を含むフォントをインストールして、もう一度書き出してください。",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "このコンピューターには {0} を含むフォントがないため、空の四角で表示されます。これらの文字を含むフォントをインストールして、もう一度書き出してください。",
 "No gap detection": "隙間を検出しない",
 "No installed font matched.": "一致するインストール済みフォントがありません。",
 "No installed fonts could be read for comparison.": "比較用にインストール済みフォントを読み取れませんでした。",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "ライブラリの場所: {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "ライブラリの場所: {0}(FORMPATH_LIBRARY_DIR で設定)。",
 "The library is in {0}.": "ライブラリの場所: {0}。",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "{0} のライセンスでは文書への埋め込みが許可されていないため、テキストは {1} のアウトラインとして描画されました。見た目は同じですが、テキストとして選択や検索はできません。",
 "The manual says nothing about that. Try other words, or search it.": "マニュアルにはそれに関する記載がありません。別の言葉を試すか、検索してください。",
 "The menus go to the menu bar from the next start.": "次回の起動からメニューはメニューバーに表示されます。",
 "The menus stay in the window from the next start.": "次回の起動からメニューはウィンドウ内に表示されます。",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "{0} を選択中 {1}",
 "x Height": "xハイト",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "フォント {0} はこのコンピューターにないため、テキストは同じ文字位置で {1} を使って組まれ、{2} にない文字には他のフォントが使われました。本来の見た目を保つには、これらのフォントをインストールしてもう一度書き出してください。",
+"{0} is not installed on this computer": "フォント {0} はこのコンピューターにインストールされていません",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "フォント {0} はこのコンピューターにないため、テキストは同じ文字位置で {1} を使って組まれ、{2} にない文字には他のフォントが使われました。本来の見た目を保つには、フォントをインストールしてもう一度書き出してください。"
 }

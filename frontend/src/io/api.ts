@@ -5,10 +5,11 @@ export interface LibraryItem { name: string; modified: number; size: number }
 export interface OpenedProject { session: string; name: string; manifest: Record<string, unknown>; images: Record<string, string>; version?: string }
 export interface LibraryFolder { folder: string; default: string; custom: boolean; fixed: boolean; synced: Array<{ label: string; base: string; suggested: string }> }
 export interface FilePart { name: string; blob: Blob }
-export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string; variable?: boolean }
+export interface FontInfo { id: string; family: string; style: string; full: string; postscript: string; variable?: boolean; aliases?: string[] }
 export interface ColorProfileInfo { id: string; name: string; space: string; class: string; size: number; source: 'builtin' | 'user' | 'system' }
 export interface SpellHit { word: string; suggestions: string[] }
 export interface SimilarFont { id: string; family: string; style: string; score: number }
+export interface FontOutlines { key: string; upm: number; whole: boolean; glyphs: Record<string, Array<string | number>>; chars?: Record<string, string> }
 export interface LlmStatus { configured: boolean; baseUrl: string; model: string; hasKey: boolean; store: 'system' | 'file'; vision?: boolean }
 export interface BridgeItem { id: string; name: string; arguments: Record<string, unknown>; inapp?: boolean; once?: boolean }
 const BRIDGE_HEADER = 'X-Formpath-Bridge';
@@ -104,6 +105,7 @@ export const api = {
   async spellDictionaryEdit(add: string[], remove: string[] = []): Promise<string[]> { return (await json<{ words: string[] }>(await request('/spell/dictionary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ add, remove }) }))).words; },
   async similarFonts(id: string, limit = 10): Promise<SimilarFont[]> { try { return (await json<{ fonts: SimilarFont[] }>(await request(`/fonts/similar?id=${encodeURIComponent(id)}&limit=${limit}`))).fonts; } catch { return []; } },
   async fonts(): Promise<FontInfo[]> { try { return await json<FontInfo[]>(await request('/fonts')); } catch { return []; } },
+  async coverFont(cp: number, prefer: string[] = []): Promise<{ family: string; style: string } | null> { try { return await json<{ family: string; style: string }>(await request(`/fonts/cover?cp=${cp}&prefer=${encodeURIComponent(prefer.filter((p) => !p.includes(',')).join(','))}`)); } catch { return null; } },
   async findFont(family: string, style: string): Promise<FontInfo | null> { try { return await json<FontInfo>(await request(`/fonts/find?family=${encodeURIComponent(family)}&style=${encodeURIComponent(style)}`)); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } },
   async fontFile(id: string): Promise<ArrayBuffer> { return (await request(`/fonts/file/${encodeURIComponent(id)}`)).arrayBuffer(); },
   async subsetFont(src: { id: string } | { bytes: ArrayBuffer }, gids: number[], axes: Record<string, number>): Promise<{ data: Uint8Array; cff: boolean } | null> {
@@ -116,12 +118,20 @@ export const api = {
       return { data: new Uint8Array(await res.arrayBuffer()), cff: res.headers.get('X-Font-Outlines') === 'cff' };
     } catch { return null; }
   },
+  async fontOutlines(src: { key: string } | { bytes: Uint8Array }, kind: 'gid' | 'cid' | 'code', ids: number[], enc = ''): Promise<FontOutlines | 'gone' | null> {
+    const body = new FormData();
+    body.append('ids', JSON.stringify(ids));
+    body.append('kind', kind);
+    if (enc) body.append('enc', enc);
+    if ('key' in src) body.append('key', src.key); else body.append('file', new Blob([src.bytes as BlobPart]), 'font.bin');
+    try { return await json<FontOutlines>(await request('/fonts/outlines', { method: 'POST', body })); } catch (e) { return e instanceof ApiError && e.status === 409 ? 'gone' : null; }
+  },
 
-  async dwgToDxf(file: Blob): Promise<{ text: string; converter: string }> {
+  async dwgToDxf(file: Blob): Promise<{ bytes: Uint8Array; converter: string }> {
     const body = new FormData();
     body.append('file', file, 'drawing.dwg');
     const res = await request('/io/dwg/to-dxf', { method: 'POST', body });
-    return { text: await res.text(), converter: res.headers.get('X-Converter') ?? 'a DWG converter' };
+    return { bytes: new Uint8Array(await res.arrayBuffer()), converter: res.headers.get('X-Converter') ?? 'a DWG converter' };
   },
 
   async plugins(): Promise<Array<{ name: string; size: number }>> { try { return await json<Array<{ name: string; size: number }>>(await request('/plugins')); } catch { return []; } },

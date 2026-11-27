@@ -28,11 +28,11 @@ export class FilePathDialog extends Dialog {
     this.body.append(head, this.list, this.field('Path', this.picked), this.note);
     this.button('Cancel', '', () => this.close());
     this.ok = this.button('Choose', 'primary', () => this.finish());
-    this.folder.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void this.load(this.folder.value); } });
+    this.folder.addEventListener('keydown', (e) => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); void this.load(this.folder.value); } });
     this.folder.addEventListener('change', () => void this.load(this.folder.value));
     this.up.addEventListener('click', () => { if (this.parent) void this.load(this.parent); });
     this.picked.addEventListener('input', () => this.syncOk());
-    this.picked.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.finish(); } });
+    this.picked.addEventListener('keydown', (e) => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); this.finish(); } });
     this.list.addEventListener('click', (e) => {
       const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-fpd-row');
       if (!r) return;

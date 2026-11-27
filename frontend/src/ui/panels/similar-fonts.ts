@@ -56,10 +56,10 @@ export async function openSimilarFonts(anchor: HTMLElement, family: string, styl
   document.addEventListener('pointerdown', onDown, true);
   document.addEventListener('keydown', onKey, true);
   off = () => { document.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); };
-  let found: SimilarFont[] = [];
+  let found: SimilarFont[] | null = [];
   try { found = await findSimilarFonts(family, style, 10); } catch { found = []; }
   if (mine !== run) return;
-  show(found.length
+  show(found?.length
     ? found.map((f) => ({ key: f.id, label: '', family: f.family, style: f.style, score: `${Math.round(f.score)}%`, pick: true }))
-    : [{ key: 'none', label: '', family: 'No similar fonts found', style: '', score: '', pick: false }]);
+    : [{ key: 'none', label: '', family: found ? 'No similar fonts found' : `${family} is not installed on this computer`, style: '', score: '', pick: false }]);
 }

@@ -2246,6 +2246,8 @@
 "No document is open.": "没有打开的文档。",
 "No errors recorded this session.": "本次会话未记录任何错误。",
 "No files match the filter.": "没有与筛选条件匹配的文件。",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "此计算机上没有任何字体包含 {0}，因此它显示为空框。请安装包含该字符的字体并重新导出。",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "此计算机上没有任何字体包含 {0}，因此它们显示为空框。请安装包含这些字符的字体并重新导出。",
 "No gap detection": "不检测间隙",
 "No installed font matched.": "没有匹配的已安装字体。",
 "No installed fonts could be read for comparison.": "无法读取已安装的字体进行比较。",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "库位于 {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "库位于 {0},由 FORMPATH_LIBRARY_DIR 设置。",
 "The library is in {0}.": "库位于 {0}。",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "{0} 的许可不允许将其嵌入文档，因此其文字已绘制为 {1} 的轮廓。外观相同，但无法作为文字选择或搜索。",
 "The manual says nothing about that. Try other words, or search it.": "手册中没有相关内容。请换个说法,或搜索手册。",
 "The menus go to the menu bar from the next start.": "下次启动时，菜单将移到菜单栏。",
 "The menus stay in the window from the next start.": "下次启动时，菜单将保留在窗口内。",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "选中 {0} 时 {1}",
 "x Height": "x 高度",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "此计算机上没有字体 {0}，因此其文字已改用 {1} 按相同的字母位置排版，{2} 缺少的字符则使用其他字体。请安装这些字体并重新导出，以保留其原有外观。",
+"{0} is not installed on this computer": "此计算机上未安装字体 {0}",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "此计算机上没有字体 {0}，因此其文字已改用 {1} 按相同的字母位置排版，{2} 缺少的字符则使用其他字体。请安装该字体并重新导出，以保留其原有外观。"
 }

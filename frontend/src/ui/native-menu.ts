@@ -24,6 +24,16 @@ export function accelerator(combo: string | undefined): string | null {
   return out.join('+');
 }
 
+export function menuAccelerator(keys: string[] | undefined): string | null {
+  for (const k of keys ?? []) {
+    const parts = k.split('+');
+    if (!parts.includes('Mod') && !parts.includes('Ctrl') && !parts.some((p) => /^F([1-9]|1[0-2])$/.test(p))) continue;
+    const acc = accelerator(k);
+    if (acc) return acc;
+  }
+  return null;
+}
+
 type Api = typeof import('@tauri-apps/api/menu');
 
 const TEXT_EDITS = new Set(['undo', 'redo', 'cut', 'copy', 'paste', 'select-all']);
@@ -57,7 +67,7 @@ export class NativeMenus {
         if (typeof spec === 'object') return api.Submenu.new({ text: t(spec.label), items: (await Promise.all(spec.items.map(make))) as never[] });
         const cmd = this.commands.get(spec);
         if (!cmd) return null;
-        const text = t(this.commands.label(cmd)), acc = accelerator(cmd.keys?.[0]);
+        const text = t(this.commands.label(cmd)), acc = menuAccelerator(cmd.keys);
         const opts = { text, enabled: this.enabled(spec), action: () => {
           if (TEXT_EDITS.has(spec) && textFieldFocused()) void import('@tauri-apps/api/core').then((m) => m.invoke('text_edit', { action: spec })).catch(() => { document.execCommand(spec === 'select-all' ? 'selectAll' : spec); });
           else this.commands.run(spec);

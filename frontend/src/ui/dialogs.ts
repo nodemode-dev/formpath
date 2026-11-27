@@ -23,6 +23,7 @@ export class Dialog {
     this.scrim.addEventListener('pointerdown', (e) => { if (e.target === this.scrim) this.close(); });
     this.scrim.addEventListener('keydown', (e) => {
       e.stopPropagation();
+      if (e.isComposing || e.keyCode === 229) { e.stopImmediatePropagation(); return; }
       if (e.key === 'Escape') { e.preventDefault(); this.close(); }
     });
     document.getElementById('overlay-root')?.appendChild(this.scrim);
@@ -139,7 +140,7 @@ class Prompt extends Dialog {
     this.field('Name', this.input);
     this.button('Cancel', 'ghost', () => this.finish(null));
     this.ok = this.button('OK', 'primary', () => this.finish(this.input.value.trim() || null));
-    this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.ok.click(); } });
+    this.input.addEventListener('keydown', (e) => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); this.ok.click(); } });
     this.onClose = () => this.finish(null);
   }
   ask(title: string, value: string, okLabel: string): Promise<string | null> {

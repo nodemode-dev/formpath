@@ -22,8 +22,12 @@ The vector tool and panel icons in `frontend/src/ui/icons-vector.ts`, the app ic
 | Inter, JetBrains Mono (via @fontsource) | SIL OFL 1.1 fonts, MIT packaging | bundled font files (latin, latin-ext, Greek, Cyrillic and Vietnamese subsets), also used for Create Outlines and as the fallback for characters a PDF's font lacks |
 | paper.js 0.12.18 | MIT | the curve kernel behind Pathfinder, offset and simplify |
 | opentype.js 2.0.0 | MIT | glyph outlines for type rendering, Create Outlines and PDF type |
+| Adobe mapping resources for PDF (pdf2unicode: Adobe-Japan1-UCS2, Adobe-GB1-UCS2, Adobe-CNS1-UCS2, Adobe-Korea1-UCS2, Adobe-KR-UCS2; adobe-type-tools/mapping-resources-pdf at 2dd5e53) | BSD-3-Clause (the notice is at the head of each file) | five unchanged text files in `frontend/src/io/cmaps/` that give the characters of Chinese, Japanese and Korean type in a PDF that names a standard character collection and has no Unicode table of its own; each is loaded only when such a PDF is opened |
+| harfbuzzjs 1.6.4 (HarfBuzz compiled to WebAssembly) | MIT (HarfBuzz itself: Old MIT) | shaping of Arabic, Hebrew, Indic, Thai and other scripts that join, reorder or stack; its `harfbuzz.wasm` is bundled and loaded only when a document has such text |
+| bidi-js 1.1.0 (Jason Johnston) | MIT | the Unicode Bidirectional Algorithm (Unicode 13 data) for right-to-left and mixed-direction type; loaded with harfbuzzjs. Its declared dependency require-from-string 2.0.2 (MIT) is installed but not bundled |
 | @tauri-apps/api | Apache-2.0 or MIT | native menus on macOS |
 | tauri, tauri-plugin-shell, tauri-plugin-dialog, tauri-plugin-updater, regex, serde_json | Apache-2.0 or MIT | desktop shell |
+| tauri-plugin-single-instance 2.5.5, with zbus 5.19.0 on Linux | Apache-2.0 or MIT (zbus: MIT) | on Windows and Linux, a second launch hands the files it was given to the running window and ends |
 | fastapi, uvicorn, python-multipart, httpx | MIT, BSD-3-Clause, Apache-2.0, BSD-3-Clause | engine |
 | Pillow 12.3.0, with LittleCMS 2 | MIT-CMU (HPND); LittleCMS is MIT | ICC profile reading and the colour lookup tables for Color Settings and Proof Colors |
 | keyring, with jaraco.classes, jaraco.context, jaraco.functools, more-itertools, jeepney and SecretStorage | MIT (SecretStorage: BSD-3-Clause) | API keys in the system's password store |

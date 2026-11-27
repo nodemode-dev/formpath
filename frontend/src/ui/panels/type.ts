@@ -8,7 +8,7 @@ import { askForm, type Field } from '../form-dialog';
 import { previewEdit } from './preview-edit';
 import { openSimilarFonts } from './similar-fonts';
 import { typing } from '../text-editor';
-import { families, glyphAlternates, glyphList, isVariableFamily, stylesOf, ensureFace, variationOf, type VariationAxis, type VariationInfo } from '../../io/fonts';
+import { aliasesOf, families, glyphAlternates, glyphList, isVariableFamily, stylesOf, ensureFace, variationOf, type VariationAxis, type VariationInfo } from '../../io/fonts';
 import { typeDefaults } from '../../tools/type';
 import { check, numField, row, section, seg, selectCtl, slider, type Ctl } from './kit';
 
@@ -110,7 +110,7 @@ export class CharacterPanel {
     this.figures = selectCtl('Figures', FIGURES, (v) => swap((f) => FIG_TAGS.has(f), v ? v.split('+') : []));
     this.otPos = selectCtl('Position', OT_POS, (v) => swap((f) => POS_TAGS.has(f), v ? [v] : []));
     this.sset = selectCtl('Sets', SETS, (v) => swap((f) => /^ss\d\d$/.test(f), v ? [v] : []));
-    this.font = selectCtl('', [], (v) => set({ font: v, style: stylesOf(v).includes(currentStyle(engine)?.style ?? 'Regular') ? currentStyle(engine)?.style ?? 'Regular' : stylesOf(v)[0] ?? 'Regular' }));
+    this.font = selectCtl('', [], (v) => set({ font: v, style: stylesOf(v).includes(currentStyle(engine)?.style ?? 'Regular') ? currentStyle(engine)?.style ?? 'Regular' : stylesOf(v)[0] ?? 'Regular' }), { search: 'Search', terms: aliasesOf });
     this.style = selectCtl('', [], (v) => { const inst = this.varInfo?.instances.find((i) => i.name === v); set({ style: v, axes: inst ? { ...inst.coords } : undefined }); });
     this.size = numField('Size', 'pt', (v) => set({ size: v }), { min: 0.1, max: 1296 });
     this.leading = numField('Leading', 'pt', (v) => set({ leading: v }), { min: 0, max: 5000, title: 'Leading; leave at auto for 120% of the size' });
@@ -281,7 +281,7 @@ export class TabsPanel {
       const n = el(`<label class="cv-props-field"><span class="cv-pf-label"></span><span class="cv-num"><input type="text" maxlength="${max}" spellcheck="false"></span></label>`);
       setText(q(n, '.cv-pf-label'), label); n.title = title;
       const input = q<HTMLInputElement>(n, 'input');
-      input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') input.blur(); });
+      input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') input.blur(); });
       input.addEventListener('change', () => change(input.value));
       return { el: n, input };
     };
@@ -377,7 +377,7 @@ export class GlyphsPanel {
 
   private async syncAlts(): Promise<void> {
     const ed = typing.editor, n = ed?.node(), r = ed?.range() ?? null;
-    const ch = n && r && r[1] - r[0] === 1 ? plainText(n).slice(r[0], r[1]) : '';
+    const picked = n && r ? plainText(n).slice(r[0], r[1]) : '', ch = Array.from(picked).length === 1 ? picked : '';
     const st = n && ch && r ? styleAt(n.spans, r[0]) : null;
     const key = st && r && n ? `${n.id}|${r[0]}|${ch}|${st.font}|${st.style}|${st.alt ?? ''}` : '';
     if (key === this.altKey) return;

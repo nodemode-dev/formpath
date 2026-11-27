@@ -28,7 +28,7 @@ function walk(sec: Sections, out: HeaderVars): void {
     str = stringStream(d, limit, b.pos);
   }
   const m = new Bits(d, limit, b.pos);
-  const tv = (): string => (ver >= 21 ? (str ? str.tuStr() : '') : m.tvCp());
+  const tv = (): string => (ver >= 21 ? (str ? str.tuStr() : '') : m.tvCp(sec.cp));
   // handles sit inline up to R2004 and in a stream of their own from R2007 on
   const hd = (): void => { if (ver < 21) m.h(); };
   const cmc = (): void => {

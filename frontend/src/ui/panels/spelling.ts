@@ -5,6 +5,7 @@ import { walk } from '../../engine/doc';
 import { deleteText, insertText, plainText } from '../../engine/text';
 import { Dialog } from '../dialogs';
 import { el, patchList, q, setDisabled, setText } from '../dom';
+import { language } from '../../i18n';
 
 export interface MisspelledRange { start: number; end: number; word: string; suggestions: string[] }
 
@@ -31,7 +32,7 @@ async function lookup(words: string[], lang: string): Promise<void> {
   for (const w of fresh) known.set(w, by.get(w) ?? null);
 }
 
-export async function misspelledRanges(text: string, lang = 'en'): Promise<MisspelledRange[]> {
+export async function misspelledRanges(text: string, lang = language()): Promise<MisspelledRange[]> {
   const toks = wordsOf(text);
   await lookup(toks.map((t) => t.word), lang);
   const out: MisspelledRange[] = [];
@@ -54,7 +55,7 @@ export class SpellingDialog extends Dialog {
   private pos = { order: -1, start: -1 };
   private busy = false;
 
-  constructor(private readonly engine: Engine, private readonly lang = 'en') {
+  constructor(private readonly engine: Engine, private readonly lang = language()) {
     super('Check Spelling', 640);
     this.body.append(el('<p class="cv-note">Not in dictionary</p>'), el('<p class="cv-spell-context"></p>'));
     const ctx = q(this.body, '.cv-spell-context');
@@ -71,7 +72,7 @@ export class SpellingDialog extends Dialog {
     this.button('Done', 'ghost', () => this.close()).classList.add('cv-btn-apart');
     this.list.addEventListener('click', (e) => { const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-list-row'); if (r?.dataset.key) { this.input.value = r.dataset.key; this.markSelected(); } });
     this.list.addEventListener('dblclick', () => void this.change(false));
-    this.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void this.change(false); } });
+    this.input.addEventListener('keydown', (e) => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); void this.change(false); } });
   }
 
   async start(): Promise<void> {

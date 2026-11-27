@@ -1,5 +1,6 @@
 import type { Engine, Project, Rect, VNode } from '../../engine';
 import { geomBounds } from '../../engine/bounds';
+import { clip } from '../../engine/doc';
 import { clipToShape, artParts, modelState, PATTERN_LAYOUTS, patternVariations, shapeFillVariations, strengthMode, type ModelState, type PatternLayout, type PatternVariation, type Variation } from '../../io/generative';
 import { reportText } from '../../io/gen-repair';
 import { GenOptionsUi } from './gen-options';
@@ -219,7 +220,7 @@ export class PatternGenPanel extends ModelPanel {
   }
 
   private saveSwatches(): void {
-    const base = (this.prompt.value.trim() || 'Generated Pattern').replace(/\s+/g, ' ').slice(0, 32);
+    const base = clip((this.prompt.value.trim() || 'Generated Pattern').replace(/\s+/g, ' '), 32);
     const list = [...this.picked].sort().flatMap((i, k) => { const r = this.results[i]; return r?.art ? [{ name: `${base} ${k + 1}`, tile: r.tile, art: r.art, type: r.layout?.type, hs: r.layout?.hs, vs: r.layout?.vs }] : []; });
     const fillIds = this.o.fill ? this.engine.selectedIds() : [];
     const ids = this.engine.addPatternSwatches(list, fillIds);
@@ -264,7 +265,7 @@ export class RetypePanel extends ModelPanel {
   constructor(engine: Engine, private readonly ensureFace: (family: string, style: string) => Promise<void>) {
     super(engine);
     this.keep = check('Keep the image under the live text', (v) => { this.keepImage = v; });
-    this.text.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') void this.find(); });
+    this.text.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') void this.find(); });
     this.go.addEventListener('click', () => void this.find());
     this.apply.addEventListener('click', () => void this.applyPicked());
     this.list.addEventListener('click', (e) => { const r = (e.target as HTMLElement).closest<HTMLElement>('.cv-retypep-row'); if (r?.dataset.key) { this.picked = this.matches.findIndex((m) => `${m.family}|${m.style}` === r.dataset.key); this.sync(); } });

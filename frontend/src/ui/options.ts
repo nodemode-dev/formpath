@@ -2,6 +2,7 @@ import type { Engine, ToolId } from '../engine';
 import { toolList, type OptionSpec, type Tool } from '../extensions/registry';
 import { el, q, setChecked, setClass, setHidden, setText, setValue } from './dom';
 import { icon } from './icons';
+import { enhanceSelect } from './dropdown';
 
 interface Group { node: HTMLElement; sync: Array<() => void> }
 
@@ -75,7 +76,7 @@ export class OptionsBar {
         const range = q<HTMLInputElement>(n, 'input[type="range"]');
         const num = q<HTMLInputElement>(n, 'input[type="number"]');
         range.addEventListener('input', () => spec.set(Number(range.value)));
-        num.addEventListener('change', () => { const v = Number(num.value); if (Number.isFinite(v)) spec.set(Math.min(spec.max, Math.max(spec.min, v))); num.blur(); });
+        num.addEventListener('change', () => { const v = num.value.trim() ? Number(num.value) : NaN; if (Number.isFinite(v)) spec.set(Math.min(spec.max, Math.max(spec.min, v))); else num.value = String(Math.round(spec.get() * 100) / 100); num.blur(); });
         num.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') num.blur(); });
         sync.push(() => { const v = String(Math.round(spec.get() * 100) / 100); setValue(range, v); setValue(num, v); });
         node.appendChild(n);
@@ -86,6 +87,7 @@ export class OptionsBar {
         for (const c of spec.choices) { const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; box.appendChild(o); }
         box.addEventListener('change', () => spec.set(box.value));
         box.addEventListener('keydown', (e) => e.stopPropagation());
+        if (spec.search) enhanceSelect(box, { search: spec.search, terms: spec.terms });
         sync.push(() => {
 
           const list = spec.live?.();
@@ -125,7 +127,7 @@ export class OptionsBar {
           if (box.value !== '' && Number.isFinite(v)) spec.set(v);
         };
         box.addEventListener('change', commit);
-        box.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { commit(); box.blur(); } else if (e.key === 'Escape') { box.value = committed; box.blur(); } });
+        box.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { commit(); box.blur(); } else if (e.key === 'Escape') { box.value = committed; box.blur(); } });
         sync.push(() => {
           const v = spec.get(), text = v === null ? '' : String(Math.round(v * 100) / 100);
           if (document.activeElement === box) return;

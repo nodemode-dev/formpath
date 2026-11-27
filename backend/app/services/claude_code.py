@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core import config, seal
-from app.services import agent_lookup, terminal
+from app.services import agent_lookup, agent_shim, terminal
 
 INAPP_HEADER = "x-formpath-inapp"
 TOKENS: dict[str, Path] = {}
@@ -169,17 +169,23 @@ def workdir() -> Path:
     return folder
 
 
+def _direct(cmd: list[str]) -> list[str]:
+    return agent_shim.unshim(cmd, child_env(cmd[0]).get("PATH")) if os.name == "nt" else cmd
+
+
 def _wrap(cmd: list[str]) -> list[str]:
-    return agent_lookup.start_argv(cmd)
+    return agent_lookup.start_argv(_direct(cmd))
 
 
 def argv(path: str, mcp_file: str, prompt: str | None, resume: str | None = None) -> list[str]:
-    cmd = [path, "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath_tab", "--append-system-prompt", NOTE]
+    cmd = _direct([path, "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath_tab", "--append-system-prompt", NOTE])
     if resume:
         cmd += ["--resume", resume]
+    if prompt and agent_shim.through_cmd(cmd) and not agent_shim.plain(prompt):
+        raise ValueError(f"Claude Code at {path} starts through the Windows command interpreter, which would cut this message at a line break or change its quotes, %, ^, &, |, <, >, ! or brackets. Send it from the Chat tab, or install Claude Code with: {INSTALL_CMD}")
     if prompt:
         cmd += ["--", prompt]
-    return _wrap(cmd)
+    return agent_lookup.start_argv(cmd)
 
 
 def status() -> dict:
@@ -197,7 +203,7 @@ def open_tab(prompt: str | None = None, cols: int = 100, rows: int = 30, fresh: 
     running = next((s for s in terminal.SESSIONS.values() if s.kind == "claude" and s.alive), None)
     if running is not None and not fresh and not resume:
         if prompt:
-            terminal.write(running.id, prompt + "\r")
+            terminal.type_line(running.id, prompt)
         return running.describe()
     found = info(fresh=True)
     if not found["installed"]:
@@ -263,12 +269,22 @@ def chat_image(name: str) -> Path | None:
     return path if path.is_file() else None
 
 
-def _chat_argv(path: str, mcp_file: str, text: str, session: str | None) -> list[str]:
-    cmd = [path, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-           "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath_tab", "--append-system-prompt", CHAT_NOTE]
+def _chat_argv(path: str, mcp_file: str, text: str, session: str | None) -> tuple[list[str], str | None]:
+    cmd = _direct([path, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+                   "--mcp-config", mcp_file, "--allowedTools", "mcp__formpath_tab", "--append-system-prompt", CHAT_NOTE])
     if session:
         cmd += ["--resume", session]
-    return _wrap(cmd + ["--", text])
+    if agent_shim.through_cmd(cmd):
+        return agent_lookup.start_argv(cmd), text
+    return agent_lookup.start_argv(cmd + ["--", text]), None
+
+
+def _feed(proc: subprocess.Popen, text: str) -> None:
+    try:
+        proc.stdin.buffer.write(text.encode("utf-8"))
+        proc.stdin.close()
+    except (OSError, ValueError):
+        pass
 
 
 def _usage_of(u: dict) -> tuple[int, int]:
@@ -285,9 +301,12 @@ def _run(text: str, path: str, folder: str) -> None:
     token = None
     try:
         token, mcp_file = issue()
-        proc = subprocess.Popen(_chat_argv(path, mcp_file, text, CHAT["session"]), cwd=folder, env=child_env(path), stdin=subprocess.DEVNULL,
+        cmd, feed = _chat_argv(path, mcp_file, text, CHAT["session"])
+        proc = subprocess.Popen(cmd, cwd=folder, env=child_env(path), stdin=subprocess.DEVNULL if feed is None else subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
         CHAT["proc"] = proc
+        if feed is not None:
+            threading.Thread(target=_feed, args=(proc, feed), daemon=True).start()
 
         def drain() -> None:
             for line in proc.stderr:

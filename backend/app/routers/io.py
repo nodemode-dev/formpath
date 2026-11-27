@@ -2,13 +2,13 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response
 
 from app.core import config
 from app.services import dwg
 
 router = APIRouter(prefix="/api/io", tags=["io"])
-SAFE = re.compile(r"[^A-Za-z0-9 ._()-]+")
+SAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]+')
 MAX = 512 * 1024 * 1024
 
 
@@ -26,16 +26,16 @@ def dwg_converters(request: Request) -> dict:
 
 
 @router.post("/dwg/to-dxf")
-def dwg_to_dxf(request: Request, file: UploadFile = File(...)) -> PlainTextResponse:
+def dwg_to_dxf(request: Request, file: UploadFile = File(...)) -> Response:
     _local(request)
     data = file.file.read()
     if len(data) > MAX:
         raise HTTPException(status_code=413, detail="The drawing is larger than 512 MiB.")
     try:
-        text, used = dwg.to_dxf(data)
+        dxf, used = dwg.to_dxf(data)
     except dwg.DwgError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return PlainTextResponse(text, headers={"X-Converter": used})
+    return Response(dxf, media_type="application/dxf", headers={"X-Converter": used})
 
 
 @router.post("/export")

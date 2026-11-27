@@ -1,4 +1,4 @@
-import { findNode, newId, nodeLabel, updateNodes } from './doc';
+import { clip, findNode, newId, nodeLabel, updateNodes } from './doc';
 import { cleanData, parseGrid, parseTable } from './graph';
 import { plainText, setPlainText } from './text';
 import type { DataSet, Doc, GraphData, ImageAsset, Mat, Variable, VariableKind, VariableValue, VNode } from './types';
@@ -121,6 +121,6 @@ export function boundLabel(doc: Doc, v: Variable): string { const n = v.node ? f
 export function fileStem(doc: Doc, set: DataSet, varName: string | null, index: number): string {
   const v = varName ? (doc.variables ?? []).find((x) => x.name === varName) : null;
   const raw = v ? set.values[v.id] : set.name;
-  const s = (typeof raw === 'string' || typeof raw === 'boolean' ? String(raw) : set.name).replace(/[\\/:*?"<>|\n\r\t]+/g, '-').trim().slice(0, 120);
+  const s = clip((typeof raw === 'string' || typeof raw === 'boolean' ? String(raw) : set.name).replace(/[\\/:*?"<>|\n\r\t]+/g, '-').trim(), 120);
   return s || `data-set-${index + 1}`;
 }

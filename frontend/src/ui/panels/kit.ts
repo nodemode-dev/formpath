@@ -24,6 +24,7 @@ export function numField(label: string, unit: string, change: (v: number) => voi
   };
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') { commit(); input.select(); }
     else if (e.key === 'Escape') { input.value = last === null ? '' : fmtNum(last); input.blur(); }
     else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); const d = (o.step ?? 1) * (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1); let v = (last ?? 0) + d; if (o.min !== undefined) v = Math.max(o.min, v); if (o.max !== undefined) v = Math.min(o.max, v); change(v); }
@@ -39,7 +40,7 @@ export function numField(label: string, unit: string, change: (v: number) => voi
 export const fmtNum = (v: number): string => String(Math.round(v * 1000) / 1000);
 
 function evalNumber(src: string, unit = ''): number {
-  const t = src.replace(/\s+/g, ''), sfx = (/[a-z%°]+$/i.exec(t)?.[0] ?? '').toLowerCase(), u = unit.trim().toLowerCase();
+  const t = src.normalize('NFKC').replace(/\s+/g, ''), sfx = (/[a-z%°]+$/i.exec(t)?.[0] ?? '').toLowerCase(), u = unit.trim().toLowerCase();
   let s = t.slice(0, t.length - sfx.length);
   if (!s.includes('.') && /^[^,]*,[^,]*$/.test(s)) s = s.replace(',', '.');
   const k = !sfx || sfx === u ? 1 : sfx in UNIT_PT && u in UNIT_PT ? UNIT_PT[sfx as Units] / UNIT_PT[u as Units] : NaN;
@@ -71,8 +72,8 @@ export function slider(engine: Engine, label: string, min: number, max: number, 
   r.addEventListener('pointerup', end);
   r.addEventListener('pointercancel', end);
   r.addEventListener('input', () => change(Number(r.value)));
-  t.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') t.blur(); });
-  t.addEventListener('change', () => { const v = parseFloat(t.value); if (!Number.isFinite(v)) { t.value = r.value; return; } const c = Math.min(max, Math.max(min, v)); r.value = String(c); t.value = fmtNum(c); change(c); });
+  t.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') t.blur(); });
+  t.addEventListener('change', () => { let v: number; try { v = evalNumber(t.value, o.unit ?? ''); } catch { v = NaN; } if (!Number.isFinite(v)) { t.value = r.value; return; } const c = Math.min(max, Math.max(min, v)); r.value = String(c); t.value = fmtNum(c); change(c); });
   return { el: n, set: (v) => { const s = fmtNum(v); setValue(r, s); setValue(t, s); }, enable: (on) => { setDisabled(r, !on); setDisabled(t, !on); } };
 }
 
@@ -88,7 +89,7 @@ export function seg(choices: ReadonlyArray<{ id: string; label: string; icon?: s
   return { el: n, set: (v) => { for (const x of bs) { setClass(x.b, 'is-on', x.id === v); x.b.setAttribute('aria-pressed', String(x.id === v)); } }, enable: (on) => { for (const x of bs) setDisabled(x.b, !on); } };
 }
 
-export function selectCtl(label: string, choices: ReadonlyArray<readonly [string, string]>, change: (id: string) => void): Ctl<string> & { setChoices(c: ReadonlyArray<readonly [string, string]>): void; allow(ok: (id: string) => boolean): void } {
+export function selectCtl(label: string, choices: ReadonlyArray<readonly [string, string]>, change: (id: string) => void, find?: { search: string; terms?: (id: string) => string }): Ctl<string> & { setChoices(c: ReadonlyArray<readonly [string, string]>): void; allow(ok: (id: string) => boolean): void } {
   const n = el('<label class="cv-props-field is-wide"><span class="cv-pf-label"></span><select class="cv-select"></select></label>');
   setText(q(n, '.cv-pf-label'), label);
   const s = q<HTMLSelectElement>(n, 'select');
@@ -102,7 +103,7 @@ export function selectCtl(label: string, choices: ReadonlyArray<readonly [string
   };
   fill(choices);
   s.addEventListener('change', () => change(s.value));
-  enhanceSelect(s);
+  enhanceSelect(s, find);
   if (!label) q(n, '.cv-pf-label').remove();
   const allow = (ok: (id: string) => boolean): void => { for (const o of Array.from(s.options)) { const off = !!o.value && !ok(o.value); if (o.disabled !== off) o.disabled = off; } };
   return { el: n, set: (v) => setValue(s, v), enable: (on) => setDisabled(s, !on), setChoices: fill, allow };

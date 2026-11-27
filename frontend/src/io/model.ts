@@ -3,6 +3,7 @@ import { buildModelMesh, encodeMesh, MESH_MIME, type Mesh } from '../engine/mode
 import { imageAverage } from '../engine/texture';
 import { parseGltf } from './gltf';
 import { parseObj } from './obj';
+import { fileText } from './text-decode';
 
 export const MODEL_FILE = /\.(obj|glb|gltf)$/i;
 export const MODEL_PART = /\.(mtl|bin)$/i;
@@ -31,8 +32,8 @@ export async function importModel(f: File, parts: File[] = []): Promise<ModelImp
   let raw, faces: number, loose: Array<{ blob: Blob; label: string } | null>;
   if (lower.endsWith('.obj')) {
     const mtl = new Map<string, string>();
-    for (const [k, p] of byName) if (k.endsWith('.mtl')) mtl.set(k, await p.text());
-    const r = parseObj(await f.text(), (n) => mtl.get(base(n)) ?? null);
+    for (const [k, p] of byName) if (k.endsWith('.mtl')) mtl.set(k, await fileText(p));
+    const r = parseObj(await fileText(f), (n) => mtl.get(base(n)) ?? null);
     raw = r.raw; faces = r.faces;
     loose = r.imageNames.map((n) => { const p = byName.get(base(n)); return p && /\.(png|jpe?g|webp)$/i.test(p.name) ? { blob: p.slice(0, p.size, p.type || (/\.png$/i.test(p.name) ? 'image/png' : /\.webp$/i.test(p.name) ? 'image/webp' : 'image/jpeg')), label: n } : null; });
     if (r.imageNames.length && loose.some((x) => !x)) notes.push('some texture images were not chosen with the file');

@@ -2246,6 +2246,8 @@
 "No document is open.": "ไม่มีเอกสารที่เปิดอยู่",
 "No errors recorded this session.": "ไม่มีข้อผิดพลาดที่บันทึกในเซสชันนี้",
 "No files match the filter.": "ไม่มีไฟล์ที่ตรงกับตัวกรอง",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "ไม่มีฟอนต์ใดในคอมพิวเตอร์เครื่องนี้ที่มี {0} จึงแสดงเป็นกล่องว่าง ให้ติดตั้งฟอนต์ที่มีอักขระนั้นแล้วส่งออกอีกครั้ง",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "ไม่มีฟอนต์ใดในคอมพิวเตอร์เครื่องนี้ที่มี {0} จึงแสดงเป็นกล่องว่าง ให้ติดตั้งฟอนต์ที่มีอักขระเหล่านั้นแล้วส่งออกอีกครั้ง",
 "No gap detection": "ไม่ตรวจจับช่องว่าง",
 "No installed font matched.": "ไม่มีฟอนต์ที่ติดตั้งอยู่ที่ตรงกัน",
 "No installed fonts could be read for comparison.": "ไม่สามารถอ่านฟอนต์ที่ติดตั้งเพื่อเปรียบเทียบได้",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "ไลบรารีอยู่ที่ {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "ไลบรารีอยู่ที่ {0} ตั้งโดย FORMPATH_LIBRARY_DIR",
 "The library is in {0}.": "ไลบรารีอยู่ที่ {0}",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "สัญญาอนุญาตของ {0} ไม่อนุญาตให้ฝังในเอกสาร ข้อความจึงถูกวาดเป็นเส้นขอบด้วย {1} หน้าตาเหมือนเดิมแต่ไม่สามารถเลือกหรือค้นหาเป็นข้อความได้",
 "The manual says nothing about that. Try other words, or search it.": "คู่มือไม่ได้กล่าวถึงเรื่องนั้น ลองใช้คำอื่น หรือค้นหาดู",
 "The menus go to the menu bar from the next start.": "เมนูจะย้ายไปที่แถบเมนูตั้งแต่การเปิดครั้งถัดไป",
 "The menus stay in the window from the next start.": "เมนูจะอยู่ในหน้าต่างตั้งแต่การเปิดครั้งถัดไป",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "เมื่อเลือก {0} {1}",
 "x Height": "ความสูง x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "ไม่มีฟอนต์ {0} ในคอมพิวเตอร์เครื่องนี้ ข้อความจึงถูกจัดด้วย {1} ที่ตำแหน่งตัวอักษรเดิม และใช้ฟอนต์อื่นสำหรับอักขระที่ {2} ไม่มี ให้ติดตั้งฟอนต์เหล่านั้นแล้วส่งออกอีกครั้งเพื่อคงรูปลักษณ์เดิมไว้",
+"{0} is not installed on this computer": "ฟอนต์ {0} ไม่ได้ติดตั้งในคอมพิวเตอร์เครื่องนี้",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "ไม่มีฟอนต์ {0} ในคอมพิวเตอร์เครื่องนี้ ข้อความจึงถูกจัดด้วย {1} ที่ตำแหน่งตัวอักษรเดิม และใช้ฟอนต์อื่นสำหรับอักขระที่ {2} ไม่มี ให้ติดตั้งฟอนต์นั้นแล้วส่งออกอีกครั้งเพื่อคงรูปลักษณ์เดิมไว้"
 }

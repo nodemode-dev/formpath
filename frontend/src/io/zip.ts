@@ -1,3 +1,5 @@
+import { decodeText } from './text-decode';
+
 export async function zipFiles(files: ReadonlyArray<{ name: string; blob: Blob }>): Promise<Blob> {
   const table = new Uint32Array(256);
   for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table[n] = c >>> 0; }
@@ -35,8 +37,8 @@ export async function unzip(data: ArrayBuffer): Promise<Map<string, Uint8Array>>
   let at = v.getUint32(end + 16, true);
   for (let k = 0; k < count; k++) {
     if (at + 46 > data.byteLength || v.getUint32(at, true) !== 0x02014b50) throw new Error('a damaged ZIP directory');
-    const method = v.getUint16(at + 10, true), packed = v.getUint32(at + 20, true), nameLen = v.getUint16(at + 28, true), extra = v.getUint16(at + 30, true), note = v.getUint16(at + 32, true), local = v.getUint32(at + 42, true);
-    const name = dec.decode(new Uint8Array(data, at + 46, nameLen));
+    const flags = v.getUint16(at + 8, true), method = v.getUint16(at + 10, true), packed = v.getUint32(at + 20, true), nameLen = v.getUint16(at + 28, true), extra = v.getUint16(at + 30, true), note = v.getUint16(at + 32, true), local = v.getUint32(at + 42, true);
+    const nameBytes = new Uint8Array(data, at + 46, nameLen), name = flags & 0x800 ? dec.decode(nameBytes) : decodeText(nameBytes);
     at += 46 + nameLen + extra + note;
     if (local + 30 > data.byteLength || v.getUint32(local, true) !== 0x04034b50) throw new Error('a damaged ZIP entry');
     const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);

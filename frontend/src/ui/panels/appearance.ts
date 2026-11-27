@@ -1,10 +1,10 @@
-import { nodeLabel } from '../../engine/doc';
+import { nodeLabel, ownLabel } from '../../engine/doc';
 import { effectDef } from '../../engine/effects';
 import { basicAppearance, emptyAppearance, fill, NONE, solid, stroke, BLACK, WHITE } from '../../engine/paint';
 import { renderNode } from '../../engine/render';
 import type { Appearance, Color, Effect, Engine, GraphicStyle, Paint, VNode } from '../../engine';
 import { STYLE_LIBRARIES } from '../../engine/style-libraries';
-import { el, patchList, q, setClass, setDisabled, setHidden, setStyleVar, setText, setTitle } from '../dom';
+import { el, patchList, q, setClass, setDisabled, setHidden, setOwnText, setStyleVar, setText, setTitle } from '../dom';
 import { icon } from '../icons';
 import { askForm } from '../form-dialog';
 import { paintCss } from '../rail';
@@ -152,8 +152,8 @@ export class AppearancePanel {
     const n = this.target(), count = this.engine.selected().length, layer = n?.kind === 'layer';
     if (!n || n.id !== this.pickedFor) { this.picked = null; this.pickedFor = n?.id ?? null; }
     const linked = this.engine.graphicStyleOf(n), style = linked ? this.engine.doc?.styles.find((s) => s.id === linked)?.name ?? '' : '';
-    setText(q(this.head, '.cv-appp-kind'), n ? (layer ? 'Layer' : count > 1 ? 'Mixed Objects' : n.kind === 'path' ? 'Path' : n.kind === 'text' ? 'Type' : nodeLabel(n)) : 'No Selection');
-    setText(q(this.head, '.cv-appp-name'), n && (layer || count === 1) ? [layer ? nodeLabel(n) : n.name ?? '', style].filter(Boolean).join(' · ') : '');
+    setOwnText(q(this.head, '.cv-appp-kind'), n ? (layer ? 'Layer' : count > 1 ? 'Mixed Objects' : n.kind === 'path' ? 'Path' : n.kind === 'text' ? 'Type' : nodeLabel(n)) : 'No Selection', !!n && !layer && count <= 1 && n.kind !== 'path' && n.kind !== 'text' && ownLabel(n));
+    setOwnText(q(this.head, '.cv-appp-name'), n && (layer || count === 1) ? [layer ? nodeLabel(n) : n.name ?? '', style].filter(Boolean).join(' · ') : '', !!n && (layer || count === 1) && !!n.name);
     patchList<Row>(this.list, this.rows(), {
       key: (r) => r.key,
       create: (r) => { const row = el(`<div class="cv-appp-row" role="option"><button class="cv-appp-eye" type="button" aria-label="Toggle visibility">${icon('eye', 14)}</button><span class="cv-appp-label"></span><button class="cv-appp-chip" type="button" aria-label="Color"></button></div>`); this.fill(row, r); return row; },

@@ -35,6 +35,15 @@ const closedOf = new WeakMap<string[], boolean>();
 const nf = (v: number, p = 1e5): string => { const r = Math.round(v * p) / p; return Object.is(r, -0) || !Number.isFinite(r) ? '0' : String(r); };
 const cf = (v: number): string => nf(Math.max(0, Math.min(1, v)), 1e9);
 const ps = (s: string): string => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).replace(/\r|\n/g, ' ').replace(/[^\x20-\x7e]/g, '?')})`;
+const esc = (b: number): string => (b === 0x28 || b === 0x29 || b === 0x5c ? `\\${String.fromCharCode(b)}` : b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : `\\${b.toString(8).padStart(3, '0')}`);
+const pu = (s: string): string => `(${[...new TextEncoder().encode(s.replace(/\r|\n/g, ' '))].map(esc).join('')})`;
+const pw = (s: string): string => {
+  if (/^[\x20-\x7e]*$/.test(s)) return ps(s);
+  const t = s.replace(/\r|\n/g, ' ');
+  let o = '(\\376\\377';
+  for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); o += esc(c >> 8) + esc(c & 255); }
+  return `${o})`;
+};
 const dateLine = (d: Date): string => `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${String(d.getUTCFullYear()).slice(2)} ${d.getUTCHours() % 12 || 12}:${String(d.getUTCMinutes()).padStart(2, '0')} ${d.getUTCHours() < 12 ? 'AM' : 'PM'}`;
 
 export interface AiPrivateInput {
@@ -106,7 +115,7 @@ class Emit {
       const sw = this.spots.get(paint.swatch);
       if (sw && sw.paint.type === 'color') {
         const k = cmykOf(sw.paint.color);
-        return [`${cf(k.c)} ${cf(k.m)} ${cf(k.y)} ${cf(k.k)} ${ps(sw.name)} ${nf(1 - (paint.tint ?? 100) / 100, 1e6)} ${stroke ? 'XS' : 'Xs'}`];
+        return [`${cf(k.c)} ${cf(k.m)} ${cf(k.y)} ${cf(k.k)} ${pu(sw.name)} ${nf(1 - (paint.tint ?? 100) / 100, 1e6)} ${stroke ? 'XS' : 'Xs'}`];
       }
     }
     if (r.type === 'color') return this.solid(r.color, stroke);
@@ -348,7 +357,7 @@ class Emit {
     const c = this.layerColour(l), locked = parentLocked || !!l.locked;
     this.line('%AI5_BeginLayer');
     this.line(`${l.hidden ? 0 : 1} ${l.template ? 0 : 1} ${locked || l.template ? 0 : 1} ${l.printable === false || l.template ? 0 : 1} ${l.template ? 1 : 0} 0 ${l.hidden ? 0 : 1} ${c.idx} ${c.rgb.join(' ')} 0 50 0 Lb`);
-    this.line(`${ps(l.name || 'Layer')} Ln`);
+    this.line(`${pu(l.name || 'Layer')} Ln`);
     this.line('0 AE');
     this.artDict(l.name || 'Layer');
     this.lock = locked ? 1 : 0;
@@ -369,7 +378,7 @@ class Emit {
       sub.images.clear();
       for (const [k, v] of this.images) sub.images.set(k, v);
       sub.line('%AI14_BeginSymbol');
-      sub.line(ps(s.name));
+      sub.line(pu(s.name));
       sub.line('0 A');
       sub.line('0 Xw');
       sub.line('0 Ae');
@@ -424,10 +433,10 @@ function paletteLines(doc: Doc, e: Emit): string[] {
     const c = s.paint.color;
     if (s.spot) {
       const k = cmykOf(c), lab = labOf(c);
-      out.push(`${cf(k.c)} ${cf(k.m)} ${cf(k.y)} ${cf(k.k)} ${nf(lab[0], 1e6)} ${nf(lab[1], 1e6)} ${nf(lab[2], 1e6)} ${ps(s.name)} 0 2 Xx`, ps(s.name), 'Pc');
+      out.push(`${cf(k.c)} ${cf(k.m)} ${cf(k.y)} ${cf(k.k)} ${nf(lab[0], 1e6)} ${nf(lab[1], 1e6)} ${nf(lab[2], 1e6)} ${pu(s.name)} 0 2 Xx`, pu(s.name), 'Pc');
     } else {
       for (const l of e.solid(c, false)) out.push(l);
-      out.push(ps(s.name), 'Pc');
+      out.push(pu(s.name), 'Pc');
     }
   }
   out.push('PB', '%AI5_EndPalette');
@@ -539,8 +548,8 @@ export async function buildAiPrivate(inp: AiPrivateInput): Promise<AiPrivate> {
   hdr.push('%AI5_FileFormat 13.0', '%AI12_BuildNumber: 326', '%AI3_ColorUsage: Color', '%AI7_ImageSettings: 0');
   const spots = [...spotNames.values()];
   if (spots.length) {
-    hdr.push(`%%DocumentCustomColors: ${spots.map((s) => ps(s.name)).join(`${CR}%%+ `)}`);
-    const cc = spots.map((s) => { const c = s.paint.type === 'color' ? s.paint.color : { kind: 'gray' as const, k: 50 }, v = toRgb(c); return `${cf(v.r / 255)} ${cf(v.g / 255)} ${cf(v.b / 255)} ${ps(s.name)}`; });
+    hdr.push(`%%DocumentCustomColors: ${spots.map((s) => pu(s.name)).join(`${CR}%%+ `)}`);
+    const cc = spots.map((s) => { const c = s.paint.type === 'color' ? s.paint.color : { kind: 'gray' as const, k: 50 }, v = toRgb(c); return `${cf(v.r / 255)} ${cf(v.g / 255)} ${cf(v.b / 255)} ${pu(s.name)}`; });
     hdr.push(`%%RGBCustomColor: ${cc.join(`${CR}%%+ `)}`);
   }
   hdr.push(rgbDoc ? '%%RGBProcessColor: 0 0 0 ([Registration])' : '%%CMYKProcessColor: 1 1 1 1 ([Registration])');
@@ -574,13 +583,13 @@ export async function buildAiPrivate(inp: AiPrivateInput): Promise<AiPrivate> {
   body.push('%AI5_Begin_NonPrinting', 'Np', '%AI9_BeginArtStyles', '/KnownStyle :', '([Default]) /Name ,', '/SimpleStyle :', '0 O', '0 0 0 0 1 1 1 Xa', '0 R', '0.749721467494965 0.679194271564484 0.670496642589569 0.901457190513611 0 0 0 XA', '0 1 0 0 0 Xy', '0 J 0 j 1 w 10 M []0 d', '0 XR', '1 1 Xd', '/Paint ;', ' /Def ;', '%AI9_EndArtStyles', '%AI5_End_NonPrinting--');
   body.push(...paletteLines(doc, e));
   body.push('%AI5_Begin_NonPrinting', 'Np', '%AI9_BeginArtStyleList', '([Default])', '%AI9_EndArtStyleList', '%AI5_End_NonPrinting--');
-  body.push('%AI5_Begin_NonPrinting', 'Np', '%AI10_BeginSymbolList ', ...doc.symbols.map((s) => ps(s.name)), '%AI10_EndSymbolList ', '%AI5_End_NonPrinting--');
+  body.push('%AI5_Begin_NonPrinting', 'Np', '%AI10_BeginSymbolList ', ...doc.symbols.map((s) => pu(s.name)), '%AI10_EndSymbolList ', '%AI5_End_NonPrinting--');
   body.push('%AI9_BeginDocumentData', '%_/Document :', '%_/Dictionary :');
   body.push('%_0 /Int (AI9 Flattening Quality Level) ,', `%_${doc.colorMode === 'rgb' ? 1 : 0} /Int (AI11 Document Setup Color Mode) ,`, '%_/Array :');
   const base = { x: 7200 - Math.round(a0.w / 2), y: 7200 + Math.round(a0.h / 2) };
   for (const a of abs) {
     const x0 = a.x - a0.x, y0 = a0.y - a.y;
-    body.push('%_/Dictionary :', `%_${ps(a.name)} /UnicodeString (Name) ,`, `%_${nf(x0)} ${nf(y0)} /RealPointRelToROrigin`, '%_ (PositionPoint1) ,', `%_${nf(base.x + x0)} ${nf(base.y + y0)} /RealPoint`, '%_ (RulerOrigin) ,', '%_0 /Int (DisplayMark) ,', `%_${nf(x0 + a.w)} ${nf(y0 - a.h)} /RealPointRelToROrigin`, '%_ (PositionPoint2) ,', '%_1 /Real (PAR) ,', `%_${/^Artboard \d+$/.test(a.name) ? 1 : 0} /Bool (IsArtboardDefaultName) ,`, '%_; ,');
+    body.push('%_/Dictionary :', `%_${pw(a.name)} /UnicodeString (Name) ,`, `%_${nf(x0)} ${nf(y0)} /RealPointRelToROrigin`, '%_ (PositionPoint1) ,', `%_${nf(base.x + x0)} ${nf(base.y + y0)} /RealPoint`, '%_ (RulerOrigin) ,', '%_0 /Int (DisplayMark) ,', `%_${nf(x0 + a.w)} ${nf(y0 - a.h)} /RealPointRelToROrigin`, '%_ (PositionPoint2) ,', '%_1 /Real (PAR) ,', `%_${/^Artboard \d+$/.test(a.name) ? 1 : 0} /Bool (IsArtboardDefaultName) ,`, '%_; ,');
   }
   body.push('%_; (ArtboardArray) ,', '%_;', '%_;', '%AI9_EndDocumentData', '%%EndSetup');
   body.push(...layerOut.out, '%%PageTrailer', 'gsave annotatepage grestore showpage', '%%Trailer', '%%EOF');

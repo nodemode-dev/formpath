@@ -6,7 +6,7 @@ import type { CharTouch, Engine, Mat, Pt, Rect, TextNode } from '../engine';
 import { registerTool, type OptionSpec, type ToolContext, type ToolPointer } from '../extensions/registry';
 import { CURSORS } from '../ui/cursors';
 import { typing } from '../ui/text-editor';
-import { families, stylesOf } from '../io/fonts';
+import { aliasesOf, families, stylesOf } from '../io/fonts';
 import { marquee, tolDoc } from './util';
 
 const S = { on: false, start: { x: 0, y: 0 }, cur: { x: 0, y: 0 }, word: false };
@@ -25,7 +25,7 @@ function typeOptions(e: Engine): OptionSpec[] {
   };
   return [
     { kind: 'title', text: 'Type' },
-    { kind: 'select', label: 'Font', choices: [], live: () => families().map((f) => ({ id: f, label: f })), get: () => st().font, set: (v) => apply({ font: v }) },
+    { kind: 'select', label: 'Font', choices: [], live: () => families().map((f) => ({ id: f, label: f })), get: () => st().font, set: (v) => apply({ font: v }), search: 'Search', terms: aliasesOf },
     { kind: 'select', label: 'Style', choices: [], live: () => stylesOf(st().font).map((s) => ({ id: s, label: s })), get: () => st().style, set: (v) => apply({ style: v }) },
     { kind: 'number', label: 'Size', min: 0.1, max: 1296, step: 1, unit: 'pt', get: () => st().size, set: (v) => apply({ size: v }) },
     { kind: 'segment', label: 'Align', choices: [{ id: 'left', label: 'Left' }, { id: 'center', label: 'Center' }, { id: 'right', label: 'Right' }, { id: 'justify', label: 'Justify' }], get: () => { const n = e.selected().find((x) => x.kind === 'text'); return n?.kind === 'text' ? n.para.align : 'left'; }, set: (v) => { e.setParaStyle({ align: v as 'left' }); } },
@@ -158,7 +158,7 @@ function touchOptions(e: Engine): OptionSpec[] {
   const num = (label: string, key: keyof CharTouch, unit: string, min: number, max: number): OptionSpec => ({ kind: 'number', label, unit, min, max, step: 1, get: () => { const c = cur(); return c ? Math.round(c[key] * 100) / 100 : null; }, set: (v) => put({ [key]: v }) });
   return [
     { kind: 'title', text: 'Glyph Touch' },
-    { kind: 'readout', label: 'Character', get: () => { const n = TT.id ? e.nodeById(TT.id) : null; return n?.kind === 'text' && TT.index >= 0 ? `“${plainText(n).slice(TT.index, TT.index + 1)}”` : 'None'; } },
+    { kind: 'readout', label: 'Character', get: () => { const n = TT.id ? e.nodeById(TT.id) : null; return n?.kind === 'text' && TT.index >= 0 ? `“${String.fromCodePoint(plainText(n).codePointAt(TT.index) ?? 32)}”` : 'None'; } },
     num('X', 'x', 'pt', -10000, 10000), num('Y', 'y', 'pt', -10000, 10000), num('H', 'sx', '%', 1, 10000), num('V', 'sy', '%', 1, 10000), num('Rotate', 'r', '°', -180, 180),
     { kind: 'button', label: 'Reset', run: () => { if (TT.id && TT.index >= 0) e.setCharTouch(TT.id, TT.index, null, 'Reset Glyph Touch'); } },
   ];

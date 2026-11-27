@@ -17,7 +17,7 @@ import { SYMBOL_REGISTRATIONS, type SymbolRegistration } from '../engine/symbols
 import { BLACK, fill as fillItem, firstFill, parseColor, paintFromInput, solid, stroke as strokeItem, withFirstFill, withFirstStroke, hex } from '../engine/paint';
 import { charStyleAt, DEFAULT_CHAR, layoutText, plainText, styleSpans } from '../engine/text';
 import { DEFAULT_HYPH, DEFAULT_JUST } from '../engine/hyphen';
-import { variationOf } from '../io/fonts';
+import { missingGlyphs, variationOf } from '../io/fonts';
 import { harmonyColors, variations, type HarmonyRule, type Variation } from '../engine/harmony';
 import { CONVERT_KINDS, liveParams, type ConvertKind, type LivePatch } from '../engine/ops/live-shapes';
 import { transformNode } from '../engine/transform';
@@ -246,6 +246,11 @@ export class AgentBridge {
     const n = this.node(a.layer);
     if (n.kind !== 'layer') throw new ToolError(`${a.layer} is not a layer id.`);
     return n.id;
+  }
+
+  private async uncovered(id: string): Promise<string> {
+    const n = this.node(id), miss = n.kind === 'text' ? await missingGlyphs(n).catch(() => [] as string[]) : [];
+    return miss.length ? `No font on this computer draws ${miss.slice(0, 12).join(' ')}${miss.length > 12 ? ` or ${miss.length - 12} more` : ''}, so set font to a family that covers ${miss.length === 1 ? 'it' : 'them'}.` : '';
   }
 
   private describe(n: VNode): Record<string, unknown> {
@@ -634,7 +639,7 @@ export class AgentBridge {
     const res = await patternVariations({ ...common, prompt: str('prompt'), colors, detail: common.detail ?? 4, density: num('density', 3), variations: Math.round(num('variations', 2)), tile: num('tile_size', 96), seamless: a.seamless !== false, layout, hs: num('h_spacing', 0), vs: num('v_spacing', 0), project: e.current });
     const good = res.filter((r) => r.art);
     if (!good.length) return fail(`The model gave no usable tile: ${res.map((r) => r.error).filter(Boolean).join('; ')}`);
-    const base = (str('name') || str('prompt') || 'Generated Pattern').replace(/\s+/g, ' ').slice(0, 32);
+    const base = Array.from((str('name') || str('prompt') || 'Generated Pattern').replace(/\s+/g, ' ')).slice(0, 32).join('');
     const fillIds = a.fill_selection === true ? (this.ids(a) ?? e.selectedIds()) : [];
     const ids = e.addPatternSwatches(good.map((r, i) => ({ name: `${base} ${i + 1}`, tile: r.tile, art: r.art as VNode, type: r.layout?.type, hs: r.layout?.hs, vs: r.layout?.vs })), fillIds);
     const defs = (e.doc?.patterns ?? []).filter((p) => ids.includes(p.id));
@@ -784,7 +789,7 @@ export class AgentBridge {
           const notes: string[] = [];
           const blob = await this.deps.exportBlob(fmt, { notes: (n) => notes.push(n), scope: str('scope', fmt === 'pdf' || fmt === 'ai' ? 'all_artboards' : 'artboard'), artboard: has('artboard') ? Math.round(num('artboard', 0)) : undefined, raster, scale: has('ppi') ? Math.max(1, Math.min(2400, num('ppi', 72))) / 72 : Math.max(0.01, Math.min(16, num('scale', 1))), quality: Math.max(0.05, Math.min(1, num('quality', 0.92))), transparent: a.transparent === true, outlineText: a.outline_text === true, liveText: a.live_text !== false, standard, layers, security, compression: pdfOnly ? compressionFrom(a) : undefined, cmyk: has('color') ? str('color') === 'cmyk' : undefined, cad });
           const note = notes.length ? ` ${notes.join(' ')}` : '';
-          return blob ? text(`Exported ${fmt.toUpperCase()}.${note}`, { data: await b64(blob) }) : fail('There was nothing to export in that scope.');
+          return blob ? text(`Exported ${fmt.toUpperCase()}.${note}`, { data: await b64(blob), notes }) : fail('There was nothing to export in that scope.');
         }
         case 'switch_document': {
           const q = has('index') ? e.projects[Math.round(num('index', 0))] : e.projects.find((x) => x.name === str('name'));
@@ -842,7 +847,7 @@ export class AgentBridge {
           if (mode === 'path') { const src = this.node(a.path_id); if (src.kind !== 'path') return fail('path_id must be a path.'); path = src.d; }
           const id = e.addText(str('text'), num('x', 0), num('y', 0), { mode, width: num('width', 200), height: num('height', 100), path, style, para: has('align') ? { align: str('align') as 'left' } : undefined, name: str('name') || undefined, layer: this.layer(a), vertical: str('orientation') === 'vertical' });
           if (!id) return fail('Could not add the type.');
-          return text(`Added ${mode} type (id ${id}).`, this.describe(this.node(id)));
+          return text([`Added ${mode} type (id ${id}).`, await this.uncovered(id)].filter(Boolean).join(' '), this.describe(this.node(id)));
         }
         case 'edit_anchors': {
           const n = this.node(a.id);
@@ -1636,7 +1641,7 @@ export class AgentBridge {
               if (!t || typeof t.position !== 'number' || !Number.isFinite(t.position)) return fail('Each tab needs a position in points.');
               const al = typeof t.align === 'string' ? t.align : 'left';
               if (!['left', 'center', 'right', 'decimal'].includes(al)) return fail('A tab aligns left, center, right or decimal.');
-              tabs.push({ pos: Math.max(0, t.position), align: al as TabStop['align'], ...(typeof t.leader === 'string' && t.leader ? { leader: t.leader.slice(0, 4) } : {}), ...(typeof t.align_on === 'string' && t.align_on ? { char: t.align_on.slice(0, 1) } : {}) });
+              tabs.push({ pos: Math.max(0, t.position), align: al as TabStop['align'], ...(typeof t.leader === 'string' && t.leader ? { leader: Array.from(t.leader).slice(0, 4).join('') } : {}), ...(typeof t.align_on === 'string' && t.align_on ? { char: [...t.align_on][0] } : {}) });
             }
             pp.tabs = tabs.length ? tabs : undefined;
           }
@@ -1677,7 +1682,7 @@ export class AgentBridge {
             node.area = area;
           }
           if (Object.keys(node).length) e.setTextNode(n.id, node, has('orientation') && Object.keys(node).length === 1 ? 'Type Orientation' : cur.mode === 'path' ? 'Type on a Path Options' : cur.mode === 'area' ? 'Area Type Options' : 'Type Options');
-          return text(['Changed the type.', ...notes].join(' '), this.describe(this.node(n.id)));
+          return text(['Changed the type.', ...notes, await this.uncovered(n.id)].filter(Boolean).join(' '), this.describe(this.node(n.id)));
         }
         case 'select_similar': {
           const ref = has('id') ? this.node(a.id).id : e.selectedIds()[0];

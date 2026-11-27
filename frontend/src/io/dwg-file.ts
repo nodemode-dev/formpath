@@ -1,11 +1,12 @@
 import { Bits, DwgError, DwgUnsupportedError, headerMask, lz77 } from './dwg-bits';
 import { readContainer } from './dwg-r2007';
+import { dwgCodePage } from './text-decode';
 
 const TAGS: Record<string, number> = { AC1015: 15, AC1018: 18, AC1021: 21, AC1024: 24, AC1027: 27, AC1032: 32 };
 const TAG_NAMES: Record<string, string> = { AC1012: 'R13', AC1014: 'R14', AC1015: 'R2000', AC1018: 'R2004', AC1021: 'R2007', AC1024: 'R2010', AC1027: 'R2013', AC1032: 'R2018' };
 
 // header and classes start at their RL size field; objects is the buffer the object map offsets point into
-export interface Sections { ver: number; tag: string; header: Uint8Array; classes: Uint8Array; handles: Uint8Array; objects: Uint8Array; maint: number }
+export interface Sections { ver: number; tag: string; header: Uint8Array; classes: Uint8Array; handles: Uint8Array; objects: Uint8Array; maint: number; cp?: string }
 export interface ClassInfo { num: number; dxf: string; cpp: string; entity: boolean }
 
 const u32 = (d: Uint8Array, p: number): number => (d[p] | (d[p + 1] << 8) | (d[p + 2] << 16) | (d[p + 3] << 24)) >>> 0;
@@ -97,9 +98,10 @@ function r2004(d: Uint8Array, tag: string, ver: number): Sections {
 
 export function readSections(d: Uint8Array): Sections {
   const { tag, ver } = versionOf(d);
-  if (ver === 15) return r2000(d, tag);
+  const cp = dwgCodePage(d[0x13] | (d[0x14] << 8));
+  if (ver === 15) return { ...r2000(d, tag), cp };
   if (ver === 21) return { ver, tag, ...readContainer(d), maint: d[0x0b] };
-  return r2004(d, tag, ver);
+  return { ...r2004(d, tag, ver), cp };
 }
 
 export function objectMap(handles: Uint8Array): Map<number, number> {
@@ -144,7 +146,7 @@ export function readClasses(s: Sections): Map<number, ClassInfo> {
     limit = str ? str.pos : end;
   }
   if (ver >= 18) { b.bs(); b.rc(); b.rc(); b.bit(); }
-  const t = (): string => (ver >= 21 ? (str ? str.tuStr() : '') : b.tvCp());
+  const t = (): string => (ver >= 21 ? (str ? str.tuStr() : '') : b.tvCp(s.cp));
   try {
     while (b.pos + 16 < limit) {
       const num = b.bs();

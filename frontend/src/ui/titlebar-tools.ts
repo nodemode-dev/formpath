@@ -1,4 +1,5 @@
 import type { Commands } from './commands';
+import { t } from '../i18n';
 import { el, setClass, setHidden, setText } from './dom';
 import { icon } from './icons';
 import { readChoice, setTheme } from './themes';
@@ -64,6 +65,7 @@ export class TitleTools {
     search.addEventListener('click', () => this.open());
     input.addEventListener('input', () => { this.picked = 0; this.fill(input.value); });
     input.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
       const n = this.results.children.length;
       if (e.key === 'Escape') { this.close(); return; }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (n) { this.picked = (this.picked + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; this.mark(); } return; }
@@ -96,7 +98,7 @@ export class TitleTools {
 
   private fill(q: string): void {
     const c = this.d.commands, needle = q.trim().toLowerCase();
-    const found = c.all().filter((cmd) => c.enabled(cmd) && c.label(cmd) && (!needle || c.label(cmd).toLowerCase().includes(needle))).slice(0, 8);
+    const found = c.all().filter((cmd) => c.enabled(cmd) && c.label(cmd) && (!needle || c.label(cmd).toLowerCase().includes(needle) || t(c.label(cmd)).toLowerCase().includes(needle))).slice(0, 8);
     this.results.textContent = '';
     for (const cmd of found) {
       const b = el<HTMLButtonElement>('<button class="cv-search-item" type="button" role="option"><span class="cv-search-label"></span><span class="cv-search-keys"></span></button>');

@@ -1,7 +1,11 @@
+import { cadEscapes } from './text-decode';
+
 export class DwgError extends Error {}
 export class DwgUnsupportedError extends DwgError {}
 
 const scratch = new DataView(new ArrayBuffer(8));
+const decoders = new Map<string, TextDecoder>();
+const decoderOf = (cp: string): TextDecoder => { let t = decoders.get(cp); if (!t) { t = new TextDecoder(cp); decoders.set(cp, t); } return t; };
 
 export class Bits {
   pos = 0;
@@ -84,13 +88,13 @@ export class Bits {
       default: return v;
     }
   }
-  tvCp(): string {
+  tvCp(cp = 'windows-1252'): string {
     const n = this.bs();
     if (n <= 0) return '';
     const b = this.bytes(n);
     let e = n;
     while (e > 0 && b[e - 1] === 0) e--;
-    return cp1252(b.subarray(0, e));
+    return cadEscapes(cp === 'windows-1252' ? cp1252(b.subarray(0, e)) : decoderOf(cp).decode(b.subarray(0, e)));
   }
   tuStr(): string {
     const n = this.bs();

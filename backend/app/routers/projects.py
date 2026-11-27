@@ -192,6 +192,29 @@ def _json_list(raw: str, what: str) -> list:
     return value
 
 
+SUMMARY_HEADER_CHARS = 4000
+
+
+def _summary_header(summary: dict) -> str:
+    head = {k: v for k, v in summary.items() if k != "files"}
+    text = json.dumps(head)
+    if len(text) <= SUMMARY_HEADER_CHARS:
+        return text
+    full = {k: list(head.get(k) or []) for k in ("missingLinks", "missingFonts")}
+    kept: dict[str, list] = {k: [] for k in full}
+    head.update(kept)
+    head["missingMore"] = sum(len(v) for v in full.values())
+    for key in ("missingFonts", "missingLinks"):
+        for entry in full[key]:
+            kept[key].append(entry)
+            head["missingMore"] -= 1
+            if len(json.dumps(head)) > SUMMARY_HEADER_CHARS:
+                kept[key].pop()
+                head["missingMore"] += 1
+                break
+    return json.dumps(head)
+
+
 @router.post("/package-full")
 def package_full(
     request: Request,
@@ -241,7 +264,7 @@ def package_full(
     except OSError as exc:
         raise HTTPException(status_code=400, detail=f"formpath could not write the package: {exc.strerror or exc}. Choose a folder you can write to.") from exc
     if blob is not None:
-        return Response(blob, media_type="application/zip", headers={"X-Package-Summary": json.dumps({k: v for k, v in summary.items() if k != "files"})[:4000]})
+        return Response(blob, media_type="application/zip", headers={"X-Package-Summary": _summary_header(summary)})
     return Response(json.dumps(summary), media_type="application/json")
 
 

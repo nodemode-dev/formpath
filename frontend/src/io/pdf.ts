@@ -15,10 +15,10 @@ import { gradientAt, perceptualStops, resolvePaint, toCmyk, toRgb } from '../eng
 import { clipGeometry, gradientGeom, knockoutShape, knocksOut } from '../engine/render';
 import { gradientStrokeArt, strokeGradient, strokeRegion, type GradientStrokeArt, type StrokePiece } from '../engine/stroke-gradient';
 import type { BlendMode, CharStyle, Color, Doc, FillRule, Gradient, Mat, Paint, PathData, PatternDef, Project, Rect, StrokeItem, VNode } from '../engine';
-import { colourEmoji, missingGlyphs, outlineText } from './fonts';
+import { colourEmoji, missingGlyphs, outlineText, substituteNotes } from './fonts';
 import { renderRegion } from './raster';
 import { serialize } from './project-io';
-import { bleedFor, marksActive, marksContent, pageGeometry, type PdfMarks } from './pdf-marks';
+import { bleedFor, marksActive, marksContent, pageGeometry, pageInfoLine, type PdfMarks } from './pdf-marks';
 import { pdfxParts } from './pdf-x';
 import { outputProfileBytes } from '../engine/color-management';
 import { inCopies, sheetPages } from './pdf-sheet';
@@ -609,14 +609,14 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   if (refusal) throw new Error(refusal);
   const pdf = new PdfFile();
   const outlines = new Map<string, PathData>();
-  const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false, missing = new Set<string>();
+  const live = new LiveFonts(), plans = new Map<string, LiveText>(), wantLive = o.liveText !== false, missing = new Set<string>(), swapped = new Set<string>();
   const visit = async (n: VNode, plain: boolean): Promise<void> => {
     if (n.kind === 'text') {
-      const d = await outlineText(n);
+      const d = await outlineText(n, swapped);
       if (d) {
         outlines.set(n.id, d);
-        for (const ch of await missingGlyphs(n)) missing.add(ch);
-        const plan = wantLive && !plain ? await live.plan(p.doc, n) : null;
+        for (const ch of await missingGlyphs(n, swapped)) missing.add(ch);
+        const plan = wantLive && !plain ? await live.plan(p.doc, n, swapped) : null;
         if (plan) plans.set(n.id, plan);
       }
     }
@@ -665,7 +665,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
     if (boxed) parts.push('Q');
     if (marksActive(o.marks) && o.marks) {
       const reg = regSpace();
-      const info = pdfString(`${o.title ?? p.doc.title ?? p.name}   ${a.name}   ${p.doc.colorMode.toUpperCase()}   ${new Date().toISOString().slice(0, 10)}`);
+      const info = await pageInfoLine(`${o.title ?? p.doc.title ?? p.name}   ${a.name}   ${p.doc.colorMode.toUpperCase()}   ${new Date().toISOString().slice(0, 10)}`);
       parts.push(marksContent(geo, a.w, a.h, o.marks, s, `CS${reg}`, 'FMark', info, painter.rgbOnly));
     }
     const packed = await deflate(new TextEncoder().encode(parts.filter(Boolean).join('\n')));
@@ -749,7 +749,7 @@ export async function exportPdf(p: Project, o: PdfOptions): Promise<Blob> {
   const root = pdf.add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names}${extra} >>`);
   const info = pdf.add(`<< /Title ${pdfTextString(title)} /Producer ${pdfString(producer)} /Creator (formpath) /CreationDate (${stamp}) /ModDate (${stamp})${xp ? ` ${xp.version} ${xp.trapped}` : ''} >>`);
   const blob = await pdf.build(root, info, rules.header, docId, sealer, (o.compression ?? DEFAULT_COMPRESSION).flate !== false);
-  for (const note of glyphNotes([...missing])) o.notes?.(note);
+  for (const note of [...substituteNotes(swapped), ...[...live.withheld].map((f) => `The licence of ${f} does not allow it to be embedded in a document, so its type was drawn as outlines in ${f}. It looks the same but cannot be selected or searched as text.`), ...glyphNotes([...missing])]) o.notes?.(note);
   return blob;
 }
 
@@ -759,7 +759,7 @@ export function glyphNotes(missing: string[]): string[] {
   const emoji = missing.filter(colourEmoji), other = missing.filter((ch) => !colourEmoji(ch));
   return [
     ...(emoji.length ? [emoji.length === 1 ? `Colour emoji cannot be embedded in a PDF, so ${listed(emoji)} shows as an empty box. Use a character from a symbol font instead.` : `Colour emoji cannot be embedded in a PDF, so ${listed(emoji)} show as an empty box. Use a character from a symbol font instead.`] : []),
-    ...(other.length ? [`No font on this computer has ${listed(other)}, so ${other.length === 1 ? 'it shows' : 'they show'} as an empty box. Install a font with ${other.length === 1 ? 'that character' : 'those characters'} and export again.`] : []),
+    ...(other.length ? [other.length === 1 ? `No font on this computer has ${listed(other)}, so it shows as an empty box. Install a font with that character and export again.` : `No font on this computer has ${listed(other)}, so they show as an empty box. Install a font with those characters and export again.`] : []),
   ];
 }
 

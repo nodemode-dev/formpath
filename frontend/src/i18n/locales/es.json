@@ -2246,6 +2246,8 @@
 "No document is open.": "No hay ningún documento abierto.",
 "No errors recorded this session.": "No se registró ningún error en esta sesión.",
 "No files match the filter.": "Ningún archivo coincide con el filtro.",
+"No font on this computer has {0}, so it shows as an empty box. Install a font with that character and export again.": "Ninguna fuente de este equipo tiene {0}, así que aparece como un cuadro vacío. Instala una fuente con ese carácter y vuelve a exportar.",
+"No font on this computer has {0}, so they show as an empty box. Install a font with those characters and export again.": "Ninguna fuente de este equipo tiene {0}, así que aparecen como un cuadro vacío. Instala una fuente con esos caracteres y vuelve a exportar.",
 "No gap detection": "Sin detección de huecos",
 "No installed font matched.": "Ninguna fuente instalada coincide.",
 "No installed fonts could be read for comparison.": "No se pudo leer ninguna fuente instalada para compararla.",
@@ -3567,6 +3569,7 @@
 "The library is in {0}": "La biblioteca está en {0}",
 "The library is in {0}, set by FORMPATH_LIBRARY_DIR.": "La biblioteca está en {0}, definida por FORMPATH_LIBRARY_DIR.",
 "The library is in {0}.": "La biblioteca está en {0}.",
+"The licence of {0} does not allow it to be embedded in a document, so its type was drawn as outlines in {1}. It looks the same but cannot be selected or searched as text.": "La licencia de {0} no permite incrustarla en un documento, así que su texto se dibujó como contornos en {1}. Se ve igual, pero no se puede seleccionar ni buscar como texto.",
 "The manual says nothing about that. Try other words, or search it.": "El manual no dice nada sobre eso. Prueba con otras palabras, o búscalo.",
 "The menus go to the menu bar from the next start.": "Los menús pasarán a la barra de menús a partir del próximo inicio.",
 "The menus stay in the window from the next start.": "Los menús se quedarán en la ventana a partir del próximo inicio.",
@@ -4123,5 +4126,8 @@
 "with {0} selected {1}": "con {0} seleccionado {1}",
 "x Height": "Altura de la x",
 "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"": "x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
-"xMidYMid meet": "xMidYMid meet"
+"xMidYMid meet": "xMidYMid meet",
+"{0} are not on this computer, so their type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install them and export again to keep their own look.": "Las fuentes {0} no están en este equipo, así que su texto se compuso en {1} con las mismas posiciones de letras, y con otras fuentes para los caracteres que {2} no tiene. Instálalas y vuelve a exportar para conservar su aspecto propio.",
+"{0} is not installed on this computer": "La fuente {0} no está instalada en este equipo",
+"{0} is not on this computer, so its type was set in {1} at the same letter positions, with other fonts for characters {2} lacks. Install it and export again to keep its own look.": "La fuente {0} no está en este equipo, así que su texto se compuso en {1} con las mismas posiciones de letras, y con otras fuentes para los caracteres que {2} no tiene. Instálala y vuelve a exportar para conservar su aspecto propio."
 }
